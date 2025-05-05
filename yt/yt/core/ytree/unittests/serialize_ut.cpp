@@ -457,6 +457,30 @@ TEST(TYTreeSerializationTest, ProtobufKeepUnknown)
     }
 }
 
+TEST(TSerializationTest, ProtobufRepeatedField)
+{
+    google::protobuf::RepeatedField<i64> original;
+    original.Add(1);
+    original.Add(2);
+    original.Add(3);
+
+    auto node = ConvertToNode(original);
+    auto deserialized = ConvertTo<google::protobuf::RepeatedField<i64>>(node);
+    EXPECT_TRUE(std::ranges::equal(original, deserialized));
+}
+
+TEST(TSerializationTest, ProtobufRepeatedPtrField)
+{
+    google::protobuf::RepeatedPtrField<TString> original;
+    original.Add("one");
+    original.Add("two");
+    original.Add("three");
+
+    auto node = ConvertToNode(original);
+    auto deserialized = ConvertTo<google::protobuf::RepeatedPtrField<TString>>(node);
+    EXPECT_TRUE(std::ranges::equal(original, deserialized));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TTestClass

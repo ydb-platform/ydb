@@ -22,6 +22,7 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
+#include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/library/login/password_checker/password_checker.h>
 #include <ydb/library/login/account_lockout/account_lockout.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
@@ -1256,120 +1257,158 @@ TString TSchemeShard::PathToString(TPathElement::TPtr item) {
     return path.PathString();
 }
 
-bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme &scheme, TString &errStr) {
+bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme& scheme, TString& errStr, std::optional<TPathElement::EPathType> pathType) {
     const auto& conditions = scheme.GetApplyIf();
 
-    for(const auto& item: conditions) {
-        if (!item.HasPathId()) {
-            continue;
-        }
-        TLocalPathId localPathId = item.GetPathId();
-        const auto pathId = TPathId(TabletID(), localPathId);
+    for (const auto& item: conditions) {
+        if (item.HasPathId()) {
+            TLocalPathId localPathId = item.GetPathId();
+            const auto pathId = TPathId(TabletID(), localPathId);
 
-        if (!PathsById.contains(pathId)) {
-            errStr = TStringBuilder()
-                << "fail user constraint: ApplyIf section:"
-                << " no path with id " << pathId;
-            return false;
-        }
-        const TPathElement::TPtr pathEl = PathsById.at(pathId);
-
-        if (pathEl->Dropped()) {
-            errStr = TStringBuilder()
-                << "fail user constraint: ApplyIf section:"
-                << " path with id " << pathId << " has been dropped";
-            return false;
-        }
-
-        if (item.HasPathVersion()) {
-            const auto requiredVersion = item.GetPathVersion();
-            arc_ui64 actualVersion;
-            auto path = TPath::Init(pathId, this);
-            auto pathVersion = GetPathVersion(path);
-
-            if (item.HasCheckEntityVersion() && item.GetCheckEntityVersion()) {
-                switch(path.Base()->PathType) {
-                    case NKikimrSchemeOp::EPathTypePersQueueGroup:
-                        actualVersion = pathVersion.GetPQVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeSubDomain:
-                    case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain:
-                        actualVersion = pathVersion.GetSubDomainVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathTypeTable:
-                        actualVersion = pathVersion.GetTableSchemaVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeBlockStoreVolume:
-                        actualVersion = pathVersion.GetBSVVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeFileStore:
-                        actualVersion = pathVersion.GetFileStoreVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeKesus:
-                        actualVersion = pathVersion.GetKesusVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeRtmrVolume:
-                        actualVersion = pathVersion.GetRTMRVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeSolomonVolume:
-                        actualVersion = pathVersion.GetSolomonVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeTableIndex:
-                        actualVersion = pathVersion.GetTableIndexVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeColumnStore:
-                        actualVersion = pathVersion.GetColumnStoreVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeColumnTable:
-                        actualVersion = pathVersion.GetColumnTableVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeCdcStream:
-                        actualVersion = pathVersion.GetCdcStreamVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeSequence:
-                        actualVersion = pathVersion.GetSequenceVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeReplication:
-                    case NKikimrSchemeOp::EPathType::EPathTypeTransfer:
-                        actualVersion = pathVersion.GetReplicationVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeExternalTable:
-                        actualVersion = pathVersion.GetExternalTableVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeExternalDataSource:
-                        actualVersion = pathVersion.GetExternalDataSourceVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeView:
-                        actualVersion = pathVersion.GetViewVersion();
-                        break;
-                    default:
-                        actualVersion = pathVersion.GetGeneralVersion();
-                        break;
-                }
-            } else {
-                actualVersion = pathVersion.GetGeneralVersion();
-            }
-
-            if (requiredVersion != actualVersion) {
+            if (!PathsById.contains(pathId)) {
                 errStr = TStringBuilder()
-                    << "fail user constraint in ApplyIf section:"
-                    //FIXME: revert to misspelled text as there is dependency on it in the nbs code.
-                    // Dependency on text should be replaced by introducing special error code.
-                    << " path version mistmach, path with id " << pathEl->PathId
-                    << " has actual version " << actualVersion
-                    << " but version " << requiredVersion << " was required";
+                    << "fail user constraint: ApplyIf section:"
+                    << " no path with id " << pathId;
                 return false;
+            }
+            const TPathElement::TPtr pathEl = PathsById.at(pathId);
+
+            if (pathEl->Dropped()) {
+                errStr = TStringBuilder()
+                    << "fail user constraint: ApplyIf section:"
+                    << " path with id " << pathId << " has been dropped";
+                return false;
+            }
+
+            if (item.HasPathVersion()) {
+                const auto requiredVersion = item.GetPathVersion();
+                arc_ui64 actualVersion;
+                auto path = TPath::Init(pathId, this);
+                auto pathVersion = GetPathVersion(path);
+
+                if (item.HasCheckEntityVersion() && item.GetCheckEntityVersion()) {
+                    switch(path.Base()->PathType) {
+                        case NKikimrSchemeOp::EPathTypePersQueueGroup:
+                            actualVersion = pathVersion.GetPQVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeSubDomain:
+                        case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain:
+                            actualVersion = pathVersion.GetSubDomainVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathTypeTable:
+                            actualVersion = pathVersion.GetTableSchemaVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeBlockStoreVolume:
+                            actualVersion = pathVersion.GetBSVVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeFileStore:
+                            actualVersion = pathVersion.GetFileStoreVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeKesus:
+                            actualVersion = pathVersion.GetKesusVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeRtmrVolume:
+                            actualVersion = pathVersion.GetRTMRVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeSolomonVolume:
+                            actualVersion = pathVersion.GetSolomonVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeTableIndex:
+                            actualVersion = pathVersion.GetTableIndexVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeColumnStore:
+                            actualVersion = pathVersion.GetColumnStoreVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeColumnTable:
+                            actualVersion = pathVersion.GetColumnTableVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeCdcStream:
+                            actualVersion = pathVersion.GetCdcStreamVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeSequence:
+                            actualVersion = pathVersion.GetSequenceVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeReplication:
+                        case NKikimrSchemeOp::EPathType::EPathTypeTransfer:
+                            actualVersion = pathVersion.GetReplicationVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeExternalTable:
+                            actualVersion = pathVersion.GetExternalTableVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeExternalDataSource:
+                            actualVersion = pathVersion.GetExternalDataSourceVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeView:
+                            actualVersion = pathVersion.GetViewVersion();
+                            break;
+                        default:
+                            actualVersion = pathVersion.GetGeneralVersion();
+                            break;
+                    }
+                } else {
+                    actualVersion = pathVersion.GetGeneralVersion();
+                }
+
+                if (requiredVersion != actualVersion) {
+                    errStr = TStringBuilder()
+                        << "fail user constraint in ApplyIf section:"
+                        //FIXME: revert to misspelled text as there is dependency on it in the nbs code.
+                        // Dependency on text should be replaced by introducing special error code.
+                        << " path version mistmach, path with id " << pathEl->PathId
+                        << " has actual version " << actualVersion
+                        << " but version " << requiredVersion << " was required";
+                    return false;
+                }
+            }
+
+            if (item.HasLockedTxId()) {
+                const auto lockOwnerTxId = TTxId(item.GetLockedTxId());
+
+                TString lockErr = "fail user constraint in ApplyIf section:";
+                if (!CheckLocks(pathId, lockOwnerTxId, lockErr)) {
+                    errStr = lockErr;
+                    return false;
+                }
             }
         }
 
-        if (item.HasLockedTxId()) {
-            const auto lockOwnerTxId = TTxId(item.GetLockedTxId());
+        if (AppData()->FeatureFlags.GetEnableAlterDatabase()) {
+            if (!item.GetPathTypes().empty()) {
+                if (!pathType.has_value()) {
+                    errStr = TStringBuilder()
+                        << "fail in ApplyIf section:"
+                        << " argument `pathType` is undefined,"
+                        << " but ApplyIf has non-empty field `PathTypes.`";
 
-            TString lockErr = "fail user constraint in ApplyIf section:";
-            if (!CheckLocks(pathId, lockOwnerTxId, lockErr)) {
-                errStr = lockErr;
-                return false;
+                    return false;
+                }
+
+                const auto& pathTypes = item.GetPathTypes();
+                bool allowed = (std::find(pathTypes.begin(), pathTypes.end(), pathType) != pathTypes.end());
+                if (!allowed) {
+                    auto enumToString = [](TPathElement::EPathType type) {
+                        return NKikimrSchemeOp::EPathType_Name(type);
+                    };
+
+                    errStr = TStringBuilder()
+                        << "fail in ApplyIf section:"
+                        << " wrong Path type."
+                        << " Expected types: ";
+
+                        for (int i = 0; i < pathTypes.size(); i++) {
+                            errStr += enumToString(static_cast<TPathElement::EPathType>(pathTypes[i]) ) + ",;"[i + 1 == pathTypes.size()] + " ";
+                        }
+
+                        errStr += TStringBuilder() << "But actual Path type is " << enumToString(pathType.value());
+                    return false;
+                }
             }
+        } else if (!item.GetPathTypes().empty()) {
+            errStr = TStringBuilder()
+                << "fail in ApplyIf section:"
+                << " Check Path Type is not supported";
+
+            return false;
         }
     }
 
@@ -2257,7 +2296,7 @@ void TSchemeShard::PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pa
         }
 
         if (DataErasureManager->Remove(pathId)) {
-            db.Table<Schema::WaitingDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::WaitingDataErasureTenants::Status>(EDataErasureStatus::COMPLETED);
+            db.Table<Schema::WaitingDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
         }
 
         db.Table<Schema::SubDomains>().Key(pathId.LocalPathId).Delete();
@@ -2601,7 +2640,11 @@ void TSchemeShard::PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId
 
         NIceDb::TUpdate<Schema::TablePartitionStats::SearchHeight>(stats.SearchHeight),
         NIceDb::TUpdate<Schema::TablePartitionStats::FullCompactionTs>(stats.FullCompactionTs),
-        NIceDb::TUpdate<Schema::TablePartitionStats::MemDataSize>(stats.MemDataSize)
+        NIceDb::TUpdate<Schema::TablePartitionStats::MemDataSize>(stats.MemDataSize),
+
+        NIceDb::TUpdate<Schema::TablePartitionStats::LocksAcquired>(stats.LocksAcquired),
+        NIceDb::TUpdate<Schema::TablePartitionStats::LocksWholeShard>(stats.LocksWholeShard),
+        NIceDb::TUpdate<Schema::TablePartitionStats::LocksBroken>(stats.LocksBroken)
     );
 
     if (!stats.StoragePoolsStats.empty()) {
@@ -3362,6 +3405,16 @@ void TSchemeShard::PersistTxShardStatus(NIceDb::TNiceDb& db, TOperationId opId, 
         );
 }
 
+NKikimrSchemeOp::TChangefeedUnderlyingTopics ConvertChangefeedUnderlyingTopics(
+    const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TPathDescription>& changefeedUnderlyingTopics
+) {
+    NKikimrSchemeOp::TChangefeedUnderlyingTopics result;
+    for (const auto& x : changefeedUnderlyingTopics) {
+        *result.AddChangefeedUnderlyingTopics() = x;
+    }
+    return result;
+}
+
 void TSchemeShard::PersistBackupSettings(
         NIceDb::TNiceDb& db,
         TPathId pathId,
@@ -3376,6 +3429,7 @@ void TSchemeShard::PersistBackupSettings(
                 NIceDb::TUpdate<Schema::BackupSettings::ScanSettings>(settings.GetScanSettings().SerializeAsString()), \
                 NIceDb::TUpdate<Schema::BackupSettings::NeedToBill>(settings.GetNeedToBill()), \
                 NIceDb::TUpdate<Schema::BackupSettings::TableDescription>(settings.GetTable().SerializeAsString()), \
+                NIceDb::TUpdate<Schema::BackupSettings::ChangefeedUnderlyingTopics>(ConvertChangefeedUnderlyingTopics(settings.GetChangefeedUnderlyingTopics()).SerializeAsString()), \
                 NIceDb::TUpdate<Schema::BackupSettings::NumberOfRetries>(settings.GetNumberOfRetries()), \
                 NIceDb::TUpdate<Schema::BackupSettings::EnableChecksums>(settings.GetEnableChecksums()), \
                 NIceDb::TUpdate<Schema::BackupSettings::EnablePermissions>(settings.GetEnablePermissions())); \
@@ -3386,6 +3440,7 @@ void TSchemeShard::PersistBackupSettings(
                 NIceDb::TUpdate<Schema::MigratedBackupSettings::ScanSettings>(settings.GetScanSettings().SerializeAsString()), \
                 NIceDb::TUpdate<Schema::MigratedBackupSettings::NeedToBill>(settings.GetNeedToBill()), \
                 NIceDb::TUpdate<Schema::MigratedBackupSettings::TableDescription>(settings.GetTable().SerializeAsString()), \
+                NIceDb::TUpdate<Schema::MigratedBackupSettings::ChangefeedUnderlyingTopics>(ConvertChangefeedUnderlyingTopics(settings.GetChangefeedUnderlyingTopics()).SerializeAsString()), \
                 NIceDb::TUpdate<Schema::MigratedBackupSettings::NumberOfRetries>(settings.GetNumberOfRetries()), \
                 NIceDb::TUpdate<Schema::MigratedBackupSettings::EnableChecksums>(settings.GetEnableChecksums()), \
                 NIceDb::TUpdate<Schema::MigratedBackupSettings::EnablePermissions>(settings.GetEnablePermissions())); \
@@ -3637,8 +3692,12 @@ void TSchemeShard::PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const
 
     TString serialized;
     TString serializedSharding;
-    Y_ABORT_UNLESS(tableInfo.Description.SerializeToString(&serialized));
-    Y_ABORT_UNLESS(tableInfo.Description.GetSharding().SerializeToString(&serializedSharding));
+    auto tableInfoCopy = tableInfo;
+    if (tableInfo.IsStandalone()) {
+        tableInfoCopy.Description.MutableSchema()->SetEngine(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
+    }
+    Y_ABORT_UNLESS(tableInfoCopy.Description.SerializeToString(&serialized));
+    Y_ABORT_UNLESS(tableInfoCopy.Description.GetSharding().SerializeToString(&serializedSharding));
 
     if (isAlter) {
         db.Table<Schema::ColumnTablesAlters>().Key(pathId.LocalPathId).Update(
@@ -4505,16 +4564,18 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
             COUNTER_PQ_STATS_BATCH_LATENCY)
     , AllowDataColumnForIndexTable(0, 0, 1)
     , LoginProvider(NLogin::TPasswordComplexity({
-        .MinLength = AppData()->AuthConfig.GetPasswordComplexity().GetMinLength(),
-        .MinLowerCaseCount = AppData()->AuthConfig.GetPasswordComplexity().GetMinLowerCaseCount(),
-        .MinUpperCaseCount = AppData()->AuthConfig.GetPasswordComplexity().GetMinUpperCaseCount(),
-        .MinNumbersCount = AppData()->AuthConfig.GetPasswordComplexity().GetMinNumbersCount(),
-        .MinSpecialCharsCount = AppData()->AuthConfig.GetPasswordComplexity().GetMinSpecialCharsCount(),
-        .SpecialChars = AppData()->AuthConfig.GetPasswordComplexity().GetSpecialChars(),
-        .CanContainUsername = AppData()->AuthConfig.GetPasswordComplexity().GetCanContainUsername()
-    }), {.AttemptThreshold = AppData()->AuthConfig.GetAccountLockout().GetAttemptThreshold(),
-         .AttemptResetDuration = AppData()->AuthConfig.GetAccountLockout().GetAttemptResetDuration()
-    })
+            .MinLength = AppData()->AuthConfig.GetPasswordComplexity().GetMinLength(),
+            .MinLowerCaseCount = AppData()->AuthConfig.GetPasswordComplexity().GetMinLowerCaseCount(),
+            .MinUpperCaseCount = AppData()->AuthConfig.GetPasswordComplexity().GetMinUpperCaseCount(),
+            .MinNumbersCount = AppData()->AuthConfig.GetPasswordComplexity().GetMinNumbersCount(),
+            .MinSpecialCharsCount = AppData()->AuthConfig.GetPasswordComplexity().GetMinSpecialCharsCount(),
+            .SpecialChars = AppData()->AuthConfig.GetPasswordComplexity().GetSpecialChars(),
+            .CanContainUsername = AppData()->AuthConfig.GetPasswordComplexity().GetCanContainUsername()
+        }), {
+            .AttemptThreshold = AppData()->AuthConfig.GetAccountLockout().GetAttemptThreshold(),
+            .AttemptResetDuration = AppData()->AuthConfig.GetAccountLockout().GetAttemptResetDuration()
+        },
+        IsLoginCacheEnabled, {})
 {
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
                             ESimpleCounters_descriptor,
@@ -4551,6 +4612,10 @@ NTabletPipe::TClientConfig TSchemeShard::GetPipeClientConfig() {
         .MaxRetryTime = TDuration::Seconds(2),
     };
     return config;
+}
+
+bool TSchemeShard::IsLoginCacheEnabled() {
+    return AppData()->FeatureFlags.GetEnableLoginCache();
 }
 
 void TSchemeShard::FillTableSchemaVersion(ui64 tableSchemaVersion, NKikimrSchemeOp::TTableDescription* tableDescr) const {
@@ -4637,23 +4702,25 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableAlterDatabaseCreateHiveFirst = appData->FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst();
     EnablePQConfigTransactionsAtSchemeShard = appData->FeatureFlags.GetEnablePQConfigTransactionsAtSchemeShard();
     EnableStatistics = appData->FeatureFlags.GetEnableStatistics();
-    EnableTablePgTypes = appData->FeatureFlags.GetEnableTablePgTypes();
     EnableServerlessExclusiveDynamicNodes = appData->FeatureFlags.GetEnableServerlessExclusiveDynamicNodes();
     EnableAddColumsWithDefaults = appData->FeatureFlags.GetEnableAddColumsWithDefaults();
     EnableReplaceIfExistsForExternalEntities = appData->FeatureFlags.GetEnableReplaceIfExistsForExternalEntities();
     EnableTempTables = appData->FeatureFlags.GetEnableTempTables();
-    EnableTableDatetime64 = appData->FeatureFlags.GetEnableTableDatetime64();
     EnableVectorIndex = appData->FeatureFlags.GetEnableVectorIndex();
-    EnableParameterizedDecimal = appData->FeatureFlags.GetEnableParameterizedDecimal();
+    EnableResourcePoolsOnServerless = appData->FeatureFlags.GetEnableResourcePoolsOnServerless();
+    EnableExternalDataSourcesOnServerless = appData->FeatureFlags.GetEnableExternalDataSourcesOnServerless();
     EnableDataErasure = appData->FeatureFlags.GetEnableDataErasure();
+    EnableExternalSourceSchemaInference = appData->FeatureFlags.GetEnableExternalSourceSchemaInference();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
     ConfigureStatsOperations(appData->SchemeShardConfig, ctx);
     MaxCdcInitialScanShardsInFlight = appData->SchemeShardConfig.GetMaxCdcInitialScanShardsInFlight();
+    MaxRestoreBuildIndexShardsInFlight = appData->SchemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
 
     ConfigureBackgroundCleaningQueue(appData->BackgroundCleaningConfig, ctx);
     ConfigureDataErasureManager(appData->DataErasureConfig);
+    ConfigureExternalSources(appData->QueryServiceConfig, ctx);
 
     if (appData->ChannelProfiles) {
         ChannelProfiles = appData->ChannelProfiles;
@@ -4875,6 +4942,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         // } // NExport
         HFuncTraced(NBackground::TEvListRequest, Handle);
         HFuncTraced(TEvPrivate::TEvExportSchemeUploadResult, Handle);
+        HFuncTraced(TEvPrivate::TEvExportUploadMetadataResult, Handle);
 
         // namespace NImport {
         HFuncTraced(TEvImport::TEvCreateImportRequest, Handle);
@@ -4883,6 +4951,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvImport::TEvForgetImportRequest, Handle);
         HFuncTraced(TEvImport::TEvListImportsRequest, Handle);
         HFuncTraced(TEvPrivate::TEvImportSchemeReady, Handle);
+        HFuncTraced(TEvPrivate::TEvImportSchemaMappingReady, Handle);
         HFuncTraced(TEvPrivate::TEvImportSchemeQueryResult, Handle);
         // } // NImport
 
@@ -4907,6 +4976,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvDataShard::TEvSampleKResponse, Handle);
         HFuncTraced(TEvDataShard::TEvReshuffleKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvLocalKMeansResponse, Handle);
+        HFuncTraced(TEvDataShard::TEvPrefixKMeansResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvUploadSampleKResponse, Handle);
         // } // NIndexBuilder
 
@@ -4957,6 +5027,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSchemeShard::TEvWakeupToRunDataErasure, DataErasureManager->WakeupToRunDataErasure);
         HFuncTraced(TEvSchemeShard::TEvTenantDataErasureRequest, Handle);
         HFuncTraced(TEvDataShard::TEvForceDataCleanupResult, Handle);
+        HFuncTraced(TEvKeyValue::TEvCleanUpDataResponse, Handle);
         HFuncTraced(TEvSchemeShard::TEvTenantDataErasureResponse, Handle);
         HFuncTraced(TEvSchemeShard::TEvDataErasureInfoRequest, Handle);
         HFuncTraced(TEvSchemeShard::TEvDataErasureManualStartupRequest, Handle);
@@ -5687,7 +5758,7 @@ void TSchemeShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &, const TA
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvSyncTenantSchemeShard::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                "Handle TEvSyncTenantSchemeShard"
                    << ", at schemeshard: " << TabletID()
                    << ", msg: " << record.DebugString());
@@ -7082,32 +7153,27 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
         newPartitioningSet.reserve(newPartitioning.size());
         const auto& oldPartitioning = tableInfo->GetPartitions();
 
+        std::vector<TShardIdx> newDataErasureShards;
         for (const auto& p: newPartitioning) {
             if (!oldPartitioning.empty())
                 newPartitioningSet.insert(p.ShardIdx);
 
             const auto& partitionStats = tableInfo->GetStats().PartitionStats;
             auto it = partitionStats.find(p.ShardIdx);
-            std::vector<TShardIdx> dataErasureShards;
             if (it != partitionStats.end()) {
                 EnqueueBackgroundCompaction(p.ShardIdx, it->second);
                 UpdateShardMetrics(p.ShardIdx, it->second);
-                dataErasureShards.push_back(p.ShardIdx);
-            }
-            if (DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
-                Execute(CreateTxAddEntryToDataErasure(dataErasureShards), this->ActorContext());
+                newDataErasureShards.push_back(p.ShardIdx);
             }
         }
+        if (EnableDataErasure && DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
+            Execute(CreateTxAddEntryToDataErasure(newDataErasureShards), this->ActorContext());
+        }
 
-        std::vector<TShardIdx> cancelDataErasureShards;
         for (const auto& p: oldPartitioning) {
             if (!newPartitioningSet.contains(p.ShardIdx)) {
                 // note that queues might not contain the shard
                 OnShardRemoved(p.ShardIdx);
-                cancelDataErasureShards.push_back(p.ShardIdx);
-            }
-            if (DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
-                Execute(CreateTxCancelDataErasureShards(cancelDataErasureShards), this->ActorContext());
             }
         }
     }
@@ -7224,6 +7290,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         ConfigureStatsBatching(schemeShardConfig, ctx);
         ConfigureStatsOperations(schemeShardConfig, ctx);
         MaxCdcInitialScanShardsInFlight = schemeShardConfig.GetMaxCdcInitialScanShardsInFlight();
+        MaxRestoreBuildIndexShardsInFlight = schemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
     }
 
     if (appConfig.HasTableProfilesConfig()) {
@@ -7233,15 +7300,8 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
     }
 
     if (appConfig.HasQueryServiceConfig()) {
-        const auto& hostnamePatterns = appConfig.GetQueryServiceConfig().GetHostnamePatterns();
-        ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(
-            std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()),
-            nullptr,
-            appConfig.GetQueryServiceConfig().GetS3().GetGeneratorPathsLimit(),
-            nullptr,
-            appConfig.GetFeatureFlags().GetEnableExternalSourceSchemaInference(),
-            appConfig.GetQueryServiceConfig().GetS3().GetAllowLocalFiles()
-        );
+        const auto& queryServiceConfig = appConfig.GetQueryServiceConfig();
+        ConfigureExternalSources(queryServiceConfig, ctx);
     }
 
     if (appConfig.HasAuthConfig()) {
@@ -7276,17 +7336,15 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableAlterDatabaseCreateHiveFirst = featureFlags.GetEnableAlterDatabaseCreateHiveFirst();
     EnablePQConfigTransactionsAtSchemeShard = featureFlags.GetEnablePQConfigTransactionsAtSchemeShard();
     EnableStatistics = featureFlags.GetEnableStatistics();
-    EnableTablePgTypes = featureFlags.GetEnableTablePgTypes();
     EnableServerlessExclusiveDynamicNodes = featureFlags.GetEnableServerlessExclusiveDynamicNodes();
     EnableAddColumsWithDefaults = featureFlags.GetEnableAddColumsWithDefaults();
     EnableTempTables = featureFlags.GetEnableTempTables();
     EnableReplaceIfExistsForExternalEntities = featureFlags.GetEnableReplaceIfExistsForExternalEntities();
-    EnableTableDatetime64 = featureFlags.GetEnableTableDatetime64();
     EnableResourcePoolsOnServerless = featureFlags.GetEnableResourcePoolsOnServerless();
     EnableVectorIndex = featureFlags.GetEnableVectorIndex();
     EnableExternalDataSourcesOnServerless = featureFlags.GetEnableExternalDataSourcesOnServerless();
-    EnableParameterizedDecimal = featureFlags.GetEnableParameterizedDecimal();
     EnableDataErasure = featureFlags.GetEnableDataErasure();
+    EnableExternalSourceSchemaInference = featureFlags.GetEnableExternalSourceSchemaInference();
 }
 
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {
@@ -7445,7 +7503,6 @@ void TSchemeShard::ConfigureBackgroundCleaningQueue(
                  << ", InflightLimit# " << cleaningConfig.InflightLimit);
 }
 
-// void TScheme
 void TSchemeShard::ConfigureLoginProvider(
         const ::NKikimrProto::TAuthConfig& config,
         const TActorContext &ctx)
@@ -7457,10 +7514,18 @@ void TSchemeShard::ConfigureLoginProvider(
         .MinUpperCaseCount = passwordComplexityConfig.GetMinUpperCaseCount(),
         .MinNumbersCount = passwordComplexityConfig.GetMinNumbersCount(),
         .MinSpecialCharsCount = passwordComplexityConfig.GetMinSpecialCharsCount(),
-        .SpecialChars = (passwordComplexityConfig.GetSpecialChars().empty() ? NLogin::TPasswordComplexity::VALID_SPECIAL_CHARS : passwordComplexityConfig.GetSpecialChars()),
+        .SpecialChars = passwordComplexityConfig.GetSpecialChars(),
         .CanContainUsername = passwordComplexityConfig.GetCanContainUsername()
     });
     LoginProvider.UpdatePasswordCheckParameters(passwordComplexity);
+
+    auto getSpecialChars = [&passwordComplexity] () {
+        TStringBuilder result;
+        for (const auto& ch : passwordComplexity.SpecialChars) {
+            result << ch;
+        }
+        return result;
+    };
 
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                  "PasswordComplexity for LoginProvider configured: MinLength# " << passwordComplexity.MinLength
@@ -7468,7 +7533,7 @@ void TSchemeShard::ConfigureLoginProvider(
                  << ", MinUpperCaseCount# " << passwordComplexity.MinUpperCaseCount
                  << ", MinNumbersCount# " << passwordComplexity.MinNumbersCount
                  << ", MinSpecialCharsCount# " << passwordComplexity.MinSpecialCharsCount
-                 << ", SpecialChars# " << (passwordComplexityConfig.GetSpecialChars().empty() ? NLogin::TPasswordComplexity::VALID_SPECIAL_CHARS : passwordComplexityConfig.GetSpecialChars())
+                 << ", SpecialChars# " << getSpecialChars()
                  << ", CanContainUsername# " << (passwordComplexity.CanContainUsername ? "true" : "false"));
 }
 
@@ -7486,6 +7551,26 @@ void TSchemeShard::ConfigureAccountLockout(
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                  "AccountLockout configured: AttemptThreshold# " << accountLockoutInitializer.AttemptThreshold
                  << ", AttemptResetDuration# " << accountLockoutInitializer.AttemptResetDuration);
+}
+
+void TSchemeShard::ConfigureExternalSources(
+    const NKikimrConfig::TQueryServiceConfig& config,
+    const TActorContext& ctx) {
+    const auto& hostnamePatterns = config.GetHostnamePatterns();
+    const auto& availableExternalDataSources = config.GetAvailableExternalDataSources();
+    ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(
+        std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()),
+        nullptr,
+        config.GetS3().GetGeneratorPathsLimit(),
+        nullptr,
+        EnableExternalSourceSchemaInference,
+        config.GetS3().GetAllowLocalFiles(),
+        std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend())
+    );
+
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "ExternalSources configured: HostnamePatterns# " << Join(", ", hostnamePatterns)
+        << ", AvailableExternalDataSources# " << Join(", ", availableExternalDataSources));
 }
 
 void TSchemeShard::StartStopCompactionQueues() {
@@ -7651,7 +7736,11 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvTenantDataErasureRequest::TPtr& ev,
 }
 
 void TSchemeShard::Handle(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev, const TActorContext& ctx) {
-    Execute(CreateTxCompleteDataErasureShard(ev), ctx);
+    Execute(CreateTxCompleteDataErasureShard<TEvDataShard::TEvForceDataCleanupResult::TPtr>(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvKeyValue::TEvCleanUpDataResponse::TPtr& ev, const TActorContext& ctx) {
+    Execute(this->CreateTxCompleteDataErasureShard(ev), ctx);
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev, const TActorContext& ctx) {

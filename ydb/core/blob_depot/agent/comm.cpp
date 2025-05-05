@@ -1,8 +1,6 @@
 #include "agent_impl.h"
 #include "blocks.h"
 
-#include <ydb/core/wrappers/s3_wrapper.h>
-
 namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
@@ -99,14 +97,9 @@ namespace NKikimr::NBlobDepot {
             S3WrapperId = {};
         }
 
-        if (S3BackendSettings) {
-            auto& settings = S3BackendSettings->GetSettings();
-            ExternalStorageConfig = NWrappers::IExternalStorageConfig::Construct(settings);
-            S3WrapperId = Register(NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator()));
-            S3BasePath = TStringBuilder() << settings.GetObjectKeyPattern() << '/' << msg.GetName();
-        } else {
-            ExternalStorageConfig = {};
-        }
+#ifndef KIKIMR_DISABLE_S3_OPS
+        InitS3(msg.GetName());
+#endif
 
         OnConnect();
     }

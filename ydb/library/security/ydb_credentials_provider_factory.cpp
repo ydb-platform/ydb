@@ -1,6 +1,6 @@
 #include "ydb_credentials_provider_factory.h"
 
-#include <ydb-cpp-sdk/client/iam/iam.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
 
 namespace NKikimr {
 

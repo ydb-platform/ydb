@@ -2,8 +2,8 @@
 
 #include <ydb/public/lib/ydb_cli/common/command.h>
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
 #include <library/cpp/logger/backend.h>
 

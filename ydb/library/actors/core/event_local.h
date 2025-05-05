@@ -20,10 +20,6 @@ namespace NActors {
         bool IsSerializable() const override {
             return false;
         }
-
-        static IEventBase* Load(TEventSerializedData*) {
-            Y_ABORT("Loading of local event %s type %" PRIu32, TypeName<TEv>().data(), TEventType);
-        }
     };
 
 }

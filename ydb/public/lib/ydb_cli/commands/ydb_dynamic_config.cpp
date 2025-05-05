@@ -1,7 +1,7 @@
 #include "ydb_dynamic_config.h"
 
-#include <ydb-cpp-sdk/client/draft/ydb_dynamic_config.h>
-#include <ydb-cpp-sdk/client/config/config.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_dynamic_config.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/config/config.h>
 #include <ydb/library/yaml_config/public/yaml_config.h>
 
 #include <openssl/sha.h>
@@ -39,19 +39,22 @@ TString WrapStaticConfig(const TString& yaml) {
 }
 
 TCommandConfig::TCommandConfig(
+        bool useLegacyApi,
         TCommandFlagsOverrides commandFlagsOverrides,
         bool allowEmptyDatabase)
     : TClientCommandTree("config", {}, "Dynamic config")
     , CommandFlagsOverrides(commandFlagsOverrides)
 {
-    AddCommand(std::make_unique<TCommandConfigFetch>(allowEmptyDatabase));
-    AddCommand(std::make_unique<TCommandConfigReplace>(allowEmptyDatabase));
+    AddCommand(std::make_unique<TCommandConfigFetch>(useLegacyApi, allowEmptyDatabase));
+    AddCommand(std::make_unique<TCommandConfigReplace>(useLegacyApi, allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandConfigResolve>());
     AddCommand(std::make_unique<TCommandGenerateDynamicConfig>(allowEmptyDatabase));
 }
 
-TCommandConfig::TCommandConfig(bool allowEmptyDatabase)
-    : TCommandConfig(TCommandFlagsOverrides{}, allowEmptyDatabase)
+TCommandConfig::TCommandConfig(
+    bool useLegacyApi,
+    bool allowEmptyDatabase)
+    : TCommandConfig(useLegacyApi, TCommandFlagsOverrides{}, allowEmptyDatabase)
 {}
 
 void TCommandConfig::PropagateFlags(const TCommandFlags& flags) {
@@ -70,8 +73,11 @@ void TCommandConfig::PropagateFlags(const TCommandFlags& flags) {
     }
 }
 
-TCommandConfigFetch::TCommandConfigFetch(bool allowEmptyDatabase)
+TCommandConfigFetch::TCommandConfigFetch(
+        bool useLegacyApi,
+        bool allowEmptyDatabase)
     : TYdbReadOnlyCommand("fetch", {"get", "dump"}, "Fetch main dynamic-config")
+    , UseLegacyApi(useLegacyApi)
     , AllowEmptyDatabase(allowEmptyDatabase)
 {
 }
@@ -81,7 +87,7 @@ void TCommandConfigFetch::Config(TConfig& config) {
     config.Opts->AddLongOption("output-directory", "Directory to save config(s)")
         .RequiredArgument("[directory]").StoreResult(&OutDir);
     config.Opts->AddLongOption("strip-metadata", "Strip metadata from config")
-        .NoArgument().SetFlag(&StripMetadata);
+        .StoreTrue(&StripMetadata);
     config.Opts->AddLongOption("dedicated-storage-section", "Fetch dedicated storage section")
         .StoreTrue(&DedicatedStorageSection);
     config.Opts->AddLongOption("dedicated-cluster-section", "Fetch dedicated cluster section")
@@ -106,11 +112,16 @@ int TCommandConfigFetch::Run(TConfig& config) {
     auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
     auto client = NYdb::NConfig::TConfigClient(*driver);
 
-    NYdb::NConfig::TFetchAllConfigsSettings settings;
-    auto result = client.FetchAllConfigs(settings).GetValueSync();
+    NYdb::NConfig::TFetchConfigResult result(TStatus(EStatus::CLIENT_CALL_UNIMPLEMENTED, {}), {});
+
+    if (!UseLegacyApi) {
+        NYdb::NConfig::TFetchAllConfigsSettings settings;
+        result = client.FetchAllConfigs(settings).GetValueSync();
+    }
 
     // if the new Config API is not supported, fallback to the old DynamicConfig API
-    if (result.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED) {
+    if (result.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED || result.GetStatus() == EStatus::UNSUPPORTED) {
+        Cerr << "Warning: Fallback to DynamicConfig API" << Endl;
         auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
         auto result = client.GetConfig().GetValueSync();
         NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
@@ -129,7 +140,7 @@ int TCommandConfigFetch::Run(TConfig& config) {
         }
 
         if (!OutDir) {
-            Cout << WrapYaml(cfg);
+            Cout << cfg << Endl;
         } else {
             TFsPath dir(OutDir);
             dir.MkDirs();
@@ -160,18 +171,38 @@ int TCommandConfigFetch::Run(TConfig& config) {
         }, entry.Identity);
     }
 
+
+    // TODO: rewrite it in proper way, without stdout and stderr confusion
     if (!clusterConfig.empty()) {
+        try {
+            clusterConfig = NYamlConfig::UpgradeMainConfigVersion(clusterConfig);
+        } catch(...) {
+            // it is better to return at least something
+            // because for user it is the only way to get config
+            // user will be unable to reupload this config without manual interaction
+            // and will get attention that something went horribly wrong
+            Cerr << "Unable to bump main config version, returning as-is" << Endl;
+        }
         if (!storageConfig.empty() || DedicatedStorageSection) {
             Cerr << "cluster config: " << Endl;
         }
-        Cout << WrapYaml(TString(clusterConfig));
+        Cout << clusterConfig << Endl;
     }
 
     if (!storageConfig.empty()) {
+        try {
+            storageConfig = NYamlConfig::UpgradeStorageConfigVersion(storageConfig);
+        } catch(...) {
+            // it is better to return at least something
+            // because for user it is the only way to get config
+            // user will be unable to reupload this config without manual interaction
+            // and will get attention that something went horribly wrong
+            Cerr << "Unable to bump storage config version, returning as-is" << Endl;
+        }
         if (!clusterConfig.empty() || DedicatedClusterSection) {
             Cerr << "storage config:" << Endl;
         }
-        Cout << WrapYaml(TString(storageConfig));
+        Cout << storageConfig << Endl;
     }
 
     if (clusterConfig.empty() && storageConfig.empty()) {
@@ -182,8 +213,11 @@ int TCommandConfigFetch::Run(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
-TCommandConfigReplace::TCommandConfigReplace(bool allowEmptyDatabase)
+TCommandConfigReplace::TCommandConfigReplace(
+        bool useLegacyApi,
+        bool allowEmptyDatabase)
     : TYdbCommand("replace", {}, "Replace dynamic config")
+    , UseLegacyApi(useLegacyApi)
     , IgnoreCheck(false)
     , AllowEmptyDatabase(allowEmptyDatabase)
 {
@@ -194,13 +228,13 @@ void TCommandConfigReplace::Config(TConfig& config) {
     config.Opts->AddLongOption('f', "filename", "Filename of the file containing configuration")
         .Required().RequiredArgument("[config.yaml]").StoreResult(&Filename);
     config.Opts->AddLongOption("ignore-local-validation", "Ignore local config applicability checks")
-        .NoArgument().SetFlag(&IgnoreCheck);
+        .StoreTrue(&IgnoreCheck);
     config.Opts->AddLongOption("dry-run", "Check config applicability")
-        .NoArgument().SetFlag(&DryRun);
+        .StoreTrue(&DryRun);
     config.Opts->AddLongOption("allow-unknown-fields", "Allow fields not present in config")
-        .NoArgument().SetFlag(&AllowUnknownFields);
+        .StoreTrue(&AllowUnknownFields);
     config.Opts->AddLongOption("force", "Ignore metadata on config replacement")
-        .NoArgument().SetFlag(&Force);
+        .StoreTrue(&Force);
     config.AllowEmptyDatabase = AllowEmptyDatabase;
     config.SetFreeArgsNum(0);
 }
@@ -212,7 +246,7 @@ void TCommandConfigReplace::Parse(TConfig& config) {
         ythrow yexception() << "Must specify non-empty -f (--filename)";
     }
 
-   const auto configStr = Filename == "-" ? Cin.ReadAll() : TFileInput(Filename).ReadAll();
+    const auto configStr = Filename == "-" ? Cin.ReadAll() : TFileInput(Filename).ReadAll();
 
     DynamicConfig = configStr;
 
@@ -242,9 +276,13 @@ int TCommandConfigReplace::Run(TConfig& config) {
         settings.AllowUnknownFields();
     }
 
-    auto status = client.ReplaceConfig(DynamicConfig, settings).GetValueSync();
+    auto status = TStatus(EStatus::CLIENT_CALL_UNIMPLEMENTED, {});
 
-    if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED) {
+    if (!UseLegacyApi) {
+        status = client.ReplaceConfig(DynamicConfig, settings).GetValueSync();
+    }
+
+    if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED || status.GetStatus() == EStatus::UNSUPPORTED) {
         Cerr << "Warning: Fallback to DynamicConfig API" << Endl;
 
         auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
@@ -281,10 +319,10 @@ TCommandConfigResolve::TCommandConfigResolve()
 void TCommandConfigResolve::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->AddLongOption("all", "Resolve for all combinations")
-        .NoArgument().SetFlag(&All);
+        .StoreTrue(&All);
     config.Opts->AddLongOption("label", "Labels for this node")
         .Optional().RequiredArgument("[LABEL=VALUE]")
-        .KVHandler([this](TString key, TString val) {
+        .GetOpt().KVHandler([this](TString key, TString val) {
             Labels[key] = val;
         });
     config.Opts->AddLongOption('f', "filename", "Filename of the file containing configuration to resolve")
@@ -294,13 +332,13 @@ void TCommandConfigResolve::Config(TConfig& config) {
     config.Opts->AddLongOption("output-directory", "Directory to save config(s)")
         .Optional().RequiredArgument("[directory]").StoreResult(&OutDir);
     config.Opts->AddLongOption("from-cluster", "Fetch current config from cluster instead of the local file")
-        .NoArgument().SetFlag(&FromCluster);
+        .StoreTrue(&FromCluster);
     config.Opts->AddLongOption("remote-resolve", "Use resolver on cluster instead of built-in resolver")
-        .NoArgument().SetFlag(&RemoteResolve);
+        .StoreTrue(&RemoteResolve);
     config.Opts->AddLongOption("node-id", "Take labels from node with the specified id")
         .Optional().RequiredArgument("[node]").StoreResult(&NodeId);
     config.Opts->AddLongOption("skip-volatile", "Ignore volatile configs")
-        .NoArgument().SetFlag(&SkipVolatile);
+        .StoreTrue(&SkipVolatile);
     config.SetFreeArgsNum(0);
 }
 
@@ -558,9 +596,9 @@ void TCommandConfigVolatileAdd::Config(TConfig& config) {
     config.Opts->AddLongOption('f', "filename", "filename to set")
         .Required().RequiredArgument("[config.yaml]").StoreResult(&Filename);
     config.Opts->AddLongOption("ignore-local-validation", "Ignore local config applicability checks")
-        .NoArgument().SetFlag(&IgnoreCheck);
+        .StoreTrue(&IgnoreCheck);
     config.Opts->AddLongOption("dry-run", "Check config applicability")
-        .NoArgument().SetFlag(&DryRun);
+        .StoreTrue(&DryRun);
     config.SetFreeArgsNum(0);
 
 }
@@ -619,7 +657,7 @@ void TCommandConfigVolatileDrop::Config(TConfig& config) {
         .Optional().RequiredArgument("[ui64]")
         .InsertTo(&Ids);
     config.Opts->AddLongOption("all", "Remove all volatile configs")
-        .NoArgument().SetFlag(&All);
+        .StoreTrue(&All);
     config.Opts->AddLongOption('f', "filename", "Filename of the file containing configuration to remove")
         .RequiredArgument("[String]").DefaultValue("").StoreResult(&Filename);
     config.Opts->AddLongOption("cluster", "Cluster name")
@@ -627,7 +665,7 @@ void TCommandConfigVolatileDrop::Config(TConfig& config) {
     config.Opts->AddLongOption("version", "Config version")
         .RequiredArgument("[ui64]").StoreResult(&Version);
     config.Opts->AddLongOption("force", "Ignore version and cluster check")
-        .NoArgument().SetFlag(&Force);
+        .StoreTrue(&Force);
     config.Opts->AddLongOption("directory", "Directory with volatile configs")
         .Optional().RequiredArgument("[directory]").StoreResult(&Dir);
 }
@@ -715,11 +753,11 @@ void TCommandConfigVolatileFetch::Config(TConfig& config) {
     config.Opts->AddLongOption("id", "Volatile config id")
         .Optional().RequiredArgument("[ui64]").InsertTo(&Ids);
     config.Opts->AddLongOption("all", "Fetch all volatile configs")
-        .NoArgument().SetFlag(&All);
+        .StoreTrue(&All);
     config.Opts->AddLongOption("output-directory", "Directory to save config(s)")
         .RequiredArgument("[directory]").StoreResult(&OutDir);
     config.Opts->AddLongOption("strip-metadata", "Strip metadata from config(s)")
-        .NoArgument().SetFlag(&StripMetadata);
+        .StoreTrue(&StripMetadata);
     config.SetFreeArgsNum(0);
     config.Opts->MutuallyExclusive("output-directory", "strip-metadata");
 }

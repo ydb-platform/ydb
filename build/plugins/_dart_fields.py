@@ -598,33 +598,9 @@ class LintConfigs:
 
     @classmethod
     def python_configs(cls, unit, flat_args, spec_args):
-        resolved_configs = []
-
-        if (custom_config := spec_args.get('CUSTOM_CONFIG')) and '/' in custom_config[0]:
-            # black if custom config is passed.
-            # XXX During migration we want to use the same macro parameter
-            # for path to linter config and config type
-            # thus, we check if '/' is present, if it is then it's a path
-            # TODO delete once custom configs migrated to autoincludes scheme
-            custom_config = custom_config[0]
-            assert_file_exists(unit, custom_config)
-            resolved_configs.append(custom_config)
-            return {cls.KEY: serialize_list(resolved_configs)}
-
         if config := cls._from_config_type(unit, spec_args):
             # specified by config type, autoincludes scheme
             return {cls.KEY: serialize_list([config])}
-
-        if project_to_config_map := spec_args.get('PROJECT_TO_CONFIG_MAP'):
-            # ruff, TODO delete once custom configs migrated to autoincludes scheme
-            project_to_config_map = project_to_config_map[0]
-            assert_file_exists(unit, project_to_config_map)
-            resolved_configs.append(project_to_config_map)
-            cfgs = get_linter_configs(unit, project_to_config_map).values()
-            for c in cfgs:
-                assert_file_exists(unit, c)
-                resolved_configs.append(c)
-            return {cls.KEY: serialize_list(resolved_configs)}
 
         # default config
         linter_name = spec_args['NAME'][0]
@@ -636,20 +612,13 @@ class LintConfigs:
             ymake.report_configure_error(message)
             raise DartValueError()
         assert_file_exists(unit, config)
-        resolved_configs.append(config)
+        configs = [config]
         if linter_name in ('flake8', 'py2_flake8'):
-            resolved_configs.extend(spec_args.get('FLAKE_MIGRATIONS_CONFIG', []))
-        return {cls.KEY: serialize_list(resolved_configs)}
+            configs.extend(spec_args.get('FLAKE_MIGRATIONS_CONFIG', []))
+        return {cls.KEY: serialize_list(configs)}
 
     @classmethod
     def cpp_configs(cls, unit, flat_args, spec_args):
-        custom_config = spec_args.get('CUSTOM_CONFIG')
-        if custom_config:
-            # TODO delete CUSTOM_CONFIG, it's used only by arc
-            config = custom_config[0]
-            assert_file_exists(unit, config)
-            return {cls.KEY: serialize_list([config])}
-
         if config := cls._from_config_type(unit, spec_args):
             # specified by config type, autoincludes scheme
             return {cls.KEY: serialize_list([config])}
@@ -670,7 +639,7 @@ class LintConfigs:
 class LintExtraParams:
     KEY = 'LINT-EXTRA-PARAMS'
 
-    _CUSTOM_CLANG_FORMAT_BIN_ALLOWED_PATHS = ('ads', 'bigrt', 'grut', 'yabs')
+    _CUSTOM_CLANG_FORMAT_ALLOWED_PATHS = ('ads', 'bigrt', 'grut', 'yabs', 'maps')
 
     @classmethod
     def from_macro_args(cls, unit, flat_args, spec_args):
@@ -680,9 +649,9 @@ class LintExtraParams:
                 message = 'Wrong EXTRA_PARAMS value: "{}". Values must have format "name=value".'.format(arg)
                 ymake.report_configure_error(message)
                 raise DartValueError()
-            if 'clang_format_bin' in arg:
+            if 'custom_clang_format' in arg:
                 upath = unit.path()[3:]
-                if not upath.startswith(cls._CUSTOM_CLANG_FORMAT_BIN_ALLOWED_PATHS):
+                if not upath.startswith(cls._CUSTOM_CLANG_FORMAT_ALLOWED_PATHS):
                     message = f'Custom clang-format is not allowed in upath: {upath}'
                     ymake.report_configure_error(message)
                     raise DartValueError()
@@ -704,7 +673,6 @@ class LintName:
     def value(cls, unit, flat_args, spec_args):
         lint_name = spec_args['NAME'][0]
         if lint_name in ('flake8', 'py2_flake8') and (unit.get('DISABLE_FLAKE8') or 'no') == 'yes':
-            unit.message(['INFO', 'Flake8 linting is disabled by `DISABLE_FLAKE8`'])
             raise DartValueError()
         return {cls.KEY: lint_name}
 
@@ -1139,22 +1107,6 @@ class TestFiles:
 
     # XXX: this is a workaround to support very specific linting settings.
     # Do not use it as a general mechanism!
-    _GRUT_PREFIX = 'grut'
-    _GRUT_INCLUDE_LINTER_TEST_PATHS = (
-        'grut/libs/bigrt/clients',
-        'grut/libs/bigrt/common',
-        'grut/libs/bigrt/data',
-        'grut/libs/bigrt/event_filter',
-        'grut/libs/bigrt/info_keepers',
-        'grut/libs/bigrt/processor',
-        'grut/libs/bigrt/profile',
-        'grut/libs/bigrt/profiles',
-        'grut/libs/bigrt/queue_info_config',
-        'grut/libs/shooter',
-    )
-
-    # XXX: this is a workaround to support very specific linting settings.
-    # Do not use it as a general mechanism!
     _MAPS_RENDERER_PREFIX = 'maps/renderer'
     _MAPS_RENDERER_INCLUDE_LINTER_TEST_PATHS = (
         'maps/renderer/cartograph',
@@ -1164,6 +1116,7 @@ class TestFiles:
         'maps/renderer/libs/data_sets/yt_data_set',
         'maps/renderer/libs/design',
         'maps/renderer/libs/geosx',
+        'maps/renderer/libs/geojson_to_yt',
         'maps/renderer/libs/gltf',
         'maps/renderer/libs/golden',
         'maps/renderer/libs/hd3d',
@@ -1285,12 +1238,6 @@ class TestFiles:
     @classmethod
     def cpp_linter_files(cls, unit, flat_args, spec_args):
         upath = unit.path()[3:]
-        if upath.startswith(cls._GRUT_PREFIX):
-            for path in cls._GRUT_INCLUDE_LINTER_TEST_PATHS:
-                if os.path.commonpath([upath, path]) == path:
-                    break
-            else:
-                raise DartValueError()
 
         if upath.startswith(cls._MAPS_RENDERER_PREFIX):
             for path in cls._MAPS_RENDERER_INCLUDE_LINTER_TEST_PATHS:
@@ -1394,6 +1341,14 @@ class TestPartition:
     @classmethod
     def value(cls, unit, flat_args, spec_args):
         return {cls.KEY: unit.get("TEST_PARTITION")}
+
+
+class TestExperimentalFork:
+    KEY = 'TEST_EXPERIMENTAL_FORK'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        return {cls.KEY: unit.get("TEST_EXPERIMENTAL_FORK")}
 
 
 class TestRecipes:

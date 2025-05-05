@@ -1,10 +1,7 @@
 #pragma once
-#include "json_handlers.h"
 #include "json_pipe_req.h"
-#include "log.h"
 #include "viewer.h"
 #include "viewer_helper.h"
-#include "viewer_tabletinfo.h"
 #include "wb_group.h"
 
 namespace NKikimr::NViewer {
@@ -51,7 +48,7 @@ constexpr ui8 operator +(ENodeFields e) {
     return static_cast<ui8>(e);
 }
 
-bool operator ==(const NActorsInterconnect::TScopeId& x, const NActorsInterconnect::TScopeId& y) {
+inline bool operator ==(const NActorsInterconnect::TScopeId& x, const NActorsInterconnect::TScopeId& y) {
     return x.GetX1() == y.GetX1() && x.GetX2() == y.GetX2();
 }
 
@@ -1105,16 +1102,16 @@ public:
             PathNavigateResponse = MakeRequestSchemeCacheNavigate(FilterPath, ENavigateRequestPath);
         }
         if (!FilterStoragePools.empty()) {
-            StoragePoolsResponse = RequestBSControllerPools();
-            GroupsResponse = RequestBSControllerGroups();
-            VSlotsResponse = RequestBSControllerVSlots();
+            StoragePoolsResponse = MakeCachedRequestBSControllerPools();
+            GroupsResponse = MakeCachedRequestBSControllerGroups();
+            VSlotsResponse = MakeCachedRequestBSControllerVSlots();
             FilterStorageStage = EFilterStorageStage::Pools;
         } else if (!FilterGroupIds.empty()) {
-            VSlotsResponse = RequestBSControllerVSlots();
+            VSlotsResponse = MakeCachedRequestBSControllerVSlots();
             FilterStorageStage = EFilterStorageStage::VSlots;
         }
         if (With != EWith::Everything) {
-            PDisksResponse = RequestBSControllerPDisks();
+            PDisksResponse = MakeCachedRequestBSControllerPDisks();
         }
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         auto* domain = domains->GetDomain();
@@ -1124,17 +1121,17 @@ public:
             TTabletId rootHiveId = domains->GetHive();
             HivesToAsk.push_back(rootHiveId);
             if (!PDisksResponse) {
-                PDisksResponse = RequestBSControllerPDisks();
+                PDisksResponse = MakeCachedRequestBSControllerPDisks();
             }
         }
         if (FieldsRequired.test(+ENodeFields::PDisks)) {
             if (!PDisksResponse) {
-                PDisksResponse = RequestBSControllerPDisks();
+                PDisksResponse = MakeCachedRequestBSControllerPDisks();
             }
         }
         if (FieldsRequired.test(+ENodeFields::VDisks)) {
             if (!VSlotsResponse) {
-                VSlotsResponse = RequestBSControllerVSlots();
+                VSlotsResponse = MakeCachedRequestBSControllerVSlots();
             }
         }
         if (FieldsNeeded(FieldsHiveNodeStat) && !FilterDatabase && !FilterPath) {
@@ -1734,13 +1731,13 @@ public:
                 }
                 if (!FilterStoragePools.empty()) {
                     if (!StoragePoolsResponse) {
-                        StoragePoolsResponse = RequestBSControllerPools();
+                        StoragePoolsResponse = MakeCachedRequestBSControllerPools();
                     }
                     if (!GroupsResponse) {
-                        GroupsResponse = RequestBSControllerGroups();
+                        GroupsResponse = MakeCachedRequestBSControllerGroups();
                     }
                     if (!VSlotsResponse) {
-                        VSlotsResponse = RequestBSControllerVSlots();
+                        VSlotsResponse = MakeCachedRequestBSControllerVSlots();
                     }
                 }
             }
@@ -1895,6 +1892,10 @@ public:
                                 HivesToAsk.push_back(entry.DomainInfo->Params.GetHive());
                             }
                         }
+                    } else {
+                        FilterPathId = TPathId(InvalidOwnerId - 1, InvalidLocalPathId - 1); // invalid path id for sys view tables
+                        AskHiveAboutPaths = true;
+                        HivesToAsk.push_back(AppData()->DomainsInfo->GetHive());
                     }
                 }
             } else {
@@ -1961,6 +1962,8 @@ public:
                 if (AskHiveAboutPaths) {
                     request->Record.SetFilterTabletsBySchemeShardId(FilterPathId.OwnerId);
                     request->Record.SetFilterTabletsByPathId(FilterPathId.LocalPathId);
+                } else if (FilterSubDomainKey) {
+                    request->Record.MutableFilterTabletsByObjectDomain()->CopyFrom(SubDomainKey);
                 }
                 HiveNodeStats.emplace(hiveId, MakeRequestHiveNodeStats(hiveId, request.release()));
             }
@@ -1983,8 +1986,8 @@ public:
                                         viewerTablet.SetType(NKikimrTabletBase::TTabletTypes::EType_Name(stateStats.GetTabletType()));
                                         viewerTablet.SetCount(stateStats.GetCount());
                                         viewerTablet.SetState(GetFlagFromTabletState(stateStats.GetVolatileState()));
-                                        FieldsAvailable.set(+ENodeFields::Tablets);
                                     }
+                                    FieldsAvailable.set(+ENodeFields::Tablets);
                                 }
                                 if (nodeStats.HasLastAliveTimestamp()) {
                                     node->SystemState.SetDisconnectTime(std::max(node->SystemState.GetDisconnectTime(), nodeStats.GetLastAliveTimestamp())); // milliseconds
@@ -2138,6 +2141,7 @@ public:
             request->MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TSystemStateInfo>());
             request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresUsedFieldNumber);
             request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresTotalFieldNumber);
+            request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kRealNumberOfCpusFieldNumber);
             if (FieldsRequired.test(+ENodeFields::MemoryDetailed)) {
                 request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kMemoryStatsFieldNumber);
             }
@@ -2150,6 +2154,9 @@ public:
             request->AddFieldsRequired(-1);
         }
         request->SetGroupBy("Type,State");
+        if (FilterSubDomainKey) {
+            request->MutableFilterTenantId()->CopyFrom(SubDomainKey);
+        }
     }
 
     template<>
@@ -3151,6 +3158,9 @@ public:
         }
         for (auto problem : Problems) {
             json.AddProblems(problem);
+        }
+        if (CachedDataMaxAge) {
+            json.SetCachedDataMaxAge(CachedDataMaxAge.MilliSeconds());
         }
         if (NodeGroups.empty()) {
             for (TNode* node : NodeView) {

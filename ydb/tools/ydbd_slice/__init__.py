@@ -394,7 +394,10 @@ def arcadia_root(begin_path='.'):
 
 def deduce_kikimr_bin_from_args(args):
     if args.binary is not None:
-        path = os.path.abspath(args.binary)
+        if args.binary.find(':') < 0:
+            path = os.path.abspath(args.binary)
+        else:
+            path = args.binary
     elif args.arcadia:
         root = arcadia_root()
         path = ya_build(root, YDBD_EXECUTABLE, args.build_args, args.dry_run)
@@ -468,7 +471,7 @@ def binaries_args():
         "--kikimr",
         metavar="BIN",
         default=None,
-        help="explicit path to ydbd"
+        help="explicit path to ydbd. Can be url: 'rbtorrent:<torrent>' for rbtorrent, 'sbr:<id>' for sandbox resource or 'http(s)://<url>' for http or 'script:' for custom script."
     )
     args.add_argument(
         "--binary-lz4",

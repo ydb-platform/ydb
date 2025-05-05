@@ -1,6 +1,8 @@
 #include "accessor.h"
 
 #include <ydb/core/formats/arrow/arrow_filter.h>
+
+#include <ydb/library/formats/arrow/arrow_helpers.h>
 namespace NKikimr::NArrow::NAccessor {
 
 namespace {
@@ -87,6 +89,45 @@ IChunkedArray::TLocalChunkedArrayAddress TCompositeChunkedArray::DoGetLocalChunk
     SelectChunk(chunkCurrent, position, accessor);
     AFL_VERIFY(result);
     return *result;
+}
+
+std::optional<bool> TCompositeChunkedArray::DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const {
+    std::optional<std::shared_ptr<arrow::Scalar>> result;
+    for (auto&& i : Chunks) {
+        std::shared_ptr<arrow::Scalar> valLocal;
+        auto res = i->CheckOneValueAccessor(valLocal);
+        if (!res || !*res) {
+            return res;
+        }
+        if (!result) {
+            result = valLocal;
+        } else if (!NArrow::ScalarCompareNullable(*result, valLocal)) {
+            return false;
+        }
+    }
+    AFL_VERIFY(!!result);
+    value = *result;
+    return true;
+}
+
+std::shared_ptr<arrow::ChunkedArray> TCompositeChunkedArray::GetChunkedArray(const TColumnConstructionContext& context) const {
+    ui32 pos = 0;
+    std::vector<std::shared_ptr<arrow::Array>> chunks;
+    for (auto&& i : Chunks) {
+        auto sliceCtx = context.Slice(pos, i->GetRecordsCount());
+        if (!sliceCtx) {
+            if (chunks.size()) {
+                break;
+            } else {
+                pos += i->GetRecordsCount();
+                continue;
+            }
+        }
+        std::shared_ptr<arrow::ChunkedArray> arr = i->GetChunkedArray(*sliceCtx);
+        chunks.insert(chunks.end(), arr->chunks().begin(), arr->chunks().end());
+        pos += i->GetRecordsCount();
+    }
+    return std::make_shared<arrow::ChunkedArray>(std::move(chunks));
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

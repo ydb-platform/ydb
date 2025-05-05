@@ -189,7 +189,9 @@ bool CanCacheQuery(const NKqpProto::TKqpPhyQuery& query) {
                 // S3 provider stores S3 paths to read in AST,
                 // YT provider opens read session during compilation,
                 // so we can't cache such queries
-                if (externalSourceType == "S3Source" || externalSourceType == YtProviderName) {
+                if (externalSourceType == "S3Source" ||
+                    externalSourceType == "SolomonSource" ||
+                    externalSourceType == YtProviderName) {
                     return false;
                 }
             }

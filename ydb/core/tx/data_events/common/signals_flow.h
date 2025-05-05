@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/tx/columnshard/counters/common/owner.h>
+#include <ydb/library/signals/owner.h>
 
 namespace NKikimr::NEvWrite {
 
@@ -13,7 +13,8 @@ enum class EWriteStage {
     BuildSlicesPack,
     Result,
     Finished,
-    Aborted
+    Aborted,
+    Replied
 };
 
 class TWriteFlowCounters: public NColumnShard::TCommonCountersOwner {

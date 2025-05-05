@@ -227,7 +227,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             auto it = tableClient.StreamExecuteScanQuery(selectQuery, NYdb::NTable::TStreamExecScanQuerySettings()).GetValueSync();
             auto streamPart = it.ReadNext().GetValueSync();
             UNIT_ASSERT(!streamPart.IsSuccess());
-            UNIT_ASSERT_STRING_CONTAINS(streamPart.GetIssues().ToString(), "reading blob range for data");
+            UNIT_ASSERT_STRING_CONTAINS(streamPart.GetIssues().ToString(), "Error reading blob range");
         }
 
         testHelper.CreateTier("tier1");
@@ -306,8 +306,15 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         olapHelper.CreateTestOlapTable();
         tieringHelper.WriteSampleData();
         csController->WaitCompactions(TDuration::Seconds(5));
-
-        csController->RegisterLock("table", std::make_shared<NOlap::NDataLocks::TListTablesLock>("table", THashSet<ui64>({0, 1, 2, 3, 4, 5}), NOlap::NDataLocks::ELockCategory::Compaction));
+        THashSet<NColumnShard::TInternalPathId> pathsToLock{
+            NColumnShard::TInternalPathId::FromRawValue(0),
+            NColumnShard::TInternalPathId::FromRawValue(1),
+            NColumnShard::TInternalPathId::FromRawValue(2),
+            NColumnShard::TInternalPathId::FromRawValue(3),
+            NColumnShard::TInternalPathId::FromRawValue(4),
+            NColumnShard::TInternalPathId::FromRawValue(5),
+        };
+        csController->RegisterLock("table", std::make_shared<NOlap::NDataLocks::TListTablesLock>("table", std::move(pathsToLock), NOlap::NDataLocks::ELockCategory::Compaction));
         {
             const TString query = R"(ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval("PT1S") ON timestamp)";
             auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();

@@ -520,6 +520,10 @@ Y_UNIT_TEST_SUITE(TTypeString)
         TestOk("Struct<>", "(StructType)");
     }
 
+    Y_UNIT_TEST(ParseErrorType) {
+        TestOk("Error<'<main>':1:2:'message'>", "(ErrorType '1 '2 '\"<main>\" '\"message\")");
+    }
+
     void TestFormat(const TString& yql, const TString& expectedTypeStr) {
         TMemoryPool pool(4096);
 

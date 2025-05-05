@@ -1,12 +1,12 @@
 #pragma once
 
-#include <src/client/federated_topic/impl/federated_topic_impl.h>
+#include <ydb/public/sdk/cpp/src/client/federated_topic/impl/federated_topic_impl.h>
 
-#include <src/client/topic/impl/write_session.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/write_session.h>
 
 #include <deque>
 
-namespace NYdb::inline V3::NFederatedTopic {
+namespace NYdb::inline Dev::NFederatedTopic {
 
 std::pair<std::shared_ptr<TDbInfo>, EStatus> SelectDatabaseByHashImpl(
     NTopic::TFederatedWriteSessionSettings const& settings,
@@ -173,13 +173,13 @@ public:
     NThreading::TFuture<uint64_t> GetInitSeqNo() override {
         return TryGetImpl()->GetInitSeqNo();
     }
-    void Write(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& message, NTable::TTransaction* tx = nullptr) override {
+    void Write(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& message, TTransactionBase* tx = nullptr) override {
         if (tx) {
             ythrow yexception() << "transactions are not supported";
         }
         TryGetImpl()->Write(std::move(continuationToken), std::move(message));
     }
-    void WriteEncoded(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& params, NTable::TTransaction* tx = nullptr) override {
+    void WriteEncoded(NTopic::TContinuationToken&& continuationToken, NTopic::TWriteMessage&& params, TTransactionBase* tx = nullptr) override {
         if (tx) {
             ythrow yexception() << "transactions are not supported";
         }
@@ -206,4 +206,4 @@ private:
     }
 };
 
-} // namespace NYdb::V3::NFederatedTopic
+} // namespace NYdb::NFederatedTopic

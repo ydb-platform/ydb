@@ -9,7 +9,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb-cpp-sdk/client/types/status_codes.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
 
 namespace NKikimr {

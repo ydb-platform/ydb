@@ -60,6 +60,11 @@ inputs:
     type: string
     default: ""
     description: "how many times to retry failed tests"
+  custom_branch_name:
+    description: "Custom branch name required when workflow branch != checkout branch"
+    type: string
+    required: false
+
 outputs:
   success:
     value: ${{ steps.build.outputs.status }}
@@ -271,8 +276,18 @@ runs:
           --cache-size 2TB --force-build-depends
         )
 
+        echo "inputs.custom_branch_name = ${{ inputs.custom_branch_name }}"
+        echo "GITHUB_REF_NAME = $GITHUB_REF_NAME"
 
-        TESTMO_BRANCH_TAG="$GITHUB_REF_NAME"
+        if [ -z "${{ inputs.custom_branch_name }}" ]; then
+          BRANCH_NAME="${GITHUB_REF_NAME}"
+        else
+          BRANCH_NAME="${{ inputs.custom_branch_name }}"
+        fi
+        echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+        echo "BRANCH_NAME is set to $BRANCH_NAME"
+
+        TESTMO_BRANCH_TAG="$BRANCH_NAME"
         TESTMO_ARCH="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
         TESTMO_PR_NUMBER=${{ github.event.number }}
 
@@ -453,6 +468,7 @@ runs:
               --public_dir "$PUBLIC_DIR" \
               --public_dir_url "$PUBLIC_DIR_URL" \
               --build_preset "$BUILD_PRESET" \
+              --branch "$BRANCH_NAME" \
               --status_report_file statusrep.txt \
               --is_retry $IS_RETRY \
               --is_last_retry $IS_LAST_RETRY \
@@ -470,7 +486,7 @@ runs:
 
           # upload tests results to YDB
           ydb_upload_run_name="${TESTMO_RUN_NAME// /"_"}"
-          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_JUNIT_XML_PATH} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull $ydb_upload_run_name --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch ${GITHUB_REF_NAME}`
+          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_JUNIT_XML_PATH} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull $ydb_upload_run_name --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
 
           if [ ${{ inputs.testman_token }} ]; then
             # finish testme session
@@ -573,7 +589,7 @@ runs:
             echo file ${file_to_check} NOT changed
         else
             echo file ${file_to_check} changed
-            .github/scripts/tests/get_muted_tests.py --output_folder "$PUBLIC_DIR/mute_info/" get_mute_diff --base_sha $ORIGINAL_HEAD~1 --head_sha $ORIGINAL_HEAD --job-id "${{ github.run_id }}" --branch "${GITHUB_REF_NAME}"
+            .github/scripts/tests/get_muted_tests.py --output_folder "$PUBLIC_DIR/mute_info/" get_mute_diff --base_sha $ORIGINAL_HEAD~1 --head_sha $ORIGINAL_HEAD --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"
             FILE_PATH=$PUBLIC_DIR/mute_info/2_new_muted_tests.txt
             SEPARATOR=""
             if [ -f "$FILE_PATH" ]; then
@@ -633,7 +649,7 @@ runs:
       run: |
         set -x
         export build_preset="${{ inputs.build_preset }}"
-        export branch_to_compare="$GITHUB_REF_NAME"
+        export branch_to_compare="$BRANCH_NAME"
         export yellow_treshold=102400
         export red_treshold=2097152
         export commit_git_sha="$(git rev-parse HEAD)"

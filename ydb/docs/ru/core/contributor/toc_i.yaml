@@ -5,6 +5,11 @@ items:
   href: build-ya.md
 - name: Релизы
   href: manage-releases.md
+- name: Документация
+  href: documentation/index.md
+  include:
+    mode: link
+    path: documentation/toc_p.yaml
 - name: Ядро
   items:
   - name: Общая схема
@@ -23,6 +28,8 @@ items:
       href: datashard-locks-and-change-visibility.md
     - name: Распределённые транзакции
       href: datashard-distributed-txs.md
+  - name: Конфигурация V2
+    href: configuration-v2.md
   - name: Тестирование с помощью нагружающих акторов
     href: load-actors-overview.md
     items:

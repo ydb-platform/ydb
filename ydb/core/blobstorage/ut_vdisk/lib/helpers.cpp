@@ -1154,7 +1154,7 @@ class TWaitForSync : public TActorBootstrapped<TWaitForSync> {
                         ui64 syncedLsn = info.SyncStates[j].SyncedLsn;
                         auto ri = [] { return TString("no internals"); };
                         NSyncLog::EReadWhatsNext whatsNext;
-                        whatsNext = NSyncLog::WhatsNext(syncedLsn, 0, &InfoVec[j].SyncLogEssence, ri).WhatsNext;
+                        whatsNext = NSyncLog::WhatsNext("", syncedLsn, 0, &InfoVec[j].SyncLogEssence, ri).WhatsNext;
                         if (whatsNext != NSyncLog::EWnDiskSynced)
                             return false;
                     }
@@ -2082,5 +2082,3 @@ NActors::IActor *ManyPutsToCorrespondingVDisks(const NActors::TActorId &notifyID
     return new TManyPutsToCorrespondingVDisksActor(notifyID, conf, dataSet, hndl, inFlight);
 }
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-

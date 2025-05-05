@@ -66,8 +66,33 @@ public:
         return ColumnNames;
     }
 
-    static void CalcForAll(
-        const std::shared_ptr<arrow::Array>& array, const ui64 seed, const std::function<void(const ui64 hash, const ui32 idx)>& action);
+    template <class TAction>
+    static void CalcForAll(const std::shared_ptr<arrow::Array>& array, const ui64 seed, const TAction& action) {
+        AFL_VERIFY(array);
+        NArrow::SwitchType(array->type_id(), [&](const auto& type) {
+            using TWrap = std::decay_t<decltype(type)>;
+            using T = typename TWrap::T;
+            using TArray = typename arrow::TypeTraits<T>::ArrayType;
+            for (ui32 idx = 0; idx < array->length(); ++idx) {
+                if (array->IsNull(idx)) {
+                    action(CalcSimple(Default<TString>().data(), 0, seed), idx);
+                    continue;
+                }
+                auto& typedArray = static_cast<const TArray&>(*array);
+                auto value = typedArray.GetView(idx);
+                if constexpr (arrow::has_string_view<T>()) {
+                    action(CalcSimple(value.data(), value.size(), seed), idx);
+                } else if constexpr (arrow::has_c_type<T>()) {
+                    action(CalcSimple(&value, sizeof(value), seed), idx);
+                } else {
+                    static_assert(arrow::is_decimal_type<T>());
+                    AFL_VERIFY(false);
+                }
+            }
+            return true;
+        });
+    }
+
     static ui64 CalcSimple(const std::string_view data, const ui64 seed);
     static ui64 CalcSimple(const void* data, const ui32 dataSize, const ui64 seed);
     static ui64 CalcForScalar(const std::shared_ptr<arrow::Scalar>& scalar, const ui64 seed);

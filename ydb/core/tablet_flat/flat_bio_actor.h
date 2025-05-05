@@ -24,10 +24,10 @@ namespace NBlockIO {
     private:
         void Registered(TActorSystem*, const TActorId&) override;
         void Inbox(TEventHandlePtr &eh);
-        void Bootstrap(EPriority priority, TAutoPtr<NPageCollection::TFetch>) noexcept;
-        void Dispatch() noexcept;
-        void Handle(ui32 offset, TArrayRef<TLoaded>) noexcept;
-        void Terminate(EStatus code) noexcept;
+        void Bootstrap(EPriority priority, TAutoPtr<NPageCollection::TFetch>);
+        void Dispatch();
+        void Handle(ui32 offset, TArrayRef<TLoaded>);
+        void Terminate(EStatus code);
 
     private:
         const TActorId Service;
@@ -61,7 +61,7 @@ namespace NBlockIO {
 
     template<typename ... TArgs>
     inline void Start(NActors::IActorOps *ops, TActorId service,
-                        ui64 cookie, TArgs&& ... args) noexcept
+                        ui64 cookie, TArgs&& ... args)
     {
         auto self = ops->Register(new TBlockIO(service, cookie));
 

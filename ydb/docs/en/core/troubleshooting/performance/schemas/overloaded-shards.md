@@ -55,3 +55,7 @@ Also, consider changing your application logic for generating primary key values
 
 {% endnote %}
 
+## Example
+
+For a practical demonstration of how to follow these instructions, see [{#T}](../../examples/schemas/overloaded-shard-simple-case.md).
+

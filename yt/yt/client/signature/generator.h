@@ -13,9 +13,9 @@ struct ISignatureGenerator
 {
     //! Fills out the Signature_ and Header_ fields in a given TSignature
     //! based on its payload.
-    virtual void Sign(const TSignaturePtr& signature) = 0;
+    virtual void Resign(const TSignaturePtr& signature) const = 0;
 
-    [[nodiscard]] TSignaturePtr Sign(std::string payload);
+    [[nodiscard]] TSignaturePtr Sign(std::string payload) const;
 };
 
 DEFINE_REFCOUNTED_TYPE(ISignatureGenerator)
@@ -23,6 +23,7 @@ DEFINE_REFCOUNTED_TYPE(ISignatureGenerator)
 ////////////////////////////////////////////////////////////////////////////////
 
 ISignatureGeneratorPtr CreateDummySignatureGenerator();
+const ISignatureGeneratorPtr& GetDummySignatureGenerator();
 
 ISignatureGeneratorPtr CreateAlwaysThrowingSignatureGenerator();
 

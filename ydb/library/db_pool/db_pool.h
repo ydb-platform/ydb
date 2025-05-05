@@ -2,7 +2,7 @@
 
 #include "events.h"
 
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/library/db_pool/protos/config.pb.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>

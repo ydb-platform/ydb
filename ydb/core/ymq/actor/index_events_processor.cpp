@@ -1,5 +1,5 @@
 #include "index_events_processor.h"
-#include <ydb-cpp-sdk/client/types/ydb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/ydb.h>
 
 namespace NKikimr::NSQS {
 using namespace NActors;

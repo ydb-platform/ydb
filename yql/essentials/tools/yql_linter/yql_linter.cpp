@@ -18,6 +18,9 @@ int Run(int argc, char* argv[]) {
     THashMap<TString, TString> clusterMapping;
     TString modeStr = "Default";
     TString syntaxStr = "YQL";
+    TString clusterModeStr = "Many";
+    TString clusterSystem;
+    NYql::TLangVersion langver = NYql::GetMaxReleasedLangVersion();
 
     opts.AddLongOption('i', "input", "input file").RequiredArgument("input").StoreResult(&inFileName);
     opts.AddLongOption('v', "verbose", "show lint issues").NoArgument();
@@ -33,8 +36,17 @@ int Run(int argc, char* argv[]) {
 
     opts.AddLongOption('m', "mode", "query mode, allowed values: " + GetEnumAllNames<NYql::NFastCheck::EMode>()).StoreResult(&modeStr);
     opts.AddLongOption('s', "syntax", "query syntax, allowed values: " + GetEnumAllNames<NYql::NFastCheck::ESyntax>()).StoreResult(&syntaxStr);
+    opts.AddLongOption("cluster-mode", "cluster mode, allowed values: " + GetEnumAllNames<NYql::NFastCheck::EClusterMode>()).StoreResult(&clusterModeStr);
+    opts.AddLongOption("cluster-system", "cluster system").StoreResult(&clusterSystem);
     opts.AddLongOption("ansi-lexer", "use ansi lexer").NoArgument();
     opts.AddLongOption("no-colors", "disable colors for output").NoArgument();
+    opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER")
+        .Handler1T<TString>([&](const TString& str) {
+            if (!NYql::ParseLangVersion(str, langver)) {
+                throw yexception() << "Failed to parse language version: " << str;
+            }
+        });
+
     opts.SetFreeArgsNum(0);
     opts.AddHelpOption();
 
@@ -73,12 +85,15 @@ int Run(int argc, char* argv[]) {
     int errors = 0;
     TString queryFile("query");
 
+    checkReq.LangVer = langver;
     checkReq.IsAnsiLexer = res.Has("ansi-lexer");
     checkReq.Program = queryString;
     checkReq.Syntax = NYql::NFastCheck::ESyntax::YQL;
     checkReq.ClusterMapping = clusterMapping;
     checkReq.Mode =  FromString<NYql::NFastCheck::EMode>(modeStr);
     checkReq.Syntax =  FromString<NYql::NFastCheck::ESyntax>(syntaxStr);
+    checkReq.ClusterMode = FromString<NYql::NFastCheck::EClusterMode>(clusterModeStr);
+    checkReq.ClusterSystem = clusterSystem;
     auto checkResp = NYql::NFastCheck::RunChecks(checkReq);
     for (const auto& c : checkResp.Checks) {
         if (!c.Success) {
@@ -112,7 +127,7 @@ int main(int argc, char* argv[]) {
     try {
         return Run(argc, argv);
     } catch (const yexception& e) {
-        Cerr << "Caught exception:" << e.what() << Endl;
+        Cerr << "Caught exception: " << e.what() << Endl;
         return 1;
     } catch (...) {
         Cerr << CurrentExceptionMessage() << Endl;

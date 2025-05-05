@@ -33,7 +33,7 @@ namespace NKikimr {
                     cfg.HugeBlobsFreeChunkReservation,
                     logFunc);
 
-            return std::make_shared<THugeBlobCtx>(
+            return std::make_shared<THugeBlobCtx>("",
                     repairedHuge->Heap->BuildHugeSlotsMap(),
                     true);
         }

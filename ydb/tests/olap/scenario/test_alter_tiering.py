@@ -35,6 +35,9 @@ from string import ascii_lowercase
 
 
 class TestLoop:
+
+    __test__ = False
+
     def __init__(self, duration: datetime.timedelta):
         self._deadline = datetime.datetime.now() + duration
 
@@ -98,7 +101,7 @@ class TieringTestBase(BaseTestSet):
                 'enable_tiering_in_column_shard',
                 'enable_column_store',
             ],
-            columnshard_config={
+            column_shard_config={
                 'lag_for_compaction_before_tierings_ms': 0,
                 'compaction_actualization_lag_ms': 0,
                 'optimizer_freshness_check_duration_ms': 0,
@@ -110,6 +113,9 @@ class TieringTestBase(BaseTestSet):
                 'TX_TIERING_BLOBS_TIER': LogLevels.TRACE,
                 'TX_COLUMNSHARD_ACTUALIZATION': LogLevels.TRACE,
             },
+            query_service_config=dict(
+                available_external_data_sources=["ObjectStorage"]
+            ),
         )
 
     def _setup_tiering_test(self, ctx):

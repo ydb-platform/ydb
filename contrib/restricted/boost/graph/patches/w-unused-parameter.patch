@@ -1,0 +1,64 @@
+--- a/include/boost/graph/adjacency_matrix.hpp	(index)
++++ b/include/boost/graph/adjacency_matrix.hpp	(working tree)
+@@ -1110,26 +1110,26 @@ struct adj_mat_pm_helper< D, VP, EP, GP, A, Tag, edge_property_tag >
+     typedef typename lookup_property_from_edge< boost::mpl::true_ >::result_type
+         single_const_type;
+ 
+-    static type get_nonconst(adjacency_matrix< D, VP, EP, GP, A >& g, Tag tag)
++    static type get_nonconst(adjacency_matrix< D, VP, EP, GP, A >& /* g */, Tag tag)
+     {
+         return type(tag);
+     }
+ 
+     static const_type get_const(
+-        const adjacency_matrix< D, VP, EP, GP, A >& g, Tag tag)
++        const adjacency_matrix< D, VP, EP, GP, A >& /* g */, Tag tag)
+     {
+         return const_type(tag);
+     }
+ 
+     static single_nonconst_type get_nonconst_one(
+-        adjacency_matrix< D, VP, EP, GP, A >& g, Tag tag, edge_descriptor e)
++        adjacency_matrix< D, VP, EP, GP, A >& /* g */, Tag tag, edge_descriptor e)
+     {
+         return lookup_one_property< EP, Tag >::lookup(
+             *static_cast< EP* >(e.get_property()), tag);
+     }
+ 
+     static single_const_type get_const_one(
+-        const adjacency_matrix< D, VP, EP, GP, A >& g, Tag tag,
++        const adjacency_matrix< D, VP, EP, GP, A >& /* g */, Tag tag,
+         edge_descriptor e)
+     {
+         return lookup_one_property< const EP, Tag >::lookup(
+--- a/include/boost/graph/dijkstra_shortest_paths.hpp	(index)
++++ b/include/boost/graph/dijkstra_shortest_paths.hpp	(working tree)
+@@ -97,7 +97,7 @@ public:
+     }
+ 
+ private:
+-    template < class Edge, class Graph > void tree_edge(Edge u, Graph& g) {}
++    template < class Edge, class Graph > void tree_edge(Edge /* u */, Graph& /* g */) {}
+ };
+ template < class Visitors >
+ dijkstra_visitor< Visitors > make_dijkstra_visitor(Visitors vis)
+@@ -251,8 +251,8 @@ namespace detail
+     struct vertex_property_map_generator_helper< Graph, IndexMap, Value, false >
+     {
+         typedef boost::vector_property_map< Value, IndexMap > type;
+-        static type build(const Graph& g, const IndexMap& index,
+-            boost::scoped_array< Value >& array_holder)
++        static type build(const Graph& /* g */, const IndexMap& index,
++            boost::scoped_array< Value >& /* array_holder */)
+         {
+             return boost::make_vector_property_map< Value >(index);
+         }
+@@ -299,7 +299,7 @@ namespace detail
+         typedef boost::vector_property_map< boost::two_bit_color_type,
+             IndexMap >
+             type;
+-        static type build(const Graph& g, const IndexMap& index)
++        static type build(const Graph& /* g */, const IndexMap& index)
+         {
+             return boost::make_vector_property_map< boost::two_bit_color_type >(
+                 index);

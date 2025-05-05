@@ -144,6 +144,14 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
     task.SetTableName(dstPath.LeafName());
     *task.MutableTableDescription() = RebuildTableDescription(GetTableDescription(ss, item.DstPathId), item.Scheme);
 
+    if (importInfo->Settings.has_encryption_settings()) {
+        auto& taskEncryptionSettings = *task.MutableEncryptionSettings();
+        *taskEncryptionSettings.MutableSymmetricKey() = importInfo->Settings.encryption_settings().symmetric_key();
+        if (item.ExportItemIV) {
+            taskEncryptionSettings.SetIV(item.ExportItemIV->GetBinaryString());
+        }
+    }
+
     switch (importInfo->Kind) {
     case TImportInfo::EKind::S3:
         {
@@ -153,7 +161,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
             restoreSettings.SetBucket(importInfo->Settings.bucket());
             restoreSettings.SetAccessKey(importInfo->Settings.access_key());
             restoreSettings.SetSecretKey(importInfo->Settings.secret_key());
-            restoreSettings.SetObjectKeyPattern(importInfo->Settings.items(itemIdx).source_prefix());
+            restoreSettings.SetObjectKeyPattern(importInfo->GetItemSrcPrefix(itemIdx));
             restoreSettings.SetUseVirtualAddressing(!importInfo->Settings.disable_virtual_addressing());
 
             switch (importInfo->Settings.scheme()) {
@@ -208,6 +216,9 @@ THolder<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
 
     const TPath dstPath = TPath::Init(item.DstPathId, ss);
     settings.set_source_path(dstPath.PathString());
+    if (ss->MaxRestoreBuildIndexShardsInFlight) {
+        settings.set_max_shards_in_flight(ss->MaxRestoreBuildIndexShardsInFlight);
+    }
 
     Y_ABORT_UNLESS(item.NextIndexIdx < item.Scheme.indexes_size());
     settings.mutable_index()->CopyFrom(item.Scheme.indexes(item.NextIndexIdx));
@@ -237,7 +248,8 @@ THolder<TEvIndexBuilder::TEvCancelRequest> CancelIndexBuildPropose(
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     TSchemeShard* ss,
     TTxId txId,
-    const TImportInfo::TItem& item
+    const TImportInfo::TItem& item,
+    TString& error
 ) {
     Y_ABORT_UNLESS(item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size());
 
@@ -255,10 +267,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     modifyScheme.SetWorkingDir(dstPath.Parent().PathString());
     cdcStream.SetTableName(dstPath.LeafName());
 
-    TString error;
-    Ydb::StatusIds::StatusCode status;
-
     auto& cdcStreamDescription = *cdcStream.MutableStreamDescription();
+    Ydb::StatusIds::StatusCode status;
     if (!FillChangefeedDescription(cdcStreamDescription, changefeed, status, error)) {
         return nullptr;
     }
@@ -271,6 +281,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
         i64 minActivePartitions =
             topic.partitioning_settings().min_active_partitions();
         if (minActivePartitions < 0) {
+            error = "minActivePartitions must be >= 0";
             return nullptr;
         } else if (minActivePartitions == 0) {
             minActivePartitions = 1;
@@ -284,6 +295,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
             i64 maxActivePartitions =
                 topic.partitioning_settings().max_active_partitions();
             if (maxActivePartitions < 0) {
+                error = "maxActivePartitions must be >= 0";
                 return nullptr;
             } else if (maxActivePartitions == 0) {
                 maxActivePartitions = 50;
@@ -334,7 +346,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
 
     auto* tabletConfig = pqGroup.MutablePQTabletConfig();
     const auto& pqConfig = AppData()->PQConfig;
-    
+
     for (const auto& consumer : topic.consumers()) {
         auto& addedConsumer = *tabletConfig->AddConsumers();
         auto consumerName = NPersQueue::ConvertNewConsumerName(consumer.name(), pqConfig);
@@ -343,7 +355,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
             addedConsumer.SetImportant(true);
         }
     }
-    
+
     return propose;
 }
 

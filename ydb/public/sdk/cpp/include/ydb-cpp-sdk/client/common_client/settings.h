@@ -2,13 +2,13 @@
 
 #include "ssl_credentials.h"
 
-#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
-#include <ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
-#include <ydb-cpp-sdk/client/types/ydb.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/ydb.h>
 
 #include <optional>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 using TCertificateAndPrivateKey = std::pair<std::string, std::string>;
 

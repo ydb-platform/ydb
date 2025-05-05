@@ -1,0 +1,11 @@
+--- a/include/boost/graph/detail/adj_list_edge_iterator.hpp	(index)
++++ b/include/boost/graph/detail/adj_list_edge_iterator.hpp	(working tree)
+@@ -47,6 +47,8 @@ namespace detail
+ 
+         inline adj_list_edge_iterator() {}
+ 
++        inline adj_list_edge_iterator& operator=(const self& x) = default;
++
+         inline adj_list_edge_iterator(const self& x)
+         : vBegin(x.vBegin)
+         , vCurr(x.vCurr)

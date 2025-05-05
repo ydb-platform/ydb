@@ -1,5 +1,4 @@
 #include "meta.h"
-#include "checker.h"
 #include <ydb/library/formats/arrow/hash/xx_hash.h>
 #include <ydb/core/formats/arrow/hash/calcer.h>
 #include <ydb/core/tx/program/program.h>
@@ -46,12 +45,6 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*r
 
     TString result(sketch->AsStringBuf());
     return result;
-}
-
-void TIndexMeta::DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& /*schema*/) const {
-    for (auto&& branch : info->GetBranches()) {
-        branch->MutableIndexes().emplace_back(std::make_shared<TCountMinSketchChecker>(GetIndexId()));
-    }
 }
 
 }   // namespace NKikimr::NOlap::NIndexes

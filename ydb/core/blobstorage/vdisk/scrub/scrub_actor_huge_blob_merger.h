@@ -45,7 +45,7 @@ namespace NKikimr {
                     TDiskDataExtractor extr;
                     memRec.GetDiskData(&extr, outbound);
                     const NMatrix::TVectorType local = memRec.GetLocalParts(GType);
-                    Y_ABORT_UNLESS(extr.End - extr.Begin == local.CountBits());
+                    Y_VERIFY_S(extr.End - extr.Begin == local.CountBits(), LogPrefix);
                     const TDiskPart *part = extr.Begin;
                     for (ui32 i = local.FirstPosition(); i != local.GetSize(); i = local.NextPosition(i), ++part) {
                         if (part->ChunkIdx && part->Size) {

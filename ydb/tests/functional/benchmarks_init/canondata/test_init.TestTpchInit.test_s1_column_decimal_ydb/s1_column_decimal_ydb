@@ -37,7 +37,7 @@ CREATE TABLE `/Root/db/Root/db/tpch/s1/lineitem` (
     l_tax Decimal(22,9) NOT NULL,
     PRIMARY KEY (l_orderkey, l_linenumber)
 )
-PARTITION BY HASH (l_orderkey, l_linenumber)
+PARTITION BY HASH (l_orderkey)
 WITH (
     STORE = COLUMN,
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64

@@ -1,5 +1,7 @@
 #include "dq.h"
 
+#include <yql/essentials/core/issue/yql_issue.h>
+
 namespace NYql::NDq {
 
 Ydb::StatusIds::StatusCode DqStatusToYdbStatus(NYql::NDqProto::StatusIds::StatusCode statusCode) {
@@ -82,6 +84,60 @@ NYql::NDqProto::StatusIds::StatusCode YdbStatusToDqStatus(Ydb::StatusIds::Status
     default:
         return NYql::NDqProto::StatusIds::GENERIC_ERROR;
     }
+}
+
+TMaybe<NYql::NDqProto::StatusIds::StatusCode> GetDqStatus(const TIssue& issue) {
+    if (issue.GetSeverity() == TSeverityIds::S_FATAL) {
+        return NYql::NDqProto::StatusIds::INTERNAL_ERROR;
+    }
+
+    switch (issue.GetCode()) {
+        case NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED:
+        case NYql::TIssuesIds::KIKIMR_LOCKS_ACQUIRE_FAILURE:
+        case NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED:
+        case NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH:
+            return NYql::NDqProto::StatusIds::ABORTED;
+
+        case NYql::TIssuesIds::KIKIMR_SCHEME_ERROR:
+            return NYql::NDqProto::StatusIds::SCHEME_ERROR;
+
+        case NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE:
+            return NYql::NDqProto::StatusIds::UNAVAILABLE;
+
+        case NYql::TIssuesIds::KIKIMR_OVERLOADED:
+        case NYql::TIssuesIds::KIKIMR_MULTIPLE_SCHEME_MODIFICATIONS:
+            return NYql::NDqProto::StatusIds::OVERLOADED;
+
+        case NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION:
+        case NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED:
+            return NYql::NDqProto::StatusIds::PRECONDITION_FAILED;
+
+        case NYql::TIssuesIds::KIKIMR_BAD_REQUEST:
+        case NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE:
+        case NYql::TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE:
+            return NYql::NDqProto::StatusIds::BAD_REQUEST;
+
+        case NYql::TIssuesIds::KIKIMR_ACCESS_DENIED:
+            return NYql::NDqProto::StatusIds::UNAUTHORIZED;
+
+        case NYql::TIssuesIds::KIKIMR_TIMEOUT:
+            return NYql::NDqProto::StatusIds::TIMEOUT;
+
+        case NYql::TIssuesIds::KIKIMR_OPERATION_CANCELLED:
+            return NYql::NDqProto::StatusIds::CANCELLED;
+
+        case NYql::TIssuesIds::KIKIMR_RESULT_UNAVAILABLE:
+        case NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN:
+            return NYql::NDqProto::StatusIds::UNDETERMINED;
+
+        case NYql::TIssuesIds::KIKIMR_UNSUPPORTED:
+            return NYql::NDqProto::StatusIds::UNSUPPORTED;
+
+        default:
+            break;
+    }
+
+    return Nothing();
 }
 
 } // namespace NYql::NDq

@@ -216,6 +216,8 @@ void TransformerStatsToYson(const TString& name, const IGraphTransformer::TStati
 TString TransformerStatsToYson(const IGraphTransformer::TStatistics& stats, NYson::EYsonFormat format
     = NYson::EYsonFormat::Pretty);
 
+void GetToken(const TString& string, TString& out, const TTypeAnnotationContext& type);
+
 void FillSecureParams(const TExprNode::TPtr& node, const TTypeAnnotationContext& types, THashMap<TString, TString>& secureParams);
 
 bool FillUsedFiles(const TExprNode& node, TUserDataTable& files, const TTypeAnnotationContext& types, TExprContext& ctx, const TUserDataTable& crutches = {});

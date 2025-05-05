@@ -397,6 +397,22 @@ TEST(TErrorTest, FormatCtor)
     EXPECT_EQ("Some error hello", TError("Some error %v", "hello").GetMessage());
 }
 
+TEST(TErrorTest, ExceptionCtor)
+{
+    {
+        auto error = TError(std::runtime_error("Some error"));
+        EXPECT_EQ(error.GetMessage(), "Some error");
+        EXPECT_EQ(error.Attributes().Get<std::string>("exception_type"), "std::runtime_error");
+    }
+    EXPECT_EQ(TError(std::runtime_error("Some bad char sequences: %v %Qv {}")).GetMessage(),
+        "Some bad char sequences: %v %Qv {}");
+
+    EXPECT_EQ(TError(TSimpleException("Some error")).GetMessage(),
+        "Some error");
+    EXPECT_EQ(TError(TSimpleException("Some bad char sequences: %v %d {}")).GetMessage(),
+        "Some bad char sequences: %v %d {}");
+}
+
 TEST(TErrorTest, FindRecursive)
 {
     auto inner = TError("Inner")

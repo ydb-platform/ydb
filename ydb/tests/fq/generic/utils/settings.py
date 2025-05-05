@@ -52,6 +52,14 @@ class Settings:
     greenplum: Optional[Greenplum] = None
 
     @dataclass
+    class MySQL:
+        dbname: str
+        username: str
+        password: str
+
+    mysql: Optional[MySQL] = None
+
+    @dataclass
     class PostgreSQL:
         dbname: str
         username: str
@@ -104,6 +112,13 @@ class Settings:
                 dbname='template1',
                 username='gpadmin',
                 password='123456',
+            )
+
+        if 'mysql' in docker_compose_yml_data['services']:
+            s.mysql = cls.MySQL(
+                dbname='db',
+                username='root',
+                password='password',
             )
 
         if 'postgresql' in docker_compose_yml_data['services']:

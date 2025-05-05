@@ -1,10 +1,10 @@
-#include <ydb-cpp-sdk/library/issue/yql_issue.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/issue/yql_issue.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <src/library/issue/yql_issue_message.h>
+#include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
-#include <ydb-cpp-sdk/type_switcher.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 
 #include <library/cpp/unicode/normalization/normalization.h>
 

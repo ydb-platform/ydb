@@ -9,14 +9,14 @@
 #include "offsets_collector.h"
 #include "transaction.h"
 
-#include <ydb-cpp-sdk/client/topic/read_session.h>
-#include <src/client/persqueue_public/include/read_session.h>
-#include <src/client/topic/common/callback_context.h>
-#include <src/client/topic/impl/topic_impl.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_session.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/include/read_session.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/topic_impl.h>
 
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
-#include <src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
@@ -30,7 +30,7 @@
 #include <vector>
 
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 template <bool UseMigrationProtocol>
 using TClientMessage = std::conditional_t<UseMigrationProtocol,
@@ -605,6 +605,7 @@ public:
     template <bool V = UseMigrationProtocol, class = std::enable_if_t<!V>>
     TPartitionStreamImpl(ui64 partitionStreamId,
                          std::string topicPath,
+                         std::string readSessionId,
                          i64 partitionId,
                          i64 assignId,
                          i64 readOffset,
@@ -617,6 +618,7 @@ public:
     {
         TAPartitionStream<false>::PartitionSessionId = partitionStreamId;
         TAPartitionStream<false>::TopicPath = std::move(topicPath);
+        TAPartitionStream<false>::ReadSessionId = std::move(readSessionId);
         TAPartitionStream<false>::PartitionId = static_cast<ui64>(partitionId);
         MaxCommittedOffset = static_cast<ui64>(readOffset);
     }
@@ -1162,10 +1164,10 @@ public:
         EventsQueue->SetCallbackContext(TEnableSelfContext<TSingleClusterReadSessionImpl<UseMigrationProtocol>>::SelfContext);
     }
 
-    void CollectOffsets(NTable::TTransaction& tx,
+    void CollectOffsets(TTransactionBase& tx,
                         const std::vector<TReadSessionEvent::TEvent>& events,
                         std::shared_ptr<TTopicClient::TImpl> client);
-    void CollectOffsets(NTable::TTransaction& tx,
+    void CollectOffsets(TTransactionBase& tx,
                         const TReadSessionEvent::TEvent& event,
                         std::shared_ptr<TTopicClient::TImpl> client);
 
@@ -1324,7 +1326,7 @@ private:
     using TTransactionInfoPtr = std::shared_ptr<TTransactionInfo>;
     using TTransactionMap = std::unordered_map<TTransactionId, TTransactionInfoPtr, THash<TTransactionId>>;
 
-    void TrySubscribeOnTransactionCommit(NTable::TTransaction& tx,
+    void TrySubscribeOnTransactionCommit(TTransactionBase& tx,
                                          std::shared_ptr<TTopicClient::TImpl> client);
     TTransactionInfoPtr GetOrCreateTxInfo(const TTransactionId& txId);
     void DeleteTx(const TTransactionId& txId);
@@ -1333,6 +1335,7 @@ private:
     const std::string Database;
     const std::string SessionId;
     const std::string ClusterName;
+    std::string ReadSessionId;
     TLog Log;
     ui64 NextPartitionStreamId;
     ui64 PartitionStreamIdStep;

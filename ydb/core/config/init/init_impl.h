@@ -2,8 +2,8 @@
 
 #include "init.h"
 
-#include <ydb-cpp-sdk/client/discovery/discovery.h>
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/discovery/discovery.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
@@ -1158,15 +1158,14 @@ public:
 
         TenantName = FillTenantPoolConfig(CommonAppOptions);
 
+        FillData(CommonAppOptions);
+
         std::vector<TString> errors;
-        EValidationResult result = ValidateConfig(AppConfig, errors);
-        if (result == EValidationResult::Error) {
+        if (csk && csk->ValidateConfig(AppConfig, errors) == NYamlConfig::EValidationResult::Error) {
             ythrow yexception() << errors.front();
         }
 
         Logger.Out() << "configured" << Endl;
-
-        FillData(CommonAppOptions);
     }
 
     void FillData(const NConfig::TCommonAppOptions& cf) {
@@ -1402,6 +1401,7 @@ public:
         configsDispatcherInitInfo.StartupConfigYaml = appConfig.GetStartupConfigYaml();
         configsDispatcherInitInfo.ItemsServeRules = std::monostate{},
         configsDispatcherInitInfo.Labels = Labels;
+        configsDispatcherInitInfo.Labels["configuration_version"] = appConfig.GetConfigDirPath() ? "v2" : "v1";
         configsDispatcherInitInfo.DebugInfo = TDebugInfo {
             .InitInfo = InitDebug.ConfigTransformInfo,
         };

@@ -2,7 +2,7 @@
 
 #include "codecs.h"
 
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 
@@ -10,7 +10,7 @@
 
 #include <limits>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
     class TProtoAccessor;
 
     namespace NScheme {
@@ -18,7 +18,7 @@ namespace NYdb::inline V3 {
     }
 }
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 enum class EMeteringMode : uint32_t {
     Unspecified = 0,
@@ -111,6 +111,7 @@ public:
     const TInstant& GetLastReadTime() const;
     const TDuration& GetMaxReadTimeLag() const;
     const TDuration& GetMaxWriteTimeLag() const;
+    const TDuration& GetMaxCommittedTimeLag() const;
 
 private:
     uint64_t CommittedOffset_;
@@ -120,6 +121,7 @@ private:
     TInstant LastReadTime_;
     TDuration MaxReadTimeLag_;
     TDuration MaxWriteTimeLag_;
+    TDuration MaxCommittedTimeLag_;
 };
 
 // Topic partition location
@@ -267,7 +269,7 @@ private:
 };
 
 class TTopicDescription {
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
 
 public:
     TTopicDescription(Ydb::Topic::DescribeTopicResult&& desc);
@@ -330,7 +332,7 @@ private:
 };
 
 class TConsumerDescription {
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
 
 public:
     TConsumerDescription(Ydb::Topic::DescribeConsumerResult&& desc);
@@ -350,7 +352,7 @@ private:
 };
 
 class TPartitionDescription {
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
 
 public:
     TPartitionDescription(Ydb::Topic::DescribePartitionResult&& desc);
@@ -365,7 +367,7 @@ private:
 
 // Result for describe topic request.
 struct TDescribeTopicResult : public TStatus {
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
 
     TDescribeTopicResult(TStatus&& status, Ydb::Topic::DescribeTopicResult&& result);
 
@@ -377,7 +379,7 @@ private:
 
 // Result for describe consumer request.
 struct TDescribeConsumerResult : public TStatus {
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
 
     TDescribeConsumerResult(TStatus&& status, Ydb::Topic::DescribeConsumerResult&& result);
 
@@ -389,7 +391,7 @@ private:
 
 // Result for describe partition request.
 struct TDescribePartitionResult: public TStatus {
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
 
     TDescribePartitionResult(TStatus&& status, Ydb::Topic::DescribePartitionResult&& result);
 
@@ -766,6 +768,8 @@ struct TDescribePartitionSettings: public TOperationRequestSettings<TDescribePar
 };
 
 // Settings for commit offset request.
-struct TCommitOffsetSettings : public TOperationRequestSettings<TCommitOffsetSettings> {};
+struct TCommitOffsetSettings : public TOperationRequestSettings<TCommitOffsetSettings> {
+    FLUENT_SETTING_OPTIONAL(std::string, ReadSessionId);
+};
 
-}  // namespace NYdb::V3::NTopic
+}  // namespace NYdb::NTopic

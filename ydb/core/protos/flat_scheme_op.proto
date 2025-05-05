@@ -22,6 +22,7 @@ import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/formats/arrow/protos/accessor.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/public/api/protos/ydb_coordination.proto";
+import "ydb/public/api/protos/ydb_export.proto";
 import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_topic.proto";
 import "ydb/public/api/protos/ydb_value.proto";
@@ -403,10 +404,23 @@ message TIndexDataExtractor {
     }
 }
 
+message TSkipIndexBitSetStorage {
+    optional string ClassName = 1;
+    message TFixString {
+    }
+    message TBitSet {
+    }
+    oneof Implementation {
+        TFixString FixString = 20;
+        TBitSet BitSet = 21;
+    }
+}
+
 message TRequestedBloomFilter {
     optional double FalsePositiveProbability = 1 [default = 0.1];
     repeated string ColumnNames = 3;
     optional TIndexDataExtractor DataExtractor = 4;
+    optional TSkipIndexBitSetStorage BitsStorage = 5;
 }
 
 message TRequestedBloomNGrammFilter {
@@ -416,6 +430,8 @@ message TRequestedBloomNGrammFilter {
     optional string ColumnName = 4;
     optional uint32 RecordsCount = 5;
     optional TIndexDataExtractor DataExtractor = 6;
+    optional TSkipIndexBitSetStorage BitsStorage = 7;
+    optional bool CaseSensitive = 8 [default = true];
 }
 
 message TRequestedMaxIndex {
@@ -446,6 +462,7 @@ message TBloomFilter {
     optional uint64 MaxBytesCount = 2 [default = 8196];
     repeated uint32 ColumnIds = 3;
     optional TIndexDataExtractor DataExtractor = 4;
+    optional TSkipIndexBitSetStorage BitsStorage = 5;
 }
 
 message TBloomNGrammFilter {
@@ -455,6 +472,8 @@ message TBloomNGrammFilter {
     optional uint32 ColumnId = 4;
     optional uint32 RecordsCount = 5;
     optional TIndexDataExtractor DataExtractor = 6;
+    optional TSkipIndexBitSetStorage BitsStorage = 7;
+    optional bool CaseSensitive = 8 [default = true];
 }
 
 message TMaxIndex {
@@ -506,10 +525,17 @@ message TCompactionLevelConstructorContainer {
         optional uint32 PortionsLiveDurationSeconds = 1;
         optional uint64 ExpectedBlobsSize = 2;
         optional uint64 PortionsCountAvailable = 3;
+        optional uint64 PortionsCountLimit = 4;
+    }
+
+    message TOneLayer {
+        optional uint32 ExpectedPortionSize = 1;
+        optional float BytesLimitFraction = 2;
     }
 
     oneof Implementation {
         TZeroLevel ZeroLevel = 10;
+        TOneLayer OneLayer = 11;
     }
 
 }
@@ -566,6 +592,7 @@ message TColumnTableSchema {
     repeated TOlapColumnDescription Columns = 1;
     repeated string KeyColumnNames = 2;
 
+    optional EColumnTableEngine Engine = 3;
     // Internal fields
     optional uint32 NextColumnId = 4;
 
@@ -1225,6 +1252,17 @@ message TBackupTask {
     optional TCompressionOptions Compression = 13;
     optional bool EnableChecksums = 16;
     optional bool EnablePermissions = 18;
+
+    // Encryption (currently available only for s3):
+    message TEncryptionSettings {
+        optional string EncryptionAlgorithm = 1;
+        optional bytes IV = 2;
+        oneof Key {
+            Ydb.Export.EncryptionSettings.SymmetricKey SymmetricKey = 3;
+        }
+    }
+
+    optional TEncryptionSettings EncryptionSettings = 19;
 }
 
 message TRestoreTask {
@@ -1239,6 +1277,15 @@ message TRestoreTask {
     }
 
     optional bool ValidateChecksums = 7; // currently available for s3
+
+    message TEncryptionSettings {
+        optional bytes IV = 1;
+        oneof Key {
+            Ydb.Export.EncryptionSettings.SymmetricKey SymmetricKey = 2;
+        }
+    }
+
+    optional TEncryptionSettings EncryptionSettings = 8;
 }
 
 message TPersQueueGroupAllocate {
@@ -1436,6 +1483,7 @@ message TSplitMergeTablePartitions {
     repeated TSplitBoundary SplitBoundary = 5;  // Points of split (there will be N+1 parts)
     optional uint64 SchemeshardId = 6;          // Only needed if TableId is used instead of path
     optional uint64 TableOwnerId = 7;
+    optional bool AllowOneToOneSplitMerge = 8;  // Allow a special 1-to-1 split/merge for emergencies
 }
 
 message TUserAttribute {
@@ -1493,7 +1541,14 @@ message TReplicationDescription {
     optional uint64 Version = 4;
     optional uint64 ControllerId = 5; // replication controller's tablet id
     optional NKikimrReplication.TReplicationState State = 6;
-    optional string TransferTransformLambda = 7;
+
+    message TAlterTransfer {
+        optional string TransformLambda = 1;
+        optional uint64 FlushIntervalMilliSeconds = 2 [default = 60000];
+        optional uint64 BatchSizeBytes = 3 [default = 8388608];
+    }
+
+    optional TAlterTransfer AlterTransfer = 10;
 }
 
 message TBlobDepotDescription {
@@ -1509,6 +1564,7 @@ message TApplyIf {
     optional uint64 PathVersion = 2;
     optional uint64 LockedTxId = 3;
     optional bool CheckEntityVersion = 4 [default = false];
+    repeated EPathType PathTypes = 5;
 }
 
 message TUpgradeSubDomain {
@@ -1537,6 +1593,7 @@ message TIndexBuildControl {
 
 message TLockConfig {
     optional string Name = 1;
+    optional uint64 LockTxId = 2; // if missing, current tx id is used
 }
 
 message TLockGuard {
@@ -2031,6 +2088,7 @@ message TExternalDataSourceDescription {
     optional TAuth Auth = 7;
     optional TExternalDataSourceProperties Properties = 8;
     optional bool ReplaceIfExists = 9;
+    optional TExternalTableReferences References = 10;
 }
 
 message TViewDescription {
@@ -2101,4 +2159,24 @@ message TImportTableChangefeeds {
         optional Ydb.Topic.DescribeTopicResult Topic = 2;
     }
     repeated TImportChangefeedTopic Changefeeds = 1;
+}
+
+message TChangefeedUnderlyingTopics {
+    repeated TPathDescription ChangefeedUnderlyingTopics = 1;
+}
+
+message TExportMetadata {
+    message TSchemaMappingItem {
+        optional string SourcePath = 1;
+        optional string DestinationPrefix = 2;
+
+        // encryption details
+        optional bytes IV = 3;
+    }
+
+    repeated TSchemaMappingItem SchemaMapping = 1;
+
+    optional string CompressionAlgorithm = 2;
+    optional string EncryptionAlgorithm = 3;
+    optional bytes IV = 4;
 }

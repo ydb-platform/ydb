@@ -97,8 +97,8 @@ TString TYtForwardingGatewayBase::GetClusterServer(const TString& cluster) const
     return Slave_->GetClusterServer(cluster);
 }
 
-NYT::TRichYPath TYtForwardingGatewayBase::GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder) const {
-    return Slave_->GetRealTable(sessionId, cluster, table, epoch, tmpFolder);
+NYT::TRichYPath TYtForwardingGatewayBase::GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder, bool temp, bool anonymous) const {
+    return Slave_->GetRealTable(sessionId, cluster, table, epoch, tmpFolder, temp, anonymous);
 }
 
 NYT::TRichYPath TYtForwardingGatewayBase::GetWriteTable(const TString& sessionId, const TString& cluster, const TString& table, const TString& tmpFolder) const {
@@ -135,6 +135,14 @@ IYtGateway::TGetTablePartitionsResult TYtForwardingGatewayBase::GetTablePartitio
 
 void TYtForwardingGatewayBase::AddCluster(const TYtClusterConfig& config) {
     Slave_->AddCluster(config);
+}
+
+IYtGateway::TClusterConnectionResult TYtForwardingGatewayBase::GetClusterConnection(const TClusterConnectionOptions&& options) {
+    return Slave_->GetClusterConnection(std::move(options));
+}
+
+TMaybe<TString> TYtForwardingGatewayBase::GetTableFilePath(const TGetTableFilePathOptions&& options) {
+    return Slave_->GetTableFilePath(std::move(options));
 }
 
 } // namspace NYql

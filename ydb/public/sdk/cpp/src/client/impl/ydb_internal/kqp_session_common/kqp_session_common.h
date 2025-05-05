@@ -1,14 +1,14 @@
 #pragma once
 
-#include <src/client/impl/ydb_endpoints/endpoints.h>
-#include <src/client/impl/ydb_internal/session_client/session_client.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_endpoints/endpoints.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/session_client/session_client.h>
 
 #include <util/datetime/base.h>
 #include <util/system/spinlock.h>
 
 #include <functional>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 ////////////////////////////////////////////////////////////////////////////////
 ui64 GetNodeIdFromSession(const std::string& sessionId);

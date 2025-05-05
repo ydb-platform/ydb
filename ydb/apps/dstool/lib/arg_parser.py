@@ -201,7 +201,7 @@ class ListValueHolder(ValueHolder):
 
 
 class ArgumentMetaInfo:
-    def __init__(self, name, aliases, help, description=None, metavar=None, multivalue=False, is_expecting_value=True, parser=None):
+    def __init__(self, name, aliases, help, description=None, metavar=None, multivalue=False, is_expecting_value=True, parser=None, version=None):
         self.name = name
         self.aliases = aliases
         self.help = help
@@ -210,6 +210,7 @@ class ArgumentMetaInfo:
         self.multivalue = multivalue
         self.is_expecting_value = is_expecting_value
         self.parser = parser
+        self.version = version
         if parser is None:
             raise ValueError("parser mustn't be None")
 
@@ -258,6 +259,11 @@ class ArgumentActions:
     @staticmethod
     def print_help(arg: Argument):
         arg.metainfo.parser._print_help()
+        sys.exit(0)
+
+    @staticmethod
+    def print_version(arg: Argument):
+        print(arg.metainfo.parser.metainfo.version)
         sys.exit(0)
 
     @staticmethod
@@ -387,12 +393,13 @@ class OptionGroup:
 
 
 class ArgumentParser:
-    def __init__(self, prog=None, description=None, parent=None, aliases=None, help=None):
+    def __init__(self, prog=None, description=None, parent=None, aliases=None, help=None, version=None):
         self._parent = parent
         self.metainfo = ArgumentMetaInfo(
             sys.argv[0] if prog is None else prog,
             aliases,
             help=help,
+            version=version,
             description=description,
             parser=self)
         self._values = dict()
@@ -402,6 +409,8 @@ class ArgumentParser:
         self._subparsers = None
         self.add_argument_group(title='Options')
         self.add_argument('--help', '-?', '-h', action='print_help', help='Print usage')
+        if version is not None:
+            self.add_argument('--version', action='print_version', help='Print version')
         self._terminal_size = None
 
     def get_terminal_size(self):
@@ -584,7 +593,7 @@ class ArgumentParser:
             if isinstance(nargs, int):
                 min_count = max_count = nargs
             valuemetainfo = ListValueMetaInfo(dest, type, choices, required, min_count, max_count, parser=self)
-        elif action == 'print_help':
+        elif action in ['print_help', 'print_version']:
             valuemetainfo = None
             is_expecting_value = False
         else:
@@ -617,6 +626,8 @@ class ArgumentParser:
             arg_action = ArgumentActions.make_store_const(False)
         elif action == 'print_help':
             arg_action = ArgumentActions.print_help
+        elif action == 'print_version':
+            arg_action = ArgumentActions.print_version
         elif nargs == '?':
             arg_action = ArgumentActions.make_store_const(const, expected_args=True)
 

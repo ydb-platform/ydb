@@ -30,7 +30,7 @@ struct TCommonOps {
         return a.ToTuple() == b.ToTuple();
     }
 
-    explicit operator size_t() const noexcept {
+    explicit operator size_t() const {
         return HashTuple(static_cast<const TDerived*>(this)->ToTuple());
     }
 };

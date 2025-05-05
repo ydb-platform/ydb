@@ -8,8 +8,8 @@
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
-#include <ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>

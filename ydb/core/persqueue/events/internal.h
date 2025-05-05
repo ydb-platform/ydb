@@ -22,7 +22,7 @@
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <util/generic/maybe.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
     class ICredentialsProviderFactory;
 }
 
@@ -492,15 +492,13 @@ struct TEvPQ {
     };
 
     struct TEvBlobRequest : public TEventLocal<TEvBlobRequest, EvBlobRequest> {
-        TEvBlobRequest(const TString& user, const ui64 cookie, const NPQ::TPartitionId& partition,
+        TEvBlobRequest(const ui64 cookie, const NPQ::TPartitionId& partition,
                        TVector<NPQ::TRequestedBlob>&& blobs)
-        : User(user)
-        , Cookie(cookie)
+        : Cookie(cookie)
         , Partition(partition)
         , Blobs(std::move(blobs))
         {}
 
-        TString User;
         ui64 Cookie;
         NPQ::TPartitionId Partition;
         TVector<NPQ::TRequestedBlob> Blobs;
@@ -811,11 +809,15 @@ struct TEvPQ {
         {
         }
 
-        void AddOperation(TString consumer, ui64 begin, ui64 end) {
+        void AddOperation(TString consumer, ui64 begin, ui64 end, bool forceCommit = false, bool killReadSession = false, bool onlyCheckCommitedToFinish = false, TString readSessionId = {}) {
             NKikimrPQ::TPartitionOperation operation;
-            operation.SetBegin(begin);
-            operation.SetEnd(end);
+            operation.SetCommitOffsetsBegin(begin);
+            operation.SetCommitOffsetsEnd(end);
             operation.SetConsumer(std::move(consumer));
+            operation.SetForceCommit(forceCommit);
+            operation.SetKillReadSession(killReadSession);
+            operation.SetOnlyCheckCommitedToFinish(onlyCheckCommitedToFinish);
+            operation.SetReadSessionId(readSessionId);
 
             Operations.push_back(std::move(operation));
         }

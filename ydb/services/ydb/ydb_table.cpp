@@ -9,26 +9,31 @@ namespace NGRpcService {
 
 TGRpcYdbTableService::TGRpcYdbTableService(NActors::TActorSystem *system,
                                            TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+                                            TIntrusivePtr<TInFlightLimiterRegistry> inFlightLimiterRegistry,
                                            const NActors::TActorId& proxyId,
                                            bool rlAllowed,
                                            size_t handlersPerCompletionQueue)
     : TGrpcServiceBase(system, counters, proxyId, rlAllowed)
     , HandlersPerCompletionQueue(Max(size_t{1}, handlersPerCompletionQueue))
+    , LimiterRegistry_(inFlightLimiterRegistry)
 {
 }
 
 TGRpcYdbTableService::TGRpcYdbTableService(NActors::TActorSystem *system,
                                            TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+                                            TIntrusivePtr<TInFlightLimiterRegistry> inFlightLimiterRegistry,
                                            const TVector<NActors::TActorId>& proxies,
                                            bool rlAllowed,
                                            size_t handlersPerCompletionQueue)
     : TGrpcServiceBase(system, counters, proxies, rlAllowed)
     , HandlersPerCompletionQueue(Max(size_t{1}, handlersPerCompletionQueue))
+    , LimiterRegistry_(inFlightLimiterRegistry)
 {
 }
 
 void TGRpcYdbTableService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
+    auto getLimiter = CreateLimiterCb(LimiterRegistry_);
 
     size_t proxyCounter = 0;
 
@@ -60,23 +65,24 @@ void TGRpcYdbTableService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         }                                                                                                             \
     }
 
-#define ADD_STREAM_REQUEST_LIMIT(NAME, IN, OUT, CB, LIMIT_TYPE, REQUEST_TYPE) \
-    for (size_t i = 0; i < HandlersPerCompletionQueue; ++i) {                                                         \
-        for (auto* cq: CQS) {                                                                                         \
-            MakeIntrusive<TGRpcRequest<Ydb::Table::IN, Ydb::Table::OUT, TGRpcYdbTableService>>                        \
-                (this, &Service_, cq,                                                                                 \
-                    [this, proxyCounter](NYdbGrpc::IRequestContextBase *ctx) {                                        \
-                        NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                              \
-                        ActorSystem_->Send(GRpcProxies_[proxyCounter % GRpcProxies_.size()],                          \
-                            new TGrpcRequestNoOperationCall<Ydb::Table::IN, Ydb::Table::OUT>                          \
-                                (ctx, &CB, TRequestAuxSettings {                                                      \
-                                    .RlMode = RLSWITCH(TRateLimiterMode::LIMIT_TYPE),                                 \
-                                    .RequestType = NJaegerTracing::ERequestType::TABLE_##REQUEST_TYPE,                \
-                                }));                                                                                  \
-                    }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME,                                  \
-                    #NAME, logger, getCounterBlock("table", #NAME))->Run();                                           \
-            ++proxyCounter;                                                                                           \
-        }                                                                                                             \
+#define ADD_STREAM_REQUEST_LIMIT(NAME, IN, OUT, CB, LIMIT_TYPE, REQUEST_TYPE, USE_LIMITER) \
+    for (size_t i = 0; i < HandlersPerCompletionQueue; ++i) {                                                                           \
+        for (auto* cq: CQS) {                                                                                                           \
+            MakeIntrusive<TGRpcRequest<Ydb::Table::IN, Ydb::Table::OUT, TGRpcYdbTableService>>                                          \
+                (this, &Service_, cq,                                                                                                   \
+                    [this, proxyCounter](NYdbGrpc::IRequestContextBase *ctx) {                                                          \
+                        NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                                \
+                        ActorSystem_->Send(GRpcProxies_[proxyCounter % GRpcProxies_.size()],                                            \
+                            new TGrpcRequestNoOperationCall<Ydb::Table::IN, Ydb::Table::OUT>                                            \
+                                (ctx, &CB, TRequestAuxSettings {                                                                        \
+                                    .RlMode = RLSWITCH(TRateLimiterMode::LIMIT_TYPE),                                                   \
+                                    .RequestType = NJaegerTracing::ERequestType::TABLE_##REQUEST_TYPE,                                  \
+                                }));                                                                                                    \
+                    }, &Ydb::Table::V1::TableService::AsyncService::Request ## NAME,                                                    \
+                    #NAME, logger, getCounterBlock("table", #NAME),                                                                     \
+                    (USE_LIMITER ? getLimiter("TableService", #NAME, UNLIMITED_INFLIGHT) : nullptr))->Run();                         \
+        ++proxyCounter;                                                                                                                 \
+    }                                                                                                                                   \
     }
 
     ADD_REQUEST_LIMIT(CreateSession, DoCreateSessionRequest, Rps, CREATESESSION)
@@ -103,9 +109,9 @@ void TGRpcYdbTableService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     ADD_REQUEST_LIMIT(ExecuteDataQuery, DoExecuteDataQueryRequest, Ru, EXECUTEDATAQUERY, Auditable)
     ADD_REQUEST_LIMIT(BulkUpsert, DoBulkUpsertRequest, Ru, BULKUPSERT, Auditable)
 
-    ADD_STREAM_REQUEST_LIMIT(StreamExecuteScanQuery, ExecuteScanQueryRequest, ExecuteScanQueryPartialResponse, DoExecuteScanQueryRequest, RuOnProgress, STREAMEXECUTESCANQUERY)
-    ADD_STREAM_REQUEST_LIMIT(StreamReadTable, ReadTableRequest, ReadTableResponse, DoReadTableRequest, RuOnProgress, STREAMREADTABLE)
-    ADD_STREAM_REQUEST_LIMIT(ReadRows, ReadRowsRequest, ReadRowsResponse, DoReadRowsRequest, Ru, READROWS)
+    ADD_STREAM_REQUEST_LIMIT(StreamExecuteScanQuery, ExecuteScanQueryRequest, ExecuteScanQueryPartialResponse, DoExecuteScanQueryRequest, RuOnProgress, STREAMEXECUTESCANQUERY, false)
+    ADD_STREAM_REQUEST_LIMIT(StreamReadTable, ReadTableRequest, ReadTableResponse, DoReadTableRequest, RuOnProgress, STREAMREADTABLE, false)
+    ADD_STREAM_REQUEST_LIMIT(ReadRows, ReadRowsRequest, ReadRowsResponse, DoReadRowsRequest, Ru, READROWS, true)
 
 #undef ADD_REQUEST_LIMIT
 #undef ADD_STREAM_REQUEST_LIMIT

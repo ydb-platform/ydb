@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -329,6 +329,18 @@ Y_UNIT_TEST(SimpleRange) {
 }
 
 Y_UNIT_TEST(ComplexRange) {
+    TestRange(
+        R"(
+            SELECT Key, Fk, Value FROM `/Root/ComplexKey`
+            WHERE Key = 2
+            ORDER BY Value DESC
+            LIMIT 1;
+        )",
+        R"([
+            [[2];[103];["Value3"]];
+        ])",
+        2);
+
     TestRange(
         R"(
             SELECT Key, Fk, Value FROM `/Root/ComplexKey`

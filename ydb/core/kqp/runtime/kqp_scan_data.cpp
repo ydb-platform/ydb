@@ -687,6 +687,7 @@ TBytesStatistics TKqpScanComputeContext::TScanData::TBlockBatchReader::AddData(c
     for (auto&& filtered : batches) {
         TUnboxedValueVector batchValues;
         batchValues.resize(totalColsCount);
+        Y_ENSURE(TotalColumnsCount == static_cast<ui32>(filtered->num_columns()));
         for (int i = 0; i < filtered->num_columns(); ++i) {
             batchValues[i] = holderFactory.CreateArrowBlock(arrow::Datum(AdoptArrowTypeToYQL(filtered->column(i))));
         }

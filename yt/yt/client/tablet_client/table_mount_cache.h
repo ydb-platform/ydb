@@ -67,6 +67,7 @@ struct TIndexInfo
     std::optional<TString> Predicate;
     std::optional<TString> UnfoldedColumn;
     ETableToIndexCorrespondence Correspondence;
+    NTableClient::TTableSchemaPtr EvaluatedColumnsSchema;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

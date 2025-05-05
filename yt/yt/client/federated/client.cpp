@@ -116,11 +116,11 @@ public:
 
     TFuture<TTransactionFlushResult> Flush() override;
 
-    TFuture<void> Ping(const NApi::TTransactionPingOptions& options = {}) override;
+    TFuture<void> Ping(const TPrerequisitePingOptions& options = {}) override;
 
     TFuture<TTransactionCommitResult> Commit(const TTransactionCommitOptions& options = TTransactionCommitOptions()) override;
 
-    TFuture<void> Abort(const TTransactionAbortOptions& options = TTransactionAbortOptions()) override;
+    TFuture<void> Abort(const TTransactionAbortOptions& options = {}) override;
 
     TFuture<TVersionedLookupRowsResult> VersionedLookupRows(
         const NYPath::TYPath&, NTableClient::TNameTablePtr,
@@ -238,6 +238,7 @@ public:
     UNIMPLEMENTED_METHOD(IJournalWriterPtr, CreateJournalWriter, (const NYPath::TYPath&, const TJournalWriterOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TDistributedWriteSessionWithCookies>, StartDistributedWriteSession, (const NYPath::TRichYPath&, const TDistributedWriteSessionStartOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, FinishDistributedWriteSession, (const TDistributedWriteSessionWithResults&, const TDistributedWriteSessionFinishOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, Abort, (const TPrerequisiteAbortOptions&));
 
 private:
     const TClientPtr Client_;
@@ -336,13 +337,15 @@ public:
 
     ITransactionPtr AttachTransaction(NTransactionClient::TTransactionId, const TTransactionAttachOptions&) override;
 
+    IPrerequisitePtr AttachPrerequisite(NPrerequisiteClient::TPrerequisiteId, const TPrerequisiteAttachOptions&) override;
+
     IConnectionPtr GetConnection() override
     {
         auto [client, _] = GetActiveClient();
         return client->GetConnection();
     }
 
-    std::optional<TStringBuf> GetClusterName(bool fetchIfNull) override
+    TFuture<std::optional<std::string>> GetClusterName(bool fetchIfNull) override
     {
         auto [client, _] = GetActiveClient();
         return client->GetClusterName(fetchIfNull);
@@ -394,6 +397,7 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<TSkynetSharePartsLocationsPtr>, LocateSkynetShare, (const NYPath::TRichYPath&, const TLocateSkynetShareOptions&));
     UNIMPLEMENTED_METHOD(TFuture<std::vector<NTableClient::TColumnarStatistics>>, GetColumnarStatistics, (const std::vector<NYPath::TRichYPath>&, const TGetColumnarStatisticsOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TMultiTablePartitions>, PartitionTables, (const std::vector<NYPath::TRichYPath>&, const TPartitionTablesOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<ITablePartitionReaderPtr>, CreateTablePartitionReader, (const TTablePartitionCookiePtr&, const TReadTablePartitionOptions&));
     UNIMPLEMENTED_METHOD(TFuture<NYson::TYsonString>, GetTablePivotKeys, (const NYPath::TYPath&, const TGetTablePivotKeysOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, CreateTableBackup, (const TBackupManifestPtr&, const TCreateTableBackupOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, RestoreTableBackup, (const TBackupManifestPtr&, const TRestoreTableBackupOptions&));
@@ -487,6 +491,7 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<void>, PausePipeline, (const NYPath::TYPath&, const TPausePipelineOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TPipelineState>, GetPipelineState, (const NYPath::TYPath&, const TGetPipelineStateOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TGetFlowViewResult>, GetFlowView, (const NYPath::TYPath&, const NYPath::TYPath&, const TGetFlowViewOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TFlowExecuteResult>, FlowExecute, (const NYPath::TYPath&, const TString&, const NYson::TYsonString&, const TFlowExecuteOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TDistributedWriteSessionWithCookies>, StartDistributedWriteSession, (const NYPath::TRichYPath&, const TDistributedWriteSessionStartOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, FinishDistributedWriteSession, (const TDistributedWriteSessionWithResults&, const TDistributedWriteSessionFinishOptions&));
     UNIMPLEMENTED_METHOD(TFuture<ITableFragmentWriterPtr>, CreateTableFragmentWriter, (const TSignedWriteFragmentCookiePtr&, const TTableFragmentWriterOptions&));
@@ -551,7 +556,7 @@ TFuture<ResultType> TTransaction::MethodName(Y_METHOD_USED_ARGS_DECLARATION(Args
 
 TRANSACTION_METHOD_IMPL(TUnversionedLookupRowsResult, LookupRows, (const NYPath::TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TUnversionedRow>&, const TLookupRowsOptions&));
 TRANSACTION_METHOD_IMPL(TSelectRowsResult, SelectRows, (const std::string&, const TSelectRowsOptions&));
-TRANSACTION_METHOD_IMPL(void, Ping, (const NApi::TTransactionPingOptions&));
+TRANSACTION_METHOD_IMPL(void, Ping, (const NApi::TPrerequisitePingOptions&));
 TRANSACTION_METHOD_IMPL(TTransactionCommitResult, Commit, (const TTransactionCommitOptions&));
 TRANSACTION_METHOD_IMPL(void, Abort, (const TTransactionAbortOptions&));
 TRANSACTION_METHOD_IMPL(TVersionedLookupRowsResult, VersionedLookupRows, (const NYPath::TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TUnversionedRow>&, const TVersionedLookupRowsOptions&));
@@ -636,7 +641,7 @@ void TClient::CheckClustersHealth()
         const auto& check = checks[index];
         auto error = NConcurrency::WaitFor(check);
         YT_LOG_DEBUG_UNLESS(error.IsOK(), error, "Cluster %Qv is marked as unhealthy",
-            UnderlyingClients_[index]->Client->GetClusterName(/*fetchIfNull*/ false));
+            UnderlyingClients_[index]->Client->GetConnection()->GetClusterName());
         UnderlyingClients_[index]->HasErrors = !error.IsOK()
             && !error.FindMatching(NSecurityClient::EErrorCode::AuthorizationError); // Ignore authorization errors.
     }
@@ -759,6 +764,21 @@ ITransactionPtr TClient::AttachTransaction(
         }
     }
     THROW_ERROR_EXCEPTION("No client is known for transaction %v", transactionId);
+}
+
+IPrerequisitePtr TClient::AttachPrerequisite(
+    NPrerequisiteClient::TPrerequisiteId prerequisiteId,
+    const TPrerequisiteAttachOptions& options)
+{
+    TTransactionAttachOptions attachOptions = {};
+    attachOptions.AutoAbort = options.AutoAbort;
+    attachOptions.PingPeriod = options.PingPeriod;
+    attachOptions.Ping = options.Ping;
+    attachOptions.PingAncestors = options.PingAncestors;
+
+    static_assert(std::is_convertible_v<ITransaction*, IPrerequisite*>);
+
+    return AttachTransaction(prerequisiteId, attachOptions);
 }
 
 void TClient::HandleError(const TErrorOr<void>& error, int clientIndex)

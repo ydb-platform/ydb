@@ -159,7 +159,10 @@ public:
             case NConfig::TYdbComputeControlPlane::TYPE_NOT_SET:
                 return {};
             case NConfig::TYdbComputeControlPlane::kSingle:
-                return controlPlane.GetSingle().GetWorkloadManagerConfig();
+                if (controlPlane.GetSingle().HasWorkloadManagerConfig()) {
+                    return controlPlane.GetSingle().GetWorkloadManagerConfig();
+                }
+                return controlPlane.GetDefaultWorkloadManagerConfig();
             case NConfig::TYdbComputeControlPlane::kCms:
                 return GetWorkloadManagerConfig(scope, controlPlane.GetCms().GetDatabaseMapping());
             case NConfig::TYdbComputeControlPlane::kYdbcp:
@@ -169,7 +172,10 @@ public:
 
     NFq::NConfig::TWorkloadManagerConfig GetWorkloadManagerConfig(const TString& scope, const ::NFq::NConfig::TDatabaseMapping& databaseMapping) const {
         auto computeDatabaseConfig = GetComputeDatabaseConfig(scope, databaseMapping);
-        return computeDatabaseConfig.GetWorkloadManagerConfig();
+        if (computeDatabaseConfig.HasWorkloadManagerConfig()) {
+            return computeDatabaseConfig.GetWorkloadManagerConfig();
+        }
+        return ComputeConfig.GetYdb().GetControlPlane().GetDefaultWorkloadManagerConfig();
     }
 
     NFq::NConfig::TComputeDatabaseConfig GetComputeDatabaseConfig(const TString& scope, const ::NFq::NConfig::TDatabaseMapping& databaseMapping) const {
@@ -238,6 +244,7 @@ public:
             case FederatedQuery::ConnectionSetting::kMysqlCluster:
             case FederatedQuery::ConnectionSetting::kYdbDatabase:
             case FederatedQuery::ConnectionSetting::kLogging:
+            case FederatedQuery::ConnectionSetting::kIceberg:
                 return true;
             case FederatedQuery::ConnectionSetting::kDataStreams:
             case FederatedQuery::ConnectionSetting::kMonitoring:

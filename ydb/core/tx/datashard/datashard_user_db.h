@@ -176,6 +176,10 @@ public:
     NMiniKQL::TEngineHostCounters& GetCounters();
     const NMiniKQL::TEngineHostCounters& GetCounters() const;
 
+    bool PrechargeRow(
+        const TTableId& tableId,
+        const TArrayRef<const TRawTypeValue> key);    
+
 private:
     static TSmallVec<TCell> ConvertTableKeys(const TArrayRef<const TRawTypeValue> key);
 
@@ -208,7 +212,6 @@ private:
     absl::flat_hash_set<ui64> CommittedLockChanges;
     absl::flat_hash_map<TPathId, TIntrusivePtr<NTable::TDynamicTransactionMap>> TxMaps;
     absl::flat_hash_map<TPathId, NTable::ITransactionObserverPtr> TxObservers;
-    bool NeedGlobalTxId = false;
 
     absl::flat_hash_set<ui64> VolatileCommitTxIds;
     YDB_ACCESSOR_DEF(absl::flat_hash_set<ui64>, VolatileDependencies);

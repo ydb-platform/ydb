@@ -26,7 +26,7 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/lib/base/msgbus_status.h>
-#include <ydb-cpp-sdk/client/params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/persqueue_v1/rpc_calls.h>
 
@@ -722,9 +722,6 @@ namespace {
 }
 
 class TKikimrIcGateway : public IKqpGateway {
-private:
-    using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-
 public:
     TKikimrIcGateway(const TString& cluster, NKikimrKqp::EQueryType queryType, const TString& database, const TString& databaseId, std::shared_ptr<IKqpTableMetadataLoader>&& metadataLoader,
         TActorSystem* actorSystem, ui32 nodeId, TKqpRequestCounters::TPtr counters, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig)
@@ -897,6 +894,48 @@ public:
             });
 
         return tablePromise.GetFuture();
+    }
+
+    TFuture<TGenericResult> AlterDatabase(const TString& cluster, const NYql::TAlterDatabaseSettings& settings) override {
+        using TRequest = TEvTxUserProxy::TEvProposeTransaction;
+
+        try {
+            if (!CheckCluster(cluster)) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
+
+            auto alterDatabasePromise = NewPromise<TGenericResult>();
+
+            auto ev = MakeHolder<TRequest>();
+
+            ev->Record.SetDatabaseName(Database);
+            if (UserToken) {
+                ev->Record.SetUserToken(UserToken->GetSerializedToken());
+            }
+
+            const auto& [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(settings.DatabasePath);
+
+            NKikimrSchemeOp::TModifyScheme* modifyScheme = ev->Record.MutableTransaction()->MutableModifyScheme();
+            modifyScheme->SetOperationType(NKikimrSchemeOp::ESchemeOpModifyACL);
+            modifyScheme->SetWorkingDir(dirname);
+            modifyScheme->MutableModifyACL()->SetNewOwner(settings.Owner.value());
+            modifyScheme->MutableModifyACL()->SetName(basename);
+
+            auto condition = modifyScheme->AddApplyIf();
+            condition->AddPathTypes(NKikimrSchemeOp::EPathType::EPathTypeSubDomain);
+            condition->AddPathTypes(NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain);
+
+            SendSchemeRequest(ev.Release()).Apply(
+                [alterDatabasePromise](const TFuture<TGenericResult>& future) mutable {
+                    alterDatabasePromise.SetValue(future.GetValue());
+                }
+            );
+
+            return alterDatabasePromise.GetFuture();
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
     }
 
     TFuture<TGenericResult> CreateColumnTable(NYql::TKikimrTableMetadataPtr metadata,
@@ -1422,8 +1461,8 @@ public:
 
             SendSchemeRequest(ev.Release()).Apply(
                 [alterUserPromise](const TFuture<TGenericResult>& future) mutable {
-                alterUserPromise.SetValue(future.GetValue());
-            }
+                    alterUserPromise.SetValue(future.GetValue());
+                }
             );
 
             return alterUserPromise.GetFuture();

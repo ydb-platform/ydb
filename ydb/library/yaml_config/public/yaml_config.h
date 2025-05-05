@@ -246,6 +246,16 @@ TVolatileMetadata GetVolatileMetadata(const TString& config);
 TString ReplaceMetadata(const TString& config, const TMainMetadata& metadata);
 
 /**
+ * Takes valid MainConfig and increases version exactly by one
+ */
+ TString UpgradeMainConfigVersion(const TString& config);
+
+/**
+ * Takes valid MainConfig and increases version exactly by one
+ */
+TString UpgradeStorageConfigVersion(const TString& config);
+
+/**
  * Replaces metadata in database config
  */
 TString ReplaceMetadata(const TString& config, const TDatabaseMetadata& metadata);

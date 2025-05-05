@@ -29,6 +29,17 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
+KEEP     COPYRIGHT_SERVICE_LABEL 1050d39974838d9e4a3ebfa807befa85
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2008-2009 Bjoern Hoehrmann <bjoern@hoehrmann.de>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/sfparse.c [1060:1060]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 1c2050c8044ca0184cd622399091074c
 BELONGS ya.make
     License text:
@@ -42,6 +53,18 @@ BELONGS ya.make
     Files with this license:
         lib/sfparse.c [4:6]
         lib/sfparse.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 21d419b06e057fd073eece04d054aff1
+BELONGS ya.make
+    License text:
+        /* Copyright (c) 2008-2010 Bjoern Hoehrmann <bjoern@hoehrmann.de>
+         * See http://bjoern.hoehrmann.de/utf-8/decoder/dfa/ for details.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/sfparse.c [1057:1058]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 3782c9399af9718cb85783105b7784ae
 BELONGS ya.make

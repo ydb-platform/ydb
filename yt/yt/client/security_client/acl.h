@@ -20,7 +20,7 @@ struct TSerializableAccessControlEntry
     std::vector<std::string> Subjects;
     NYTree::EPermissionSet Permissions;
     EAceInheritanceMode InheritanceMode = EAceInheritanceMode::ObjectAndDescendants;
-    std::optional<std::string> SubjectTagFilter;
+    std::optional<TBooleanFormula> SubjectTagFilter;
     std::optional<std::vector<std::string>> Columns;
     std::optional<bool> Vital;
 

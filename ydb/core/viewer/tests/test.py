@@ -1,12 +1,17 @@
 # -*- coding: utf-8 -*-
+
+import logging
+import ydb
+from ydb._topic_writer.topic_writer import PublicMessage
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
+
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 import requests
 from urllib.parse import urlencode
 import time
 
 
-cluster = KiKiMR(KikimrConfigGenerator(enable_alter_database_create_hive_first=True))
+cluster = KiKiMR(KikimrConfigGenerator(extra_feature_flags={'enable_alter_database_create_hive_first': True, 'enable_topic_transfer': True}))
 cluster.start()
 domain_name = '/' + cluster.domain_name
 dedicated_db = domain_name + "/dedicated_db"
@@ -30,9 +35,19 @@ cluster.wait_tenant_up(serverless_db)
 databases = [domain_name, dedicated_db, shared_db, serverless_db]
 
 
-def call_viewer_api(url):
+def call_viewer_api_get(url):
     port = cluster.nodes[1].mon_port
     return requests.get("http://localhost:%s%s" % (port, url))
+
+
+def call_viewer_api_post(url):
+    port = cluster.nodes[1].mon_port
+    return requests.post("http://localhost:%s%s" % (port, url))
+
+
+def call_viewer_api_delete(url):
+    port = cluster.nodes[1].mon_port
+    return requests.delete("http://localhost:%s%s" % (port, url))
 
 
 def get_result(result):
@@ -44,7 +59,19 @@ def get_result(result):
 def call_viewer(url, params=None):
     if params is None:
         params = {}
-    return get_result(call_viewer_api(url + '?' + urlencode(params)))
+    return get_result(call_viewer_api_get(url + '?' + urlencode(params)))
+
+
+def call_viewer_post(url, params=None):
+    if params is None:
+        params = {}
+    return get_result(call_viewer_api_post(url + '?' + urlencode(params)))
+
+
+def call_viewer_delete(url, params=None):
+    if params is None:
+        params = {}
+    return get_result(call_viewer_api_delete(url + '?' + urlencode(params)))
 
 
 def call_viewer_db(url, params=None):
@@ -57,16 +84,28 @@ def call_viewer_db(url, params=None):
     return result
 
 
+def get_viewer_db(url, params=None):
+    if params is None:
+        params = {}
+    return call_viewer_db(url, params)
+
+
 def get_viewer(url, params=None):
     if params is None:
         params = {}
     return call_viewer(url, params)
 
 
-def get_viewer_db(url, params=None):
+def post_viewer(url, params=None):
     if params is None:
         params = {}
-    return call_viewer_db(url, params)
+    return call_viewer_post(url, params)
+
+
+def delete_viewer(url, params=None):
+    if params is None:
+        params = {}
+    return call_viewer_delete(url, params)
 
 
 wait_good = False
@@ -338,6 +377,7 @@ def normalize_result_nodes(result):
                                            'SendThroughput',
                                            'UptimeSeconds',
                                            'Usage',
+                                           'TotalSessions',
                                            ])
     return replace_values_by_key(result, ['CpuUsage',
                                           'DiskSpaceUsage',
@@ -354,6 +394,7 @@ def normalize_result_nodes(result):
                                           'NumberOfCpus',
                                           'CoresUsed',
                                           'CoresTotal',
+                                          'RealNumberOfCpus',
                                           'CreateTime',
                                           'MaxDiskUsage',
                                           'Roles',
@@ -397,6 +438,15 @@ def normalize_result_healthcheck(result):
     return result
 
 
+def normalize_result_replication(result):
+    result = replace_values_by_key(result, ['connection_string',
+                                            'endpoint',
+                                            'plan_step',
+                                            'tx_id'])
+    delete_keys_recursively(result, ['issue_log'])
+    return result
+
+
 def normalize_result(result):
     delete_keys_recursively(result, ['Version',
                                      'MemoryUsed',
@@ -416,6 +466,7 @@ def normalize_result(result):
     result = normalize_result_pdisks(result)
     result = normalize_result_vdisks(result)
     result = normalize_result_cluster(result)
+    result = normalize_result_replication(result)
     return result
 
 
@@ -569,4 +620,189 @@ def test_viewer_nodes_issue_14992():
         'response_group_by': response_group_by,
         'response_group': response_group,
     }
+    return result
+
+
+def test_operations_list():
+    return get_viewer_normalized("/operation/list", {
+        'database': dedicated_db,
+        'kind': 'import/s3'
+    })
+
+
+def test_operations_list_page():
+    return get_viewer_normalized("/operation/list", {
+        'database': dedicated_db,
+        'kind': 'import/s3',
+        'offset': 50,
+        'limit': 50
+    })
+
+
+def test_operations_list_page_bad():
+    return get_viewer_normalized("/operation/list", {
+        'database': dedicated_db,
+        'kind': 'import/s3',
+        'offset': 10,
+        'limit': 50
+    })
+
+
+def test_scheme_directory():
+    result = {}
+    result["1-get"] = get_viewer_normalized("/scheme/directory", {
+        'database': dedicated_db,
+        'path': dedicated_db
+        })
+    result["2-post"] = post_viewer("/scheme/directory", {
+        'database': dedicated_db,
+        'path': dedicated_db + '/test_dir'
+        })
+    result["3-get"] = get_viewer_normalized("/scheme/directory", {
+        'database': dedicated_db,
+        'path': dedicated_db
+        })
+    result["4-delete"] = delete_viewer("/scheme/directory", {
+        'database': dedicated_db,
+        'path': dedicated_db + '/test_dir'
+        })
+    result["5-get"] = get_viewer_normalized("/scheme/directory", {
+        'database': dedicated_db,
+        'path': dedicated_db
+        })
+    return result
+
+
+def test_topic_data():
+    grpc_port = cluster.nodes[1].grpc_port
+
+    call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'CREATE TOPIC topic1',
+        'schema': 'multi'
+    })
+
+    endpoint = "localhost:{}".format(grpc_port)
+    driver = ydb.Driver(endpoint=endpoint, database=dedicated_db, oauth=None)
+    driver.wait(10, fail_fast=True)
+
+    def write(writer, message_pattern, close=True):
+        writer.write(["{}-{}".format(message_pattern, i) for i in range(10)])
+        writer.flush()
+        if close:
+            writer.close()
+
+    writer = driver.topic_client.writer('topic1', producer_id="12345")
+    write(writer, "message", False)
+
+    # Also write one messagewith metadata
+    message_w_meta = PublicMessage(data="message_with_meta", metadata_items={"key1": "value1", "key2": "value2"})
+    writer.write(message_w_meta)
+    writer.close()
+
+    writer_compressed = driver.topic_client.writer('topic1', producer_id="12345", codec=2)
+    write(writer_compressed, "compressed-message")
+
+    response = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': '{}/topic1'.format(dedicated_db),
+        'partition': '0',
+        'offset': '0',
+        'limit': '5'
+    })
+
+    response_cut_by_last_offset = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': '{}/topic1'.format(dedicated_db),
+        'partition': '0',
+        'offset': '0',
+        'last_offset': '2',
+        'limit': '5'
+    })
+
+    response_w_meta = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': '{}/topic1'.format(dedicated_db),
+        'partition': '0',
+        'offset': '10',
+        'limit': '1'
+    })
+    response_compressed = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': '{}/topic1'.format(dedicated_db),
+        'partition': '0',
+        'offset': '11',
+        'limit': '5'
+    })
+
+    response_last = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': '{}/topic1'.format(dedicated_db),
+        'partition': '0',
+        'offset': '20',
+        'limit': '5'
+    })
+
+    response_short_msg = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': '{}/topic1'.format(dedicated_db),
+        'partition': '0',
+        'offset': '20',
+        'limit': '1',
+        'message_size_limit': '5'
+    })
+
+    response_no_part = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': '{}/topic1'.format(dedicated_db),
+        'offset': '20'
+    })
+
+    response_both_offset_and_ts = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': '{}/topic1'.format(dedicated_db),
+        'partition': '0',
+        'offset': '20',
+        'read_timestamp': '20'
+    })
+
+    def replace_values(resp):
+        res = replace_values_by_key(resp, ['CreateTimestamp',
+                                           'WriteTimestamp',
+                                           'TimestampDiff',
+                                           'ProducerId',
+                                           ])
+        logging.info(res)
+        return res
+
+    result = {
+        'response_read': replace_values(response),
+        'response_metadata': replace_values(response_w_meta),
+        'response_compressed': replace_values(response_compressed),
+        'response_not_truncated': replace_values(response_last),
+        'no_partition': response_no_part,
+        'both_offset_and_ts': response_both_offset_and_ts,
+        'response_truncated': replace_values(response_short_msg),
+        'response_last_offset': replace_values(response_cut_by_last_offset),
+    }
+    return result
+
+
+def test_transfer_describe():
+    grpc_port = cluster.nodes[1].grpc_port
+    endpoint = "grpc://localhost:{}/?database={}".format(grpc_port, dedicated_db)
+
+    call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'CREATE ASYNC REPLICATION `TestAsyncReplication` FOR `TableNotExists` AS `TargetAsyncReplicationTable` WITH (CONNECTION_STRING = "{}")'.format(endpoint),
+        'schema': 'multi'
+    })
+
+    result = get_viewer_normalized("/viewer/describe_replication", {
+        'database': dedicated_db,
+        'path': '{}/TestAsyncReplication'.format(dedicated_db),
+        'include_stats': 'true',
+        'enums': 'true'
+    })
+
     return result

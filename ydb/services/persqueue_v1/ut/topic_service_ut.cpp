@@ -1,9 +1,9 @@
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <ydb-cpp-sdk/client/types/status_codes.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
 #include <ydb/library/services/services.pb.h>
 
@@ -412,7 +412,11 @@ Y_UNIT_TEST_F(MultiplePartitionsAndNoGapsInTheOffsets, TUpdateOffsetsInTransacti
     auto result = tx->Commit().ExtractValueSync();
     Cerr << ">>> CommitTx >>>" << Endl;
     UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::ABORTED);
+    if (server->ServerSettings.AppConfig->GetTableServiceConfig().GetEnableOltpSink()) {
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::ABORTED);
+    }
 }
 
 }

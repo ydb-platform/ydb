@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 extern const char* YDB_AUTH_TICKET_HEADER;
 extern const char* YDB_DATABASE_HEADER;

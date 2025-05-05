@@ -1,7 +1,7 @@
 #include "write_session_impl.h"
 
-#include <src/client/topic/common/log_lazy.h>
-#include <src/client/topic/common/trace_lazy.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/trace_lazy.h>
 
 #include <library/cpp/string_utils/url/url.h>
 
@@ -18,7 +18,7 @@ void Out<NYdb::NTopic::TTransactionId>(IOutputStream& s, const NYdb::NTopic::TTr
     s << "{" << v.SessionId << ", " << v.TxId << "}";
 }
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 const TDuration UPDATE_TOKEN_PERIOD = TDuration::Hours(1);
 // Error code from file ydb/public/api/protos/persqueue_error_codes_v1.proto
@@ -50,13 +50,13 @@ TTxIdOpt GetTransactionId(const std::optional<TTransactionId>& tx)
     return TTxId(tx->SessionId, tx->TxId);
 }
 
-std::optional<TTransactionId> MakeTransactionId(const NTable::TTransaction* tx)
+std::optional<TTransactionId> MakeTransactionId(const TTransactionBase* tx)
 {
     if (!tx) {
         return std::nullopt;
     }
 
-    return TTransactionId{tx->GetSession().GetId(), tx->GetId()};
+    return TTransactionId{tx->GetSessionId(), tx->GetId()};
 }
 
 }
@@ -537,7 +537,7 @@ NThreading::TFuture<void> TWriteSessionImpl::WaitEvent() {
     return EventsQueue->WaitEvent();
 }
 
-void TWriteSessionImpl::TrySubscribeOnTransactionCommit(TTransaction* tx)
+void TWriteSessionImpl::TrySubscribeOnTransactionCommit(TTransactionBase* tx)
 {
     if (!tx) {
         return;
@@ -951,7 +951,7 @@ void TWriteSessionImpl::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t co
     TProcessSrvMessageResult processResult;
     bool needSetValue = false;
     if (!grpcStatus.Ok()) {
-        errorStatus = TPlainStatus(std::move(grpcStatus));
+        errorStatus = TPlainStatus(grpcStatus);
     }
     bool doRead = false;
     {

@@ -2,8 +2,8 @@
 #include "ydb_proxy.h"
 
 #include <ydb/core/protos/replication.pb.h>
-#include <ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -36,6 +36,12 @@ void TEvYdbProxy::TEndTopicPartitionResult::Out(IOutputStream& out) const {
         << " PartitionId: " << PartitionId
         << " AdjacentPartitionsIds [" << JoinSeq(",", AdjacentPartitionsIds) << "]"
         << " ChildPartitionsIds [" << JoinSeq(",", ChildPartitionsIds) << "]"
+    << " }";
+}
+
+void TEvYdbProxy::TStartTopicReadingSessionResult::Out(IOutputStream& out) const {
+    out << "{"
+        << " ReadSessionId: " << ReadSessionId
     << " }";
 }
 
@@ -177,7 +183,9 @@ private:
 
 class TTopicReader: public TBaseProxyActor<TTopicReader> {
     void Handle(TEvYdbProxy::TEvReadTopicRequest::TPtr& ev) {
-        if (AutoCommit) {
+        auto args = std::move(ev->Get()->GetArgs());
+        const auto& settings = std::get<TEvYdbProxy::TReadTopicSettings>(args);
+        if (AutoCommit && !settings.SkipCommit_) {
             DeferredCommit.Commit();
         }
         WaitEvent(ev->Sender, ev->Cookie);
@@ -203,6 +211,7 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
         if (auto* x = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
             PartitionEndWatcher.Clear();
             x->Confirm();
+            Send(ev->Get()->Sender, new TEvYdbProxy::TEvStartTopicReadingSession(*x), 0, ev->Get()->Cookie);
             return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
         } else if (auto* x = std::get_if<TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
             x->Confirm();

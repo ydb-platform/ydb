@@ -15,26 +15,6 @@ using namespace NSQLv1Generated;
 
 namespace {
 
-struct TViewQuerySplit {
-    TString ContextRecreation;
-    TString Select;
-};
-
-TViewQuerySplit SplitViewQuery(TStringInput query) {
-    // to do: make the implementation more versatile
-    TViewQuerySplit split;
-
-    TString line;
-    while (query.ReadLine(line)) {
-        (line.StartsWith("--") || line.StartsWith("PRAGMA ")
-            ? split.ContextRecreation
-            : split.Select
-        ) += line;
-    }
-
-    return split;
-}
-
 bool ValidateViewQuery(const TString& query, NYql::TIssues& issues) {
     TRule_sql_query queryProto;
     if (!SqlToProtoAst(query, queryProto, issues)) {
@@ -103,6 +83,21 @@ bool RewriteTablePathPrefix(TString& query, TStringBuf backupRoot, TStringBuf re
 }
 
 } // anonymous
+
+TViewQuerySplit SplitViewQuery(TStringInput query) {
+    // to do: make the implementation more versatile
+    TViewQuerySplit split;
+
+    TString line;
+    while (query.ReadLine(line)) {
+        (line.StartsWith("--") || line.StartsWith("PRAGMA ")
+            ? split.ContextRecreation
+            : split.Select
+        ) += line;
+    }
+
+    return split;
+}
 
 TString BuildCreateViewQuery(
     const TString& name, const TString& dbPath, const TString& viewQuery, const TString& backupRoot,

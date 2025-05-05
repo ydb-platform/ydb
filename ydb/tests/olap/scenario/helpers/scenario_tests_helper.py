@@ -10,13 +10,14 @@ from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from abc import abstractmethod, ABC
 from typing import Set, List, Dict, Any, Callable, Optional
 from time import sleep
-from ydb.tests.olap.lib.utils import get_external_param
 
 
 class TestContext:
     """Scenario test execution context.
 
     The class is created by the test execution system and used by {ScenarioTestHelper}."""
+
+    __test__ = False
 
     def __init__(self, suite_name: str, test_name: str, scenario: Callable) -> None:
         """Constructor.
@@ -317,7 +318,7 @@ class ScenarioTestHelper:
         result = os.path.join('/', YdbCluster.ydb_database, YdbCluster.tables_path)
         if self.test_context is not None:
             result = _add_not_empty(result, self.test_context.suite)
-            result = _add_not_empty(result, self.test_context.test) + get_external_param("table_suffix", "")
+            result = _add_not_empty(result, self.test_context.test)
         result = _add_not_empty(result, path)
         return result
 
@@ -356,6 +357,7 @@ class ScenarioTestHelper:
             sleep(3)
         if fail_on_error:
             pytest.fail(f'Retries exceeded with unexpected status: must be in {repr(expected_status)}, but get {repr(error or status)}')
+        return 1
 
     def _bulk_upsert_impl(
         self, tablename: str, data_generator: ScenarioTestHelper.IDataGenerator, expected_status: ydb.StatusCode | Set[ydb.StatusCode]
@@ -483,7 +485,7 @@ class ScenarioTestHelper:
 
         allure.attach(yql, 'request', allure.attachment_type.TEXT)
         with ydb.QuerySessionPool(YdbCluster.get_ydb_driver()) as pool:
-            self._run_with_expected_status(lambda: pool.execute_with_retries(yql, None, ydb.RetrySettings(max_retries=retries)), expected_status, fail_on_error=fail_on_error)
+            return self._run_with_expected_status(lambda: pool.execute_with_retries(yql, None, ydb.RetrySettings(max_retries=retries)), expected_status, fail_on_error=fail_on_error)
 
     def drop_if_exist(self, names: List[str], operation) -> None:
         """Erase entities in the tested database, if it exists.

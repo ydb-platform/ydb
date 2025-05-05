@@ -76,12 +76,10 @@ public:
                 PartialArray->GetHeader().GetField(i.second.GetColumnIdx()), nullptr, 0);
             source->GetContext()->GetCommonContext()->GetCounters().GetSubColumns()->GetColumnCounters().OnRead(
                 i.second.GetBlobDataVerified().size());
-            std::vector<NArrow::NAccessor::TDeserializeChunkedArray::TChunk> chunks = { NArrow::NAccessor::TDeserializeChunkedArray::TChunk(
-                GetRecordsCount(), i.second.GetBlobDataVerified()) };
             const std::shared_ptr<NArrow::NAccessor::IChunkedArray> arrOriginal =
-                deserialize
-                    ? columnLoader->ApplyVerified(i.second.GetBlobDataVerified(), GetRecordsCount())
-                    : std::make_shared<NArrow::NAccessor::TDeserializeChunkedArray>(GetRecordsCount(), columnLoader, std::move(chunks), true);
+                deserialize ? columnLoader->ApplyVerified(i.second.GetBlobDataVerified(), GetRecordsCount())
+                            : std::make_shared<NArrow::NAccessor::TDeserializeChunkedArray>(
+                                  GetRecordsCount(), columnLoader, i.second.GetBlobDataVerified(), true);
             if (applyFilter) {
                 PartialArray->AddColumn(i.first, applyFilter->Apply(arrOriginal));
             } else {
@@ -169,18 +167,19 @@ private:
     std::vector<TColumnChunkRestoreInfo> ColumnChunks;
     std::optional<TString> StorageId;
     bool NeedToAddResource = false;
-    virtual void DoOnDataCollected() override {
+    virtual void DoOnDataCollected(TFetchingResultContext& context) override {
         if (NeedToAddResource) {
             NArrow::NAccessor::TCompositeChunkedArray::TBuilder compositeBuilder(ChunkExternalInfo.GetColumnType());
             for (auto&& i : ColumnChunks) {
-                i.Finish(nullptr, Source);
+                i.Finish(nullptr, context.GetSource());
                 compositeBuilder.AddChunk(i.GetPartialArray());
             }
-            Resources->AddVerified(GetColumnId(), compositeBuilder.Finish(), true);
+            context.GetAccessors().AddVerified(GetEntityId(), compositeBuilder.Finish(), true);
         } else {
             ui32 pos = 0;
             for (auto&& i : ColumnChunks) {
-                i.Finish(std::make_shared<NArrow::TColumnFilter>(Resources->GetAppliedFilter()->Slice(pos, i.GetRecordsCount())), Source);
+                i.Finish(std::make_shared<NArrow::TColumnFilter>(context.GetAccessors().GetAppliedFilter()->Slice(pos, i.GetRecordsCount())),
+                    context.GetSource());
                 pos += i.GetRecordsCount();
             }
         }
@@ -189,7 +188,7 @@ private:
     virtual void DoOnDataReceived(TReadActionsCollection& nextRead, NBlobOperations::NRead::TCompositeReadBlobs& blobs) override {
         AFL_VERIFY(ColumnChunks.size());
         AFL_VERIFY(!!StorageId);
-        TBlobsAction blobsAction(Source->GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
+        TBlobsAction blobsAction(StoragesManager, NBlobOperations::EConsumer::SCAN);
         auto reading = blobsAction.GetReading(*StorageId);
         reading->SetIsBackgroundProcess(false);
         for (auto&& i : ColumnChunks) {
@@ -228,19 +227,20 @@ private:
         nextRead.Add(reading);
     }
 
-    virtual void DoStart(TReadActionsCollection& nextRead) override {
-        auto columnChunks = Source->GetStageData().GetPortionAccessor().GetColumnChunksPointers(GetColumnId());
+    virtual void DoStart(TReadActionsCollection& nextRead, TFetchingResultContext& context) override {
+        auto source = context.GetSource();
+        auto columnChunks = source->GetStageData().GetPortionAccessor().GetColumnChunksPointers(GetEntityId());
         AFL_VERIFY(columnChunks.size());
-        StorageId = Source->GetColumnStorageId(GetColumnId());
-        TBlobsAction blobsAction(Source->GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
+        StorageId = source->GetColumnStorageId(GetEntityId());
+        TBlobsAction blobsAction(StoragesManager, NBlobOperations::EConsumer::SCAN);
         auto reading = blobsAction.GetReading(*StorageId);
         reading->SetIsBackgroundProcess(false);
-        auto filterPtr = Source->GetStageData().GetAppliedFilter();
+        auto filterPtr = source->GetStageData().GetAppliedFilter();
         const NArrow::TColumnFilter& cFilter = filterPtr ? *filterPtr : NArrow::TColumnFilter::BuildAllowFilter();
-        auto itFilter = cFilter.GetIterator(false, Source->GetRecordsCount());
+        auto itFilter = cFilter.GetIterator(false, source->GetRecordsCount());
         bool itFinished = false;
 
-        auto accessor = Resources->GetAccessorOptional(GetColumnId());
+        auto accessor = context.GetAccessors().GetAccessorOptional(GetEntityId());
         NeedToAddResource = !accessor;
         std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> chunks;
         if (!NeedToAddResource) {
@@ -256,7 +256,7 @@ private:
             auto& meta = columnChunks[chunkIdx]->GetMeta();
             AFL_VERIFY(!itFinished);
             if (!itFilter.IsBatchForSkip(meta.GetRecordsCount())) {
-                const TBlobRange range = Source->RestoreBlobRange(columnChunks[chunkIdx]->BlobRange);
+                const TBlobRange range = source->RestoreBlobRange(columnChunks[chunkIdx]->BlobRange);
                 ColumnChunks.emplace_back(range, ChunkExternalInfo.GetSubset(meta.GetRecordsCount()));
                 if (!NeedToAddResource) {
                     AFL_VERIFY(resChunkIdx < chunks.size())("chunks", chunks.size())("meta", columnChunks.size())("need", NeedToAddResource);
@@ -270,7 +270,7 @@ private:
             itFinished = !itFilter.Next(meta.GetRecordsCount());
         }
         AFL_VERIFY(NeedToAddResource || (resChunkIdx == chunks.size()));
-        AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", Source->GetRecordsCount());
+        AFL_VERIFY(itFinished)("filter", itFilter.DebugString())("count", source->GetRecordsCount());
         for (auto&& i : blobsAction.GetReadingActions()) {
             nextRead.Add(i);
         }
@@ -278,10 +278,10 @@ private:
 
 public:
     TSubColumnsFetchLogic(const ui32 columnId, const std::shared_ptr<IDataSource>& source, const std::vector<TString>& subColumns)
-        : TBase(columnId, source)
-        , ChunkExternalInfo(Source->GetSourceSchema()->GetColumnLoaderVerified(GetColumnId())->BuildAccessorContext(Source->GetRecordsCount()))
+        : TBase(columnId, source->GetContext()->GetCommonContext()->GetStoragesManager())
+        , ChunkExternalInfo(source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId())->BuildAccessorContext(source->GetRecordsCount()))
         , SubColumns(subColumns) {
-        const auto loader = Source->GetSourceSchema()->GetColumnLoaderVerified(GetColumnId());
+        const auto loader = source->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId());
         AFL_VERIFY(loader->GetAccessorConstructor()->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray)
         ("type", loader->GetAccessorConstructor()->GetType());
     }

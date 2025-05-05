@@ -1564,9 +1564,10 @@ value {
         }
     }
 
-    Y_UNIT_TEST(ExportImportOnSupportedDatatypes) {
+    void ExportImportOnSupportedDatatypesImpl(bool encrypted, bool commonPrefix, bool emptyTable = false) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
+        runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"_(
@@ -1600,55 +1601,219 @@ value {
         )_");
         env.TestWaitNotification(runtime, txId);
 
-        const int partitionIdx = 0;
+        if (!emptyTable) {
+            const int partitionIdx = 0;
 
-        const TVector<TCell> keys = {TCell::Make(1ull)};
+            const TVector<TCell> keys = {TCell::Make(1ull)};
 
-        const TString string = "test string";
-        const TString json = R"({"key": "value"})";
-        auto binaryJson = NBinaryJson::SerializeToBinaryJson(json);
-        Y_ABORT_UNLESS(std::holds_alternative<NBinaryJson::TBinaryJson>(binaryJson));
-        const auto& binaryJsonValue = std::get<NBinaryJson::TBinaryJson>(binaryJson);
+            const TString string = "test string";
+            const TString json = R"({"key": "value"})";
+            auto binaryJson = NBinaryJson::SerializeToBinaryJson(json);
+            Y_ABORT_UNLESS(std::holds_alternative<NBinaryJson::TBinaryJson>(binaryJson));
+            const auto& binaryJsonValue = std::get<NBinaryJson::TBinaryJson>(binaryJson);
 
-        const std::pair<ui64, ui64> decimal = NYql::NDecimal::MakePair(NYql::NDecimal::FromString("16.17", NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE));
-        const std::pair<ui64, ui64> decimal35 = NYql::NDecimal::MakePair(NYql::NDecimal::FromString("555555555555555.123456789", 35, 10));
-        const TString dynumber = *NDyNumber::ParseDyNumberString("18");
+            const std::pair<ui64, ui64> decimal = NYql::NDecimal::MakePair(NYql::NDecimal::FromString("16.17", NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE));
+            const std::pair<ui64, ui64> decimal35 = NYql::NDecimal::MakePair(NYql::NDecimal::FromString("555555555555555.123456789", 35, 10));
+            const TString dynumber = *NDyNumber::ParseDyNumberString("18");
 
-        char uuid[16];
-        NUuid::ParseUuidToArray(TString("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), reinterpret_cast<ui16*>(uuid), false);
+            char uuid[16];
+            NUuid::ParseUuidToArray(TString("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"), reinterpret_cast<ui16*>(uuid), false);
 
-        const TVector<TCell> values = {
-            TCell::Make<i32>(-1), // Int32
-            TCell::Make<ui32>(2), // Uint32
-            TCell::Make<i64>(-3), // Int64
-            TCell::Make<ui64>(4), // Uint64
-            TCell::Make<ui8>(5), // Uint8
-            TCell::Make<bool>(true), // Bool
-            TCell::Make<double>(6.66), // Double
-            TCell::Make<float>(7.77), // Float
-            TCell::Make<ui16>(8), // Date
-            TCell::Make<ui32>(9), // Datetime
-            TCell::Make<ui64>(10), // Timestamp
-            TCell::Make<i64>(-11), // Interval
-            TCell::Make<i32>(-12), // Date32
-            TCell::Make<i64>(-13), // Datetime64
-            TCell::Make<i64>(-14), // Timestamp64
-            TCell::Make<i64>(-15), // Interval64
-            TCell::Make<std::pair<ui64, ui64>>(decimal), // Decimal
-            TCell::Make<std::pair<ui64, ui64>>(decimal35), // Decimal
-            TCell(dynumber.data(), dynumber.size()), // Dynumber
-            TCell(string.data(), string.size()), // String
-            TCell(string.data(), string.size()), // Utf8
-            TCell(json.data(), json.size()), // Json
-            TCell(binaryJsonValue.Data(), binaryJsonValue.Size()), // JsonDocument
-            TCell(uuid, sizeof(uuid)), // Uuid
-        };
+            const TVector<TCell> values = {
+                TCell::Make<i32>(-1), // Int32
+                TCell::Make<ui32>(2), // Uint32
+                TCell::Make<i64>(-3), // Int64
+                TCell::Make<ui64>(4), // Uint64
+                TCell::Make<ui8>(5), // Uint8
+                TCell::Make<bool>(true), // Bool
+                TCell::Make<double>(6.66), // Double
+                TCell::Make<float>(7.77), // Float
+                TCell::Make<ui16>(8), // Date
+                TCell::Make<ui32>(9), // Datetime
+                TCell::Make<ui64>(10), // Timestamp
+                TCell::Make<i64>(-11), // Interval
+                TCell::Make<i32>(-12), // Date32
+                TCell::Make<i64>(-13), // Datetime64
+                TCell::Make<i64>(-14), // Timestamp64
+                TCell::Make<i64>(-15), // Interval64
+                TCell::Make<std::pair<ui64, ui64>>(decimal), // Decimal
+                TCell::Make<std::pair<ui64, ui64>>(decimal35), // Decimal
+                TCell(dynumber.data(), dynumber.size()), // Dynumber
+                TCell(string.data(), string.size()), // String
+                TCell(string.data(), string.size()), // Utf8
+                TCell(json.data(), json.size()), // Json
+                TCell(binaryJsonValue.Data(), binaryJsonValue.Size()), // JsonDocument
+                TCell(uuid, sizeof(uuid)), // Uuid
+            };
 
-        const TVector<ui32> keyTags = {1};
-        TVector<ui32> valueTags(values.size());
-        std::iota(valueTags.begin(), valueTags.end(), 2);
+            const TVector<ui32> keyTags = {1};
+            TVector<ui32> valueTags(values.size());
+            std::iota(valueTags.begin(), valueTags.end(), 2);
 
-        UploadRow(runtime, "/MyRoot/Table", partitionIdx, keyTags, valueTags, keys, values);
+            UploadRow(runtime, "/MyRoot/Table", partitionIdx, keyTags, valueTags, keys, values);
+        }
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TString encryptionSettings;
+        if (encrypted) {
+            encryptionSettings = R"(encryption_settings {
+                encryption_algorithm: "ChaCha20-Poly1305"
+                symmetric_key {
+                    key: "Very very secret export key!!!!!"
+                }
+            })";
+        }
+        TString exportItems, importItems;
+        if (commonPrefix) {
+            exportItems = R"(
+                source_path: "/MyRoot"
+                destination_prefix: "BackupPrefix"
+                items {
+                    source_path: "Table"
+                }
+            )";
+            importItems = R"(
+                source_prefix: "BackupPrefix"
+                destination_path: "/MyRoot/Restored"
+            )";
+        } else {
+            exportItems = R"(
+                items {
+                    source_path: "/MyRoot/Table"
+                    destination_prefix: "Backup1"
+                }
+            )";
+            importItems = R"(
+                items {
+                    source_prefix: "Backup1"
+                    destination_path: "/MyRoot/Restored"
+                }
+            )";
+        }
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              %s
+              %s
+            }
+        )", port, exportItems.c_str(), encryptionSettings.c_str()));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              %s
+              %s
+            }
+        )", port, importItems.c_str(), encryptionSettings.c_str()));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot");
+
+        if (!emptyTable) {
+            TString expectedJson = TStringBuilder() << "[[[[["
+                << "[%true];" // bool
+                << "[\"" << -12 << "\"];" // date32
+                << "[\"" << 8 << "\"];" // date
+                << "[\"" << -13 << "\"];" // datetime64
+                << "[\"" << 9 << "\"];" // datetime
+                << "[\"" << "555555555555555.123456789" << "\"];" // decimal35
+                << "[\"" << "16.17" << "\"];" // decimal
+                << "[\"" << 6.66 << "\"];" // double
+                << "[\"" << ".18e2" << "\"];" // dynumber
+                << "[\"" << 7.77f << "\"];" // float
+                << "[\"" << -1 << "\"];" // int32
+                << "[\"" << -3 << "\"];" // int64
+                << "[\"" << -15 << "\"];" // interval64
+                << "[\"" << -11 << "\"];" // interval
+                << "[\"" << "{\\\"key\\\": \\\"value\\\"}" << "\"];" // json
+                << "[\"" << "{\\\"key\\\":\\\"value\\\"}" << "\"];" // jsondoc
+                << "[\"" << 1 << "\"];" // key
+                << "[\"" << "test string" << "\"];" // string
+                << "[\"" << -14 << "\"];" // timestamp64
+                << "[\"" << 10 << "\"];" // timestamp
+                << "[\"" << 2 << "\"];" // uint32
+                << "[\"" << 4 << "\"];" // uint64
+                << "[\"" << 5 << "\"];" // uint8
+                << "[\"" << "test string" << "\"];" // utf8
+                << "[[\"" << "wR7fZX2pskeuVjwCPabujA==" << "\"]]" // uuid
+            << "]];\%false]]]";
+
+            const TReadKeyDesc readKeyDesc = {"key", "Uint64", "0"};
+
+            const TVector<TString> readColumns = {
+                "key",
+                "int32_value",
+                "uint32_value",
+                "int64_value",
+                "uint64_value",
+                "uint8_value",
+                "bool_value",
+                "double_value",
+                "float_value",
+                "date_value",
+                "datetime_value",
+                "timestamp_value",
+                "interval_value",
+                "date32_value",
+                "datetime64_value",
+                "timestamp64_value",
+                "interval64_value",
+                "decimal_value",
+                "decimal35_value",
+                "dynumber_value",
+                "string_value",
+                "utf8_value",
+                "json_value",
+                "jsondoc_value",
+                "uuid_value",
+            };
+
+            auto contentOriginalTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", readKeyDesc, readColumns);
+            NKqp::CompareYson(expectedJson, contentOriginalTable);
+
+            auto contentRestoredTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 2, commonPrefix ? "Table" : "Restored", readKeyDesc, readColumns);
+            NKqp::CompareYson(expectedJson, contentRestoredTable);
+        }
+    }
+
+    Y_UNIT_TEST(ExportImportOnSupportedDatatypes) {
+        ExportImportOnSupportedDatatypesImpl(false, false);
+    }
+
+    Y_UNIT_TEST(ExportImportOnSupportedDatatypesWithCommonDestPrefix) {
+        ExportImportOnSupportedDatatypesImpl(false, true);
+    }
+
+    Y_UNIT_TEST(ExportImportOnSupportedDatatypesEncrypted) {
+        ExportImportOnSupportedDatatypesImpl(true, true);
+    }
+
+    Y_UNIT_TEST(ExportImportOnSupportedDatatypesEncryptedNoData) {
+        ExportImportOnSupportedDatatypesImpl(true, true, true);
+    }
+
+    Y_UNIT_TEST(ZeroLengthEncryptedFileTreatedAsCorrupted) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
+        runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"_(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "String" }
+            KeyColumnNames: ["key"]
+        )_");
+        env.TestWaitNotification(runtime, txId);
 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -1660,92 +1825,69 @@ value {
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
-              items {
-                source_path: "/MyRoot/Table"
-                destination_prefix: "Backup1"
+              source_path: "/MyRoot"
+                destination_prefix: "BackupPrefix"
+                items {
+                    source_path: "Table"
+                }
+              encryption_settings {
+                encryption_algorithm: "ChaCha20-Poly1305"
+                symmetric_key {
+                    key: "Very very secret export key!!!!!"
+                }
               }
             }
         )", port));
         env.TestWaitNotification(runtime, txId);
         TestGetExport(runtime, txId, "/MyRoot");
 
+        // Successfully imports
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ImportFromS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
-              items {
-                source_prefix: "Backup1"
-                destination_path: "/MyRoot/Restored"
+              source_prefix: "BackupPrefix"
+              destination_path: "/MyRoot/Restored"
+              encryption_settings {
+                symmetric_key {
+                    key: "Very very secret export key!!!!!"
+                }
               }
             }
         )", port));
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot");
 
+        // Delete data from different files
+        auto checkFailsIfFileIsEmpty = [&](const TString& fileName) {
+            TString& data = s3Mock.GetData()[fileName];
+            UNIT_ASSERT(!data.empty());
+            TString srcData = data;
+            data.clear();
 
-        TString expectedJson = TStringBuilder() << "[[[[["
-            << "[%true];" // bool
-            << "[\"" << -12 << "\"];" // date32
-            << "[\"" << 8 << "\"];" // date
-            << "[\"" << -13 << "\"];" // datetime64
-            << "[\"" << 9 << "\"];" // datetime
-            << "[\"" << "555555555555555.123456789" << "\"];" // decimal35
-            << "[\"" << "16.17" << "\"];" // decimal
-            << "[\"" << 6.66 << "\"];" // double
-            << "[\"" << ".18e2" << "\"];" // dynumber
-            << "[\"" << 7.77f << "\"];" // float
-            << "[\"" << -1 << "\"];" // int32
-            << "[\"" << -3 << "\"];" // int64
-            << "[\"" << -15 << "\"];" // interval64
-            << "[\"" << -11 << "\"];" // interval
-            << "[\"" << "{\\\"key\\\": \\\"value\\\"}" << "\"];" // json
-            << "[\"" << "{\\\"key\\\":\\\"value\\\"}" << "\"];" // jsondoc
-            << "[\"" << 1 << "\"];" // key
-            << "[\"" << "test string" << "\"];" // string
-            << "[\"" << -14 << "\"];" // timestamp64
-            << "[\"" << 10 << "\"];" // timestamp
-            << "[\"" << 2 << "\"];" // uint32
-            << "[\"" << 4 << "\"];" // uint64
-            << "[\"" << 5 << "\"];" // uint8
-            << "[\"" << "test string" << "\"];" // utf8
-            << "[[\"" << "wR7fZX2pskeuVjwCPabujA==" << "\"]]" // uuid
-        << "]];\%false]]]";
+            TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+              ImportFromS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                source_prefix: "BackupPrefix"
+                destination_path: "/MyRoot/Restored2"
+                encryption_settings {
+                  symmetric_key {
+                    key: "Very very secret export key!!!!!"
+                  }
+                }
+              }
+            )", port));
+            env.TestWaitNotification(runtime, txId);
+            TestGetImport(runtime, txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
 
-        const TReadKeyDesc readKeyDesc = {"key", "Uint64", "0"};
-
-        const TVector<TString> readColumns = {
-            "key",
-            "int32_value",
-            "uint32_value",
-            "int64_value",
-            "uint64_value",
-            "uint8_value",
-            "bool_value",
-            "double_value",
-            "float_value",
-            "date_value",
-            "datetime_value",
-            "timestamp_value",
-            "interval_value",
-            "date32_value",
-            "datetime64_value",
-            "timestamp64_value",
-            "interval64_value",
-            "decimal_value",
-            "decimal35_value",
-            "dynumber_value",
-            "string_value",
-            "utf8_value",
-            "json_value",
-            "jsondoc_value",
-            "uuid_value",
+            data = srcData;
         };
 
-        auto contentOriginalTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", readKeyDesc, readColumns);
-        NKqp::CompareYson(expectedJson, contentOriginalTable);
-
-        auto contentRestoredTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 2, "Restored", readKeyDesc, readColumns);
-        NKqp::CompareYson(expectedJson, contentRestoredTable);
+        checkFailsIfFileIsEmpty("/BackupPrefix/SchemaMapping/metadata.json.enc");
+        checkFailsIfFileIsEmpty("/BackupPrefix/SchemaMapping/mapping.json.enc");
+        checkFailsIfFileIsEmpty("/BackupPrefix/001/data_00.csv.enc");
+        checkFailsIfFileIsEmpty("/BackupPrefix/001/metadata.json.enc");
     }
 
     Y_UNIT_TEST(ExportImportPg) {
@@ -1919,20 +2061,20 @@ value {
      Y_UNIT_TEST_WITH_COMPRESSION(ExportImportWithChecksums) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
-    
+
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
-    
+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableChecksumsExport(true));
-    
+
         ui64 txId = 100;
-    
+
         runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
-    
+
         // Create table
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Original"
@@ -1941,10 +2083,10 @@ value {
             KeyColumnNames: ["key"]
         )");
         env.TestWaitNotification(runtime, txId);
-    
+
         // Upload data
         UpdateRow(runtime, "Original", 1, "valueA", TTestTxConfig::FakeHiveTablets);
-    
+
         // Export table
         const char* compression = Codec == ECompressionCodec::Zstd ? "zstd" : "";
         TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -1960,12 +2102,12 @@ value {
         )", port, compression));
         const ui64 exportId = txId;
         env.TestWaitNotification(runtime, exportId);
-    
+
         // Check export
         TestGetExport(runtime, exportId, "/MyRoot");
-    
+
         UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 6);
-    
+
         // Restore table
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ImportFromS3Settings {
@@ -1979,10 +2121,10 @@ value {
         )", port));
         const ui64 importId = txId;
         env.TestWaitNotification(runtime, importId);
-    
+
         // Check import
         TestGetImport(runtime, importId, "/MyRoot");
-    
+
         // Check data in restored table
         {
             auto expectedJson = TStringBuilder() << "[[[["
@@ -2000,20 +2142,20 @@ value {
     void ExportImportWithCorruption(T corruption) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
-    
+
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
-    
+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableChecksumsExport(true).EnablePermissionsExport(true));
-    
+
         ui64 txId = 100;
-    
+
         runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
-    
+
         // Create table
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Original"
@@ -2022,10 +2164,10 @@ value {
             KeyColumnNames: ["key"]
         )");
         env.TestWaitNotification(runtime, txId);
-    
+
         // Upload data
         UpdateRow(runtime, "Original", 1, "valueA", TTestTxConfig::FakeHiveTablets);
-    
+
         // Export table
         const char* compression = Codec == ECompressionCodec::Zstd ? "zstd" : "";
         TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
@@ -2041,12 +2183,12 @@ value {
         )", port, compression));
         const ui64 exportId = txId;
         env.TestWaitNotification(runtime, exportId);
-    
+
         // Check export
         TestGetExport(runtime, exportId, "/MyRoot");
-    
+
         UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 8);
-        
+
         // Make corruption
         corruption(s3Mock.GetData());
 
@@ -2063,7 +2205,7 @@ value {
         )", port));
         ui64 importId = txId;
         env.TestWaitNotification(runtime, importId);
-    
+
         // Check corrupted import
         TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::CANCELLED);
 
@@ -4949,8 +5091,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
         TBlockEvents<TEvPrivate::TEvImportSchemeQueryResult> queryResultBlocker(runtime,
             [&](const TEvPrivate::TEvImportSchemeQueryResult::TPtr& event) {
-                // When we receive the scheme query result message, we can be sure that the SchemeShard actor ID is set,
-                // because the table is the first item on the import list.
+                // The test expects the SchemeShard actor ID to be already initialized when we receive the first query result message.
+                // This expectation is valid because we import items in order of their appearance on the import items list.
                 if (!schemeshardActorId || event->Recipient != schemeshardActorId) {
                     return false;
                 }
@@ -4991,6 +5133,114 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::Finished,
             NLs::IsView
         });
+    }
+
+    Y_UNIT_TEST(MultipleViewCreationRetries) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableViews(true);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        ui64 txId = 100;
+
+        constexpr int ViewLayers = 10;
+        THashMap<TString, TTestDataWithScheme> bucketContent(ViewLayers);
+        for (int i = 0; i < ViewLayers; ++i) {
+            bucketContent.emplace(std::format("/view{}", i), GenerateTestData(
+                {
+                    EPathTypeView,
+                    std::format(R"(
+                            -- backup root: "/MyRoot"
+                            CREATE VIEW IF NOT EXISTS `view` WITH security_invoker = TRUE AS {};
+                        )", i == 0
+                            ? "SELECT 1"
+                            : std::format("SELECT * FROM `view{}`", i - 1)
+                    )
+                }
+            ));
+        }
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock(ConvertTestData(bucketContent), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TActorId schemeshardActorId;
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> viewCreationBlocker(runtime,
+            [&](const TEvSchemeShard::TEvModifySchemeTransaction::TPtr& event) {
+                const auto& record = event->Get()->Record;
+                if (record.GetTransaction(0).GetOperationType() == ESchemeOpCreateView) {
+                    schemeshardActorId = event->Recipient;
+                    return true;
+                }
+                return false;
+            }
+        );
+
+        int missingDependencyFails = 0;
+        auto missingDependencyObserver = runtime.AddObserver<TEvPrivate::TEvImportSchemeQueryResult>(
+            [&](const TEvPrivate::TEvImportSchemeQueryResult::TPtr& event) {
+                if (!schemeshardActorId
+                    || event->Recipient != schemeshardActorId
+                    || event->Get()->Status != Ydb::StatusIds::SCHEME_ERROR) {
+                    return;
+                }
+                const auto* error = std::get_if<TString>(&event->Get()->Result);
+                if (error && error->Contains("Cannot find table")) {
+                    ++missingDependencyFails;
+                }
+            }
+        );
+
+        auto importSettings = TStringBuilder() << std::format(R"(
+                ImportFromS3Settings {{
+                    endpoint: "localhost:{}"
+                    scheme: HTTP
+            )", port
+        );
+        for (int i = 0; i < ViewLayers; ++i) {
+            importSettings << std::format(R"(
+                    items {{
+                        source_prefix: "view{}"
+                        destination_path: "/MyRoot/view{}"
+                    }}
+                )", i, i
+            );
+        }
+        importSettings << '}';
+
+        const ui64 importId = ++txId;
+        TestImport(runtime, importId, "/MyRoot", importSettings);
+
+        int expectedFails = 0;
+        for (int iteration = 1; iteration <= ViewLayers; ++iteration) {
+            runtime.WaitFor("blocked view creation", [&]{ return !viewCreationBlocker.empty(); });
+
+            expectedFails += ViewLayers - iteration;
+            if (iteration > 1) {
+                runtime.WaitFor("query results", [&]{ return missingDependencyFails >= expectedFails; });
+            } else {
+                // the first iteration might miss some query results due to the initially unset schemeshardActorId
+                missingDependencyFails = expectedFails;
+            }
+
+            viewCreationBlocker.Unblock(1);
+        }
+        UNIT_ASSERT(viewCreationBlocker.empty());
+        viewCreationBlocker.Stop();
+
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot");
+
+        for (int i = 0; i < ViewLayers; ++i) {
+            TestDescribeResult(DescribePath(runtime, std::format("/MyRoot/view{}", i)), {
+                NLs::Finished,
+                NLs::IsView
+            });
+        }
     }
 
     struct TGeneratedChangefeed {
@@ -5203,6 +5453,84 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         TestImportChangefeeds(3, AddedSchemeWithPermissions);
     }
 
+    void TestCreateCdcStreams(TTestEnv& env, TTestActorRuntime& runtime, ui64& txId, const TString& dbName, ui64 count, bool isShouldSuccess) {
+        for (ui64 i = 1; i <= count; ++i) {
+            TestCreateCdcStream(runtime, ++txId, dbName, Sprintf(R"(
+                TableName: "Original"
+                StreamDescription {
+                  Name: "Stream_%d"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: %s
+                }
+            )", i, isShouldSuccess ? "ECdcStreamFormatJson" : "ECdcStreamFormatProto"));
+            env.TestWaitNotification(runtime, txId);
+        }
+    }
+
+    void ChangefeedsExportRestore(bool isShouldSuccess) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::DATASHARD_RESTORE, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
+        runtime.GetAppData().FeatureFlags.SetEnableChangefeedsExport(true);
+        runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Original"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "double_value" Type: "Double" }
+            Columns { Name: "float_value" Type: "Float" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStreams(env, runtime, txId, "/MyRoot", 3, isShouldSuccess);
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Original"
+                destination_prefix: ""
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+
+        TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetImport(runtime, txId, "/MyRoot", isShouldSuccess ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::CANCELLED);
+    }
+
+    Y_UNIT_TEST(ChangefeedsExportRestore) {
+        ChangefeedsExportRestore(true);
+    }
+
+    Y_UNIT_TEST(ChangefeedsExportRestoreUnhappyPropose) {
+        ChangefeedsExportRestore(false);
+    }
+
     Y_UNIT_TEST(IgnoreBasicSchemeLimits) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -5405,7 +5733,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             }
             primary_key: "key"
         )" , {{"a", 1}}, "", R"({"version": 1})");
-        
+
         TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 

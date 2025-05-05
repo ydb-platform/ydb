@@ -15,6 +15,11 @@ class TTablet : public TActor<TTablet> {
     using TTabletStateInfo = NKikimrWhiteboard::TTabletStateInfo;
     using ETabletState = TTabletStateInfo::ETabletState;
 
+    struct TRequestAddr {
+        TActorId Sender;
+        ui64 Cookie;
+    };
+
     struct TStateStorageInfo {
         TActorId ProxyID;
 
@@ -255,6 +260,10 @@ class TTablet : public TActor<TTablet> {
     TString BlobStorageErrorReason;
     bool BlobStorageErrorReported = false;
 
+    // Leader confirmation requests
+    THashMap<ui64, TRequestAddr> ConfirmLeaderRequests;
+    ui64 ConfirmLeaderCounter = 0;
+
     ui64 TabletID() const;
 
     void ReportTabletStateChange(ETabletState state);
@@ -318,6 +327,8 @@ class TTablet : public TActor<TTablet> {
 
     void Handle(TEvTablet::TEvGcForStepAckRequest::TPtr& ev);
 
+    void Handle(TEvTablet::TEvConfirmLeader::TPtr &ev);
+    void Handle(TEvBlobStorage::TEvGetBlockResult::TPtr &ev);
     void Handle(TEvTablet::TEvCommit::TPtr &ev);
     bool HandleNext(TEvTablet::TEvCommit::TPtr &ev);
     void Handle(TEvTablet::TEvAux::TPtr &ev);
@@ -512,6 +523,7 @@ class TTablet : public TActor<TTablet> {
     STATEFN(StateActivePhase) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTablet::TEvCommit, Handle);
+            hFunc(TEvTablet::TEvConfirmLeader, Handle);
             hFunc(TEvTablet::TEvAux, Handle);
             hFunc(TEvTablet::TEvPreCommit, Handle);
             hFunc(TEvTablet::TEvTabletActive, HandleByLeader);
@@ -536,6 +548,7 @@ class TTablet : public TActor<TTablet> {
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleByLeader);
             hFunc(TEvents::TEvUndelivered, HandleByLeader);
             hFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
+            hFunc(TEvBlobStorage::TEvGetBlockResult, Handle);
             hFunc(TEvTablet::TEvGcForStepAckRequest, Handle);
         }
     }

@@ -70,8 +70,10 @@
 #include <ydb/core/health_check/health_check.h>
 
 #include <ydb/core/kafka_proxy/actors/kafka_metrics_actor.h>
+#include <ydb/core/kafka_proxy/actors/kafka_metadata_actor.h>
 #include <ydb/core/kafka_proxy/kafka_metrics.h>
 #include <ydb/core/kafka_proxy/kafka_proxy.h>
+#include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
 
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
@@ -480,6 +482,17 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
 
     if (config.HasEventDelayMicrosec()) {
         result.EventDelay = TDuration::MicroSeconds(config.GetEventDelayMicrosec());
+    }
+
+    if (config.HasSocketSendOptimization()) {
+        switch (config.GetSocketSendOptimization()) {
+            case NKikimrConfig::TInterconnectConfig::IC_SO_DISABLED:
+                result.SocketSendOptimization = ESocketSendOptimization::DISABLED;
+                break;
+            case NKikimrConfig::TInterconnectConfig::IC_SO_MSG_ZEROCOPY:
+                result.SocketSendOptimization = ESocketSendOptimization::IC_MSG_ZEROCOPY;
+                break;
+        }
     }
 
     return result;
@@ -2758,16 +2771,23 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
         settings.SslCertificatePem = Config.GetKafkaProxyConfig().GetSslCertificate();
         settings.CertificateFile = Config.GetKafkaProxyConfig().GetCert();
         settings.PrivateKeyFile = Config.GetKafkaProxyConfig().GetKey();
+        settings.TcpNotDelay = true;
 
         setup->LocalServices.emplace_back(
             NKafka::MakeKafkaDiscoveryCacheID(),
             TActorSetupCmd(CreateDiscoveryCache(NGRpcService::KafkaEndpointId),
                 TMailboxType::HTSwap, appData->UserPoolId)
         );
+        
+        setup->LocalServices.emplace_back(
+            NKafka::MakeKafkaTransactionsServiceID(),
+            TActorSetupCmd(NKafka::CreateKafkaTransactionsCoordinator(),
+                TMailboxType::HTSwap, appData->UserPoolId
+            )
+        );
         setup->LocalServices.emplace_back(
             TActorId(),
-            TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig(),
-                                                       NKafka::MakeKafkaDiscoveryCacheID()),
+            TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig()),
                            TMailboxType::HTSwap, appData->UserPoolId)
         );
 

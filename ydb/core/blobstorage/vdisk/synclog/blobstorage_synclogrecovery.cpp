@@ -54,9 +54,11 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // TSyncLogRecovery
         ////////////////////////////////////////////////////////////////////////////
-        TSyncLogRecovery::TSyncLogRecovery(std::unique_ptr<TSyncLogRepaired> &&repaired) {
-            Repaired = std::move(repaired);
-        }
+        TSyncLogRecovery::TSyncLogRecovery(const TString& logPrefix,
+                std::unique_ptr<TSyncLogRepaired> &&repaired)
+            : VDiskLogPrefix(logPrefix)
+            , Repaired(std::move(repaired))
+        {}
 
         void TSyncLogRecovery::PutLogoBlob(
                 const TBlobStorageGroupType &gtype,
@@ -64,8 +66,8 @@ namespace NKikimr {
                 const TLogoBlobID &id,
                 const TIngress &ingress)
         {
-            Y_ABORT_UNLESS(GetLastLsnOfIndexRecord() < lsn,
-                     "State# %s lsn# %" PRIu64, ToString().data(), lsn);
+            Y_VERIFY_S(GetLastLsnOfIndexRecord() < lsn,
+                    VDiskLogPrefix << "State# " << ToString() << " lsn# " << lsn);
             ++LogoBlobs;
 
             char buf[NSyncLog::MaxRecFullSize];
@@ -74,8 +76,8 @@ namespace NKikimr {
         }
 
         void TSyncLogRecovery::PutBlock(ui64 lsn, ui64 tabletId, ui32 gen) {
-            Y_ABORT_UNLESS(GetLastLsnOfIndexRecord() < lsn,
-                     "State# %s lsn# %" PRIu64, ToString().data(), lsn);
+            Y_VERIFY_S(GetLastLsnOfIndexRecord() < lsn, 
+                    VDiskLogPrefix << "State# " << ToString() << " lsn# " << lsn);
             ++Blocks;
 
             char buf[NSyncLog::MaxRecFullSize];
@@ -89,8 +91,8 @@ namespace NKikimr {
                 const NKikimrBlobStorage::TEvVCollectGarbage &record,
                 const TBarrierIngress &ingress)
         {
-            Y_ABORT_UNLESS(GetLastLsnOfIndexRecord() < lsn,
-                     "State# %s lsn# %" PRIu64, ToString().data(), lsn);
+            Y_VERIFY_S(GetLastLsnOfIndexRecord() < lsn,
+                    VDiskLogPrefix << "State# " << ToString() << " lsn# " << lsn);
             ++Gcs;
 
             const bool collect = record.HasCollectGeneration();
@@ -120,8 +122,8 @@ namespace NKikimr {
                 bool hard,
                 const TBarrierIngress &ingress)
         {
-            Y_ABORT_UNLESS(GetLastLsnOfIndexRecord() < lsn,
-                     "State# %s lsn# %" PRIu64, ToString().data(), lsn);
+            Y_VERIFY_S(GetLastLsnOfIndexRecord() < lsn,
+                    VDiskLogPrefix << "State# " << ToString() << " lsn# " << lsn);
             ++Barriers;
 
             char buf[NSyncLog::MaxRecFullSize];
@@ -134,8 +136,8 @@ namespace NKikimr {
 
         std::unique_ptr<TSyncLogRepaired> TSyncLogRecovery::ReleaseRepaired() {
             // after finishing recovery check that Dsk and Mem do not intersect
-            Y_ABORT_UNLESS(Repaired->SyncLogPtr->CheckMemAndDiskRecLogsDoNotIntersect(),
-                     "%s", Repaired->SyncLogPtr->BoundariesToString().data());
+            Y_VERIFY_S(Repaired->SyncLogPtr->CheckMemAndDiskRecLogsDoNotIntersect(),
+                    VDiskLogPrefix << Repaired->SyncLogPtr->BoundariesToString());
             return std::exchange(Repaired, nullptr);
         }
 
@@ -154,7 +156,7 @@ namespace NKikimr {
         void TSyncLogRecovery::GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
             for (TChunkIdx chunkIdx : Repaired->ChunksToDelete) {
                 const bool inserted = chunks.insert(chunkIdx).second;
-                Y_ABORT_UNLESS(inserted);
+                Y_VERIFY_S(inserted, VDiskLogPrefix);
             }
             Repaired->SyncLogPtr->GetOwnedChunks(chunks);
         }

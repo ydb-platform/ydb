@@ -67,7 +67,7 @@ IPenaltyProviderPtr CreateReplicationLagPenaltyProvider(
     auto config = New<TReplicationLagPenaltyProviderOptions>();
 
     config->TablePath = path;
-    config->ReplicaClusters.push_back(TString(cluster));
+    config->ReplicaClusters.push_back(cluster);
     config->MaxTabletsWithLagFraction = 0.5;
     config->MaxTabletLag = maxTabletLag;
     config->CheckPeriod = checkPeriod;
@@ -430,7 +430,7 @@ TEST(THedgingClientTest, ResponseFromSecondClientWhenFirstHasReplicationLag)
 
 TEST(THedgingClientTest, CreatingHedgingClientWithPreinitializedClients)
 {
-    const TString clusterName = "test_cluster";
+    const std::string clusterName = "test_cluster";
     NYPath::TYPath path = "/test/1234";
     NYson::TYsonString clientResult("ClientData"_sb);
 
@@ -439,7 +439,7 @@ TEST(THedgingClientTest, CreatingHedgingClientWithPreinitializedClients)
         .WillOnce(Return(MakeFuture(clientResult)));
 
     auto mockClientsCache = New<StrictMock<TMockClientsCache>>();
-    EXPECT_CALL(*mockClientsCache, GetClient(clusterName)).WillOnce(Return(mockClient));
+    EXPECT_CALL(*mockClientsCache, GetClient(TStringBuf(clusterName))).WillOnce(Return(mockClient));
 
     auto hedgingClientConfig = New<THedgingClientOptions>();
     hedgingClientConfig->BanDuration = TDuration::MilliSeconds(100);

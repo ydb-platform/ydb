@@ -13,6 +13,7 @@
 namespace NKikimr::NOlap::NReader {
 
 class TPartialReadResult;
+class TPartialSourceAddress;
 
 class TComputeShardingPolicy {
 private:
@@ -170,7 +171,7 @@ public:
         Started = true;
         return DoStart();
     }
-    virtual void OnSentDataFromInterval(const ui32 intervalIdx) const = 0;
+    virtual void OnSentDataFromInterval(const TPartialSourceAddress& address) = 0;
 
     const TReadContext& GetContext() const {
         return *Context;

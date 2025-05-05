@@ -2,9 +2,6 @@
 
 namespace NYql::NFmr {
 
-struct TFmrYtSerivceSettings {
-};
-
 IYtService::TPtr MakeFmrYtSerivce();
 
 } // namespace NYql::NFmr

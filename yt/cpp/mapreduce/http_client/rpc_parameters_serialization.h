@@ -159,6 +159,10 @@ TNode SerializeParamsForReadTable(
     const TTransactionId& transactionId,
     const TTableReaderOptions& options);
 
+TNode SerializeParamsForReadTablePartition(
+    const TString& cookie,
+    const TTablePartitionReaderOptions& options);
+
 TNode SerializeParamsForReadBlobTable(
     const TTransactionId& transactionId,
     const TRichYPath& path,

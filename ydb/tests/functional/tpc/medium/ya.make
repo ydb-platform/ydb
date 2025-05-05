@@ -3,6 +3,7 @@ ENV(YDB_HARD_MEMORY_LIMIT_BYTES="107374182400")
 
 TEST_SRCS(
     test_clickbench.py
+    test_diff_processing.py
     test_tpch.py
 )
 
@@ -14,6 +15,7 @@ ENV(YDB_ENABLE_COLUMN_TABLES="true")
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(NO_KUBER_LOGS="yes")
+ENV(WAIT_CLUSTER_ALIVE_TIMEOUT="60")
 
 PEERDIR(
     ydb/tests/functional/tpc/lib

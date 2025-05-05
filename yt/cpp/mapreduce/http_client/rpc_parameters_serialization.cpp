@@ -49,18 +49,10 @@ static void SetPathParam(TNode* node, const TString& pathPrefix, const TYPath& p
     (*node)["path"] = std::move(updatedPath);
 }
 
-static TNode SerializeAttributeFilter(const TAttributeFilter& attributeFilter)
+template <typename TFilter>
+static TNode SerializeAttributeFilter(const TFilter& attributeFilter)
 {
-    TNode result = TNode::CreateList();
-    for (const auto& attribute : attributeFilter.Attributes_) {
-        result.Add(attribute);
-    }
-    return result;
-}
-
-static TNode SerializeAttributeFilter(const TOperationAttributeFilter& attributeFilter)
-{
-    TNode result = TNode::CreateList();
+    auto result = TNode::CreateList();
     for (const auto& attribute : attributeFilter.Attributes_) {
         result.Add(ToString(attribute));
     }
@@ -513,11 +505,14 @@ TNode SerializeParamsForUpdateOperationParameters(
 TNode SerializeParamsForGetJob(
     const TOperationId& operationId,
     const TJobId& jobId,
-    const TGetJobOptions& /* options */)
+    const TGetJobOptions& options)
 {
     TNode result;
     SetOperationIdParam(&result, operationId);
     result["job_id"] = GetGuidAsString(jobId);
+    if (options.AttributeFilter_) {
+        result["attributes"] = SerializeAttributeFilter(*options.AttributeFilter_);
+    }
     return result;
 }
 
@@ -558,6 +553,9 @@ TNode SerializeParamsForListJobs(
     if (options.WithMonitoringDescriptor_) {
         result["with_monitoring_descriptor"] = *options.WithMonitoringDescriptor_;
     }
+    if (options.WithInterruptionInfo_) {
+        result["with_interruption_info"] = *options.WithInterruptionInfo_;
+    }
     if (options.OperationIncarnation_) {
         result["operation_incarnation"] = *options.OperationIncarnation_;
     }
@@ -593,6 +591,9 @@ TNode SerializeParamsForListJobs(
     }
     if (options.IncludeControllerAgent_) {
         result["include_controller_agent"] = *options.IncludeControllerAgent_;
+    }
+    if (options.AttributeFilter_) {
+        result["attributes"] = SerializeAttributeFilter(*options.AttributeFilter_);
     }
     return result;
 }
@@ -663,6 +664,13 @@ TNode SerializeParamsForReadTable(
             .Item("enable_range_index").Value(options.ControlAttributes_.EnableRangeIndex_)
         .EndMap();
     return result;
+}
+
+TNode SerializeParamsForReadTablePartition(const TString& cookie, const TTablePartitionReaderOptions& /*options*/)
+{
+    TNode node;
+    node["cookie"] = cookie;
+    return node;
 }
 
 TNode SerializeParamsForReadBlobTable(
@@ -812,6 +820,7 @@ TNode SerializeParamsForGetTablePartitions(
         result["max_partition_count"] = *options.MaxPartitionCount_;
     }
     result["adjust_data_weight_per_partition"] = options.AdjustDataWeightPerPartition_;
+    result["enable_cookies"] = options.EnableCookies_;
     return result;
 }
 

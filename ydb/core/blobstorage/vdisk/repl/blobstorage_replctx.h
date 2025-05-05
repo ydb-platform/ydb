@@ -51,11 +51,10 @@ namespace NKikimr {
             , PDiskWriteBytes(std::move(pdiskWriteBytes))
             , PausedAtStart(pausedAtStart)
         {
-            Y_ABORT_UNLESS(MinHugeBlobInBytes);
+            Y_VERIFY_S(MinHugeBlobInBytes, VCtx->VDiskLogPrefix);
         }
 
         bool GetAddHeader() const { return !HullCtx || HullCtx->AddHeader; }
     };
 
 } // NKikimr
-

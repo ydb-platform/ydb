@@ -140,6 +140,7 @@ namespace NKikimr {
         const TDuration HullCompStorageRatioMaxCalcDuration;
         const bool AddHeader;
 
+        NMonGroup::TCompactionStrategyGroup CompactionStrategyGroup;
         NMonGroup::TLsmHullGroup LsmHullGroup;
         NMonGroup::TLsmHullSpaceGroup LsmHullSpaceGroup;
 

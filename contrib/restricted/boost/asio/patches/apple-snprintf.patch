@@ -1,0 +1,11 @@
+--- contrib/restricted/boost/asio/include/boost/asio/detail/config.hpp	(index)
++++ contrib/restricted/boost/asio/include/boost/asio/detail/config.hpp	(working tree)
+@@ -2216,7 +2216,7 @@
+ // Standard library support for snprintf.
+ #if !defined(BOOST_ASIO_HAS_SNPRINTF)
+ # if !defined(BOOST_ASIO_DISABLE_SNPRINTF)
+-#  if defined(__apple_build_version__)
++#  if defined(__APPLE__)
+ #    if (__clang_major__ >= 14)
+ #     define BOOST_ASIO_HAS_SNPRINTF 1
+ #    endif // (__clang_major__ >= 14)

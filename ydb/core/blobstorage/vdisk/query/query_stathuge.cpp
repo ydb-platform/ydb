@@ -134,7 +134,7 @@ namespace NKikimr {
                         TAggrSlotInfo aggr(x.second.NumberOfSlotsInChunk);
 
                         auto insertRes = Aggr.insert(TAggrBySlotSize::value_type(x.second.SlotSize, aggr));
-                        Y_ABORT_UNLESS(insertRes.second);
+                        Y_VERIFY_S(insertRes.second, HugeBlobCtx->VDiskLogPrefix);
                         it = insertRes.first;
                     }
                     it->second.UsedSlots += x.second.UsedSlots;
@@ -323,11 +323,11 @@ namespace NKikimr {
                 TPerChunkMap::iterator it = Map.find(part.ChunkIdx);
                 if (it == Map.end()) {
                     const THugeSlotsMap::TSlotInfo *slotInfo = HugeBlobCtx->HugeSlotsMap->GetSlotInfo(part.Size);
-                    Y_ABORT_UNLESS(slotInfo, "size# %" PRIu32, part.Size);
+                    Y_VERIFY_S(slotInfo, HugeBlobCtx->VDiskLogPrefix << "size# " << part.Size);
                     TChunkInfo chunkInfo(slotInfo->SlotSize, slotInfo->NumberOfSlotsInChunk);
 
                     auto insertRes = Map.insert(TPerChunkMap::value_type(part.ChunkIdx, chunkInfo));
-                    Y_ABORT_UNLESS(insertRes.second);
+                    Y_VERIFY_S(insertRes.second, HugeBlobCtx->VDiskLogPrefix);
                     it = insertRes.first;
                 }
                 ++(it->second.UsedSlots);

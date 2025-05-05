@@ -354,6 +354,13 @@ private:
         response->set_result_set_index(ev->Get()->Record.GetQueryResultIndex());
         response->mutable_result_set()->Swap(ev->Get()->Record.MutableResultSet());
 
+        if (ev->Get()->Record.HasVirtualTimestamp()) {
+            auto snap = response->mutable_snapshot_timestamp();
+            auto& ts = ev->Get()->Record.GetVirtualTimestamp();
+            snap->set_plan_step(ts.GetStep());
+            snap->set_tx_id(ts.GetTxId());
+        }
+
         TString out;
         Y_PROTOBUF_SUPPRESS_NODISCARD response->SerializeToString(&out);
 
@@ -386,7 +393,7 @@ private:
         if (NeedReportStats(*Request_->GetProtoRequest())) {
             if (record.HasQueryStats()) {
                 FillQueryStats(*response.mutable_exec_stats(), record.GetQueryStats());
-                response.mutable_exec_stats()->set_query_plan(NKqp::SerializeAnalyzePlan(record.GetQueryStats()));
+                response.mutable_exec_stats()->set_query_plan(record.GetQueryPlan());
             }
         }
 

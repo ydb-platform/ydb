@@ -11,6 +11,8 @@
 #include "transaction.h"
 
 #include <yt/yt/client/api/helpers.h>
+#include <yt/yt/client/api/table_partition_reader.h>
+#include <yt/yt/client/api/transaction.h>
 
 #include <yt/yt/client/chaos_client/replication_card_serialization.h>
 
@@ -222,6 +224,16 @@ ITransactionPtr TClient::AttachTransaction(
         std::move(stickyParameters),
         rsp->sequence_number_source_id(),
         "Transaction attached");
+}
+
+IPrerequisitePtr TClient::AttachPrerequisite(
+    NPrerequisiteClient::TPrerequisiteId prerequisiteId,
+    const TPrerequisiteAttachOptions& options)
+{
+    TTransactionAttachOptions attachOptions = {};
+    static_cast<TPrerequisiteAttachOptions&>(attachOptions) = options;
+
+    return AttachTransaction(prerequisiteId, attachOptions);
 }
 
 TFuture<void> TClient::MountTable(
@@ -474,6 +486,10 @@ TFuture<void> TClient::AlterTableReplica(
 
     YT_OPTIONAL_SET_PROTO(req, enable_replicated_table_tracker, options.EnableReplicatedTableTracker);
     YT_OPTIONAL_TO_PROTO(req, replica_path, options.ReplicaPath);
+
+    if (options.Force) {
+        req->set_force(true);
+    }
 
     ToProto(req->mutable_mutating_options(), options);
 
@@ -1452,6 +1468,9 @@ TFuture<TListJobsResult> TClient::ListJobs(
     if (options.WithMonitoringDescriptor) {
         req->set_with_monitoring_descriptor(*options.WithMonitoringDescriptor);
     }
+    if (options.WithInterruptionInfo) {
+        req->set_with_interruption_info(*options.WithInterruptionInfo);
+    }
     if (options.TaskName) {
         req->set_task_name(*options.TaskName);
     }
@@ -1466,6 +1485,9 @@ TFuture<TListJobsResult> TClient::ListJobs(
     }
     if (options.ContinuationToken) {
         req->set_continuation_token(*options.ContinuationToken);
+    }
+    if (options.Attributes) {
+        ToProto(req->mutable_attributes()->mutable_keys(), *options.Attributes);
     }
 
     req->set_sort_field(static_cast<NProto::EJobSortField>(options.SortField));
@@ -1735,12 +1757,44 @@ TFuture<NApi::TMultiTablePartitions> TClient::PartitionTables(
     req->set_adjust_data_weight_per_partition(options.AdjustDataWeightPerPartition);
 
     req->set_enable_key_guarantee(options.EnableKeyGuarantee);
+    req->set_enable_cookies(options.EnableCookies);
+
+    req->set_use_new_slicing_implementation_in_ordered_pool(options.UseNewSlicingImplementationInOrderedPool);
+    req->set_use_new_slicing_implementation_in_unordered_pool(options.UseNewSlicingImplementationInUnorderedPool);
 
     ToProto(req->mutable_transactional_options(), options);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPartitionTablesPtr& rsp) {
         return FromProto<TMultiTablePartitions>(*rsp);
     }));
+}
+
+TFuture<ITablePartitionReaderPtr> TClient::CreateTablePartitionReader(
+    const TTablePartitionCookiePtr& cookie,
+    const TReadTablePartitionOptions& /*options*/)
+{
+    YT_VERIFY(cookie);
+
+    auto proxy = CreateApiServiceProxy();
+    auto req = proxy.ReadTablePartition();
+    InitStreamingRequest(*req);
+
+    NProto::ToProto(req->mutable_cookie(), cookie);
+
+    return NRpc::CreateRpcClientInputStream(std::move(req))
+        .ApplyUnique(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) -> TFuture<ITablePartitionReaderPtr>{
+            return inputStream->Read().Apply(BIND([=] (const TSharedRef& metaRef) {
+                // Actually we don't have any metadata in first version but we can have it in future. Just parse empty proto.
+                NApi::NRpcProxy::NProto::TRspReadTablePartitionMeta meta;
+                if (!TryDeserializeProto(&meta, metaRef)) {
+                    THROW_ERROR_EXCEPTION("Failed to deserialize partition table reader meta information");
+                }
+
+                auto rowBatchReader = New<TRowBatchReader>(std::move(inputStream), /*isStreamWithStatistics*/ false);
+
+                return NApi::CreateTablePartitionReader(rowBatchReader, /*schemas*/ {}, /*columnFilters=*/ {});
+            }));
+        }));
 }
 
 TFuture<void> TClient::TruncateJournal(
@@ -2241,6 +2295,20 @@ TFuture<NQueryTrackerClient::TQueryId> TClient::StartQuery(
         protoFile->set_type(static_cast<NProto::EContentType>(file->Type));
     }
 
+    for (const auto& secret : options.Secrets) {
+        auto* protoSecret = req->add_secrets();
+        protoSecret->set_id(secret->Id);
+        if (!secret->Category.empty()) {
+            protoSecret->set_category(secret->Category);
+        }
+        if (!secret->Subcategory.empty()) {
+            protoSecret->set_subcategory(secret->Subcategory);
+        }
+        if (!secret->YPath.empty()) {
+            protoSecret->set_ypath(secret->YPath);
+        }
+    }
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspStartQueryPtr& rsp) {
         return FromProto<NQueryTrackerClient::TQueryId>(rsp->query_id());
     }));
@@ -2444,10 +2512,10 @@ TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryTrackerInfoPtr& rsp) {
         return TGetQueryTrackerInfoResult{
             .QueryTrackerStage = FromProto<TString>(rsp->query_tracker_stage()),
-            .ClusterName = FromProto<TString>(rsp->cluster_name()),
+            .ClusterName = FromProto<std::string>(rsp->cluster_name()),
             .SupportedFeatures = TYsonString(rsp->supported_features()),
             .AccessControlObjects = FromProto<std::vector<TString>>(rsp->access_control_objects()),
-            .Clusters = FromProto<std::vector<TString>>(rsp->clusters())
+            .Clusters = FromProto<std::vector<std::string>>(rsp->clusters())
         };
     }));
 }
@@ -2663,6 +2731,30 @@ TFuture<TGetFlowViewResult> TClient::GetFlowView(
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetFlowViewPtr& rsp) {
         return TGetFlowViewResult{
             .FlowViewPart = TYsonString(rsp->flow_view_part()),
+        };
+    }));
+}
+
+TFuture<TFlowExecuteResult> TClient::FlowExecute(
+    const NYPath::TYPath& pipelinePath,
+    const TString& command,
+    const NYson::TYsonString& argument,
+    const TFlowExecuteOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.FlowExecute();
+    SetTimeoutOptions(*req, options);
+
+    req->set_pipeline_path(pipelinePath);
+    req->set_command(command);
+    if (argument) {
+        req->set_argument(argument.ToString());
+    }
+
+    return req->Invoke().Apply(BIND([](const TApiServiceProxy::TRspFlowExecutePtr& rsp) {
+        return TFlowExecuteResult{
+            .Result = rsp->has_result() ? TYsonString(rsp->result()) : TYsonString{},
         };
     }));
 }

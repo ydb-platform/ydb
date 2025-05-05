@@ -23,5 +23,5 @@ namespace NSQLTranslationV1 {
     google::protobuf::Message* SqlAST(const TParsers& parsers, const TString& query, const TString& queryName,
         NYql::TIssues& err, size_t maxErrors, bool ansiLexer, bool antlr4Parser, google::protobuf::Arena* arena);
     google::protobuf::Message* SqlAST(const TParsers& parsers, const TString& query, const TString& queryName,
-        NProtoAST::IErrorCollector& err, bool ansiLexer, bool antlr4Parser, google::protobuf::Arena* arena);
+        NAST::IErrorCollector& err, bool ansiLexer, bool antlr4Parser, google::protobuf::Arena* arena);
 }  // namespace NSQLTranslationV1

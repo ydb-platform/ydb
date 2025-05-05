@@ -1,4 +1,4 @@
-#include <ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #include <library/cpp/testing/gtest/gtest.h>
 
@@ -81,7 +81,7 @@ public:
 
     template <typename TRequest, typename TResponse>
     grpc::Status RunStream(TGrpcStreamCall<TRequest, TResponse> call, grpc::ServerContext *context,
-                     const TRequest* request, grpc::ServerWriter<TResponse>* writer) {
+                           const TRequest* request, grpc::ServerWriter<TResponse>* writer) {
         auto clientContext = grpc::ClientContext::FromServerContext(*context);
         auto reader = (Stub_.*call)(clientContext.get(), *request);
 

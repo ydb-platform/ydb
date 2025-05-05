@@ -1,12 +1,13 @@
 LIBRARY()
 
 SRCS(
-    table_data_service.cpp
+    yql_yt_table_data_service_local.cpp
 )
 
 PEERDIR(
     library/cpp/threading/future
     yt/yql/providers/yt/fmr/table_data_service/interface
+    yt/yql/providers/yt/fmr/utils
 )
 
 YQL_LAST_ABI_VERSION()

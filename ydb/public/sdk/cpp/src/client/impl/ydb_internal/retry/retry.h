@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/retry/retry.h>
-#include <ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
-#include <ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include <library/cpp/threading/future/core/fwd.h>
 #include <util/datetime/base.h>
@@ -13,11 +13,11 @@
 #include <functional>
 #include <memory>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 class IClientImplCommon;
 }
 
-namespace NYdb::inline V3::NRetry {
+namespace NYdb::inline Dev::NRetry {
 
 ui32 CalcBackoffTime(const TBackoffSettings& settings, ui32 retryNumber);
 void Backoff(const NRetry::TBackoffSettings& settings, ui32 retryNumber);

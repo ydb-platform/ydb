@@ -3,7 +3,7 @@
 
 #include <yql/essentials/utils/log/context.h>
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 #include <util/system/mutex.h>
 
@@ -34,6 +34,8 @@ public:
         ui32 limit,
         const TString& exclusiveStartStreamName = {}) override;
 
+    TAsyncDescribeFederatedTopicResult DescribeFederatedTopic(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) override;
+
     void UpdateClusterConfigs(
         const TString& clusterName,
         const TString& endpoint,
@@ -43,7 +45,9 @@ public:
     void UpdateClusterConfigs(const TPqGatewayConfigPtr& config) override;
 
     ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) override;
+    IFederatedTopicClient::TPtr GetFederatedTopicClient(const NYdb::TDriver& driver, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings) override;
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const override;
+    NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const override;
 
 private:
     TPqSession::TPtr GetExistingSession(const TString& sessionId) const;
@@ -140,6 +144,10 @@ NThreading::TFuture<IPqGateway::TListStreams> TPqNativeGateway::ListStreams(cons
     return GetExistingSession(sessionId)->ListStreams(cluster, database, token, limit, exclusiveStartStreamName);
 }
 
+IPqGateway::TAsyncDescribeFederatedTopicResult TPqNativeGateway::DescribeFederatedTopic(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) {
+    return GetExistingSession(sessionId)->DescribeFederatedTopic(cluster, database, path, token);
+}
+
 IPqGateway::TPtr CreatePqNativeGateway(const TPqGatewayServices& services) {
     return MakeIntrusive<TPqNativeGateway>(services);
 }
@@ -150,6 +158,31 @@ ITopicClient::TPtr TPqNativeGateway::GetTopicClient(const NYdb::TDriver& driver,
 
 NYdb::NTopic::TTopicClientSettings TPqNativeGateway::GetTopicClientSettings() const {
     return CommonTopicClientSettings ? *CommonTopicClientSettings : NYdb::NTopic::TTopicClientSettings();
+}
+
+IFederatedTopicClient::TPtr TPqNativeGateway::GetFederatedTopicClient(const NYdb::TDriver& driver, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings = NYdb::NFederatedTopic::TFederatedTopicClientSettings()) {
+    return MakeIntrusive<TNativeFederatedTopicClient>(driver, settings);
+}
+
+NYdb::NFederatedTopic::TFederatedTopicClientSettings TPqNativeGateway::GetFederatedTopicClientSettings() const {
+    NYdb::NFederatedTopic::TFederatedTopicClientSettings settings;
+
+    if (!CommonTopicClientSettings) {
+        return settings;
+    }
+
+    settings.DefaultCompressionExecutor(CommonTopicClientSettings->DefaultCompressionExecutor_);
+    settings.DefaultHandlersExecutor(CommonTopicClientSettings->DefaultHandlersExecutor_);
+#define COPY_OPTIONAL_SETTINGS(NAME) \
+    if (CommonTopicClientSettings->NAME##_) { \
+        settings.NAME(*CommonTopicClientSettings->NAME##_); \
+    }
+    COPY_OPTIONAL_SETTINGS(CredentialsProviderFactory);
+    COPY_OPTIONAL_SETTINGS(SslCredentials);
+    COPY_OPTIONAL_SETTINGS(DiscoveryMode);
+#undef COPY_OPTIONAL_SETTINGS
+
+    return settings;
 }
 
 TPqNativeGateway::~TPqNativeGateway() {

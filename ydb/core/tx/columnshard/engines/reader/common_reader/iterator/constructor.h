@@ -2,44 +2,68 @@
 #include "fetching.h"
 #include "source.h"
 
+#include <ydb/core/formats/arrow/program/collection.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/engines/portions/column_record.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
+#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/collection.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
-class IKernelFetchLogic {
+class TFetchingResultContext {
 private:
-    YDB_READONLY(ui32, ColumnId, 0);
+    NArrow::NAccessor::TAccessorsCollection& Accessors;
+    NIndexes::TIndexesCollection& Indexes;
+    std::shared_ptr<IDataSource> Source;
 
-    virtual void DoStart(TReadActionsCollection& nextRead) = 0;
+public:
+    NArrow::NAccessor::TAccessorsCollection& GetAccessors() {
+        return Accessors;
+    }
+    NIndexes::TIndexesCollection& GetIndexes() const {
+        return Indexes;
+    }
+    const std::shared_ptr<IDataSource>& GetSource() const {
+        return Source;
+    }
+    TFetchingResultContext(
+        NArrow::NAccessor::TAccessorsCollection& accessors, NIndexes::TIndexesCollection& indexes, const std::shared_ptr<IDataSource>& source)
+        : Accessors(accessors)
+        , Indexes(indexes)
+        , Source(source)
+    {
+    }
+};
+
+class IKernelFetchLogic: public NArrow::NSSA::IFetchLogic {
+private:
+    using TBase = NArrow::NSSA::IFetchLogic;
+    virtual void DoStart(TReadActionsCollection& nextRead, TFetchingResultContext& context) = 0;
     virtual void DoOnDataReceived(TReadActionsCollection& nextRead, NBlobOperations::NRead::TCompositeReadBlobs& blobs) = 0;
-    virtual void DoOnDataCollected() = 0;
+    virtual void DoOnDataCollected(TFetchingResultContext& context) = 0;
 
 protected:
-    const std::shared_ptr<IDataSource> Source;
-    const std::shared_ptr<NArrow::NAccessor::TAccessorsCollection> Resources;
+    const std::shared_ptr<IStoragesManager> StoragesManager;
 
 public:
     virtual ~IKernelFetchLogic() = default;
 
-    IKernelFetchLogic(const ui32 columnId, const std::shared_ptr<IDataSource>& source)
-        : ColumnId(columnId)
-        , Source(source)
-        , Resources(Source->GetStageData().GetTable()) {
-        AFL_VERIFY(Resources);
+    IKernelFetchLogic(const ui32 entityId, const std::shared_ptr<IStoragesManager>& storagesManager)
+        : TBase(entityId)
+        , StoragesManager(storagesManager) {
+        AFL_VERIFY(StoragesManager);
     }
 
-    void Start(TReadActionsCollection& nextRead) {
-        DoStart(nextRead);
+    void Start(TReadActionsCollection& nextRead, TFetchingResultContext& context) {
+        DoStart(nextRead, context);
     }
     void OnDataReceived(TReadActionsCollection& nextRead, NBlobOperations::NRead::TCompositeReadBlobs& blobs) {
         DoOnDataReceived(nextRead, blobs);
     }
-    void OnDataCollected() {
-        DoOnDataCollected();
+    void OnDataCollected(TFetchingResultContext& context) {
+        DoOnDataCollected(context);
     }
 };
 
@@ -71,6 +95,7 @@ public:
         , DataFetchers(fetchers)
         , Cursor(cursor)
         , Guard(Source->GetContext()->GetCommonContext()->GetCounters().GetFetchBlobsGuard()) {
+        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("scf"));
     }
 };
 

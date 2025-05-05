@@ -413,7 +413,7 @@ void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_pt
     for (const auto& [pathId, _] : tables) {
         auto* periodicTableStats = ev->Record.AddTables();
         periodicTableStats->SetDatashardId(TabletID());
-        periodicTableStats->SetTableLocalId(pathId);
+        periodicTableStats->SetTableLocalId(pathId.GetRawValue());
 
         periodicTableStats->SetShardState(2);   // NKikimrTxDataShard.EDatashardState.Ready
         periodicTableStats->SetGeneration(Executor()->Generation());

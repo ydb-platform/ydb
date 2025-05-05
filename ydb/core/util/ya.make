@@ -3,7 +3,6 @@ LIBRARY()
 SRCS(
     activeactors.h
     address_classifier.cpp
-    aws.cpp
     backoff.cpp
     cache.cpp
     cache.h
@@ -14,6 +13,8 @@ SRCS(
     console.cpp
     console.h
     counted_leaky_bucket.h
+    cpuinfo.cpp
+    cpuinfo.h
     defs.h
     event_priority_queue.h
     failure_injection.cpp
@@ -84,10 +85,16 @@ IF (OS_WINDOWS)
     CFLAGS(
         -DKIKIMR_DISABLE_S3_OPS
     )
+    SRCS(
+        aws_windows_stub.cpp
+    )
 ELSE()
     PEERDIR(
         contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
         contrib/libs/curl
+    )
+    SRCS(
+        aws.cpp
     )
 ENDIF()
 

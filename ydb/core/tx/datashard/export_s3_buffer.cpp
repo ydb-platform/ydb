@@ -39,7 +39,15 @@ public:
 
     bool AddData(TStringBuf data);
 
-    TMaybe<TBuffer> Flush(bool prepare);
+    void Clear() {
+        Reset();
+    }
+
+    TMaybe<TBuffer> Flush();
+
+    size_t GetReadyOutputBytes() const {
+        return Buffer.Size();
+    }
 
 private:
     enum ECompressionResult {
@@ -78,7 +86,7 @@ private:
     inline ui64 GetBytesLimit() const { return MaxBytes; }
 
     bool Collect(const NTable::IScan::TRow& row, IOutputStream& out);
-    virtual TMaybe<TBuffer> Flush(bool prepare, bool last);
+    virtual TMaybe<TBuffer> Flush(bool last);
 
     static NBackup::IChecksum* CreateChecksum(const TMaybe<TS3ExportBufferSettings::TChecksumSettings>& settings);
     static TZStdCompressionProcessor* CreateCompression(const TMaybe<TS3ExportBufferSettings::TCompressionSettings>& settings);
@@ -141,14 +149,14 @@ TZStdCompressionProcessor* TS3Buffer::CreateCompression(const TMaybe<TS3ExportBu
 }
 
 void TS3Buffer::ColumnsOrder(const TVector<ui32>& tags) {
-    Y_ABORT_UNLESS(tags.size() == Columns.size());
+    Y_ENSURE(tags.size() == Columns.size());
 
     Indices.clear();
     for (ui32 i = 0; i < tags.size(); ++i) {
         const ui32 tag = tags.at(i);
         auto it = Columns.find(tag);
-        Y_ABORT_UNLESS(it != Columns.end());
-        Y_ABORT_UNLESS(Indices.emplace(tag, i).second);
+        Y_ENSURE(it != Columns.end());
+        Y_ENSURE(Indices.emplace(tag, i).second);
     }
 }
 
@@ -156,8 +164,8 @@ bool TS3Buffer::Collect(const NTable::IScan::TRow& row, IOutputStream& out) {
     bool needsComma = false;
     for (const auto& [tag, column] : Columns) {
         auto it = Indices.find(tag);
-        Y_ABORT_UNLESS(it != Indices.end());
-        Y_ABORT_UNLESS(it->second < (*row).size());
+        Y_ENSURE(it != Indices.end());
+        Y_ENSURE(it->second < (*row).size());
         const auto& cell = (*row)[it->second];
 
         BytesRead += cell.Size();
@@ -253,7 +261,7 @@ bool TS3Buffer::Collect(const NTable::IScan::TRow& row, IOutputStream& out) {
             serialized = UuidToStream(cell.AsValue<std::pair<ui64, ui64>>(), out, ErrorString);
             break;
         default:
-            Y_ABORT("Unsupported type");
+            Y_ENSURE(false, "Unsupported type");
         }
 
         if (!serialized) {
@@ -297,7 +305,7 @@ IEventBase* TS3Buffer::PrepareEvent(bool last, NExportScan::IBuffer::TStats& sta
     stats.Rows = Rows;
     stats.BytesRead = BytesRead;
 
-    auto buffer = Flush(true, last);
+    auto buffer = Flush(last);
     if (!buffer) {
         return nullptr;
     }
@@ -312,11 +320,19 @@ IEventBase* TS3Buffer::PrepareEvent(bool last, NExportScan::IBuffer::TStats& sta
 }
 
 void TS3Buffer::Clear() {
-    Y_ABORT_UNLESS(Flush(false, false));
+    Rows = 0;
+    BytesRead = 0;
+    if (Compression) {
+        Compression->Clear();
+    }
 }
 
 bool TS3Buffer::IsFilled() const {
-    if (Buffer.Size() < MinBytes) {
+    size_t outputSize = Buffer.Size();
+    if (Compression) {
+        outputSize = Compression->GetReadyOutputBytes();
+    }
+    if (outputSize < MinBytes) {
         return false;
     }
 
@@ -327,7 +343,7 @@ TString TS3Buffer::GetError() const {
     return ErrorString;
 }
 
-TMaybe<TBuffer> TS3Buffer::Flush(bool prepare, bool last) {
+TMaybe<TBuffer> TS3Buffer::Flush(bool last) {
     Rows = 0;
     BytesRead = 0;
 
@@ -338,7 +354,7 @@ TMaybe<TBuffer> TS3Buffer::Flush(bool prepare, bool last) {
     // It allows to import data in batches and save its state during import.
 
     if (Compression) {
-        TMaybe<TBuffer> compressedBuffer = Compression->Flush(prepare);
+        TMaybe<TBuffer> compressedBuffer = Compression->Flush();
         if (!compressedBuffer) {
             return Nothing();
         }
@@ -372,8 +388,8 @@ bool TZStdCompressionProcessor::AddData(TStringBuf data) {
     return true;
 }
 
-TMaybe<TBuffer> TZStdCompressionProcessor::Flush(bool prepare) {
-    if (prepare && BytesAdded) {
+TMaybe<TBuffer> TZStdCompressionProcessor::Flush() {
+    if (BytesAdded) {
         ECompressionResult res;
         auto input = ZSTD_inBuffer{NULL, 0, 0};
 

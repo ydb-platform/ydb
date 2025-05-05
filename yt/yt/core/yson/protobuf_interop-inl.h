@@ -4,6 +4,8 @@
 #include "protobuf_interop.h"
 #endif
 
+#include <library/cpp/yt/error/error.h>
+
 namespace NYT::NYson {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -13,6 +15,47 @@ const TProtobufMessageType* ReflectProtobufMessageType()
 {
     static const auto* type = ReflectProtobufMessageType(T::default_instance().GetDescriptor());
     return type;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+#define MAP_PROTOBUF_ELEMENT_TYPE_NAME(elementType, name) \
+template <> \
+consteval std::string_view GetProtobufElementTypeName<elementType>() \
+{ \
+    return name##sv; \
+}
+
+MAP_PROTOBUF_ELEMENT_TYPE_NAME(TProtobufMessageElement, "message")
+MAP_PROTOBUF_ELEMENT_TYPE_NAME(TProtobufScalarElement, "scalar")
+MAP_PROTOBUF_ELEMENT_TYPE_NAME(TProtobufAttributeDictionaryElement, "attributeDictionary")
+MAP_PROTOBUF_ELEMENT_TYPE_NAME(TProtobufRepeatedElement, "repeated")
+MAP_PROTOBUF_ELEMENT_TYPE_NAME(TProtobufMapElement, "map")
+MAP_PROTOBUF_ELEMENT_TYPE_NAME(TProtobufAnyElement, "any")
+
+#undef MAP_PROTOBUF_ELEMENT_TYPE_NAME
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class... U>
+auto VisitProtobufElement(const TProtobufElement& element, U&&... visitorOverloads)
+{
+    TOverloaded visitor{std::forward<U>(visitorOverloads)...};
+    return Visit(element, [&] <CProtobufElement TElement> (const std::unique_ptr<TElement>& element) {
+        YT_VERIFY(element);
+        return visitor(*element);
+    });
+}
+
+template <CProtobufElement TElementType>
+const TElementType& GetProtobufElementOrThrow(const TProtobufElement& element)
+{
+    const auto* result = std::get_if<std::unique_ptr<TElementType>>(&element);
+    THROW_ERROR_EXCEPTION_UNLESS(result,
+        "Expected protobuf element of type %Qv, but got of type %Qv",
+        GetProtobufElementTypeName<TElementType>(),
+        GetProtobufElementTypeName(element));
+    return *result->get();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

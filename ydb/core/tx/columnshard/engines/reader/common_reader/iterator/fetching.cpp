@@ -15,17 +15,19 @@ namespace NKikimr::NOlap::NReader::NCommon {
 bool TStepAction::DoApply(IDataReader& owner) const {
     if (FinishedFlag) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "apply");
+        Source->StartSyncSection();
         Source->OnSourceFetchingFinishedSafe(owner, Source);
     }
     return true;
 }
 
 TConclusionStatus TStepAction::DoExecuteImpl() {
+    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("step_action"));
     if (Source->GetContext()->IsAborted()) {
         return TConclusionStatus::Success();
     }
     auto executeResult = Cursor.Execute(Source);
-    if (!executeResult) {
+    if (executeResult.IsFail()) {
         return executeResult;
     }
     if (*executeResult) {
@@ -34,11 +36,17 @@ TConclusionStatus TStepAction::DoExecuteImpl() {
     return TConclusionStatus::Success();
 }
 
-TStepAction::TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId)
+TStepAction::TStepAction(const std::shared_ptr<IDataSource>& source, TFetchingScriptCursor&& cursor, const NActors::TActorId& ownerActorId,
+    const bool changeSyncSection)
     : TBase(ownerActorId)
     , Source(source)
     , Cursor(std::move(cursor))
     , CountersGuard(Source->GetContext()->GetCommonContext()->GetCounters().GetAssembleTasksGuard()) {
+    if (changeSyncSection) {
+        Source->StartAsyncSection();
+    } else {
+        Source->CheckAsyncSection();
+    }
 }
 
 TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSource>& source) {
@@ -47,20 +55,20 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
     Script->OnExecute();
     AFL_VERIFY(!Script->IsFinished(CurrentStepIdx));
     while (!Script->IsFinished(CurrentStepIdx)) {
-        if (source->HasStageData() && source->GetStageData().IsEmptyFiltered()) {
+        if (source->HasStageData() && source->GetStageData().IsEmptyWithData()) {
             source->OnEmptyStageData(source);
+            break;
+        } else if (source->HasStageResult() && source->GetStageResult().IsEmpty()) {
             break;
         }
         auto step = Script->GetStep(CurrentStepIdx);
         TMemoryProfileGuard mGuard("SCAN_PROFILE::FETCHING::" + step->GetName() + "::" + Script->GetBranchName(),
             IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("scan_step", step->DebugString())("scan_step_idx", CurrentStepIdx);
-        AFL_VERIFY(!CurrentStartInstant);
-        CurrentStartInstant = TMonotonic::Now();
-        AFL_VERIFY(!CurrentStartDataSize);
-        CurrentStartDataSize = step->GetProcessingDataSize(source);
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("scan_step", step->DebugString())("scan_step_idx", CurrentStepIdx)("source_id", source->GetSourceId());
+
+        const TMonotonic startInstant = TMonotonic::Now();
         const TConclusion<bool> resultStep = step->ExecuteInplace(source, *this);
-        FlushDuration();
+        FlushDuration(TMonotonic::Now() - startInstant);
         if (!resultStep) {
             return resultStep;
         }
@@ -69,6 +77,7 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
         }
         ++CurrentStepIdx;
     }
+    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("fcursor"));
     return true;
 }
 
@@ -105,7 +114,8 @@ TString TFetchingScript::ProfileDebugString() const {
     return sb;
 }
 
-void TFetchingScriptBuilder::AddAllocation(const std::set<ui32>& entityIds, const EStageFeaturesIndexes stage, const EMemType mType) {
+void TFetchingScriptBuilder::AddAllocation(
+    const std::set<ui32>& entityIds, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage, const EMemType mType) {
     if (Steps.size() == 0) {
         AddStep(std::make_shared<TAllocateMemoryStep>(entityIds, mType, stage));
     } else {
@@ -148,7 +158,7 @@ TFetchingScriptBuilder::TFetchingScriptBuilder(const TSpecialReadContext& contex
     : TFetchingScriptBuilder(context.GetReadMetadata()->GetResultSchema(), context.GetMergeColumns()) {
 }
 
-void TFetchingScriptBuilder::AddFetchingStep(const TColumnsSetIds& columns, const EStageFeaturesIndexes stage) {
+void TFetchingScriptBuilder::AddFetchingStep(const TColumnsSetIds& columns, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage) {
     auto actualColumns = columns - AddedFetchingColumns;
     AddedFetchingColumns += columns;
     if (actualColumns.IsEmpty()) {
@@ -166,7 +176,7 @@ void TFetchingScriptBuilder::AddFetchingStep(const TColumnsSetIds& columns, cons
 }
 
 void TFetchingScriptBuilder::AddAssembleStep(
-    const TColumnsSetIds& columns, const TString& purposeId, const EStageFeaturesIndexes stage, const bool sequential) {
+    const TColumnsSetIds& columns, const TString& purposeId, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stage, const bool sequential) {
     auto actualColumns = columns - AddedAssembleColumns;
     AddedAssembleColumns += columns;
     if (actualColumns.IsEmpty()) {
@@ -182,7 +192,7 @@ void TFetchingScriptBuilder::AddAssembleStep(
             *actualSet = *actualSet - *cross;
         }
         if (!actualSet->IsEmpty()) {
-            AddAllocation(notSequentialColumnIds, stage, EMemType::RawSequential);
+            AddAllocation(actualSet->GetColumnIds(), stage, EMemType::RawSequential);
             AddStep(std::make_shared<TOptionalAssemblerStep>(actualSet, purposeId));
         }
     } else {
@@ -191,66 +201,63 @@ void TFetchingScriptBuilder::AddAssembleStep(
     }
 }
 
-TConclusion<bool> TProgramStepPrepare::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
-    TReadActionsCollection readActions;
-    THashMap<ui32, std::shared_ptr<IKernelFetchLogic>> fetchers;
-    for (auto&& i : Step.GetOriginalColumnsToUse()) {
-        const auto columnLoader = source->GetSourceSchema()->GetColumnLoaderVerified(i.GetColumnId());
-        auto customFetchInfo = Step->BuildFetchTask(i.GetColumnId(), columnLoader->GetAccessorConstructor()->GetType(), source->GetStageData().GetTable());
-        if (!customFetchInfo) {
+TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
+    const bool started = !source->GetExecutionContext().HasProgramIterator();
+    if (!source->GetExecutionContext().HasProgramIterator()) {
+        source->MutableExecutionContext().Start(source, Program, step);
+    }
+    auto iterator = source->GetExecutionContext().GetProgramIteratorVerified();
+    const auto& resources = source->GetStageData().GetTable();
+    if (!started) {
+        iterator->Next();
+        source->MutableExecutionContext().OnFinishProgramStepExecution();
+    }
+    for (; iterator->IsValid();) {
+        {
+            auto conclusion = iterator->Next();
+            if (conclusion.IsFail()) {
+                return conclusion;
+            }
+        }
+        if (!source->GetExecutionContext().GetExecutionVisitorVerified()->GetExecutionNode()) {
+            if (iterator->IsValid()) {
+                GetSignals(iterator->GetCurrentNodeId())->OnSkipGraphNode(source->GetRecordsCount());
+                source->GetContext()->GetCommonContext()->GetCounters().OnSkipGraphNode(iterator->GetCurrentNode().GetIdentifier());
+            }
             continue;
         }
-        if (customFetchInfo->GetRemoveCurrent()) {
-            source->GetStageData().GetTable()->Remove(i.GetColumnId());
+        AFL_VERIFY(source->GetExecutionContext().GetExecutionVisitorVerified()->GetExecutionNode()->GetIdentifier() == iterator->GetCurrentNodeId());
+        source->MutableExecutionContext().OnStartProgramStepExecution(iterator->GetCurrentNodeId(), GetSignals(iterator->GetCurrentNodeId()));
+        auto signals = GetSignals(iterator->GetCurrentNodeId());
+        const TMonotonic start = TMonotonic::Now();
+        auto conclusion = source->GetExecutionContext().GetExecutionVisitorVerified()->Execute();
+        source->GetContext()->GetCommonContext()->GetCounters().AddExecutionDuration(TMonotonic::Now() - start);
+        signals->AddExecutionDuration(TMonotonic::Now() - start);
+        if (conclusion.IsFail()) {
+            source->MutableExecutionContext().OnFailedProgramStepExecution();
+            return conclusion;
+        } else if (*conclusion == NArrow::NSSA::IResourceProcessor::EExecutionResult::InBackground) {
+            return false;
         }
-        std::shared_ptr<IKernelFetchLogic> logic;
-        if (customFetchInfo->GetFullRestore() || source->GetStageData().GetPortionAccessor().GetColumnChunksPointers(i.GetColumnId()).empty()) {
-            logic = std::make_shared<TDefaultFetchLogic>(i.GetColumnId(), source);
-        } else {
-            AFL_VERIFY(customFetchInfo->GetSubColumns().size());
-            logic = std::make_shared<TSubColumnsFetchLogic>(i.GetColumnId(), source, customFetchInfo->GetSubColumns());
+        source->MutableExecutionContext().OnFinishProgramStepExecution();
+        GetSignals(iterator->GetCurrentNodeId())->OnExecuteGraphNode(source->GetRecordsCount());
+        source->GetContext()->GetCommonContext()->GetCounters().OnExecuteGraphNode(iterator->GetCurrentNode().GetIdentifier());
+        if (resources->GetRecordsCountActualOptional() == 0) {
+            resources->Clear();
+            break;
         }
-        logic->Start(readActions);
-        AFL_VERIFY(fetchers.emplace(i.GetColumnId(), logic).second)("column_id", i.GetColumnId());
     }
-    if (readActions.IsEmpty()) {
-        NBlobOperations::NRead::TCompositeReadBlobs blobs;
-        for (auto&& i : fetchers) {
-            i.second->OnDataReceived(readActions, blobs);
-            source->MutableStageData().AddFetcher(i.second);
-        }
-        AFL_VERIFY(readActions.IsEmpty());
-        return true;
-    }
-    NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(
-        std::make_shared<TColumnsFetcherTask>(std::move(readActions), fetchers, source, step, GetName(), "")));
-    return false;
-}
+    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("fgraph"));
+    AFL_DEBUG(NKikimrServices::SSA_GRAPH_EXECUTION)(
+        "graph_constructed", Program->DebugDOT(source->GetExecutionContext().GetExecutionVisitorVerified()->GetExecutedIds()));
 
-TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*cursor*/) const {
-//    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()(
-//        "program", source->GetContext()->GetCommonContext()->GetReadMetadata()->GetProgram().ProtoDebugString());
-    auto result = Step->Execute(source->GetStageData().GetTable(), Step);
-    if (result.IsFail()) {
-        return result;
-    }
-    source->GetStageData().GetTable()->Remove(Step.GetColumnsToDrop(), true);
     return true;
 }
 
-TConclusion<bool> TProgramStepAssemble::DoExecuteInplace(
-    const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*cursor*/) const {
-    for (auto&& i : Step.GetOriginalColumnsToUse()) {
-        const auto columnLoader = source->GetSourceSchema()->GetColumnLoaderVerified(i.GetColumnId());
-        auto customFetchInfo =
-            Step->BuildFetchTask(i.GetColumnId(), columnLoader->GetAccessorConstructor()->GetType(), source->GetStageData().GetTable());
-        if (!customFetchInfo) {
-            continue;
-        }
-        auto fetcher = source->MutableStageData().ExtractFetcherVerified(i.GetColumnId());
-        fetcher->OnDataCollected();
-    }
-    return true;
+const std::shared_ptr<TFetchingStepSignals>& TProgramStep::GetSignals(const ui32 nodeId) const {
+    auto it = Signals.find(nodeId);
+    AFL_VERIFY(it != Signals.end())("node_id", nodeId);
+    return it->second;
 }
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

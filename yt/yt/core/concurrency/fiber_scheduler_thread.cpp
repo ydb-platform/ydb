@@ -8,6 +8,7 @@
 #include <yt/yt/library/profiling/producer.h>
 
 #include <yt/yt/core/actions/invoker_util.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <yt/yt/core/misc/finally.h>
 #include <yt/yt/core/misc/shutdown.h>
@@ -508,7 +509,6 @@ void FiberTrampoline()
     YT_LOG_DEBUG("Fiber started");
 
     auto* currentFiber = GetCurrentFiber();
-    TFiber* successorFiber = nullptr;
 
     // Break loop to terminate fiber
     while (auto* fiberThread = TryGetFiberThread()) {
@@ -531,7 +531,7 @@ void FiberTrampoline()
 
         // Trace context can be restored for resumer fiber, so current trace context and memory tag are
         // not necessarily null. Check them after switch from and returning into current fiber.
-        if (successorFiber = ExtractResumerFiber()) {
+        if (auto* successorFiber = ExtractResumerFiber()) {
             // Suspend current fiber.
             TIdleFiberPool::Get()->SwichFromFiberAndMakeItIdle(currentFiber, successorFiber);
         }

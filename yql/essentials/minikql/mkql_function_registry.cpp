@@ -239,23 +239,26 @@ public:
     }
 
     TStatus FindFunctionTypeInfo(
-            const TTypeEnvironment& env,
-            NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
-            NUdf::ICountersProvider* countersProvider,
-            const TStringBuf& name,
-            TType* userType,
-            const TStringBuf& typeConfig,
-            ui32 flags,
-            const NUdf::TSourcePosition& pos,
-            const NUdf::ISecureParamsProvider* secureParamsProvider,
-            TFunctionTypeInfo* funcInfo) const override
+        NYql::TLangVersion langver,
+        const TTypeEnvironment& env,
+        NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
+        NUdf::ICountersProvider* countersProvider,
+        const TStringBuf& name,
+        TType* userType,
+        const TStringBuf& typeConfig,
+        ui32 flags,
+        const NUdf::TSourcePosition& pos,
+        const NUdf::ISecureParamsProvider* secureParamsProvider,
+        const NUdf::ILogProvider* logProvider,
+        TFunctionTypeInfo* funcInfo) const override
     {
         TStringBuf moduleName, funcName;
         if (name.TrySplit(MODULE_NAME_DELIMITER, moduleName, funcName)) {
             auto it = UdfModules_.find(moduleName);
             if (it != UdfModules_.end()) {
-                TFunctionTypeInfoBuilder typeInfoBuilder(env, typeInfoHelper, moduleName,
-                    (flags & NUdf::IUdfModule::TFlags::TypesOnly) ? nullptr : countersProvider, pos, secureParamsProvider);
+                TFunctionTypeInfoBuilder typeInfoBuilder(langver, env, typeInfoHelper, moduleName,
+                    (flags & NUdf::IUdfModule::TFlags::TypesOnly) ? nullptr : countersProvider, pos,
+                    secureParamsProvider, logProvider);
                 const auto& module = *it->second.Impl;
                 module.BuildFunctionTypeInfo(
                     funcName, userType, typeConfig, flags, typeInfoBuilder);
@@ -410,17 +413,20 @@ public:
     }
 
     TStatus FindFunctionTypeInfo(
-            const TTypeEnvironment& env,
-            NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
-            NUdf::ICountersProvider* countersProvider,
-            const TStringBuf& name,
-            TType* userType,
-            const TStringBuf& typeConfig,
-            ui32 flags,
-            const NUdf::TSourcePosition& pos,
-            const NUdf::ISecureParamsProvider* secureParamsProvider,
-            TFunctionTypeInfo* funcInfo) const override
+        NYql::TLangVersion langver,
+        const TTypeEnvironment& env,
+        NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
+        NUdf::ICountersProvider* countersProvider,
+        const TStringBuf& name,
+        TType* userType,
+        const TStringBuf& typeConfig,
+        ui32 flags,
+        const NUdf::TSourcePosition& pos,
+        const NUdf::ISecureParamsProvider* secureParamsProvider,
+        const NUdf::ILogProvider* logProvider,
+        TFunctionTypeInfo* funcInfo) const override
     {
+        Y_UNUSED(langver);
         Y_UNUSED(env);
         Y_UNUSED(typeInfoHelper);
         Y_UNUSED(countersProvider);
@@ -430,6 +436,7 @@ public:
         Y_UNUSED(flags);
         Y_UNUSED(pos);
         Y_UNUSED(secureParamsProvider);
+        Y_UNUSED(logProvider);
         Y_UNUSED(funcInfo);
         return TStatus::Error(TStringBuf("Unsupported access to builtins registry"));
     }

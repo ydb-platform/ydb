@@ -125,6 +125,7 @@ message TDqConfig {
         optional TSpillingSettings SpillingSettings = 38;
         optional TDiskRequest DiskRequest = 39;
         optional bool EnforceJobYtIsolation = 40;
+        optional bool UseLocalLDLibraryPath = 41 [default = false];
     }
 
     repeated TYtBackend YtBackends = 5;

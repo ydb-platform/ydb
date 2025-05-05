@@ -248,8 +248,19 @@ private:
         return KeyWidth + StateWidth;
     }
 public:
-    TState(TMemoryUsageInfo* memInfo, ui32 keyWidth, ui32 stateWidth, const THashFunc& hash, const TEqualsFunc& equal, bool allowOutOfMemory = true)
-        : TBase(memInfo), KeyWidth(keyWidth), StateWidth(stateWidth), AllowOutOfMemory(allowOutOfMemory), Hash(hash), Equal(equal) {
+    TState(
+        TMemoryUsageInfo* memInfo, ui32 keyWidth, ui32 stateWidth, const THashFunc& hash, const TEqualsFunc& equal,
+        NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent, bool allowOutOfMemory = true
+    )
+        : TBase(memInfo)
+        , KeyWidth(keyWidth)
+        , StateWidth(stateWidth)
+        , AllowOutOfMemory(allowOutOfMemory)
+        , Hash(hash)
+        , Equal(equal)
+        , Logger(logger)
+        , LogComponent(logComponent)
+    {
         CurrentPage = &Storage.emplace_back(RowSize() * CountRowsOnPage, NUdf::TUnboxedValuePod());
         CurrentPosition = 0;
         Tongue = CurrentPage->data();
@@ -295,7 +306,7 @@ public:
         try {
             States->CheckGrow();
         } catch (TMemoryLimitExceededException) {
-            YQL_LOG(INFO) << "State failed to grow";
+            UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder() << "State failed to grow");
             if (IsOutOfMemory || !AllowOutOfMemory) {
                 throw;
             } else {
@@ -373,6 +384,8 @@ private:
     std::unique_ptr<TStates> States;
     const THashFunc Hash;
     const TEqualsFunc Equal;
+    const NUdf::TLoggerPtr Logger;
+    const NUdf::TLogComponentId LogComponent;
 };
 
 class TSpillingSupportState : public TComputationValue<TSpillingSupportState> {
@@ -421,10 +434,11 @@ public:
     TSpillingSupportState(
         TMemoryUsageInfo* memInfo,
         const TMultiType* usedInputItemType, const TMultiType* keyAndStateType, ui32 keyWidth, size_t itemNodesSize,
-        const THashFunc& hash, const TEqualsFunc& equal, bool allowSpilling, TComputationContext& ctx
+        const THashFunc& hash, const TEqualsFunc& equal, bool allowSpilling, TComputationContext& ctx,
+        NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent
     )
         : TBase(memInfo)
-        , InMemoryProcessingState(memInfo, keyWidth, keyAndStateType->GetElementsCount() - keyWidth, hash, equal, allowSpilling && ctx.SpillerFactory)
+        , InMemoryProcessingState(memInfo, keyWidth, keyAndStateType->GetElementsCount() - keyWidth, hash, equal, logger, logComponent, allowSpilling && ctx.SpillerFactory)
         , UsedInputItemType(usedInputItemType)
         , KeyAndStateType(keyAndStateType)
         , KeyWidth(keyWidth)
@@ -436,6 +450,8 @@ public:
         , Equal(equal)
         , AllowSpilling(allowSpilling)
         , Ctx(ctx)
+        , Logger(logger)
+        , LogComponent(logComponent)
     {
         BufferForUsedInputItems.reserve(usedInputItemType->GetElementsCount());
         Tongue = InMemoryProcessingState.Tongue;
@@ -726,6 +742,10 @@ private:
     }
 
     void LogMemoryUsage() const {
+        const auto memoryUsageLogLevel = NUdf::ELogLevel::Info;
+        if (!Logger->IsActive(LogComponent, memoryUsageLogLevel)) {
+            return;
+        }
         const auto used = TlsAllocState->GetUsed();
         const auto limit = TlsAllocState->GetLimit();
         TStringBuilder logmsg;
@@ -735,7 +755,7 @@ private:
         }
         logmsg << (used/1_MB) << "MB/" << (limit/1_MB) << "MB";
 
-        YQL_LOG(INFO) << logmsg;
+        UDF_LOG(Logger, LogComponent, memoryUsageLogLevel, logmsg);
     }
 
     void SpillMoreStateFromBucket(TSpilledBucket& bucket) {
@@ -858,31 +878,32 @@ private:
     void SwitchMode(EOperatingMode mode) {
         switch(mode) {
             case EOperatingMode::InMemory: {
-                YQL_LOG(INFO) << "switching Memory mode to InMemory";
+                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, "switching Memory mode to InMemory");
                 MKQL_ENSURE(false, "Internal logic error");
                 break;
             }
             case EOperatingMode::SplittingState: {
-                YQL_LOG(INFO) << "switching Memory mode to SplittingState";
+                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, "switching Memory mode to SplittingState");
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 SpilledBuckets.resize(SpilledBucketCount);
                 auto spiller = Ctx.SpillerFactory->CreateSpiller();
                 for (auto &b: SpilledBuckets) {
                     b.SpilledState = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, KeyAndStateType, 5_MB);
                     b.SpilledData = std::make_unique<TWideUnboxedValuesSpillerAdapter>(spiller, UsedInputItemType, 5_MB);
-                    b.InMemoryProcessingState = std::make_unique<TState>(MemInfo, KeyWidth, KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal, false);
+                    b.InMemoryProcessingState = std::make_unique<TState>(MemInfo, KeyWidth,
+                            KeyAndStateType->GetElementsCount() - KeyWidth, Hasher, Equal, Logger, LogComponent, false);
                 }
                 break;
             }
             case EOperatingMode::Spilling: {
-                YQL_LOG(INFO) << "switching Memory mode to Spilling";
+                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, "switching Memory mode to Spilling");
                 MKQL_ENSURE(EOperatingMode::SplittingState == Mode || EOperatingMode::InMemory == Mode, "Internal logic error");
 
                 Tongue = ViewForKeyAndState.data();
                 break;
             }
             case EOperatingMode::ProcessSpilled: {
-                YQL_LOG(INFO) << "switching Memory mode to ProcessSpilled";
+                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, "switching Memory mode to ProcessSpilled");
                 MKQL_ENSURE(EOperatingMode::Spilling == Mode, "Internal logic error");
                 MKQL_ENSURE(SpilledBuckets.size() == SpilledBucketCount, "Internal logic error");
                 MKQL_ENSURE(BufferForUsedInputItems.empty(), "Internal logic error");
@@ -940,6 +961,9 @@ private:
 
     TComputationContext& Ctx;
     NYql::NUdf::TCounter CounterOutputRows_;
+
+    const NUdf::TLoggerPtr Logger;
+    const NUdf::TLogComponentId LogComponent;
 };
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -1097,7 +1121,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TWideCombinerWrapper::MakeState));
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWideCombinerWrapper::MakeState>());
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
         CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
@@ -1115,7 +1139,7 @@ public:
         const auto over = BasicBlock::Create(context, "over", ctx.Func);
         const auto result = PHINode::Create(statusType, 3U, "result", over);
 
-        const auto readMoreFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::ReadMore<SkipYields>));
+        const auto readMoreFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::ReadMore<SkipYields>>());
         const auto readMoreFuncType = FunctionType::get(Type::getInt1Ty(context), { statePtrType }, false);
         const auto readMoreFuncPtr = CastInst::Create(Instruction::IntToPtr, readMoreFunc, PointerType::getUnqual(readMoreFuncType), "read_more_func", block);
         const auto readMore = CallInst::Create(readMoreFuncType, readMoreFuncPtr, { stateArg }, "read_more", block);
@@ -1238,7 +1262,7 @@ public:
                 new StoreInst(key, keyPtr, block);
             }
 
-            const auto atFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::TasteIt));
+            const auto atFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::TasteIt>());
             const auto atType = FunctionType::get(Type::getInt1Ty(context), {stateArg->getType()}, false);
             const auto atPtr = CastInst::Create(Instruction::IntToPtr, atFunc, PointerType::getUnqual(atType), "function", block);
             const auto newKey = CallInst::Create(atType, atPtr, {stateArg}, "new_key", block);
@@ -1355,7 +1379,7 @@ public:
             new StoreInst(getres.first, statusPtr, block);
 
             const auto stat = ctx.GetStat();
-            const auto statFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::PushStat));
+            const auto statFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::PushStat>());
             const auto statType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), stat->getType()}, false);
             const auto statPtr = CastInst::Create(Instruction::IntToPtr, statFunc, PointerType::getUnqual(statType), "stat", block);
             CallInst::Create(statType, statPtr, {stateArg, stat}, "", block);
@@ -1368,7 +1392,7 @@ public:
 
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
 
-            const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Extract));
+            const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::Extract>());
             const auto extractType = FunctionType::get(ptrValueType, {stateArg->getType()}, false);
             const auto extractPtr = CastInst::Create(Instruction::IntToPtr, extractFunc, PointerType::getUnqual(extractType), "extract", block);
             const auto out = CallInst::Create(extractType, extractPtr, {stateArg}, "out", block);
@@ -1402,12 +1426,18 @@ public:
 #endif
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
+        NYql::NUdf::TLoggerPtr logger = ctx.MakeLogger();
+        NYql::NUdf::TLogComponentId logComponent = logger->RegisterComponent("WideCombine");
+        UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
+
 #ifdef MKQL_DISABLE_CODEGEN
-        state = ctx.HolderFactory.Create<TState>(Nodes.KeyNodes.size(), Nodes.StateNodes.size(), TMyValueHasher(KeyTypes), TMyValueEqual(KeyTypes));
+        state = ctx.HolderFactory.Create<TState>(Nodes.KeyNodes.size(), Nodes.StateNodes.size(),
+                TMyValueHasher(KeyTypes), TMyValueEqual(KeyTypes), logger, logComponent);
 #else
         state = ctx.HolderFactory.Create<TState>(Nodes.KeyNodes.size(), Nodes.StateNodes.size(),
             ctx.ExecuteLLVM && Hash ? THashFunc(std::ptr_fun(Hash)) : THashFunc(TMyValueHasher(KeyTypes)),
-            ctx.ExecuteLLVM && Equals ? TEqualsFunc(std::ptr_fun(Equals)) : TEqualsFunc(TMyValueEqual(KeyTypes))
+            ctx.ExecuteLLVM && Equals ? TEqualsFunc(std::ptr_fun(Equals)) : TEqualsFunc(TMyValueEqual(KeyTypes)),
+            logger, logComponent
         );
 #endif
         if (ctx.CountersProvider) {
@@ -1567,7 +1597,7 @@ public:
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TWideLastCombinerWrapper::MakeState));
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWideLastCombinerWrapper::MakeState>());
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
         CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
@@ -1604,7 +1634,7 @@ public:
 
         block = more;
 
-        const auto updateFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::Update));
+        const auto updateFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSpillingSupportState::Update>());
         const auto updateType = FunctionType::get(wayType, {stateArg->getType()}, false);
         const auto updateFuncPtr = CastInst::Create(Instruction::IntToPtr, updateFunc, PointerType::getUnqual(updateType), "update_func", block);
         const auto update = CallInst::Create(updateType, updateFuncPtr, { stateArg }, "update", block);
@@ -1693,7 +1723,7 @@ public:
             new StoreInst(key, keyPtr, block);
         }
 
-        const auto atFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::TasteIt));
+        const auto atFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSpillingSupportState::TasteIt>());
         const auto atType = FunctionType::get(wayType, {stateArg->getType()}, false);
         const auto atPtr = CastInst::Create(Instruction::IntToPtr, atFunc, PointerType::getUnqual(atType), "function", block);
         const auto taste= CallInst::Create(atType, atPtr, {stateArg}, "taste", block);
@@ -1793,7 +1823,7 @@ public:
 
         block = fill;
 
-        const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TSpillingSupportState::Extract));
+        const auto extractFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TSpillingSupportState::Extract>());
         const auto extractType = FunctionType::get(ptrValueType, {stateArg->getType()}, false);
         const auto extractPtr = CastInst::Create(Instruction::IntToPtr, extractFunc, PointerType::getUnqual(extractType), "extract", block);
         const auto out = CallInst::Create(extractType, extractPtr, {stateArg}, "out", block);
@@ -1832,6 +1862,10 @@ public:
 #endif
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
+        NYql::NUdf::TLoggerPtr logger = ctx.MakeLogger();
+        NYql::NUdf::TLogComponentId logComponent = logger->RegisterComponent("WideLastCombine");
+        UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
+
         state = ctx.HolderFactory.Create<TSpillingSupportState>(UsedInputItemType, KeyAndStateType,
             Nodes.KeyNodes.size(),
             Nodes.ItemNodes.size(),
@@ -1839,11 +1873,13 @@ private:
             TMyValueHasher(KeyTypes),
             TMyValueEqual(KeyTypes),
 #else
-           ctx.ExecuteLLVM && Hash ? THashFunc(std::ptr_fun(Hash)) : THashFunc(TMyValueHasher(KeyTypes)),
-           ctx.ExecuteLLVM && Equals ? TEqualsFunc(std::ptr_fun(Equals)) : TEqualsFunc(TMyValueEqual(KeyTypes)),
+            ctx.ExecuteLLVM && Hash ? THashFunc(std::ptr_fun(Hash)) : THashFunc(TMyValueHasher(KeyTypes)),
+            ctx.ExecuteLLVM && Equals ? TEqualsFunc(std::ptr_fun(Equals)) : TEqualsFunc(TMyValueEqual(KeyTypes)),
 #endif
             AllowSpilling,
-            ctx
+            ctx,
+            logger,
+            logComponent
         );
     }
 
@@ -1975,24 +2011,16 @@ IComputationNode* WrapWideCombinerT(TCallable& callable, const TComputationNodeF
                 allowSpilling
             );
         } else {
-            if constexpr (RuntimeVersion < 46U) {
-                const auto memLimit = AS_VALUE(TDataLiteral, callable.GetInput(1U))->AsValue().Get<ui64>();
+            if (const auto memLimit = AS_VALUE(TDataLiteral, callable.GetInput(1U))->AsValue().Get<i64>(); memLimit >= 0)
                 if (EGraphPerProcess::Single == ctx.GraphPerProcess)
-                    return new TWideCombinerWrapper<true, false>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), memLimit);
+                    return new TWideCombinerWrapper<true, false>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), ui64(memLimit));
                 else
-                    return new TWideCombinerWrapper<false, false>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), memLimit);
-            } else {
-                if (const auto memLimit = AS_VALUE(TDataLiteral, callable.GetInput(1U))->AsValue().Get<i64>(); memLimit >= 0)
-                    if (EGraphPerProcess::Single == ctx.GraphPerProcess)
-                        return new TWideCombinerWrapper<true, false>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), ui64(memLimit));
-                    else
-                        return new TWideCombinerWrapper<false, false>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), ui64(memLimit));
+                    return new TWideCombinerWrapper<false, false>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), ui64(memLimit));
+            else
+                if (EGraphPerProcess::Single == ctx.GraphPerProcess)
+                    return new TWideCombinerWrapper<true, true>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), ui64(-memLimit));
                 else
-                    if (EGraphPerProcess::Single == ctx.GraphPerProcess)
-                        return new TWideCombinerWrapper<true, true>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), ui64(-memLimit));
-                    else
-                        return new TWideCombinerWrapper<false, true>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), ui64(-memLimit));
-            }
+                    return new TWideCombinerWrapper<false, true>(ctx.Mutables, wide, std::move(nodes), std::move(keyTypes), ui64(-memLimit));
         }
     }
 
@@ -2004,7 +2032,6 @@ IComputationNode* WrapWideCombiner(TCallable& callable, const TComputationNodeFa
 }
 
 IComputationNode* WrapWideLastCombiner(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    YQL_LOG(INFO) << "Found non-serializable type, spilling is disabled";
     return WrapWideCombinerT<true>(callable, ctx, false);
 }
 

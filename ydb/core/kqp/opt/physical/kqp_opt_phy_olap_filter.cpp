@@ -214,11 +214,6 @@ TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& 
         return false;
     });
 
-    // Temporary fix for https://st.yandex-team.ru/KIKIMR-22216
-    if (parameters.size()!=0) {
-        return nullptr;
-    }
-
     const auto members = FindNodes(apply.Ptr(), [&argument] (const TExprNode::TPtr& node) {
         if (const auto maybeMember = TMaybeNode<TCoMember>(node))
             return maybeMember.Cast().Struct().Raw() == &argument;
@@ -231,8 +226,16 @@ TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& 
     arguments.reserve(members.size());
     for (const auto& member : members) {
         columns.emplace_back(member->TailPtr());
-        arguments.emplace_back(ctx.NewArgument(member->Pos(), columns.back()->Content()));
+        TString argumentName = "members_" + TString(columns.back()->Content());
+        arguments.emplace_back(ctx.NewArgument(member->Pos(), TStringBuf(argumentName)));
         replacements.emplace(member.Get(), arguments.back());
+    }
+
+    for(const auto& pptr : parameters) {
+        TCoParameter parameter = TMaybeNode<TCoParameter>(pptr).Cast();
+        TString argumentName = "parameter_" + TString(parameter.Name().StringValue());
+        arguments.emplace_back(ctx.NewArgument(pptr->Pos(), TStringBuf(argumentName)));
+        replacements.emplace(pptr.Get(), arguments.back());
     }
 
     // Temporary fix for https://st.yandex-team.ru/KIKIMR-22560
@@ -243,6 +246,7 @@ TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& 
     return Build<TKqpOlapApply>(ctx, apply.Pos())
         .Type(ExpandType(argument.Pos(), *argument.GetTypeAnn(), ctx))
         .Columns().Add(std::move(columns)).Build()
+        .Parameters().Add(std::move(parameters)).Build()
         .Lambda(ctx.NewLambda(apply.Pos(), ctx.NewArguments(argument.Pos(), std::move(arguments)), ctx.ReplaceNodes(apply.Ptr(), replacements)))
         .Done();
 }
@@ -401,7 +405,7 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
             return SafeCastPredicatePushdown(maybeFlatmap.Cast(), argument, ctx, pos);
         } else if (auto maybePredicate = node.Maybe<TCoCompare>()) {
             return SimplePredicatePushdown(maybePredicate.Cast(), argument, ctx, pos);
-        }        
+        }
 
         if constexpr (NKikimr::NSsa::RuntimeVersion >= 5U) {
             return YqlApplyPushdown(node, argument, ctx);
@@ -696,9 +700,11 @@ TFilterOpsLevels PredicatePushdown(const TExprBase& predicate, const TExprNode& 
     return YqlApplyPushdown(predicate, argument, ctx);
 }
 
-std::pair<TVector<TOLAPPredicateNode>, TVector<TOLAPPredicateNode>> SplitForPartialPushdown(const TOLAPPredicateNode& predicateTree)
+std::pair<TVector<TOLAPPredicateNode>, TVector<TOLAPPredicateNode>> SplitForPartialPushdown(const TOLAPPredicateNode& predicateTree, bool allowApply)
 {
-    if (predicateTree.CanBePushed) {
+    bool canBePushed =  (predicateTree.CanBePushed || predicateTree.CanBePushedApply && allowApply);
+
+    if (canBePushed) {
         return {{predicateTree}, {}};
     }
 
@@ -713,7 +719,8 @@ std::pair<TVector<TOLAPPredicateNode>, TVector<TOLAPPredicateNode>> SplitForPart
     TVector<TOLAPPredicateNode> pushable;
     TVector<TOLAPPredicateNode> remaining;
     for (const auto& predicate : predicateTree.Children) {
-        if (predicate.CanBePushed && !isFoundNotStrictOp) {
+        canBePushed =  (predicate.CanBePushed || predicate.CanBePushedApply && allowApply);
+        if (canBePushed && !isFoundNotStrictOp) {
             pushable.emplace_back(predicate);
         } else {
             if (!IsStrict(predicate.ExprNode)) {
@@ -764,7 +771,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     CollectPredicates(predicate, predicateTree, &lambdaArg, read.Process().Body(), false);
     YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
 
-    auto [pushable, remaining] = SplitForPartialPushdown(predicateTree);
+    auto [pushable, remaining] = SplitForPartialPushdown(predicateTree, false);
     TVector<TFilterOpsLevels> pushedPredicates;
     for (const auto& p: pushable) {
         pushedPredicates.emplace_back(PredicatePushdown(TExprBase(p.ExprNode), lambdaArg, ctx, node.Pos()));
@@ -791,16 +798,25 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             TOLAPPredicateNode predicateTree;
             predicateTree.ExprNode = predicate.Ptr();
             CollectPredicates(predicate, predicateTree, &lambdaArg, read.Process().Body(), true);
+
             YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
-            auto [pushableWithApply, remaining] = SplitForPartialPushdown(predicateTree);
-            for (const auto& p: pushableWithApply) {
-               pushedPredicates.emplace_back(PredicatePushdown(TExprBase(p.ExprNode), lambdaArg, ctx, node.Pos()));
+            auto [pushable, remaining] = SplitForPartialPushdown(predicateTree, true);
+            for (const auto& p: pushable) {
+                if (p.CanBePushed) {
+                    auto pred = PredicatePushdown(TExprBase(p.ExprNode), lambdaArg, ctx, node.Pos());
+                    pushedPredicates.emplace_back(pred);
+                }
+                else {
+                    auto expr = YqlApplyPushdown(TExprBase(p.ExprNode), lambdaArg, ctx);
+                    TFilterOpsLevels pred(expr);
+                    pushedPredicates.emplace_back(pred);
+                }
             }
             remainingAfterApply.insert(remainingAfterApply.end(), remaining.begin(), remaining.end());
         }
         remaining = std::move(remainingAfterApply);
     }
-    
+
     if (pushedPredicates.empty()) {
         return node;
     }
@@ -810,7 +826,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     const auto remainingFilter = CombinePredicatesWithAnd(remaining, ctx, node.Pos(), false, true);
 
     TMaybeNode<TExprBase> olapFilter;
-    if (pushedFilter.FirstLevelOps.IsValid()) {    
+    if (pushedFilter.FirstLevelOps.IsValid()) {
         olapFilter = Build<TKqpOlapFilter>(ctx, node.Pos())
             .Input(read.Process().Body())
             .Condition(pushedFilter.FirstLevelOps.Cast())
@@ -877,6 +893,34 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
 
     return newFlatmap;
 #endif
+}
+
+TExprBase KqpAddColumnForEmptyColumnsOlapRead(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    if (!node.Maybe<TKqpReadOlapTableRanges>()) {
+        return node;
+    }
+
+    auto readOlap = node.Cast<TKqpReadOlapTableRanges>();
+    if (readOlap.Columns().Size()!=0) {
+        return node;
+    }
+
+    const auto& tableData = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, readOlap.Table().Path().Value());
+    auto keyColumns = tableData.Metadata->KeyColumnNames;
+
+    TVector<TExprNode::TPtr> newColumns;
+    newColumns.push_back(ctx.NewAtom(node.Pos(), keyColumns[0]));
+
+    return Build<TKqpReadOlapTableRanges>(ctx, node.Pos())
+        .Table(readOlap.Table())
+        .Ranges(readOlap.Ranges())
+        .Columns()
+            .Add(newColumns)
+            .Build()
+        .Settings(readOlap.Settings())
+        .ExplainPrompt(readOlap.ExplainPrompt())
+        .Process(readOlap.Process())
+        .Done();
 }
 
 } // namespace NKikimr::NKqp::NOpt

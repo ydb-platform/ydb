@@ -2,6 +2,7 @@
 
 #include "logic_redo_entry.h"
 #include "flat_exec_commit.h"
+#include "util_fmt_abort.h"
 #include <util/generic/deque.h>
 #include <util/generic/intrlist.h>
 
@@ -18,12 +19,12 @@ namespace NRedo {
             Bytes = 0;
         }
 
-        TOverhead* Push(ui32 table, TEntry* entry) noexcept
+        TOverhead* Push(ui32 table, TEntry* entry)
         {
             if (Trace && Trace.back() == entry) {
-                Y_Fail(NFmt::Do(*entry) << " is dublicated in table trace");
+                Y_TABLET_ERROR(NFmt::Do(*entry) << " is dublicated in table trace");
             } else if (Trace && entry->Stamp < Trace.back()->Stamp) {
-                Y_Fail(NFmt::Do(*entry) << " is in the past of table trace");
+                Y_TABLET_ERROR(NFmt::Do(*entry) << " is in the past of table trace");
             }
 
             Trace.emplace_back(entry);
@@ -34,7 +35,7 @@ namespace NRedo {
             return this;
         }
 
-        TOverhead* Cut(TTxStamp stamp, TGCBlobDelta &gc, ui64 &largeGlobIds) noexcept
+        TOverhead* Cut(TTxStamp stamp, TGCBlobDelta &gc, ui64 &largeGlobIds)
         {
             if (!Trace || stamp < Trace.front()->Stamp) {
                 return nullptr;
@@ -45,7 +46,7 @@ namespace NRedo {
                     return stamp < entry->Stamp;
                 });
 
-            Y_ABORT_UNLESS(end != Trace.begin());
+            Y_ENSURE(end != Trace.begin());
 
             for (auto it = Trace.begin(); it != end; ++it) {
                 NUtil::SubSafe(Bytes, (*it)->BytesData());

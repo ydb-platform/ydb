@@ -12,6 +12,8 @@
 
 namespace NKafka {
 
+TActorId MakeKafkaDiscoveryCacheID();
+
 class TKafkaMetadataActor: public NActors::TActorBootstrapped<TKafkaMetadataActor> {
 public:
     TKafkaMetadataActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TMetadataRequestData>& message,
@@ -85,10 +87,11 @@ private:
     bool NeedAllNodes = false;
     bool HaveError = false;
     bool FallbackToIcDiscovery = false;
-    TMap<ui64, TAutoPtr<TEvLocationResponse>> PendingTopicResponses;
+    TMap<ui64, TSimpleSharedPtr<TEvLocationResponse>> PendingTopicResponses;
 
     THashMap<ui64, TNodeInfo> Nodes;
     THashMap<TString, TActorId> PartitionActors;
+    THashSet<ui64> HaveBrokers;
 
 };
 

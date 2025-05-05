@@ -32,11 +32,15 @@ public:
             }
 
             if (Self->ClusterName != cluster) {
-                ythrow yexception() << "ClusterName mismatch";
+                ythrow yexception() << "ClusterName mismatch"
+                    << " expected " << Self->ClusterName
+                    << " but got " << cluster;
             }
 
             if (Version != Self->YamlVersion) {
-                ythrow yexception() << "Version mismatch";
+                ythrow yexception() << "Version mismatch"
+                    << " expected " << Self->YamlVersion
+                    << " but got " << Version;
             }
         } catch (const yexception& ex) {
             Error = true;

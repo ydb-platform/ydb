@@ -37,12 +37,12 @@ namespace NTest {
 
         }
 
-        ui64 DataSize() const override
+        ui64 DataSize() const noexcept override
         {
             return Store->PageCollectionBytes(0);
         }
 
-        ui64 BackingSize() const override
+        ui64 BackingSize() const noexcept override
         {
             return Store->PageCollectionBytes(0) + Store->PageCollectionBytes(Store->GetOuterRoom());
         }
@@ -88,17 +88,17 @@ namespace NTest {
 
     class TTestEnv: public IPages {
     public:
-        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept override
+        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) override
         {
             return MemTableRefLookup(memTable, ref, tag);
         }
 
-        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override
+        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) override
         {
             auto* partStore = CheckedCast<const TPartStore*>(part);
 
             if ((lob != ELargeObj::Extern && lob != ELargeObj::Outer) || (ref >> 32)) {
-                Y_Fail("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
+                Y_TABLET_ERROR("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
             }
 
             ui32 room = (lob == ELargeObj::Extern)
@@ -116,31 +116,31 @@ namespace NTest {
     private:
         const TSharedData* Get(const TPart *part, ui32 room, ui32 ref) const
         {
-            Y_ABORT_UNLESS(ref != Max<ui32>(), "Got invalid page reference");
+            Y_ENSURE(ref != Max<ui32>(), "Got invalid page reference");
 
             return CheckedCast<const TPartStore*>(part)->Store->GetPage(room, ref);
         }
     };
 
     struct TPartEggs {
-        const TIntrusiveConstPtr<TPartStore>& At(size_t num) const noexcept
+        const TIntrusiveConstPtr<TPartStore>& At(size_t num) const
         {
             return Parts.at(num);
         }
 
-        const TIntrusiveConstPtr<TPartStore>& Lone() const noexcept
+        const TIntrusiveConstPtr<TPartStore>& Lone() const
         {
-            Y_ABORT_UNLESS(Parts.size() == 1, "Need egg with one part inside");
+            Y_ENSURE(Parts.size() == 1, "Need egg with one part inside");
 
             return Parts[0];
         }
 
-        bool NoResult() const noexcept
+        bool NoResult() const
         {
             return Written == nullptr;  /* compaction was aborted */
         }
 
-        TPartView ToPartView() const noexcept
+        TPartView ToPartView() const
         {
             return { Lone(), nullptr, Lone()->Slices };
         }
@@ -150,7 +150,7 @@ namespace NTest {
         TVector<TIntrusiveConstPtr<TPartStore>> Parts;
     };
 
-    TString DumpPart(const TPartStore&, ui32 depth = 10) noexcept;
+    TString DumpPart(const TPartStore&, ui32 depth = 10);
 
     namespace IndexTools {
         using TGroupId = NPage::TGroupId;
@@ -159,9 +159,9 @@ namespace NTest {
             TTestEnv env;
             TPartGroupFlatIndexIter index(&part, &env, { });
 
-            Y_ABORT_UNLESS(index.Seek(0) == EReady::Data);
+            Y_ENSURE(index.Seek(0) == EReady::Data);
             for (TPageId p = 0; p < pageIndex; p++) {
-                Y_ABORT_UNLESS(index.Next() == EReady::Data);
+                Y_ENSURE(index.Next() == EReady::Data);
             }
 
             return index.GetRecord();
@@ -170,7 +170,7 @@ namespace NTest {
         inline const TPartGroupFlatIndexIter::TRecord * GetFlatLastRecord(const TPart& part) {
             TTestEnv env;
             TPartGroupFlatIndexIter index(&part, &env, { });
-            Y_ABORT_UNLESS(index.SeekLast() == EReady::Data);
+            Y_ENSURE(index.SeekLast() == EReady::Data);
             return index.GetLastRecord();
         }
 
@@ -182,7 +182,7 @@ namespace NTest {
             for (size_t i = 0; ; i++) {
                 auto ready = i == 0 ? index->Seek(0) : index->Next();
                 if (ready != EReady::Data) {
-                    Y_ABORT_UNLESS(ready != EReady::Page, "Unexpected page fault");
+                    Y_ENSURE(ready != EReady::Page, "Unexpected page fault");
                     break;
                 }
                 result++;
@@ -199,7 +199,7 @@ namespace NTest {
             for (size_t i = 0; ; i++) {
                 auto ready = i == 0 ? index->Seek(0) : index->Next();
                 if (ready != EReady::Data) {
-                    Y_ABORT_UNLESS(ready != EReady::Page, "Unexpected page fault");
+                    Y_ENSURE(ready != EReady::Page, "Unexpected page fault");
                     break;
                 }
                 result += part.GetPageSize(index->GetPageId(), groupId);
@@ -218,9 +218,9 @@ namespace NTest {
             TTestEnv env;
             auto index = CreateIndexIter(&part, &env, { });
 
-            Y_ABORT_UNLESS(index->Seek(0) == EReady::Data);
+            Y_ENSURE(index->Seek(0) == EReady::Data);
             for (TPageId p = 0; p < pageIndex; p++) {
-                Y_ABORT_UNLESS(index->Next() == EReady::Data);
+                Y_ENSURE(index->Next() == EReady::Data);
             }
 
             return index->GetPageId();
@@ -230,9 +230,9 @@ namespace NTest {
             TTestEnv env;
             auto index = CreateIndexIter(&part, &env, { });
 
-            Y_ABORT_UNLESS(index->Seek(0) == EReady::Data);
+            Y_ENSURE(index->Seek(0) == EReady::Data);
             for (TPageId p = 0; p < pageIndex; p++) {
-                Y_ABORT_UNLESS(index->Next() == EReady::Data);
+                Y_ENSURE(index->Next() == EReady::Data);
             }
 
             return index->GetRowId();
@@ -256,9 +256,9 @@ namespace NTest {
             TTestEnv env;
             auto index = CreateIndexIter(&part, &env, { });
 
-            Y_ABORT_UNLESS(index->Seek(0) == EReady::Data);
+            Y_ENSURE(index->Seek(0) == EReady::Data);
             for (TPageId p = 0; p < pageIndex; p++) {
-                Y_ABORT_UNLESS(index->Next() == EReady::Data);
+                Y_ENSURE(index->Next() == EReady::Data);
             }
 
             TVector<TCell> key;
@@ -271,8 +271,8 @@ namespace NTest {
 
         inline TSlice MakeSlice(const TPartStore& part, ui32 pageIndex1Inclusive, ui32 pageIndex2Exclusive) {
             auto mainPagesCount = CountMainPages(part);
-            Y_ABORT_UNLESS(pageIndex1Inclusive < pageIndex2Exclusive);
-            Y_ABORT_UNLESS(pageIndex2Exclusive <= mainPagesCount);
+            Y_ENSURE(pageIndex1Inclusive < pageIndex2Exclusive);
+            Y_ENSURE(pageIndex2Exclusive <= mainPagesCount);
             
             TSlice slice;
             slice.FirstInclusive = pageIndex1Inclusive > 0

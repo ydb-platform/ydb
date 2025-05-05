@@ -98,6 +98,12 @@ template <class TContainer, class... TArgs>
 auto EmplaceOrCrash(TContainer&& container, TArgs&&... args);
 
 /*!
+ * This function emplaces default value at the given key.
+ */
+template <class TMap, class TKey>
+auto EmplaceDefault(TMap&& map, TKey&& key);
+
+/*!
  * This function is supposed to replace std::get<T>(variant)
  * for those cases when exception should not be thrown.
  */

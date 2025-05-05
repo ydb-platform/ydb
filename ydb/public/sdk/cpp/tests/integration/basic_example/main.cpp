@@ -1,6 +1,6 @@
 #include "basic_example.h"
 
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <ydb/public/api/protos/ydb_value.pb.h>
 

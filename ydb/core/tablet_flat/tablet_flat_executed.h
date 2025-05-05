@@ -16,7 +16,10 @@ struct IMiniKQLFactory {
     virtual TAutoPtr<ITransaction> Make(TEvTablet::TEvLocalReadColumns::TPtr&) = 0;
 };
 
-class TTabletExecutedFlat : public NFlatExecutorSetup::ITablet {
+class TTabletExecutedFlat
+    : public NFlatExecutorSetup::ITablet
+    , public IActorExceptionHandler
+{
 protected:
     using IExecutor = NFlatExecutorSetup::IExecutor;
 
@@ -24,13 +27,15 @@ protected:
     IExecutor* Executor() const { return Executor0; }
     const TInstant StartTime() const { return StartTime0; }
 
+    bool OnUnhandledException(const std::exception&) override;
+
     void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx);
     void Execute(TAutoPtr<ITransaction> transaction);
     ui64 Enqueue(TAutoPtr<ITransaction> transaction);
     ui64 EnqueueExecute(TAutoPtr<ITransaction> transaction);
     ui64 EnqueueLowPriority(TAutoPtr<ITransaction> transaction);
 
-    const NTable::TScheme& Scheme() const noexcept;
+    const NTable::TScheme& Scheme() const;
 
     TActorContext ExecutorCtx(const TActivationContext &ctx) {
         return TActorContext(ctx.Mailbox, ctx.ExecutorThread, ctx.EventStart, ExecutorID());

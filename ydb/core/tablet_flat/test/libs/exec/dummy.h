@@ -3,6 +3,7 @@
 #include "events.h"
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
 #include <ydb/library/actors/core/actor.h>
 #include <util/system/type_name.h>
 
@@ -15,7 +16,7 @@ namespace NFake {
         virtual NFake::TEvExecute* OnFinished() = 0;
     };
 
-    class TDummy : public ::NActors::IActorCallback, public TExecuted {
+    class TDummy : public TActor<TDummy>, public TExecuted {
         enum EState {
             Boot    = 1,
             Work    = 2,
@@ -35,7 +36,7 @@ namespace NFake {
 
         TDummy(const TActorId &tablet, TInfo *info, const TActorId& owner,
                 ui32 flags = 0 /* ORed EFlg enum */)
-            : ::NActors::IActorCallback(static_cast<TReceiveFunc>(&TDummy::Inbox), NKikimrServices::TActivity::FAKE_ENV_A)
+            : TActor(&TDummy::Inbox, NKikimrServices::TActivity::FAKE_ENV_A)
             , TTabletExecutedFlat(info, tablet, nullptr)
             , Owner(owner)
             , Flags(flags)
@@ -46,7 +47,7 @@ namespace NFake {
         void Inbox(TEventHandlePtr &eh)
         {
             if (auto *ev = eh->CastAsLocal<NFake::TEvExecute>()) {
-                Y_ABORT_UNLESS(State == EState::Work, "Cannot handle TX now");
+                Y_ENSURE(State == EState::Work, "Cannot handle TX now");
 
                 for (auto& tx : ev->Txs) {
                     Execute(tx.Release(), this->ActorContext());
@@ -55,7 +56,7 @@ namespace NFake {
                     std::move(lambda)(Executor(), this->ActorContext());
                 }
             } else if (auto *ev = eh->CastAsLocal<NFake::TEvCompact>()) {
-                Y_ABORT_UNLESS(State == EState::Work, "Cannot handle compaction now");
+                Y_ENSURE(State == EState::Work, "Cannot handle compaction now");
 
                 if (ev->MemOnly) {
                     Executor()->CompactMemTable(ev->Table);
@@ -75,7 +76,7 @@ namespace NFake {
                      */
 
                     auto ctx(this->ActorContext());
-                    Executor()->DetachTablet(ctx), Detach(ctx);
+                    Executor()->DetachTablet(), Detach(ctx);
                 }
             } else if (State == EState::Boot) {
                 TTabletExecutedFlat::StateInitImpl(eh, SelfId());
@@ -85,7 +86,7 @@ namespace NFake {
             } else if (eh->CastAsLocal<TEvTabletPipe::TEvServerDisconnected>()){
 
             } else if (!TTabletExecutedFlat::HandleDefaultEvents(eh, SelfId())) {
-                Y_Fail("Unexpected event " << eh->GetTypeName());
+                Y_TABLET_ERROR("Unexpected event " << eh->GetTypeName());
             }
         }
 
@@ -93,7 +94,7 @@ namespace NFake {
         {
             const auto &name = eh->GetTypeName();
 
-            Y_ABORT("Got unexpected event %s on tablet booting", name.c_str());
+            Y_TABLET_ERROR("Got unexpected event " << name << " on tablet booting");
         }
 
         void DefaultSignalTabletActive(const TActorContext&) override
@@ -107,7 +108,7 @@ namespace NFake {
                 SignalTabletActive(SelfId());
                 Send(Owner, new NFake::TEvReady(TabletID(), SelfId()));
             } else {
-                Y_ABORT("Received unexpected TExecutor activation");
+                Y_TABLET_ERROR("Received unexpected TExecutor activation");
             }
         }
 
@@ -140,7 +141,7 @@ namespace NFake {
             if (auto* snapContext = dynamic_cast<TDummySnapshotContext*>(rawSnapContext.Get())) {
                 Send(SelfId(), snapContext->OnFinished());
             } else {
-                Y_ABORT("Unsupported snapshot context");
+                Y_TABLET_ERROR("Unsupported snapshot context");
             }
         }
 

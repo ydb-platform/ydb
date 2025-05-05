@@ -60,12 +60,7 @@ public:
     TScanHead& MutableScanner() {
         return *Scanner;
     }
-    virtual void OnSentDataFromInterval(const ui32 sourceIdx) const override {
-        if (!SpecialReadContext->IsActive()) {
-            return;
-        }
-        Scanner->ContinueSource(sourceIdx);
-    }
+    virtual void OnSentDataFromInterval(const TPartialSourceAddress& sourceAddress) override;
 
     void OnIntervalResult(const std::shared_ptr<TPartialReadResult>& result);
 

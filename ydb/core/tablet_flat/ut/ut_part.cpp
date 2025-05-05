@@ -16,7 +16,7 @@ namespace NTable {
 namespace {
     using namespace NTest;
 
-    NPage::TConf PageConf(size_t groups = 1) noexcept
+    NPage::TConf PageConf(size_t groups = 1)
     {
         NPage::TConf conf{ true, 2 * 1024 };
 
@@ -64,7 +64,7 @@ namespace {
                 Precharged[groupId].insert(pageId);
                 return NTest::TTestEnv::TryGetPage(part, pageId, groupId);
             } else {
-                Y_VERIFY_S(Precharged[groupId].count(pageId), "Requested page " << pageId << " should be precharged");
+                Y_ENSURE(Precharged[groupId].count(pageId), "Requested page " << pageId << " should be precharged");
                 return NTest::TTestEnv::TryGetPage(part, pageId, groupId);
             }
         }
@@ -664,7 +664,7 @@ Y_UNIT_TEST_SUITE(TPart) {
 
         TSubset subset(TEpoch::Zero(), cooked.Scheme);
         for (const auto &part : cooked.Parts) {
-            Y_ABORT_UNLESS(part->Slices, "Missing part slices");
+            Y_ENSURE(part->Slices, "Missing part slices");
             subset.Flatten.push_back({ part, nullptr, part->Slices });
         }
         for (int i = 1; i <= 1000; ++i) {

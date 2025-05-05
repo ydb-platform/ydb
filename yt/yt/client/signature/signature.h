@@ -25,16 +25,12 @@ public:
 private:
     NYson::TYsonString Header_;
     std::string Payload_;
-    std::vector<std::byte> Signature_;
+    std::string Signature_;
 
     friend struct ISignatureGenerator;
-    friend struct TDummySignatureGenerator;
-    friend struct TAlwaysThrowingSignatureGenerator;
     friend class TSignatureGenerator;
 
     friend struct ISignatureValidator;
-    friend struct TDummySignatureValidator;
-    friend struct TAlwaysThrowingSignatureValidator;
     friend class TSignatureValidator;
 
     friend void Serialize(const TSignature& signature, NYson::IYsonConsumer* consumer);

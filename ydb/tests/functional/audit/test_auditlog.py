@@ -13,7 +13,7 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb import Driver, DriverConfig, SessionPool
 from ydb.draft import DynamicConfigClient
 from ydb.tests.library.harness.util import LogLevels
-from ydb.tests.library.harness.ydb_fixtures import ydb_database_ctx
+from ydb.tests.library.fixtures import ydb_database_ctx
 
 logger = logging.getLogger(__name__)
 

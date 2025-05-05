@@ -45,11 +45,14 @@ struct TPartitionActorInfo {
     TSet<ui64> NextCommits;
     TDisjointIntervalTree<ui64> NextRanges;
     ui64 Offset;
+    bool ConsumerHasAnyCommits;
 
     TInstant AssignTimestamp;
 
     ui64 Generation;
     ui64 NodeId;
+    bool ReadingFinished;
+    ui64 EndOffset;
 
 
     struct TDirectReadInfo {
@@ -60,7 +63,8 @@ struct TPartitionActorInfo {
     ui64 MaxProcessedDirectReadId = 0;
     ui64 LastDirectReadId = 0;
 
-    std::map<i64, TDirectReadInfo> DirectReads;
+    std::map<ui64, TDirectReadInfo> DirectReads;
+    std::queue<ui64> PendingDirectReadAcks;
 
     explicit TPartitionActorInfo(
             const TActorId& actor,
@@ -82,8 +86,13 @@ struct TPartitionActorInfo {
         , AssignTimestamp(timestamp)
         , Generation(0)
         , NodeId(0)
+        , ReadingFinished(false)
     {
         Y_ABORT_UNLESS(partition.DiscoveryConverter != nullptr);
+    }
+
+    bool IsLastOffsetCommitted() const {
+        return ReadingFinished && EndOffset == Offset;
     }
 };
 
@@ -191,6 +200,7 @@ private:
 
     static constexpr ui64 MAX_INFLY_BYTES = 25_MB;
     static constexpr ui32 MAX_INFLY_READS = 10;
+    static constexpr ui32 MAX_PENDING_DIRECT_READ_ACKS = 10;
 
     static constexpr ui64 MAX_READ_SIZE = 100_MB;
     static constexpr ui64 READ_BLOCK_SIZE = 8_KB; // metering
@@ -330,6 +340,10 @@ private:
     void ProcessReads(const TActorContext& ctx);
     ui64 PrepareResponse(typename TFormedReadResponse<TServerMessage>::TPtr formedResponse);
     void ProcessAnswer(typename TFormedReadResponse<TServerMessage>::TPtr formedResponse, const TActorContext& ctx);
+    void ProcessDirectReads(
+        TPartitionsMap::iterator it,
+        const TActorContext& ctx
+    );
 
     void DropPartition(TPartitionsMapIterator& it, const TActorContext& ctx);
     void ReleasePartition(TPartitionsMapIterator& it, bool couldBeReads, const TActorContext& ctx);
@@ -340,6 +354,8 @@ private:
 
     static ui32 NormalizeMaxReadMessagesCount(ui32 sourceValue);
     static ui32 NormalizeMaxReadSize(ui32 sourceValue);
+
+    void NotifyChildren(const TPartitionActorInfo& partition, const TActorContext& ctx);
 
 private:
     std::unique_ptr</* type alias */ TEvStreamReadRequest> Request;
@@ -413,6 +429,7 @@ private:
     TMap<TPartitionId, TControlMessages> PartitionToControlMessages;
 
     std::deque<THolder<TEvPQProxy::TEvRead>> Reads;
+    std::deque<THolder<TEvPersQueue::TEvLockPartition>> Locks;
 
     ui64 Cookie;
 

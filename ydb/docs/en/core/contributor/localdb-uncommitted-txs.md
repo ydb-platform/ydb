@@ -28,44 +28,44 @@ Redo log (see [flat_redo_writer.h](https://github.com/ydb-platform/ydb/blob/main
 
 [MemTable](../concepts/glossary.md#memtable) in LocalDB is a relatively small in-memory sorted tree that maps table keys to values. MemTable value is a chain of MVCC (partial) rows, each tagged with a row version (a pair of Step and TxId which is a global timestamp). Rows are normally pre-merged across the given MemTable. For example, let's suppose there have been the following operations for some key K:
 
-| Version | Operation |
---- | ---
+| Version    | Operation              |
+|------------|------------------------|
 | `v1000/10` | `UPDATE ... SET A = 1` |
 | `v2000/11` | `UPDATE ... SET B = 2` |
 | `v3000/12` | `UPDATE ... SET C = 3` |
 
 Then the chain of rows for key K in a single MemTable will look like this:
 
-| Version | Row |
---- | ---
+| Version    | Row                       |
+|------------|---------------------------|
 | `v3000/12` | `SET A = 1, B = 2, C = 3` |
-| `v2000/11` | `SET A = 1, B = 2` |
-| `v1000/10` | `SET A = 1` |
+| `v2000/11` | `SET A = 1, B = 2`        |
+| `v1000/10` | `SET A = 1`               |
 
 However, if the MemTable was split between updates, it may look like this:
 
-| MemTable | Version | Row |
---- | --- | ---
-| Epoch 2 | `v3000/12` | `SET B = 2, C = 3` |
-| Epoch 2 | `v2000/11` | `SET B = 2` |
-| Epoch 1 | `v1000/10` | `SET A = 1` |
+| MemTable | Version | Row                |
+|----------| --- |--------------------|
+| Epoch 2  | `v3000/12` | `SET B = 2, C = 3` |
+| Epoch 2  | `v2000/11` | `SET B = 2`        |
+| Epoch 1  | `v1000/10` | `SET A = 1`        |
 
 Changes are applied to the current MemTable, and uncommitted changes are no exception. However, they are tagged with a special version (where Step is the maximum possible number, as if they are in some "distant" future, and TxId is their uncommitted TxId), without any pre-merging. For example, let's suppose we additionally performed the following operations:
 
-| TxId | Operation |
---- | ---
-| 15 | `UPDATE ... SET C = 10` |
-| 13 | `UPDATE ... SET B = 20` |
+| TxId | Operation               |
+|------|-------------------------|
+| 15   | `UPDATE ... SET C = 10` |
+| 13   | `UPDATE ... SET B = 20` |
 
 The update chain for our key K will look like this:
 
-| Version | Row |
---- | ---
-| `v{max}/13` | `SET B = 20` |
-| `v{max}/15` | `SET C = 10` |
-| `v3000/12` | `SET A = 1, B = 2, C = 3` |
-| `v2000/11` | `SET A = 1, B = 2` |
-| `v1000/10` | `SET A = 1` |
+| Version     | Row                       |
+|-------------|---------------------------|
+| `v{max}/13` | `SET B = 20`              |
+| `v{max}/15` | `SET C = 10`              |
+| `v3000/12`  | `SET A = 1, B = 2, C = 3` |
+| `v2000/11`  | `SET A = 1, B = 2`        |
+| `v1000/10`  | `SET A = 1`               |
 
 When reading [iterator](https://github.com/ydb-platform/ydb/blob/main/ydb/core/tablet_flat/flat_mem_iter.h) performs a lookup for changes with `Step == max` into an [in-memory transaction map](https://github.com/ydb-platform/ydb/blob/0e69bf615395fdd48ecee032faaec81bc468b0b8/ydb/core/tablet_flat/flat_table.h#L359), which maps committed TxIds to their corresponding commit versions, and applies all committed deltas until it finds and applies a pre-merged row with `Step != max`.
 
@@ -73,14 +73,14 @@ Let's suppose we commit tx 13 at `v4000/20`. At that point transaction map is up
 
 Let's suppose we now perform an `UPDATE ... SET A = 30` at version `v5000/21`, the resulting chain will look as follows:
 
-| Version | Row |
---- | ---
-| `v5000/21` | `SET A = 30, B = 20, C = 3` |
-| `v{max}/13` | `SET B = 20` |
-| `v{max}/15` | `SET C = 10` |
-| `v3000/12` | `SET A = 1, B = 2, C = 3` |
-| `v2000/11` | `SET A = 1, B = 2` |
-| `v1000/10` | `SET A = 1` |
+| Version     | Row                         |
+|-------------|-----------------------------|
+| `v5000/21`  | `SET A = 30, B = 20, C = 3` |
+| `v{max}/13` | `SET B = 20`                |
+| `v{max}/15` | `SET C = 10`                |
+| `v3000/12`  | `SET A = 1, B = 2, C = 3`   |
+| `v2000/11`  | `SET A = 1, B = 2`          |
+| `v1000/10`  | `SET A = 1`                 |
 
 Notice how the new record has its state pre-merged, including the previously committed delta for tx 13. Since tx 15 is not committed it was skipped and baked into a pre-merged state for `v5000/21`. It is important that tx 15 is not committed afterwards, and would result in a read anomaly otherwise: some versions would observe it as committed, and some won't.
 
@@ -92,58 +92,58 @@ Data pages (see [flat_page_data.h](https://github.com/ydb-platform/ydb/blob/main
 
 One key may have several uncommitted delta records, as well as (optionally) the latest committed record data. Historically, data pages could only have one record (and one record pointer) per key, so the record pointer leads to the top of the delta chain, and other records are available via additional per-record offset table for other records:
 
-| Offset | Description |
---- | ---
-| -X*8 | offset of Main |
-| ... | ... |
-| -16 | offset of Delta 2 |
-| -8 | offset of Delta 1 |
-| 0 | header of Delta 0 |
-| ... | ... |
+| Offset            | Description       |
+|-------------------|-------------------|
+| -X*8              | offset of Main    |
+| ...               | ...               |
+| -16               | offset of Delta 2 |
+| -8                | offset of Delta 1 |
+| 0                 | header of Delta 0 |
+| ...               | ...               |
 | offset of Delta 1 | header of Delta 1 |
-| ... | ... |
-| offset of Main | header of Main |
+| ...               | ...               |
+| offset of Main    | header of Main    |
 
 Having a pointer to Delta 0, other records for the same key are available with the `GetAltRecord(size_t index)` method, where `index` is the record number (which is 1 for Delta 1). The chain of records ends either with a pointer to the record without an IsDelta flag (the Main record), or 0 (when there is no Main record for the key).
 
 Let's suppose that after writing tx 13 above the MemTable was compacted. Entry for the 32-bit key K may look like this (offsets are relative to the record pointer on the table):
 
-| Offset | Value | Description |
---- | --- | ---
-| -16 | 58 | offset of Main |
-| -8 | 29 | offset of Delta 1 |
-| 0 | 0x21 | Delta 0: IsDelta + ERowOp::Upsert |
-| 1 | 0x00 | .. key column is not NULL |
-| 2 | K | .. key column (32-bit) |
-| 6 | 0x00 | .. column A is empty |
-| 7 | 0 | .. column A (32-bit) |
-| 11 | 0x01 | .. column B = ECellOp::Set |
-| 12 | 20 | .. column B (32-bit) |
-| 16 | 0x00 | .. column C is empty |
-| 17 | 0 | .. column C (32-bit) |
-| 21 | 13 | .. TDelta::TxId |
-| 29 | 0x21 | Delta 1: IsDelta + ERowOp::Upsert |
-| 30 | 0x00 | .. key column is not NULL |
-| 31 | K | .. key column (32-bit) |
-| 35 | 0x00 | .. column A is empty |
-| 36 | 0 | .. column A (32-bit) |
-| 40 | 0x00 | .. column B is empty |
-| 41 | 0 | .. column B (32-bit) |
-| 45 | 0x01 | .. column C = ECellOp::Set |
-| 46 | 10 | .. column C (32-bit) |
-| 50 | 15 | .. TDelta::TxId |
-| 58 | 0x61 | Main: HasHistory + IsVersioned + ERowOp::Upsert |
-| 59 | 0x00 | .. key column is not NULL |
-| 60 | K | .. key column (32-bit) |
-| 64 | 0x01 | .. column A = ECellOp::Set |
-| 65 | 1 | .. column A (32-bit) |
-| 69 | 0x01 | .. column B = ECellOp::Set |
-| 70 | 2 | .. column B (32-bit) |
-| 74 | 0x01 | .. column C = ECellOp::Set |
-| 75 | 3 | .. column C (32-bit) |
-| 79 | 3000 | .. RowVersion.Step |
-| 87 | 12 | .. RowVersion.TxId |
-| 95 | - | End of record |
+| Offset | Value | Description                                     |
+|--------| --- |-------------------------------------------------|
+| -16    | 58 | offset of Main                                  |
+| -8     | 29 | offset of Delta 1                               |
+| 0      | 0x21 | Delta 0: IsDelta + ERowOp::Upsert               |
+| 1      | 0x00 | .. key column is not NULL                       |
+| 2      | K | .. key column (32-bit)                          |
+| 6      | 0x00 | .. column A is empty                            |
+| 7      | 0 | .. column A (32-bit)                            |
+| 11     | 0x01 | .. column B = ECellOp::Set                      |
+| 12     | 20 | .. column B (32-bit)                            |
+| 16     | 0x00 | .. column C is empty                            |
+| 17     | 0 | .. column C (32-bit)                            |
+| 21     | 13 | .. TDelta::TxId                                 |
+| 29     | 0x21 | Delta 1: IsDelta + ERowOp::Upsert               |
+| 30     | 0x00 | .. key column is not NULL                       |
+| 31     | K | .. key column (32-bit)                          |
+| 35     | 0x00 | .. column A is empty                            |
+| 36     | 0 | .. column A (32-bit)                            |
+| 40     | 0x00 | .. column B is empty                            |
+| 41     | 0 | .. column B (32-bit)                            |
+| 45     | 0x01 | .. column C = ECellOp::Set                      |
+| 46     | 10 | .. column C (32-bit)                            |
+| 50     | 15 | .. TDelta::TxId                                 |
+| 58     | 0x61 | Main: HasHistory + IsVersioned + ERowOp::Upsert |
+| 59     | 0x00 | .. key column is not NULL                       |
+| 60     | K | .. key column (32-bit)                          |
+| 64     | 0x01 | .. column A = ECellOp::Set                      |
+| 65     | 1 | .. column A (32-bit)                            |
+| 69     | 0x01 | .. column B = ECellOp::Set                      |
+| 70     | 2 | .. column B (32-bit)                            |
+| 74     | 0x01 | .. column C = ECellOp::Set                      |
+| 75     | 3 | .. column C (32-bit)                            |
+| 79     | 3000 | .. RowVersion.Step                              |
+| 87     | 12 | .. RowVersion.TxId                              |
+| 95     | - | End of record                                   |
 
 The HasHistory flag in the Main record shows that other two records are stored among history data with keys `(RowId, 2000, 11)` and `(RowId, 1000, 10)` respectively.
 

@@ -4,6 +4,16 @@
 using namespace NYql;
 using namespace NYql::NFastCheck;
 
+namespace {
+
+TChecksRequest MakeCheckRequest() {
+    return TChecksRequest{
+        .LangVer = GetMaxReleasedLangVersion()
+    };
+}
+
+}
+
 Y_UNIT_TEST_SUITE(TLinterTests) {
     Y_UNIT_TEST(ListChecksResult) {
         auto res = ListChecks();
@@ -11,7 +21,7 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
     }
 
     Y_UNIT_TEST(DummyLexerSExpr) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "((return world))";
         request.Syntax = ESyntax::SExpr;
         request.Filters.ConstructInPlace();
@@ -19,12 +29,12 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
         auto res = RunChecks(request);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "lexer");
-        UNIT_ASSERT(res.Checks[0].Success);
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(), 0);
     }
 
     Y_UNIT_TEST(DummyLexerPg) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "select 1::text";
         request.Syntax = ESyntax::PG;
         request.Filters.ConstructInPlace();
@@ -32,12 +42,12 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
         auto res = RunChecks(request);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "lexer");
-        UNIT_ASSERT(res.Checks[0].Success);
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(), 0);
     }
 
     Y_UNIT_TEST(GoodLexerYql) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "1";
         request.Syntax = ESyntax::YQL;
         request.Filters.ConstructInPlace();
@@ -45,12 +55,12 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
         auto res = RunChecks(request);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "lexer");
-        UNIT_ASSERT(res.Checks[0].Success);
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(), 0);
     }
 
     Y_UNIT_TEST(BadLexerYql) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "Я";
         request.Syntax = ESyntax::YQL;
         request.Filters.ConstructInPlace();
@@ -64,7 +74,7 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
     }
 
     Y_UNIT_TEST(DummyFormatSExpr) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "((return world))";
         request.Syntax = ESyntax::SExpr;
         request.Filters.ConstructInPlace();
@@ -72,12 +82,12 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
         auto res = RunChecks(request);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "format");
-        UNIT_ASSERT(res.Checks[0].Success);
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(), 0);
     }
 
     Y_UNIT_TEST(DummyFormatPg) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "select 1::text";
         request.Syntax = ESyntax::PG;
         request.Filters.ConstructInPlace();
@@ -85,12 +95,12 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
         auto res = RunChecks(request);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "format");
-        UNIT_ASSERT(res.Checks[0].Success);
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(), 0);
     }
 
     Y_UNIT_TEST(GoodFormatYql) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "SELECT\n    1\n;\n";
         request.Syntax = ESyntax::YQL;
         request.Filters.ConstructInPlace();
@@ -98,13 +108,12 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
         auto res = RunChecks(request);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "format");
-        UNIT_ASSERT(res.Checks[0].Success);
-        Cerr << res.Checks[0].Issues.ToString();
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(), 0);
     }
 
     Y_UNIT_TEST(GoodFormatYqlWithWinEOL) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "SELECT\r\n    1\r\n;\r\n";
         request.Syntax = ESyntax::YQL;
         request.Filters.ConstructInPlace();
@@ -112,13 +121,25 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
         auto res = RunChecks(request);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "format");
-        UNIT_ASSERT(res.Checks[0].Success);
-        Cerr << res.Checks[0].Issues.ToString();
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(), 0);
+    }
+
+    Y_UNIT_TEST(GoodFormatYqlWithWinEOLInComment) {
+        TChecksRequest request = MakeCheckRequest();
+        request.Program = "--\r\nSELECT\n    1\n;\n\nSELECT\n    2\n;\n";
+        request.Syntax = ESyntax::YQL;
+        request.Filters.ConstructInPlace();
+        request.Filters->push_back(TCheckFilter{.CheckNameGlob = "format"});
+        auto res = RunChecks(request);
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "format");
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(), 0);
     }
 
     Y_UNIT_TEST(UnparsedFormatYql) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "select1\n";
         request.Syntax = ESyntax::YQL;
         request.Filters.ConstructInPlace();
@@ -126,13 +147,12 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
         auto res = RunChecks(request);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "format");
-        UNIT_ASSERT(res.Checks[0].Success);
-        Cerr << res.Checks[0].Issues.ToString();
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(), 0);
     }
 
     Y_UNIT_TEST(BadFormatYql) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "select 1";
         request.Syntax = ESyntax::YQL;
         request.Filters.ConstructInPlace();
@@ -146,7 +166,7 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
     }
 
     Y_UNIT_TEST(ContextForBadFormatYql) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "SELECT\n    'привет',1;";
         request.File = "myFile.sql";
         request.Syntax = ESyntax::YQL;
@@ -163,8 +183,28 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
         UNIT_ASSERT_VALUES_EQUAL(pos.Column, 13);
     }
 
+    Y_UNIT_TEST(BadFormatYqlHidden) {
+        TChecksRequest request = MakeCheckRequest();
+        request.Program = "select\t1 ";
+        request.Syntax = ESyntax::YQL;
+        request.Filters.ConstructInPlace();
+        request.Filters->push_back(TCheckFilter{.CheckNameGlob = "format"});
+        auto res = RunChecks(request);
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "format");
+        UNIT_ASSERT(!res.Checks[0].Success);
+        UNIT_ASSERT_NO_DIFF(res.Checks[0].Issues.ToString(),
+            "<main>:1:0: Warning: Format mismatch, expected:\n"
+            "SELECT\n"
+            "••••1\n"
+            ";\n\n"
+            "but got:\n"
+            "select→1•\n"
+            ", code: 3\n");
+    }
+
     Y_UNIT_TEST(GoodParserSExpr) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "((return world))";
         request.Syntax = ESyntax::SExpr;
         request.Filters.ConstructInPlace();
@@ -172,13 +212,12 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
         auto res = RunChecks(request);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "parser");
-        UNIT_ASSERT(res.Checks[0].Success);
-        Cerr << res.Checks[0].Issues.ToString();
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(),0);
     }
 
     Y_UNIT_TEST(BadParserSExpr) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = ")";
         request.Syntax = ESyntax::SExpr;
         request.Filters.ConstructInPlace();
@@ -192,7 +231,7 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
     }
 
     Y_UNIT_TEST(GoodParserPg) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "select 1::text";
         request.Syntax = ESyntax::PG;
         request.Filters.ConstructInPlace();
@@ -200,13 +239,12 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
         auto res = RunChecks(request);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "parser");
-        UNIT_ASSERT(res.Checks[0].Success);
-        Cerr << res.Checks[0].Issues.ToString();
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(),0);
     }
 
     Y_UNIT_TEST(BadParserPg) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "sel";
         request.Syntax = ESyntax::PG;
         request.Filters.ConstructInPlace();
@@ -220,7 +258,7 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
     }
 
     Y_UNIT_TEST(DummyParserPg) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "select 1::text";
         request.Syntax = ESyntax::PG;
         request.Filters.ConstructInPlace();
@@ -228,12 +266,12 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
         auto res = RunChecks(request);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "parser");
-        UNIT_ASSERT(res.Checks[0].Success);
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(), 0);
     }
 
     Y_UNIT_TEST(GoodParserYql) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "SELECT 1";
         request.Syntax = ESyntax::YQL;
         request.Filters.ConstructInPlace();
@@ -241,12 +279,12 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
         auto res = RunChecks(request);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "parser");
-        UNIT_ASSERT(res.Checks[0].Success);
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(), 0);
     }
 
     Y_UNIT_TEST(BadParserYql) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "1";
         request.Syntax = ESyntax::YQL;
         request.Filters.ConstructInPlace();
@@ -260,7 +298,7 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
     }
 
     Y_UNIT_TEST(DummyTranslatorSExpr) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "((return world))";
         request.Syntax = ESyntax::SExpr;
         request.Filters.ConstructInPlace();
@@ -268,12 +306,12 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
         auto res = RunChecks(request);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "translator");
-        UNIT_ASSERT(res.Checks[0].Success);
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(), 0);
     }
 
     Y_UNIT_TEST(GoodTranslatorPg) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.ClusterMapping["plato"] = TString(YtProviderName);
         request.Program = "select * from plato.\"Input\"";
         request.Syntax = ESyntax::PG;
@@ -282,13 +320,12 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
         auto res = RunChecks(request);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "translator");
-        UNIT_ASSERT(res.Checks[0].Success);
-        Cerr << res.Checks[0].Issues.ToString();
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(),0);
     }
 
     Y_UNIT_TEST(BadTranslatorPg) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "select * from \"Input\"";
         request.Syntax = ESyntax::PG;
         request.Filters.ConstructInPlace();
@@ -302,7 +339,7 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
     }
 
     Y_UNIT_TEST(GoodTranslatorYql) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.ClusterMapping["plato"] = TString(YtProviderName);
         request.Program = "use plato; select * from Input";
         request.Syntax = ESyntax::YQL;
@@ -311,13 +348,12 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
         auto res = RunChecks(request);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "translator");
-        UNIT_ASSERT(res.Checks[0].Success);
-        Cerr << res.Checks[0].Issues.ToString();
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(),0);
     }
 
     Y_UNIT_TEST(BadTranslatorYql) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "select ListLengggth([1,2,3])";
         request.Syntax = ESyntax::YQL;
         request.Filters.ConstructInPlace();
@@ -331,7 +367,7 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
     }
 
     Y_UNIT_TEST(AllowYqlExportsForLibrary) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "$a = 1; export $a";
         request.Mode = EMode::Library;
         request.Syntax = ESyntax::YQL;
@@ -340,13 +376,12 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
         auto res = RunChecks(request);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "translator");
-        UNIT_ASSERT(res.Checks[0].Success);
-        Cerr << res.Checks[0].Issues.ToString();
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(),0);
     }
 
     Y_UNIT_TEST(AllowYqlExportsForDefault) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "$a = 1; export $a";
         request.Syntax = ESyntax::YQL;
         request.Filters.ConstructInPlace();
@@ -354,13 +389,12 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
         auto res = RunChecks(request);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "translator");
-        UNIT_ASSERT(res.Checks[0].Success);
-        Cerr << res.Checks[0].Issues.ToString();
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(),0);
     }
 
     Y_UNIT_TEST(DisallowYqlExportsForMain) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "$a = 1; export $a";
         request.Syntax = ESyntax::YQL;
         request.Mode = EMode::Main;
@@ -375,7 +409,7 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
     }
 
     Y_UNIT_TEST(DisallowYqlExportsForView) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "$a = 1; export $a";
         request.Syntax = ESyntax::YQL;
         request.Mode = EMode::View;
@@ -390,7 +424,7 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
     }
 
     Y_UNIT_TEST(GoodYqlView) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "select 1";
         request.Syntax = ESyntax::YQL;
         request.Mode = EMode::View;
@@ -399,13 +433,12 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
         auto res = RunChecks(request);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "translator");
-        UNIT_ASSERT(res.Checks[0].Success);
-        Cerr << res.Checks[0].Issues.ToString();
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(),0);
     }
 
     Y_UNIT_TEST(BadYqlView) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "select 1;select 2";
         request.Syntax = ESyntax::YQL;
         request.Mode = EMode::View;
@@ -420,7 +453,7 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
     }
 
     Y_UNIT_TEST(AllChecks) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "SELECT\n    1\n;\n";
         request.Syntax = ESyntax::YQL;
         auto res = RunChecks(request);
@@ -437,7 +470,7 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
     }
 
     Y_UNIT_TEST(AllChecksByStar) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "SELECT\n    1\n;\n";
         request.Syntax = ESyntax::YQL;
         request.Filters.ConstructInPlace();
@@ -456,7 +489,7 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
     }
 
     Y_UNIT_TEST(NoChecksByStarWithSecondFilter) {
-        TChecksRequest request;
+        TChecksRequest request = MakeCheckRequest();
         request.Program = "1";
         request.Syntax = ESyntax::YQL;
         request.Filters.ConstructInPlace();
@@ -465,6 +498,135 @@ Y_UNIT_TEST_SUITE(TLinterTests) {
         auto res = RunChecks(request);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "lexer");
-        UNIT_ASSERT(res.Checks[0].Success);
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
+    }
+
+    Y_UNIT_TEST(BadTranslatorYqlWithoutUseMany) {
+        TChecksRequest request = MakeCheckRequest();
+        request.Program = "select * from Input";
+        request.Syntax = ESyntax::YQL;
+        request.Filters.ConstructInPlace();
+        request.Filters->push_back(TCheckFilter{.CheckNameGlob = "translator"});
+        auto res = RunChecks(request);
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "translator");
+        UNIT_ASSERT(!res.Checks[0].Success);
+        Cerr << res.Checks[0].Issues.ToString();
+        UNIT_ASSERT(res.Checks[0].Issues.Size() > 0);
+    }
+
+    Y_UNIT_TEST(GoodTranslatorYqlWithoutUseSingle) {
+        TChecksRequest request = MakeCheckRequest();
+        request.Program = "select * from Input";
+        request.ClusterMode = EClusterMode::Single;
+        request.ClusterSystem = YtProviderName;
+        request.Syntax = ESyntax::YQL;
+        request.Filters.ConstructInPlace();
+        request.Filters->push_back(TCheckFilter{.CheckNameGlob = "translator"});
+        auto res = RunChecks(request);
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "translator");
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(),0);
+    }
+
+    Y_UNIT_TEST(GoodTranslatorYqlWithoutUseUnknown) {
+        TChecksRequest request = MakeCheckRequest();
+        request.Program = "select * from Input";
+        request.ClusterMode = EClusterMode::Unknown;
+        request.Syntax = ESyntax::YQL;
+        request.Filters.ConstructInPlace();
+        request.Filters->push_back(TCheckFilter{.CheckNameGlob = "translator"});
+        auto res = RunChecks(request);
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "translator");
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(),0);
+    }
+
+    Y_UNIT_TEST(BadTranslatorYqlAnotherClusterMany) {
+        TChecksRequest request = MakeCheckRequest();
+        request.Program = "select * from foo.Input";
+        request.Syntax = ESyntax::YQL;
+        request.Filters.ConstructInPlace();
+        request.Filters->push_back(TCheckFilter{.CheckNameGlob = "translator"});
+        auto res = RunChecks(request);
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "translator");
+        UNIT_ASSERT(!res.Checks[0].Success);
+        Cerr << res.Checks[0].Issues.ToString();
+        UNIT_ASSERT(res.Checks[0].Issues.Size() > 0);
+    }
+
+    Y_UNIT_TEST(GoodTranslatorYqlAnotherClusterMany) {
+        TChecksRequest request = MakeCheckRequest();
+        request.Program = "select * from foo.Input";
+        request.ClusterSystem = YtProviderName;
+        request.Syntax = ESyntax::YQL;
+        request.Filters.ConstructInPlace();
+        request.Filters->push_back(TCheckFilter{.CheckNameGlob = "translator"});
+        auto res = RunChecks(request);
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "translator");
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(),0);
+    }
+
+    Y_UNIT_TEST(GoodTranslatorYqlUnknownSystemUpdate) {
+        TChecksRequest request = MakeCheckRequest();
+        request.Program = "update foo set value = 1";
+        request.ClusterMode = EClusterMode::Unknown;
+        request.Syntax = ESyntax::YQL;
+        request.Filters.ConstructInPlace();
+        request.Filters->push_back(TCheckFilter{.CheckNameGlob = "translator"});
+        auto res = RunChecks(request);
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "translator");
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(),0);
+    }
+
+    Y_UNIT_TEST(GoodTranslatorYqlUnknownSystemDelete) {
+        TChecksRequest request = MakeCheckRequest();
+        request.Program = "delete from foo where value = 1";
+        request.ClusterMode = EClusterMode::Unknown;
+        request.Syntax = ESyntax::YQL;
+        request.Filters.ConstructInPlace();
+        request.Filters->push_back(TCheckFilter{.CheckNameGlob = "translator"});
+        auto res = RunChecks(request);
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "translator");
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(),0);
+    }
+
+    Y_UNIT_TEST(GoodTranslatorYqlUnknownSystemReplaceInto) {
+        TChecksRequest request = MakeCheckRequest();
+        request.Program = "replace into foo select 1";
+        request.ClusterMode = EClusterMode::Unknown;
+        request.Syntax = ESyntax::YQL;
+        request.Filters.ConstructInPlace();
+        request.Filters->push_back(TCheckFilter{.CheckNameGlob = "translator"});
+        auto res = RunChecks(request);
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "translator");
+        UNIT_ASSERT_C(res.Checks[0].Success, res.Checks[0].Issues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].Issues.Size(),0);
+    }
+
+    Y_UNIT_TEST(TooHighLangVersion) {
+        TChecksRequest request;
+        request.LangVer = GetMaxLangVersion();
+        request.ClusterMapping["plato"] = TString(YtProviderName);
+        request.Program = "use plato; select * from Input";
+        request.Syntax = ESyntax::YQL;
+        request.Filters.ConstructInPlace();
+        request.Filters->push_back(TCheckFilter{.CheckNameGlob = "translator"});
+        auto res = RunChecks(request);
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "translator");
+        UNIT_ASSERT(!res.Checks[0].Success);
+        Cerr << res.Checks[0].Issues.ToString();
+        UNIT_ASSERT(res.Checks[0].Issues.Size() > 0);
     }
 }

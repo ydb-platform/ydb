@@ -13,7 +13,7 @@ namespace NActors {
 
     struct TBasicExecutorPoolConfig {
         static constexpr TDuration DEFAULT_TIME_PER_MAILBOX = TDuration::MilliSeconds(10);
-        static constexpr ui32 DEFAULT_EVENTS_PER_MAILBOX = 1'000'000;
+        static constexpr ui32 DEFAULT_EVENTS_PER_MAILBOX = 100;
 
         ui32 PoolId = 0;
         TString PoolName;

@@ -41,7 +41,7 @@ EExecutionStatus TReceiveSnapshotCleanupUnit::Execute(TOperation::TPtr op,
                                                       const TActorContext &)
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     auto &schemeTx = tx->GetSchemeTx();
     if (!schemeTx.HasReceiveSnapshot())

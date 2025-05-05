@@ -25,7 +25,7 @@ $ {{ ydb-cli }} -e <endpoint> -d <database> table ttl set --column modified_at -
 Следующий пример демонстрирует включение вытеснения данных через вызов YQL-запроса из {{ ydb-short-name }} CLI. Строки таблицы `mytable` будут переноситься в бакет, описанный во внешнем источнике данных `/Root/s3_cold_data`, спустя час после наступления времени, записанного в колонке `created_at`, а спустя 24 часа будут удаляться.
 
 ```bash
-$ {{ ydb-cli }} -e <endpoint> -d <database> table query execute -q '
+$ {{ ydb-cli }} -e <endpoint> -d <database> sql -s '
     ALTER TABLE `mytable` SET (
         TTL =
             Interval("PT1H") TO EXTERNAL DATA SOURCE `/Root/s3_cold_data`,

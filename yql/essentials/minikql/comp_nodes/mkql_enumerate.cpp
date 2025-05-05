@@ -129,7 +129,7 @@ public:
         const auto start = GetterFor<ui64>(startv, context, block);
         const auto step = GetterFor<ui64>(stepv, context, block);
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TEnumerateWrapper::WrapList));
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TEnumerateWrapper::WrapList>());
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
 

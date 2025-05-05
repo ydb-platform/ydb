@@ -14,7 +14,9 @@
 #include <string>
 #include <string_view>
 
-namespace NYdb::NIssue {
+namespace NYdb {
+inline namespace Dev {
+namespace NIssue {
 
 using TIssueCode = uint32_t;
 constexpr TIssueCode DEFAULT_ERROR = 0;
@@ -329,7 +331,9 @@ public:
 TIssue ExceptionToIssue(const std::exception& e, const TPosition& pos = TPosition());
 std::optional<TPosition> TryParseTerminationMessage(std::string_view& message);
 
-} // namespace NYql
+}
+}
+}
 
 template <>
 void Out<NYdb::NIssue::TPosition>(IOutputStream& out, const NYdb::NIssue::TPosition& pos);

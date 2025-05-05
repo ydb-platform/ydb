@@ -73,6 +73,9 @@ namespace NKikimrConfig {
     class TMetadataCacheConfig;
     class TMemoryControllerConfig;
     class TFeatureFlags;
+    class THealthCheckConfig;
+    class TWorkloadManagerConfig;
+    class TQueryServiceConfig;
 }
 
 namespace NKikimrReplication {
@@ -113,7 +116,7 @@ namespace NMonitoring {
     class TBusNgMonPage;
 }
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
     class TDriver;
 }
 
@@ -152,6 +155,10 @@ namespace NSchemeShard {
     class IOperationFactory;
 }
 
+namespace NReplication::NService {
+    class ITransferWriterFactory;
+}
+
 class TFormatFactory;
 
 namespace NYamlConfig {
@@ -187,6 +194,7 @@ struct TAppData {
 
     const NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory* PersQueueGetReadSessionsInfoWorkerFactory = nullptr;
     const NPQ::IPersQueueMirrorReaderFactory* PersQueueMirrorReaderFactory = nullptr;
+    std::shared_ptr<NReplication::NService::ITransferWriterFactory> TransferWriterFactory = nullptr;
     NYdb::TDriver* YdbDriver = nullptr;
     const NPDisk::IIoContextFactory* IoContextFactory = nullptr;
 
@@ -242,6 +250,9 @@ struct TAppData {
     NKikimrReplication::TReplicationDefaults& ReplicationConfig;
     NKikimrProto::TDataIntegrityTrailsConfig& DataIntegrityTrailsConfig;
     NKikimrConfig::TDataErasureConfig& DataErasureConfig;
+    NKikimrConfig::THealthCheckConfig& HealthCheckConfig;
+    NKikimrConfig::TWorkloadManagerConfig& WorkloadManagerConfig;
+    NKikimrConfig::TQueryServiceConfig& QueryServiceConfig;
     bool EnforceUserTokenRequirement = false;
     bool EnforceUserTokenCheckRequirement = false; // check token if it was specified
     bool AllowHugeKeyValueDeletes = true; // delete when all clients limit deletes per request

@@ -112,7 +112,7 @@ namespace NKikimr {
             , Ev(ev)
             , NotifyId(notifyId)
         {
-            Y_ABORT_UNLESS(Ev->Get()->SubRequestId == TDbMon::SyncerInfoId);
+            Y_VERIFY_S(Ev->Get()->SubRequestId == TDbMon::SyncerInfoId, SyncerContext->VCtx->VDiskLogPrefix);
         }
     };
 

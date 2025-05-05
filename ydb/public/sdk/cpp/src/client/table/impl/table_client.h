@@ -1,16 +1,16 @@
 #pragma once
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/session_client/session_client.h>
-#include <src/client/impl/ydb_internal/scheme_helpers/helpers.h>
-#include <src/client/impl/ydb_internal/table_helpers/helpers.h>
-#include <src/client/impl/ydb_internal/make_request/make.h>
-#include <src/client/impl/ydb_internal/session_pool/session_pool.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/session_client/session_client.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/scheme_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/table_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/session_pool/session_pool.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
-#include <src/client/common_client/impl/client.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 
 #include "client_session.h"
@@ -18,8 +18,10 @@
 #include "request_migrator.h"
 #include "readers.h"
 
+#include <library/cpp/threading/future/core/coroutine_traits.h>
 
-namespace NYdb::inline V3 {
+
+namespace NYdb::inline Dev {
 namespace NTable {
 
 //How ofter run host scan to perform session balancing
@@ -179,24 +181,30 @@ private:
         const TExecDataQuerySettings& settings, bool fromCache
     ) {
         if (!txControl.Tx_.has_value() || !txControl.CommitTx_) {
-            return ExecuteDataQueryInternal(session, query, txControl, params, settings, fromCache);
+            co_return co_await AsExtractingAwaitable(ExecuteDataQueryInternal(session, query, txControl, params, settings, fromCache));
         }
 
-        auto onPrecommitCompleted = [this, session, query, txControl, params, settings, fromCache](const NThreading::TFuture<TStatus>& f) {
-            TStatus status = f.GetValueSync();
-            if (!status.IsSuccess()) {
-                return NThreading::MakeFuture(TDataQueryResult(std::move(status),
-                                                               {},
-                                                               txControl.Tx_,
-                                                               std::nullopt,
-                                                               false,
-                                                               std::nullopt));
-            }
+        auto sessionCopy = session;
+        auto settingsCopy = settings;
+        auto queryCopy = query;
+        auto txControlCopy = txControl;
+        auto paramsCopy = params;
 
-            return ExecuteDataQueryInternal(session, query, txControl, params, settings, fromCache);
-        };
+        auto status = co_await txControlCopy.Tx_->Precommit();
 
-        return txControl.Tx_->Precommit().Apply(onPrecommitCompleted);
+        if (!status.IsSuccess()) {
+            co_return TDataQueryResult(std::move(status), {}, txControlCopy.Tx_, std::nullopt, false, std::nullopt);
+        }
+
+        auto dataQueryResult = co_await AsExtractingAwaitable(ExecuteDataQueryInternal(sessionCopy, queryCopy, txControlCopy, paramsCopy, settingsCopy, fromCache));
+
+        if (!dataQueryResult.IsSuccess()) {
+            co_await txControlCopy.Tx_->ProcessFailure();
+
+            co_return std::move(dataQueryResult);
+        }
+
+        co_return std::move(dataQueryResult);
     }
 
     template <typename TQueryType, typename TParamsType>

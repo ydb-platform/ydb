@@ -8,6 +8,7 @@
 #include <ydb/core/fq/libs/control_plane_config/control_plane_config.h>
 #include <ydb/core/fq/libs/control_plane_proxy/control_plane_proxy.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
+#include <ydb/core/fq/libs/db_id_async_resolver_impl/http_proxy.h>
 #include <ydb/core/fq/libs/health/health.h>
 #include <ydb/core/fq/libs/private_client/internal_service.h>
 #include <ydb/core/fq/libs/private_client/loopback_service.h>
@@ -45,7 +46,7 @@
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
-#include <ydb/library/yql/providers/solomon/async_io/dq_solomon_write_actor.h>
+#include <ydb/library/yql/providers/solomon/actors/dq_solomon_write_actor.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 
 
@@ -151,7 +152,12 @@ void Init(
     }
 
     if (protoConfig.GetRateLimiter().GetDataPlaneEnabled()) {
-        actorRegistrator(NFq::YqQuoterServiceActorId(), NFq::CreateQuoterService(protoConfig.GetRateLimiter(), yqSharedResources, NKikimr::CreateYdbCredentialsProviderFactory));
+        actorRegistrator(
+            NFq::YqQuoterServiceActorId(),
+            NFq::CreateQuoterService(protoConfig.GetRateLimiter(),
+            yqSharedResources,
+            NKikimr::CreateYdbCredentialsProviderFactory,
+            yqCounters->GetSubgroup("subsystem", "quoter_service")));
     }
 
     if (protoConfig.GetAudit().GetEnabled()) {
@@ -168,7 +174,12 @@ void Init(
     }
 
     if (protoConfig.GetCheckpointCoordinator().GetEnabled()) {
-        auto checkpointStorage = NFq::NewCheckpointStorageService(protoConfig.GetCheckpointCoordinator(), protoConfig.GetCommon(), NKikimr::CreateYdbCredentialsProviderFactory, yqSharedResources);
+        auto checkpointStorage = NFq::NewCheckpointStorageService(
+            protoConfig.GetCheckpointCoordinator(),
+            protoConfig.GetCommon(),
+            NKikimr::CreateYdbCredentialsProviderFactory,
+            yqSharedResources,
+            yqCounters->GetSubgroup("subsystem", "checkpoint_storage"));
         actorRegistrator(NYql::NDq::MakeCheckpointStorageID(), checkpointStorage.release());
     }
 
@@ -193,8 +204,9 @@ void Init(
         yqCounters->GetSubgroup("subcomponent", "http_gateway"));
 
     NYql::NConnector::IClient::TPtr connectorClient = nullptr;
+
     if (protoConfig.GetGateways().GetGeneric().HasConnector()) {
-        connectorClient = NYql::NConnector::MakeClientGRPC(protoConfig.GetGateways().GetGeneric().GetConnector());
+        connectorClient = NYql::NConnector::MakeClientGRPC(protoConfig.GetGateways().GetGeneric());
     }
 
     if (protoConfig.GetTokenAccessor().GetEnabled()) {

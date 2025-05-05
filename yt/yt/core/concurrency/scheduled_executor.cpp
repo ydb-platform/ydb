@@ -28,9 +28,9 @@ TScheduledInvocationTimePolicy::TScheduledInvocationTimePolicy(
 void TScheduledInvocationTimePolicy::ProcessResult()
 { }
 
-TInstant TScheduledInvocationTimePolicy::KickstartDeadline()
+TInstant TScheduledInvocationTimePolicy::GenerateKickstartDeadline()
 {
-    return NextDeadline();
+    return GenerateNextDeadline();
 }
 
 bool TScheduledInvocationTimePolicy::IsEnabled()
@@ -53,7 +53,7 @@ void TScheduledInvocationTimePolicy::SetOptions(TOptions interval)
 //! Returns the next time instant which is a multiple of the configured interval.
 //! NB: If the current instant is itself a multiple of the configured interval, this method will return the next
 //! suitable instant.
-TInstant TScheduledInvocationTimePolicy::NextDeadline()
+TInstant TScheduledInvocationTimePolicy::GenerateNextDeadline()
 {
     YT_VERIFY(Interval_);
 

@@ -2,12 +2,13 @@
 dependencies {
 {%- for library in target.consumer if library.classpath -%}
 {%-     if library.prebuilt and library.jar and (library.type != "contrib" or target.handler.build_contribs) %}
-    implementation(files("$project_root/{{ library.jar }}"))
+    implementation(files("$arcadia_root/{{ library.jar }}"))
 {%-     else -%}
 {%-         set classpath = library.classpath -%}
 {%-         if classpath|replace('"','') == classpath -%}
 {%-             set classpath = '"' + classpath + '"' -%}
 {%-         endif %}
+{%-         include "[generator]/patch_classpath.jinja" -%}
 {%-         if library.type != "contrib" %}
     implementation
 {%-         else %}

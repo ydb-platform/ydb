@@ -159,6 +159,7 @@ target_commands-ITEM="dict"
 target_commands-macro="str"
 target_commands-args="list"
 target_commands-args_escaped="list"
+target_commands-flags="list"
 
 target_macroses="list"
 target_macroses-ITEM="dict"
@@ -329,7 +330,10 @@ attrs=[
     "target_macroses-macro=target_cython_include_directories",
     "target_macroses-macro=set_python_type_for_cython",
 ]
-copy=["cmake/cython.cmake"]
+copy=[
+    "cmake/cython.cmake",
+    "cmake/FindCython.cmake"
+]
 add_values=[{attr="includes", values=["cmake/cython.cmake"]}]
 
 [[rules]]

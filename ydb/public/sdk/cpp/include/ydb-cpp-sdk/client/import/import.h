@@ -1,11 +1,11 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb-cpp-sdk/client/types/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 
-#include <ydb-cpp-sdk/client/types/s3_settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/s3_settings.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NImport {
 
 /// Common
@@ -35,8 +35,18 @@ struct TImportFromS3Settings : public TOperationRequestSettings<TImportFromS3Set
     using TSelf = TImportFromS3Settings;
 
     struct TItem {
+        // Source prefix.
+        // S3 prefix for item
         std::string Src;
+
+        // Destination path.
+        // database path where to import data
         std::string Dst;
+
+        // Source path.
+        // if the export contains the database objects list, you may specify the database object name,
+        // and the S3 prefix will be looked up in the database objects list by the import procedure
+        std::string SrcPath = {};
     };
 
     FLUENT_SETTING_VECTOR(TItem, Item);
@@ -44,6 +54,9 @@ struct TImportFromS3Settings : public TOperationRequestSettings<TImportFromS3Set
     FLUENT_SETTING_OPTIONAL(uint32_t, NumberOfRetries);
     FLUENT_SETTING_OPTIONAL(bool, NoACL);
     FLUENT_SETTING_OPTIONAL(bool, SkipChecksumValidation);
+    FLUENT_SETTING_OPTIONAL(std::string, SourcePrefix);
+    FLUENT_SETTING_OPTIONAL(std::string, DestinationPath);
+    FLUENT_SETTING_OPTIONAL(std::string, SymmetricKey);
 };
 
 class TImportFromS3Response : public TOperation {

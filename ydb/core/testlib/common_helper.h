@@ -1,6 +1,6 @@
 #pragma once
 #include "test_client.h"
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <library/cpp/yson/writer.h>
 
 namespace NKikimr::NKqp {

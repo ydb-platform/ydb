@@ -1,0 +1,22 @@
+From 7f5f436c0ffaf8d481676efb77fbf8013e55848c Mon Sep 17 00:00:00 2001
+From: CBBBrother <cbbbrother@gmail.com>
+Date: Mon, 17 Feb 2025 15:00:57 +0300
+Subject: [PATCH] fix tls staack protector on x86_64
+
+---
+ src/asm/make_x86_64_sysv_elf_gas.S | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/asm/make_x86_64_sysv_elf_gas.S b/src/asm/make_x86_64_sysv_elf_gas.S
+index 7561c089..9336210a 100644
+--- a/src/asm/make_x86_64_sysv_elf_gas.S
++++ b/src/asm/make_x86_64_sysv_elf_gas.S
+@@ -77,7 +77,7 @@ make_fcontext:
+ #if defined(BOOST_CONTEXT_TLS_STACK_PROTECTOR)
+     /* save stack guard */
+     movq  %fs:0x28, %rcx    /* read stack guard from TLS record */
+-    movq  %rcx, 0x8(%rsp)   /* save stack guard */
++    movq  %rcx, 0x8(%rax)   /* save stack guard */
+ #endif
+ 
+     /* compute abs address of label trampoline */

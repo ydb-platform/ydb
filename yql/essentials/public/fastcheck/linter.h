@@ -4,6 +4,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/set.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 
 namespace NYql {
 namespace NFastCheck {
@@ -21,6 +22,12 @@ enum class EMode {
     View
 };
 
+enum EClusterMode {
+    Many,
+    Single,
+    Unknown
+};
+
 struct TCheckFilter {
     bool Include = true;
     TString CheckNameGlob;
@@ -29,9 +36,12 @@ struct TCheckFilter {
 struct TChecksRequest {
     TString Program;
     TString File;
+    EClusterMode ClusterMode = Many;
+    TString ClusterSystem;
     THashMap<TString, TString> ClusterMapping;
     ESyntax Syntax = ESyntax::YQL;
     ui16 SyntaxVersion = 1;
+    TLangVersion LangVer = MinLangVersion;
     bool IsAnsiLexer = false;
     EMode Mode = EMode::Default;
     TMaybe<TVector<TCheckFilter>> Filters;

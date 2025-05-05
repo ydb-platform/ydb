@@ -300,7 +300,7 @@ bool AllConsumersAreUnordered(const TExprNode::TPtr& node, const TParentsMap& pa
 bool OptimizeForUnorderedConsumers(const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
     static const char optName[] = "UnorderedOverSortImproved";
     YQL_ENSURE(optCtx.Types);
-    const bool optEnabled = IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
+    const bool optEnabled = !IsOptimizerDisabled<optName>(*optCtx.Types);
     if (!optEnabled) {
         return false;
     }
@@ -395,7 +395,17 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
         }
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap& parentsMap, TExprContext& ctx) {
-                return ApplyExtractMembersToSort(input, members, parentsMap, ctx, " with multi-usage");
+                return ApplyExtractMembersToSortOrPruneKeys(input, members, parentsMap, ctx, " with multi-usage");
+            }
+        );
+
+        return true;
+    };
+
+    map[TCoPruneKeys::CallableName()] = map[TCoPruneAdjacentKeys::CallableName()] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
+        OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
+            [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap& parentsMap, TExprContext& ctx) {
+                return ApplyExtractMembersToSortOrPruneKeys(input, members, parentsMap, ctx, " with multi-usage");
             }
         );
 

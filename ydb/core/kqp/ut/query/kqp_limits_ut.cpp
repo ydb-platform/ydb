@@ -87,9 +87,60 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         )", NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
-        UNIT_ASSERT(!to_lower(TString{result.GetIssues().ToString()}).Contains("query result"));
+        UNIT_ASSERT_C(
+            !to_lower(TString{result.GetIssues().ToString()}).Contains("query result"),
+            result.GetIssues().ToString());
         if (useSink) {
-            UNIT_ASSERT(result.GetIssues().ToString().contains("Stream write queries aren't allowed"));
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().contains("Memory limit exception, current limit is 1024 bytes."),
+                result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(StreamWrite, Allowed) {
+        auto app = NKikimrConfig::TAppConfig();
+        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        app.MutableTableServiceConfig()->SetEnableStreamWrite(Allowed);
+
+        auto settings = TKikimrSettings()
+            .SetAppConfig(app)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+        CreateLargeTable(kikimr, 1000, 1_KB, 64_KB);
+
+        auto db = kikimr.GetQueryClient();
+        
+        {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE `/Root/DataShard` (
+                    Key Uint64,
+                    KeyText String,
+                    Data Int64,
+                    DataText String,
+                    PRIMARY KEY (Key)
+                )
+                WITH (
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 8,
+                    PARTITION_AT_KEYS = (1000000, 2000000, 3000000, 4000000, 5000000, 6000000, 7000000)
+                );)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = db.ExecuteQuery(R"(
+                UPSERT INTO `/Root/DataShard` SELECT * FROM `/Root/LargeTable`;
+            )", NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            if (!Allowed) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+                UNIT_ASSERT_C(
+                    result.GetIssues().ToString().contains("Stream write queries aren't allowed."),
+                    result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
         }
     }
 
@@ -390,7 +441,6 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     }
 
     Y_UNIT_TEST_TWIN(OutOfSpaceYQLUpsertFail, useSink) {
-        UNIT_ASSERT(!useSink);
         auto app = NKikimrConfig::TAppConfig();
         app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
@@ -422,7 +472,6 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         auto session = client.CreateSession().GetValueSync().GetSession();
 
-        bool getOutOfSpace = false;
         ui32 batchIdx = 0;
         ui32 cnt = 0;
 
@@ -450,26 +499,38 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
                 UPSERT INTO `/Root/LargeTable`
                 SELECT * FROM AS_TABLE($rows);
             )"), TTxControl::BeginTx().CommitTx(), paramsBuilder.Build()).ExtractValueSync();
-            if (IsRetryable(result.GetStatus())) {
+ 
+            switch (result.GetStatus()) {
+            case EStatus::SUCCESS:
                 continue;
-            }
-            if (result.GetStatus() != EStatus::SUCCESS) {
-                result.GetIssues().PrintTo(Cerr);
-                UNIT_ASSERT_C(result.GetStatus() == EStatus::UNAVAILABLE, result.GetIssues().ToString());
-                if (result.GetIssues().ToString().contains("OUT_OF_SPACE")
-                        || result.GetIssues().ToString().contains("DISK_SPACE_EXHAUSTED")) {
-                    getOutOfSpace = true;
+            case EStatus::OVERLOADED:
+                if (result.GetIssues().ToString().contains("out of disk space")) {
+                    UNIT_ASSERT(useSink);
+                    Cerr << "Got out of space. Successfully inserted " << rowsPerBatch << " x " << batchIdx << " lines, each of size " << dataTextSize << "bytes";
+                    return;
+                } else {
+                    continue;
+                }
+            case EStatus::UNAVAILABLE:
+                if (result.GetIssues().ToString().contains("out of disk space")) {
+                    UNIT_ASSERT(!useSink);
+                    //TODO Should be also EStatus::OVERLOADED
+                    Cerr << "Got out of space. Successfully inserted " << rowsPerBatch << " x " << batchIdx << " lines, each of size " << dataTextSize << "bytes";
+                    return;
                 } else if (result.GetIssues().ToString().contains("WRONG_SHARD_STATE")
                         || result.GetIssues().ToString().contains("wrong shard state")
                         || result.GetIssues().ToString().contains("can't deliver message to tablet")) {
                     // shards are allowed to split
                     continue;
                 }
-                break;
+                UNIT_ASSERT_C(false, "Unexpected UNAVAILABLE status" << result.GetIssues().ToString());
+            default:
+                UNIT_ASSERT_C(false, "Unexpected status" << result.GetStatus() << result.GetIssues().ToString());
             }
+
             ++batchIdx;
         }
-        UNIT_ASSERT_C(getOutOfSpace, "Successfully inserted " << rowsPerBatch << " x " << batchIdx << " lines, each of size " << dataTextSize << "bytes");
+        UNIT_FAIL("Out of space is expected");
     }
 
     Y_UNIT_TEST_TWIN(TooBigQuery, useSink) {
@@ -571,6 +632,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     Y_UNIT_TEST_TWIN(TooBigKey, useSink) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        appConfig.MutableTableServiceConfig()->MutableWriteActorSettings()->SetInFlightMemoryLimitPerActorBytes(512 * 1024 * 1024); // for ASAN
+
         TKikimrRunner kikimr(appConfig);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -591,7 +654,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
-        UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
+        UNIT_ASSERT_C(HasIssue(result.GetIssues(), useSink ? NYql::TIssuesIds::KIKIMR_BAD_REQUEST : NYql::TIssuesIds::DEFAULT_ERROR,
             [&](const auto& issue) {
                 if (useSink) {
                     return issue.GetMessage().contains("Row key size of")
@@ -627,7 +690,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         } else {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         }
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
+        UNIT_ASSERT(HasIssue(result.GetIssues(), useSink ? NYql::TIssuesIds::KIKIMR_BAD_REQUEST : NYql::TIssuesIds::DEFAULT_ERROR,
                 [] (const auto& issue) {
                     return issue.GetMessage().contains("larger than the allowed threshold");
             }));
@@ -636,38 +699,38 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     Y_UNIT_TEST(AffectedShardsLimit) {
         NKikimrConfig::TAppConfig appConfig;
         auto& queryLimits = *appConfig.MutableTableServiceConfig()->MutableQueryLimits();
-        queryLimits.MutablePhaseLimits()->SetAffectedShardsLimit(20);
+        queryLimits.MutablePhaseLimits()->SetAffectedShardsLimit(23);
 
         TKikimrRunner kikimr(appConfig);
 
         kikimr.GetTestClient().CreateTable("/Root", R"(
-            Name: "ManyShard20"
+            Name: "ManyShard23"
             Columns { Name: "Key", Type: "Uint32" }
             Columns { Name: "Value1", Type: "String" }
             Columns { Name: "Value2", Type: "Int32" }
             KeyColumnNames: ["Key"]
-            UniformPartitionsCount: 20
+            UniformPartitionsCount: 23
         )");
 
         kikimr.GetTestClient().CreateTable("/Root", R"(
-            Name: "ManyShard21"
+            Name: "ManyShard24"
             Columns { Name: "Key", Type: "Uint32" }
             Columns { Name: "Value1", Type: "String" }
             Columns { Name: "Value2", Type: "Int32" }
             KeyColumnNames: ["Key"]
-            UniformPartitionsCount: 21
+            UniformPartitionsCount: 24
         )");
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(Q_(R"(
-            SELECT COUNT(*) FROM `/Root/ManyShard20`
+            SELECT COUNT(*) FROM `/Root/ManyShard23`
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(Q_(R"(
-            SELECT COUNT(*) FROM `/Root/ManyShard21`
+            SELECT COUNT(*) FROM `/Root/ManyShard24`
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "common.h"
+
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/accessor/validator.h>
 #include <ydb/library/formats/arrow/splitter/similar_packer.h>
@@ -247,6 +249,9 @@ private:
     }
     virtual std::optional<ui64> DoGetRawSize() const = 0;
     virtual std::shared_ptr<arrow::Scalar> DoGetScalar(const ui32 index) const = 0;
+    virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& /*value*/) const {
+        return std::nullopt;
+    }
 
     virtual TLocalChunkedArrayAddress DoGetLocalChunkedArray(
         const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
@@ -261,6 +266,8 @@ private:
     virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const = 0;
 
 protected:
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const;
+
     std::shared_ptr<arrow::Schema> GetArraySchema() const {
         const arrow::FieldVector fields = { std::make_shared<arrow::Field>("val", GetDataType()) };
         return std::make_shared<arrow::Schema>(fields);
@@ -328,8 +335,19 @@ protected:
 public:
     std::shared_ptr<IChunkedArray> ApplyFilter(const TColumnFilter& filter, const std::shared_ptr<IChunkedArray>& selfPtr) const;
 
-    virtual void Reallocate() {
+    virtual bool HasWholeDataVolume() const {
+        return true;
+    }
 
+    std::optional<bool> CheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const {
+        return DoCheckOneValueAccessor(value);
+    }
+
+    virtual bool HasSubColumnData(const TString& /*subColumnName*/) const {
+        return true;
+    }
+
+    virtual void Reallocate() {
     }
 
     void VisitValues(const TValuesSimpleVisitor& visitor) const {
@@ -429,7 +447,8 @@ public:
         return *result;
     }
 
-    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray() const;
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray(
+        const TColumnConstructionContext& context = Default<TColumnConstructionContext>()) const;
     virtual ~IChunkedArray() = default;
 
     std::shared_ptr<arrow::ChunkedArray> Slice(const ui32 offset, const ui32 count) const;

@@ -10,6 +10,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/protobuf/interop
     ydb/core/fq/libs/graph_params/proto
     ydb/core/fq/libs/protos
     ydb/core/fq/libs/row_dispatcher
@@ -23,6 +24,7 @@ PEERDIR(
     yql/essentials/public/types
     yql/essentials/utils/log
     ydb/public/sdk/cpp/adapters/issue
+    ydb/public/sdk/cpp/src/client/federated_topic
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/types/credentials

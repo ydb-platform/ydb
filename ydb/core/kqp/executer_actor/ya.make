@@ -18,7 +18,6 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/actors/core
     library/cpp/containers/absl_flat_hash
     ydb/core/actorlib_impl
     ydb/core/base
@@ -28,20 +27,22 @@ PEERDIR(
     ydb/core/kqp/compute_actor
     ydb/core/kqp/executer_actor/shards_resolver
     ydb/core/kqp/federated_query
+    ydb/core/kqp/gateway/local_rpc
     ydb/core/kqp/query_compiler
     ydb/core/kqp/rm_service
     ydb/core/kqp/topics
-    ydb/core/kqp/gateway/local_rpc
     ydb/core/protos
+    ydb/core/sys_view/common
     ydb/core/tx/long_tx_service/public
     ydb/core/ydb_convert
-    ydb/services/metadata/abstract
+    ydb/library/actors/core
     ydb/library/mkql_proto
     ydb/library/mkql_proto/protos
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/runtime
     ydb/library/yql/dq/tasks
     ydb/library/yql/providers/common/http_gateway
+    ydb/services/metadata/abstract
 )
 
 GENERATE_ENUM_SERIALIZATION(

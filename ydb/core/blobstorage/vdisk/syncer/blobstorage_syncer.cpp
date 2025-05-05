@@ -148,7 +148,7 @@ namespace NKikimr {
             , SchedulerId(schedulerId)
             , LogAndPhase(logAndPhase)
         {
-            Y_ABORT_UNLESS(Ev->Get()->SubRequestId == TDbMon::SyncerInfoId);
+            Y_VERIFY_S(Ev->Get()->SubRequestId == TDbMon::SyncerInfoId, SyncerCtx->VCtx->VDiskLogPrefix);
         }
     };
 
@@ -467,7 +467,7 @@ namespace NKikimr {
         }
 
         void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
-            Y_ABORT_UNLESS(ev->Get()->SubRequestId == TDbMon::SyncerInfoId);
+            Y_VERIFY_S(ev->Get()->SubRequestId == TDbMon::SyncerInfoId, SyncerCtx->VCtx->VDiskLogPrefix);
             TActorId schId;
             switch (Phase) {
                 case TPhaseVal::PhaseStandardMode: {
@@ -533,7 +533,8 @@ namespace NKikimr {
             auto *msg = ev->Get();
             Sublog.Log() << "Syncer: GenerationChange (ReadyModeHandle)\n";
             // check that NewInfo has the same topology as the one VDisk started with
-            Y_ABORT_UNLESS(SyncerCtx->VCtx->Top->EqualityCheck(msg->NewInfo->GetTopology()));
+            Y_VERIFY_S(SyncerCtx->VCtx->Top->EqualityCheck(msg->NewInfo->GetTopology()),
+                SyncerCtx->VCtx->VDiskLogPrefix);
 
             GInfo = msg->NewInfo;
             // reconfigure scheduler
@@ -550,11 +551,12 @@ namespace NKikimr {
             auto *msg = ev->Get();
             Sublog.Log() << "Syncer: GenerationChange (SyncGuidModeHandle)\n";
             // check that NewInfo has the same topology as the one VDisk started with
-            Y_ABORT_UNLESS(SyncerCtx->VCtx->Top->EqualityCheck(msg->NewInfo->GetTopology()));
+            Y_VERIFY_S(SyncerCtx->VCtx->Top->EqualityCheck(msg->NewInfo->GetTopology()),
+                SyncerCtx->VCtx->VDiskLogPrefix);
 
             GInfo = msg->NewInfo;
             // reconfigure guid recovery actor
-            Y_ABORT_UNLESS(GuidRecoveryId != TActorId());
+            Y_VERIFY_S(GuidRecoveryId != TActorId(), SyncerCtx->VCtx->VDiskLogPrefix);
             ctx.Send(GuidRecoveryId, msg->Clone());
         }
 
@@ -562,7 +564,8 @@ namespace NKikimr {
             auto *msg = ev->Get();
             Sublog.Log() << "Syncer: GenerationChange (InconsistencyModeHandle)\n";
             // check that NewInfo has the same topology as the one VDisk started with
-            Y_ABORT_UNLESS(SyncerCtx->VCtx->Top->EqualityCheck(msg->NewInfo->GetTopology()));
+            Y_VERIFY_S(SyncerCtx->VCtx->Top->EqualityCheck(msg->NewInfo->GetTopology()),
+                SyncerCtx->VCtx->VDiskLogPrefix);
 
             Y_UNUSED(ctx);
             GInfo = msg->NewInfo;
@@ -572,7 +575,8 @@ namespace NKikimr {
             auto *msg = ev->Get();
             Sublog.Log() << "Syncer: GenerationChange (RecoverLostDataModeHandle)\n";
             // check that NewInfo has the same topology as the one VDisk started with
-            Y_ABORT_UNLESS(SyncerCtx->VCtx->Top->EqualityCheck(msg->NewInfo->GetTopology()));
+            Y_VERIFY_S(SyncerCtx->VCtx->Top->EqualityCheck(msg->NewInfo->GetTopology()),
+                SyncerCtx->VCtx->VDiskLogPrefix);
 
             GInfo = msg->NewInfo;
 
@@ -594,7 +598,8 @@ namespace NKikimr {
             , SyncerData(syncerData)
             , LocalSyncerState(SyncerData->LocalSyncerState)
         {
-            Y_ABORT_UNLESS(SyncerCtx->VCtx->Top->EqualityCheck(info->GetTopology()));
+            Y_VERIFY_S(SyncerCtx->VCtx->Top->EqualityCheck(info->GetTopology()),
+                SyncerCtx->VCtx->VDiskLogPrefix);
         }
     };
 

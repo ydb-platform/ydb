@@ -179,6 +179,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateBindi
         });
 }
 
+NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::TEvListBindingsRequest::TPtr& ev) const {
+    return ValidateEvent(ev);
+}
+
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListBindingsRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
@@ -205,8 +209,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListBinding
         << NKikimr::MaskTicket(token) << " "
         << request.DebugString());
 
-    NYql::TIssues issues = ValidateEvent(ev);
-    if (issues) {
+    if (const auto& issues = ValidateRequest(ev)) {
         CPS_LOG_D(MakeLogPrefix(scope, user)
             << "ListBindingsRequest, validation failed: "
             << NKikimr::MaskTicket(token) << " "

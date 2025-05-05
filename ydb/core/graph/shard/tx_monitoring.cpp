@@ -1,5 +1,6 @@
 #include "shard_impl.h"
 #include "log.h"
+#include <library/cpp/json/json_writer.h>
 
 namespace NKikimr {
 namespace NGraph {
@@ -102,7 +103,7 @@ public:
             if (wasLine) {
                 html << "<br>";
             }
-            html << "arithmetic " << name << " " << value.ValueA << " " << value.Op << " " << value.ValueB; 
+            html << "arithmetic " << name << " " << value.ValueA << " " << value.Op << " " << value.ValueB;
             wasLine = true;
         }
         html << "</td></tr>";
@@ -113,6 +114,45 @@ public:
     }
 };
 
+class TTxMonitoringGetSettings : public TTransactionBase<TGraphShard> {
+private:
+    NMon::TEvRemoteHttpInfo::TPtr Event;
+
+public:
+    TTxMonitoringGetSettings(TGraphShard* shard, NMon::TEvRemoteHttpInfo::TPtr ev)
+        : TBase(shard)
+        , Event(std::move(ev))
+    {}
+
+    TTxType GetTxType() const override { return NGraphShard::TXTYPE_MONITORING; }
+
+    bool Execute(TTransactionContext&, const TActorContext&) override {
+        BLOG_D("TTxMonitoringGetSettings::Execute");
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        BLOG_D("TTxMonitoringGetSettings::Complete");
+        NJson::TJsonValue json;
+        switch (Self->BackendType) {
+            case EBackendType::Memory:
+                json["backend"] = "Memory";
+                json["metrics_size"] = Self->MemoryBackend.MetricsIndex.size();
+                json["records_size"] = Self->MemoryBackend.MetricsValues.size();
+                break;
+            case EBackendType::Local:
+                json["backend"] = "Local";
+                json["metrics_size"] = Self->LocalBackend.MetricsIndex.size();
+                break;
+            case EBackendType::External:
+                json["backend"] = "External";
+                break;
+        }
+        ctx.Send(Event->Sender, new NMon::TEvRemoteJsonInfoRes(NJson::WriteJson(json, false)));
+    }
+};
+
+
 void TGraphShard::ExecuteTxMonitoring(NMon::TEvRemoteHttpInfo::TPtr ev) {
     if (ev->Get()->Cgi().Has("action")) {
         if (ev->Get()->Cgi().Get("action") == "change_backend") {
@@ -122,6 +162,10 @@ void TGraphShard::ExecuteTxMonitoring(NMon::TEvRemoteHttpInfo::TPtr ev) {
                 Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("<html><p>ok</p></html>"));
                 return;
             }
+        }
+        if (ev->Get()->Cgi().Get("action") == "get_settings") {
+            Execute(new TTxMonitoringGetSettings(this, std::move(ev)));
+            return;
         }
         Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes("<html><p>bad parameters</p></html>"));
         return;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include "topic_workload_writer.h"
 
 #include <library/cpp/logger/log.h>

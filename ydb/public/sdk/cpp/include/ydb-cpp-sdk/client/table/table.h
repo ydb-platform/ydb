@@ -4,13 +4,14 @@
 
 #include "table_enum.h"
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb-cpp-sdk/client/params/params.h>
-#include <ydb-cpp-sdk/client/result/result.h>
-#include <ydb-cpp-sdk/client/retry/retry.h>
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
-#include <ydb-cpp-sdk/client/table/query_stats/stats.h>
-#include <ydb-cpp-sdk/client/types/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/query_stats/stats.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/tx/tx.h>
 
 #include <variant>
 
@@ -41,7 +42,7 @@ class EvictionToExternalStorageSettings;
 } // namespace Table
 } // namespace Ydb
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 namespace NRetry::Async {
 template <typename TClient, typename TStatusType>
@@ -272,7 +273,7 @@ public:
 
 //! Represents index description
 class TIndexDescription {
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
 
 public:
     TIndexDescription(
@@ -349,7 +350,7 @@ private:
 
 //! Represents changefeed description
 class TChangefeedDescription {
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
 
 public:
     class TInitialScanProgress {
@@ -655,7 +656,7 @@ enum class EStoreType {
 //! Represents table description
 class TTableDescription {
     friend class TTableBuilder;
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
 
     using EUnit = TValueSinceUnixEpochModeSettings::EUnit;
 
@@ -1092,8 +1093,8 @@ using TAsyncScanQueryPartIterator = NThreading::TFuture<TScanQueryPartIterator>;
 
 struct TCreateSessionSettings : public TOperationRequestSettings<TCreateSessionSettings> {};
 
-using TBackoffSettings = NYdb::V3::NRetry::TBackoffSettings;
-using TRetryOperationSettings = NYdb::V3::NRetry::TRetryOperationSettings;
+using TBackoffSettings = NYdb::NRetry::TBackoffSettings;
+using TRetryOperationSettings = NYdb::NRetry::TRetryOperationSettings;
 
 struct TSessionPoolSettings {
     using TSelf = TSessionPoolSettings;
@@ -1755,8 +1756,6 @@ struct TReadTableSettings : public TRequestSettings<TReadTableSettings> {
     FLUENT_SETTING_OPTIONAL(bool, ReturnNotNullAsOptional);
 };
 
-using TPrecommitTransactionCallback = std::function<TAsyncStatus ()>;
-
 //! Represents all session operations
 //! Session is transparent logic representation of connection
 class TSession {
@@ -1897,22 +1896,24 @@ TAsyncStatus TTableClient::RetryOperation(
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Represents data transaction
-class TTransaction {
+class TTransaction : public TTransactionBase {
     friend class TTableClient;
+
 public:
-    const std::string& GetId() const;
     bool IsActive() const;
 
     TAsyncCommitTransactionResult Commit(const TCommitTxSettings& settings = TCommitTxSettings());
     TAsyncStatus Rollback(const TRollbackTxSettings& settings = TRollbackTxSettings());
 
     TSession GetSession() const;
-    void AddPrecommitCallback(TPrecommitTransactionCallback cb);
+    void AddPrecommitCallback(TPrecommitTransactionCallback cb) override;
+    void AddOnFailureCallback(TOnFailureTransactionCallback cb) override;
 
 private:
     TTransaction(const TSession& session, const std::string& txId);
 
     TAsyncStatus Precommit() const;
+    NThreading::TFuture<void> ProcessFailure() const;
 
     class TImpl;
 
@@ -1955,6 +1956,7 @@ public:
     const std::string& GetId() const;
     const std::optional<std::string>& GetText() const;
     TParamsBuilder GetParamsBuilder() const;
+    std::map<std::string, TType> GetParameterTypes() const;
 
     TAsyncDataQueryResult Execute(const TTxControl& txControl,
         const TExecDataQuerySettings& settings = TExecDataQuerySettings());
@@ -2061,6 +2063,8 @@ private:
     uint64_t TxId_;
 };
 
+using TVirtualTimestamp = TReadTableSnapshot;
+
 template<typename TPart>
 class TSimpleStreamPart : public TStreamPartStatus {
 public:
@@ -2115,6 +2119,10 @@ public:
     const std::string& GetDiagnostics() const { return *Diagnostics_; }
     std::string&& ExtractDiagnostics() { return std::move(*Diagnostics_); }
 
+    bool HasVirtualTimestamp() const { return Vt_.has_value(); }
+    const TVirtualTimestamp& GetVirtualTimestamp() const { return *Vt_; }
+    TVirtualTimestamp&& ExtractVirtualTimestamp() { return std::move(*Vt_); }
+
     TScanQueryPart(TStatus&& status)
         : TStreamPartStatus(std::move(status))
     {}
@@ -2125,17 +2133,20 @@ public:
         , Diagnostics_(diagnostics)
     {}
 
-    TScanQueryPart(TStatus&& status, TResultSet&& resultSet, const std::optional<TQueryStats>& queryStats, const std::optional<std::string>& diagnostics)
+    TScanQueryPart(TStatus&& status, TResultSet&& resultSet, const std::optional<TQueryStats>& queryStats,
+        const std::optional<std::string>& diagnostics, std::optional<TVirtualTimestamp>&& vt)
         : TStreamPartStatus(std::move(status))
         , ResultSet_(std::move(resultSet))
         , QueryStats_(queryStats)
         , Diagnostics_(diagnostics)
+        , Vt_(std::move(vt))
     {}
 
 private:
     std::optional<TResultSet> ResultSet_;
     std::optional<TQueryStats> QueryStats_;
     std::optional<std::string> Diagnostics_;
+    std::optional<TVirtualTimestamp> Vt_;
 };
 
 using TAsyncScanQueryPart = NThreading::TFuture<TScanQueryPart>;
@@ -2221,7 +2232,7 @@ private:
     class TImpl;
     std::shared_ptr<TImpl> Impl_;
 
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
     const Ydb::Table::DescribeExternalDataSourceResult& GetProto() const;
 };
 
@@ -2247,7 +2258,7 @@ private:
     class TImpl;
     std::shared_ptr<TImpl> Impl_;
 
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
     const Ydb::Table::DescribeExternalTableResult& GetProto() const;
 };
 

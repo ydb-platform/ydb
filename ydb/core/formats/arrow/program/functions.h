@@ -324,7 +324,7 @@ public:
 class TKernelFunction: public IStepFunction {
 private:
     using TBase = IStepFunction;
-    const std::shared_ptr<arrow::compute::ScalarFunction> Function;
+    const std::shared_ptr<const arrow::compute::ScalarFunction> Function;
     std::shared_ptr<arrow::compute::FunctionOptions> FunctionOptions;
 
     virtual bool IsAggregation() const override {
@@ -332,7 +332,7 @@ private:
     }
 
 public:
-    TKernelFunction(const std::shared_ptr<arrow::compute::ScalarFunction> kernelsFunction,
+    TKernelFunction(const std::shared_ptr<const arrow::compute::ScalarFunction> kernelsFunction,
         const std::shared_ptr<arrow::compute::FunctionOptions>& functionOptions = nullptr, const bool needConcatenation = false)
         : TBase(needConcatenation)
         , Function(kernelsFunction)

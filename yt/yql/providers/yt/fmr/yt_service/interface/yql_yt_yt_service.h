@@ -1,9 +1,18 @@
 #pragma once
 
 #include <util/system/tempfile.h>
+#include <yt/cpp/mapreduce/interface/io.h>
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
 
 namespace NYql::NFmr {
+
+struct TYtReaderSettings {
+    bool WithAttributes = false; // Enable RowIndex and RangeIndex
+};
+
+struct TYtWriterSettings {
+    TMaybe<ui64> MaxRowWeight = Nothing();
+};
 
 class IYtService: public TThrRefBase {
 public:
@@ -11,9 +20,17 @@ public:
 
     using TPtr = TIntrusivePtr<IYtService>;
 
-    virtual std::variant<THolder<TTempFileHandle>, TError> Download(const TYtTableRef& ytTable, const TClusterConnection& clusterConnection = TClusterConnection()) = 0;
+    virtual NYT::TRawTableReaderPtr MakeReader(
+        const TYtTableRef& ytTable,
+        const TClusterConnection& clusterConnection,
+        const TYtReaderSettings& settings = TYtReaderSettings()
+    ) = 0;
 
-    virtual TMaybe<TError> Upload(const TYtTableRef& ytTable, IInputStream& tableContent, const TClusterConnection& clusterConnection = TClusterConnection()) = 0;
+    virtual NYT::TRawTableWriterPtr MakeWriter(
+        const TYtTableRef& ytTable,
+        const TClusterConnection& clusterConnection,
+        const TYtWriterSettings& settings = TYtWriterSettings()
+    ) = 0;
 };
 
 } // namespace NYql::NFmr

@@ -50,5 +50,6 @@ group by
     j.o_totalprice
 order by
     o_totalprice desc,
-    o_orderdate
+    o_orderdate,
+    o_orderkey
 limit 100;

@@ -10,7 +10,7 @@ std::pair<TKeyPrefix, TKeyPrefix> MakeKeyPrefixRange(TKeyPrefix::EType type, con
     return {std::move(from), std::move(to)};
 }
 
-TKey MakeKeyFromString(const TString& s, const TPartitionId& partition)
+TKey TKey::FromString(const TString& s, const TPartitionId& partition)
 {
     TKey t(s);
     return TKey(t.GetType(),
@@ -19,7 +19,45 @@ TKey MakeKeyFromString(const TString& s, const TPartitionId& partition)
                 t.GetPartNo(),
                 t.GetCount(),
                 t.GetInternalPartsCount(),
-                t.IsHead());
+                t.GetSuffix());
+}
+
+TKey TKey::ForBody(EType type,
+                   const TPartitionId& partition,
+                   const ui64 offset,
+                   const ui16 partNo,
+                   const ui32 count,
+                   const ui16 internalPartsCount)
+{
+    return {type, partition, offset, partNo, count, internalPartsCount, Nothing()};
+}
+
+TKey TKey::ForHead(EType type,
+                   const TPartitionId& partition,
+                   const ui64 offset,
+                   const ui16 partNo,
+                   const ui32 count,
+                   const ui16 internalPartsCount)
+{
+    return {type, partition, offset, partNo, count, internalPartsCount, '|'};
+}
+
+TKey TKey::ForFastWrite(EType type,
+                        const TPartitionId& partition,
+                        const ui64 offset,
+                        const ui16 partNo,
+                        const ui32 count,
+                        const ui16 internalPartsCount)
+{
+    return {type, partition, offset, partNo, count, internalPartsCount, '?'};
+}
+
+TKey TKey::FromKey(const TKey& k,
+                   EType type,
+                   const TPartitionId& partition,
+                   ui64 offset)
+{
+    return {type, partition, offset, k.GetPartNo(), k.GetCount(), k.GetInternalPartsCount(), k.GetSuffix()};
 }
 
 void TKeyPrefix::SetTypeImpl(EType type, bool isServicePartition)

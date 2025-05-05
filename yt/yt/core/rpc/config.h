@@ -26,10 +26,9 @@ DEFINE_ENUM(ERequestTracingMode,
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class THistogramExponentialBounds
+struct THistogramExponentialBounds
     : public NYTree::TYsonStruct
 {
-public:
     TDuration Min;
     TDuration Max;
 
@@ -313,10 +312,9 @@ DEFINE_REFCOUNTED_TYPE(TServiceDiscoveryEndpointsConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBalancingChannelConfigBase
+struct TBalancingChannelConfigBase
     : public TDynamicChannelPoolConfig
 {
-public:
     //! Disables discovery and balancing when just one address is given.
     //! This is vital for jobs since node's redirector is incapable of handling
     //! discover requests properly.

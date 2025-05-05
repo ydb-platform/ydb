@@ -128,9 +128,9 @@ void AuditLogModifySchemeOperation(const NKikimrSchemeOp::TModifyScheme& operati
             AUDIT_PART(name, (!value.empty() ? value : EmptyValue))
         }
 
-        AUDIT_PART("cloud_id", cloud_id, !cloud_id.empty());
-        AUDIT_PART("folder_id", folder_id, !folder_id.empty());
-        AUDIT_PART("resource_id", database_id, !database_id.empty());
+        AUDIT_PART("cloud_id", cloud_id, !cloud_id.empty())
+        AUDIT_PART("folder_id", folder_id, !folder_id.empty())
+        AUDIT_PART("resource_id", database_id, !database_id.empty())
 
         // Additionally:
 
@@ -140,21 +140,23 @@ void AuditLogModifySchemeOperation(const NKikimrSchemeOp::TModifyScheme& operati
         // 1. explicit operation ESchemeOpModifyACL -- to modify ACL on a path
         // 2. ESchemeOpMkDir or ESchemeOpCreate* operations -- to set rights to newly created paths/entities
         // 3. ESchemeOpCopyTable -- to be checked against acl size limit, not to be applied in any way
-        AUDIT_PART("new_owner", logEntry.NewOwner, !logEntry.NewOwner.empty());
-        AUDIT_PART("acl_add", RenderList(logEntry.ACLAdd), !logEntry.ACLAdd.empty());
-        AUDIT_PART("acl_remove", RenderList(logEntry.ACLRemove), !logEntry.ACLRemove.empty());
+        AUDIT_PART("new_owner", logEntry.NewOwner, !logEntry.NewOwner.empty())
+        AUDIT_PART("acl_add", RenderList(logEntry.ACLAdd), !logEntry.ACLAdd.empty())
+        AUDIT_PART("acl_remove", RenderList(logEntry.ACLRemove), !logEntry.ACLRemove.empty())
 
         // AlterUserAttributes.
         // 1. explicit operation ESchemeOpAlterUserAttributes -- to modify user attributes on a path
         // 2. ESchemeOpMkDir or some ESchemeOpCreate* operations -- to set user attributes for newly created paths/entities
-        AUDIT_PART("user_attrs_add", RenderList(logEntry.UserAttrsAdd), !logEntry.UserAttrsAdd.empty());
-        AUDIT_PART("user_attrs_remove", RenderList(logEntry.UserAttrsRemove), !logEntry.UserAttrsRemove.empty());
+        AUDIT_PART("user_attrs_add", RenderList(logEntry.UserAttrsAdd), !logEntry.UserAttrsAdd.empty())
+        AUDIT_PART("user_attrs_remove", RenderList(logEntry.UserAttrsRemove), !logEntry.UserAttrsRemove.empty())
 
         // AlterLogin.
         // explicit operation ESchemeOpAlterLogin -- to modify user and groups
-        AUDIT_PART("login_user", logEntry.LoginUser);
-        AUDIT_PART("login_group", logEntry.LoginGroup);
-        AUDIT_PART("login_member", logEntry.LoginMember);
+        AUDIT_PART("login_user", logEntry.LoginUser)
+        AUDIT_PART("login_group", logEntry.LoginGroup)
+        AUDIT_PART("login_member", logEntry.LoginMember)
+
+        AUDIT_PART("login_user_change", RenderList(logEntry.LoginUserChange), logEntry.LoginUserChange)
     );
 }
 

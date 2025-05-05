@@ -73,6 +73,20 @@ struct TEvPrivate {
     };
 };
 
+struct TCounters {
+    explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
+        : Counters(counters) {
+        InFlySubscribe = Counters->GetCounter("InFlySubscribe");
+        ResourceCount = Counters->GetCounter("ResourceCount");
+        SenderCount = Counters->GetCounter("SenderCount");
+    }
+
+    ::NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InFlySubscribe;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ResourceCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SenderCount;
+};
+
 class TYqQuoterService : public NActors::TActorBootstrapped<TYqQuoterService> {
     using TResourceKey = std::pair<TString, TString>;
 
@@ -88,10 +102,12 @@ public:
     TYqQuoterService(
         const NFq::NConfig::TRateLimiterConfig& config,
         const NFq::TYqSharedResources::TPtr& yqSharedResources,
-        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory)
+        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+        const ::NMonitoring::TDynamicCounterPtr& counters)
         : Config(config)
         , YqSharedResources(yqSharedResources)
         , CredProviderFactory(credentialsProviderFactory)
+        , Counters(counters)
     {
     }
 
@@ -137,11 +153,14 @@ public:
         proc.RequiredAmount += amount;
         proc.Requests.emplace_back(std::move(ev));
         ProcessRequests(proc, key);
+        Counters.ResourceCount->Set(Resources.size());
+        Counters.SenderCount->Set(SenderToResource.size());
     }
 
     void AcquireResource(const TResourceKey& key, ui64 amount, ui64 cookie) {
         LOG_T("Send acquire resource request to {\"" << key.first << "\", \"" << key.second << "\"}. Amount: " << amount << ". Cookie: " << cookie);
         auto asyncStatus = YdbConnection->RateLimiterClient.AcquireResource(key.first, key.second, NYdb::NRateLimiter::TAcquireResourceSettings().Amount(amount));
+        Counters.InFlySubscribe->Inc();
         asyncStatus.Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), selfId = SelfId(), cookie, key, amount](const NYdb::TAsyncStatus& status) {
             actorSystem->Send(new NActors::IEventHandle(selfId, selfId, new TEvPrivate::TEvQuotaReceived(status.GetValueSync(), key.first, key.second, amount), 0, cookie));
         });
@@ -222,6 +241,7 @@ public:
     }
 
     void Handle(TEvPrivate::TEvQuotaReceived::TPtr& ev) {
+        Counters.InFlySubscribe->Dec();
         const TResourceKey key(ev->Get()->RateLimiter, ev->Get()->Resource);
         TResourceProcessor& proc = Resources[key];
         LOG_T("Received quota for resource {\"" << key.first << "\", \"" << key.second << "\"}. Amount: " << ev->Get()->Amount << ". Cookie: " << ev->Cookie << ". Status: " << ev->Get()->Status.GetStatus() << " " << ev->Get()->Status.GetIssues().ToOneLineString());
@@ -302,6 +322,8 @@ public:
         if (deletedRes || deletedSenders) {
             LOG_I("CleanupEmpty. Deleted " << deletedRes << " resources and " << deletedSenders << " senders");
         }
+        Counters.ResourceCount->Set(Resources.size());
+        Counters.SenderCount->Set(SenderToResource.size());
     }
 
 private:
@@ -313,6 +335,7 @@ private:
     std::unordered_map<TResourceKey, TResourceProcessor, THash<TResourceKey>> Resources;
     std::unordered_map<NActors::TActorId, TResourceKey, THash<NActors::TActorId>> SenderToResource;
     IRetryPolicy<const NYdb::TStatus&>::TPtr RetryPolicy = IRetryPolicy<const NYdb::TStatus&>::GetExponentialBackoffPolicy(RetryClass);
+    TCounters Counters;
 };
 
 } // namespace
@@ -320,9 +343,10 @@ private:
 NActors::IActor* CreateQuoterService(
     const NFq::NConfig::TRateLimiterConfig& rateLimiterConfig,
     const NFq::TYqSharedResources::TPtr& yqSharedResources,
-    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory)
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+    const ::NMonitoring::TDynamicCounterPtr& counters)
 {
-    return new TYqQuoterService(rateLimiterConfig, yqSharedResources, credentialsProviderFactory);
+    return new TYqQuoterService(rateLimiterConfig, yqSharedResources, credentialsProviderFactory, counters);
 }
 
 } // namespace NFq

@@ -1,5 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -76,6 +76,45 @@ Y_UNIT_TEST_SUITE(KqpParams) {
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST_TWIN(MissingOptionalParameter, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(true);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto params = db.GetParamsBuilder()
+                .AddParam("$_amount")
+                    .Uint64(42)
+                    .Build()
+                .Build();
+            auto result = session.ExecuteDataQuery(Q_(R"(
+                --!syntax_v1
+
+                DECLARE $_amount AS Uint64;
+                DECLARE $_comment AS String?;
+
+                UPSERT INTO `/Root/Test` (Group, Name, Amount, Comment) VALUES
+                    (1u, "test", $_amount, $_comment);
+            )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(Q_(R"(
+                SELECT * FROM `/Root/Test` WHERE Group = 1 AND Name = "test";
+            )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+
+            CompareYson(R"([[[42u];#;[1u];["test"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        }
     }
 
     Y_UNIT_TEST(BadParameterType) {

@@ -2,14 +2,14 @@
 
 #include "transaction.h"
 
-#include <src/client/topic/common/callback_context.h>
-#include <src/client/topic/impl/common.h>
-#include <src/client/topic/impl/topic_impl.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/topic_impl.h>
 
 #include <util/generic/buffer.h>
 
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 class TWriteSessionEventsQueue: public TBaseSessionEventsQueue<TWriteSessionSettings, TWriteSessionEvent::TEvent, TSessionClosedEvent, IExecutor> {
     using TParent = TBaseSessionEventsQueue<TWriteSessionSettings, TWriteSessionEvent::TEvent, TSessionClosedEvent, IExecutor>;
@@ -425,7 +425,7 @@ private:
 
     bool TxIsChanged(const Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest) const;
 
-    void TrySubscribeOnTransactionCommit(TTransaction* tx);
+    void TrySubscribeOnTransactionCommit(TTransactionBase* tx);
     void CancelTransactions();
     TTransactionInfoPtr GetOrCreateTxInfo(const TTransactionId& txId);
     void TrySignalAllAcksReceived(ui64 seqNo);

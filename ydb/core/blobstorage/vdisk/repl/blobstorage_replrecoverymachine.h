@@ -19,6 +19,7 @@ namespace NKikimr {
             COMMIT,
             OTHER,
             PHANTOM,
+            OUT_OF_SPACE_DELAY,
             COUNT
         };
 
@@ -46,6 +47,7 @@ namespace NKikimr {
                 replInfo.CommitDuration = Durations[static_cast<ui32>(ETimeState::COMMIT)];
                 replInfo.OtherDuration = Durations[static_cast<ui32>(ETimeState::OTHER)];
                 replInfo.PhantomDuration = Durations[static_cast<ui32>(ETimeState::PHANTOM)];
+                replInfo.OutOfSpaceDelayDuration = Durations[static_cast<ui32>(ETimeState::OUT_OF_SPACE_DELAY)];
             }
 
         private:
@@ -124,8 +126,8 @@ namespace NKikimr {
             template<typename TBlobProcessor>
             void Recover(TPartSet& item, TRecoveredBlobsQueue& rbq, TBlobProcessor&& processor) {
                 const TLogoBlobID& id = item.Id;
-                Y_ABORT_UNLESS(!id.PartId());
-                Y_ABORT_UNLESS(!LastRecoveredId || *LastRecoveredId < id);
+                Y_VERIFY_S(!id.PartId(), ReplCtx->VCtx->VDiskLogPrefix);
+                Y_VERIFY_S(!LastRecoveredId || *LastRecoveredId < id, ReplCtx->VCtx->VDiskLogPrefix);
                 LastRecoveredId = id;
 
                 RecoverMetadata(id, rbq);
@@ -142,7 +144,7 @@ namespace NKikimr {
                 }
 
                 const TLost& lost = LostVec.front();
-                Y_ABORT_UNLESS(lost.Id == id);
+                Y_VERIFY_S(lost.Id == id, ReplCtx->VCtx->VDiskLogPrefix);
 
                 const NMatrix::TVectorType parts = lost.PartsToRecover;
 
@@ -159,7 +161,7 @@ namespace NKikimr {
                     }
                 }
 
-                Y_DEBUG_ABORT_UNLESS((item.PartsMask >> groupType.TotalPartCount()) == 0);
+                Y_VERIFY_DEBUG_S((item.PartsMask >> groupType.TotalPartCount()) == 0, ReplCtx->VCtx->VDiskLogPrefix);
                 const ui32 presentParts = std::popcount(item.PartsMask);
                 bool canRestore = presentParts >= groupType.MinimalRestorablePartCount();
 
@@ -202,10 +204,10 @@ namespace NKikimr {
                             }
                             const TLogoBlobID partId(id, i + 1);
                             const ui32 partSize = groupType.PartSize(partId);
-                            Y_ABORT_UNLESS(partSize); // no metadata here
+                            Y_VERIFY_S(partSize, ReplCtx->VCtx->VDiskLogPrefix); // no metadata here
                             partsSize += partSize;
                             TRope& data = item.Parts[i];
-                            Y_ABORT_UNLESS(data.GetSize() == partSize);
+                            Y_VERIFY_S(data.GetSize() == partSize, ReplCtx->VCtx->VDiskLogPrefix);
                             if (ReplCtx->HugeBlobCtx->IsHugeBlob(groupType, id, ReplCtx->MinHugeBlobInBytes)) {
                                 AddBlobToQueue(partId, TDiskBlob::Create(id.BlobSize(), i + 1, groupType.TotalPartCount(),
                                     std::move(data), Arena, ReplCtx->GetAddHeader()), {}, true, rbq);
@@ -306,8 +308,8 @@ namespace NKikimr {
             // add next task during preparation phase
             void AddTask(const TLogoBlobID &id, const NMatrix::TVectorType &partsToRecover, bool possiblePhantom,
                     TIngress ingress) {
-                Y_ABORT_UNLESS(!id.PartId());
-                Y_ABORT_UNLESS(LostVec.empty() || LostVec.back().Id < id);
+                Y_VERIFY_S(!id.PartId(), ReplCtx->VCtx->VDiskLogPrefix);
+                Y_VERIFY_S(LostVec.empty() || LostVec.back().Id < id, ReplCtx->VCtx->VDiskLogPrefix);
                 LostVec.push_back(TLost(id, partsToRecover, possiblePhantom, ingress));
             }
 

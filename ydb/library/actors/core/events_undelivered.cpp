@@ -29,9 +29,9 @@ namespace NActors {
         return true;
     }
 
-    IEventBase* TEvents::TEvUndelivered::Load(TEventSerializedData* bufs) {
+    TEvents::TEvUndelivered* TEvents::TEvUndelivered::Load(const TEventSerializedData* bufs) {
         TString str = bufs->GetString();
-        Y_ABORT_UNLESS(str.size() == (sizeof(ui32) + sizeof(ui32)));
+        Y_ENSURE(str.size() == (sizeof(ui32) + sizeof(ui32)));
         const char* p = str.data();
         const ui64 sourceType = ReadUnaligned<ui32>(p + 0);
         const ui64 reason = ReadUnaligned<ui32>(p + 4);

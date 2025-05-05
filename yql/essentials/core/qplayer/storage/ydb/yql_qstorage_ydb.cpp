@@ -2,7 +2,7 @@
 
 #include <yql/essentials/core/qplayer/storage/memory/yql_qstorage_memory.h>
 
-#include <contrib/ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb-cpp-sdk/client/table/table.h>
 
 #include <library/cpp/digest/old_crc/crc.h>
 

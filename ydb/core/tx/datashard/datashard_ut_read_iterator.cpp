@@ -17,7 +17,7 @@
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/protos/query_stats.pb.h>
 
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 #include <algorithm>
 #include <map>
@@ -736,7 +736,7 @@ struct TTestHelper {
         std::vector<ui32> columnIds(columnCount);
         std::iota(columnIds.begin(), columnIds.end(), 1);
 
-        Y_ABORT_UNLESS(values.size() == columnCount);
+        Y_ENSURE(values.size() == columnCount);
 
         TVector<TCell> cells;
         for (ui32 col = 0; col < columnCount; ++col)
@@ -2570,16 +2570,19 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         });
     }
 
-    Y_UNIT_TEST(ShouldReadFromHeadWithConflict) {
+    Y_UNIT_TEST_TWIN(ShouldReadFromHeadWithConflict, UseSink) {
         // Similar to ShouldReadFromHead, but there is conflicting hanged operation.
         // We will read all at once thus should not block
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             // Blocked volatile transactions block reads, disable
-            .SetEnableDataShardVolatileTransactions(false);
+            .SetEnableDataShardVolatileTransactions(false)
+            .SetAppConfig(app);
 
         const ui64 shardCount = 1;
         TTestHelper helper(serverSettings, shardCount);
@@ -2624,7 +2627,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         }
     }
 
-    Y_UNIT_TEST(ShouldReadFromHeadToMvccWithConflict) {
+    Y_UNIT_TEST_TWIN(ShouldReadFromHeadToMvccWithConflict, UseSink) {
         // Similar to ShouldProperlyOrderConflictingTransactionsMvcc, but we read HEAD
         //
         // In this test HEAD read waits conflicting transaction: first time we read from HEAD and
@@ -2632,8 +2635,11 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
 
         const ui64 shardCount = 1;
         TTestHelper helper(serverSettings, shardCount);
@@ -2714,7 +2720,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         }
     }
 
-    Y_UNIT_TEST(ShouldProperlyOrderConflictingTransactionsMvcc) {
+    Y_UNIT_TEST_TWIN(ShouldProperlyOrderConflictingTransactionsMvcc, UseSink) {
         // 1. Start read-write multishard transaction: readset will be blocked
         // to hang transaction. Write is the key we want to read.
         // 2a. Check that we can read prior blocked step.
@@ -2727,8 +2733,11 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
 
         const ui64 shardCount = 1;
         TTestHelper helper(serverSettings, shardCount);
@@ -4716,6 +4725,67 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorConsistency) {
             "{ items { uint32_value: 5 } items { uint32_value: 50 } }, "
             "{ items { uint32_value: 6 } items { uint32_value: 60 } }, "
             "{ items { uint32_value: 7 } items { uint32_value: 70 } }");
+    }
+
+    Y_UNIT_TEST(LeaseConfirmationNotOutOfOrder) {
+        TTestHelper helper;
+
+        auto& runtime = *helper.Server->GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_TRACE);
+
+        auto& table1 = helper.Tables.at("table-1");
+
+        // Make sure the table is primed for reads
+        auto request1 = GetBaseReadRequest(table1.TableId, table1.UserTable.GetDescription(), 1);
+        AddRangeQuery<ui32>(*request1, { 1 }, true, { 3 }, true);
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+        CheckResult(table1.UserTable, *readResult1, {
+            {1, 1, 1, 100},
+            {3, 3, 3, 300},
+        });
+        UNIT_ASSERT(readResult1->Record.GetFinished());
+
+        // Slee for some time, this will make sure the lease expires and stops getting renewed
+        runtime.SimulateSleep(TDuration::Seconds(10));
+
+        // Start blocking new commits and leases for the tablet
+        TBlockEvents<TEvBlobStorage::TEvPut> blockCommits(runtime,
+            [tabletId = table1.TabletId](auto& ev) {
+                if (ev->Get()->Id.TabletID() == tabletId) {
+                    Cerr << "... blocking blob " << ev->Get()->Id << Endl;
+                    return true;
+                }
+                return false;
+            });
+        TBlockEvents<TEvBlobStorage::TEvGetBlock> blockLeases(runtime,
+            [tabletId = table1.TabletId](auto& ev) {
+                if (ev->Get()->TabletId == tabletId) {
+                    Cerr << "... blocking getblock " << ev->Get()->TabletId << Endl;
+                    return true;
+                }
+                return false;
+            });
+
+        // Make one more request, this time forcing more than one result
+        auto request2 = GetBaseReadRequest(table1.TableId, table1.UserTable.GetDescription(), 2);
+        AddRangeQuery<ui32>(*request2, { 1 }, true, { 3 }, true);
+        request2->Record.SetMaxRowsInResult(1);
+        helper.SendReadAsync("table-1", request2.release());
+
+        // Sleep for some time, giving the tablet a chance to produce out-of-order results
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_C((blockCommits.size() + blockLeases.size()) > 0, "no commits or leases have been blocked");
+
+        // Stop blocking commits and leases
+        blockCommits.Stop().Unblock();
+        blockLeases.Stop().Unblock();
+
+        // The first result we receive should be with the first row
+        auto readResult2 = helper.WaitReadResult();
+        CheckResult(table1.UserTable, *readResult2, {
+            {1, 1, 1, 100},
+        });
+        UNIT_ASSERT(!readResult2->Record.GetFinished());
     }
 
 }

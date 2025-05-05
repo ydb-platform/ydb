@@ -35,6 +35,8 @@ public:
             return TStatus::Ok;
         }
 
+        //YQL_CLOG(DEBUG, ProviderYt) << "Epoch:\n" << NCommon::ExprToPrettyString(ctx, *input);
+
         TNodeMap<ui32> commitEpochs;
         TStatus status = AssignCommitEpochs(input, output, ctx, commitEpochs);
         if (status.Level == TStatus::Error) {

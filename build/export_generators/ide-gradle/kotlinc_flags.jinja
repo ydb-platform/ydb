@@ -1,0 +1,20 @@
+{%- if with_kotlin -%}
+{%-     set kotlinc_flags = [] -%}
+{%-     if target.kotlinc.flags|length -%}
+{%-         set kotlinc_flags = target.kotlinc.flags|unique -%}
+{%-     endif -%}
+{%-     set extra_kotlinc_flags = extra_targets|selectattr('kotlinc')|map(attribute='kotlinc')|map(attribute='flags')|sum -%}
+{%-     if extra_kotlinc_flags|length -%}
+{%-         set kotlinc_flags = kotlinc_flags + extra_kotlinc_flags|unique -%}
+{%-     endif -%}
+{%-     if kotlinc_flags|length %}
+
+tasks.withType<KotlinCompile>() {
+    compilerOptions {
+{%-         for kotlinc_flag in kotlinc_flags|unique %}
+        freeCompilerArgs.add({{ PatchRoots(kotlinc_flag, true) }})
+{%-         endfor %}
+    }
+}
+{%      endif -%}
+{%- endif -%}

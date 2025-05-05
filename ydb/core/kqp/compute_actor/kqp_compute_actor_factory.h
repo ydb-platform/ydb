@@ -122,6 +122,7 @@ public:
         const NKikimr::NKqp::NRm::EKqpMemoryPool MemoryPool;
         const bool WithSpilling;
         const NYql::NDqProto::EDqStatsMode StatsMode;
+        const bool WithProgressStats;
         const TInstant& Deadline;
         const bool ShareMailbox;
         const TMaybe<NYql::NDqProto::TRlPath>& RlPath;

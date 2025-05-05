@@ -22,7 +22,7 @@ class OnlyOnce:
     Note: parse action signature must include all 3 arguments.
     """
 
-    def __init__(self, method_call: Callable[[str, int, ParseResults], Any]):
+    def __init__(self, method_call: Callable[[str, int, ParseResults], Any]) -> None:
         from .core import _trim_arity
 
         self.callable = _trim_arity(method_call)

@@ -3,12 +3,12 @@
 
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb-cpp-sdk/client/export/export.h>
-#include <ydb-cpp-sdk/client/import/import.h>
-#include <ydb-cpp-sdk/client/operation/operation.h>
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/export/export.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <library/cpp/yson/writer.h>
 

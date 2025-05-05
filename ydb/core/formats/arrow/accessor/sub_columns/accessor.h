@@ -62,9 +62,18 @@ protected:
             ColumnsData.Slice(offset, count), OthersData.Slice(offset, count, Settings), GetDataType(), count, Settings);
     }
 
+    std::shared_ptr<arrow::Array> BuildBJsonArray(const TColumnConstructionContext& context) const;
+
 public:
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray(
+        const TColumnConstructionContext& context = Default<TColumnConstructionContext>()) const override;
     virtual void DoVisitValues(const std::function<void(std::shared_ptr<arrow::Array>)>& /*visitor*/) const override {
         AFL_VERIFY(false);
+    }
+
+    bool HasSubColumn(const TString& subColumnName) const {
+        return ColumnsData.GetStats().GetKeyIndexOptional(std::string_view(subColumnName.data(), subColumnName.size())) ||
+               OthersData.GetStats().GetKeyIndexOptional(std::string_view(subColumnName.data(), subColumnName.size()));
     }
 
     void StoreSourceString(const TString& sourceDeserializationString) {
@@ -92,8 +101,8 @@ public:
     TSubColumnsArray(NSubColumns::TColumnsData&& columns, NSubColumns::TOthersData&& others, const std::shared_ptr<arrow::DataType>& type,
         const ui32 recordsCount, const NSubColumns::TSettings& settings);
 
-    static TConclusion<std::shared_ptr<TSubColumnsArray>> Make(const std::shared_ptr<IChunkedArray>& sourceArray,
-        const std::shared_ptr<NSubColumns::IDataAdapter>& adapter, const NSubColumns::TSettings& settings);
+    static TConclusion<std::shared_ptr<TSubColumnsArray>> Make(
+        const std::shared_ptr<IChunkedArray>& sourceArray, const NSubColumns::TSettings& settings);
 
     TSubColumnsArray(const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount, const NSubColumns::TSettings& settings);
 

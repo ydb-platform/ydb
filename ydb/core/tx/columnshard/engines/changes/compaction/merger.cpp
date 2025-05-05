@@ -14,7 +14,7 @@
 namespace NKikimr::NOlap::NCompaction {
 
 std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats,
-    const NArrow::NMerger::TIntervalPositions& checkPoints, const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered, const ui64 pathId,
+    const NArrow::NMerger::TIntervalPositions& checkPoints, const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered, const TInternalPathId pathId,
     const std::optional<ui64> shardingActualVersion) {
     AFL_VERIFY(Batches.size() == Filters.size());
     std::vector<std::shared_ptr<arrow::RecordBatch>> batchResults;
@@ -155,7 +155,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             const ui32 deletionsCount = IIndexInfo::CalcDeletions(b, false);
             auto constructor = TWritePortionInfoWithBlobsConstructor::BuildByBlobs(slice.GroupChunksByBlobs(groups),
                 dataWithSecondary.GetSecondaryInplaceData(), pathId, resultFiltered->GetVersion(), resultFiltered->GetSnapshot(),
-                SaverContext.GetStoragesManager());
+                SaverContext.GetStoragesManager(), EPortionType::Compacted);
 
             NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultFiltered->GetIndexInfo().GetReplaceKey()));
             NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());

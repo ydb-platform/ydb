@@ -1,6 +1,5 @@
 #include "actor.h"
 #include "debug.h"
-#include "actor_virtual.h"
 #include "actorsystem.h"
 #include "executor_thread.h"
 #include <ydb/library/actors/util/datetime.h>
@@ -103,7 +102,7 @@ namespace NActors {
         return (double)Min(passed, used) / passed;
     }
 
-    void IActor::Describe(IOutputStream &out) const noexcept {
+    void IActor::Describe(IOutputStream &out) const {
         SelfActorId.Out(out);
     }
 
@@ -268,13 +267,24 @@ namespace NActors {
         return NHPTimer::GetSeconds(ElapsedTicks);
     }
 
-    void TActorCallbackBehaviour::Receive(IActor* actor, TAutoPtr<IEventHandle>& ev) {
-        (actor->*StateFunc)(ev);
-    }
+    void IActor::Receive(TAutoPtr<IEventHandle>& ev) {
+#ifndef NDEBUG
+        if (ev->Flags & IEventHandle::FlagDebugTrackReceive) {
+            YaDebugBreak();
+        }
+#endif
+        ++HandledEvents;
+        LastReceiveTimestamp = TActivationContext::Monotonic();
 
-    void TActorVirtualBehaviour::Receive(IActor* actor, std::unique_ptr<IEventHandle> ev) {
-        Y_ABORT_UNLESS(!!ev && ev->GetBase());
-        ev->GetBase()->Execute(actor, std::move(ev));
+        try {
+            (this->*StateFunc_)(ev);
+        } catch(const std::exception& e) {
+            if (auto* handler = dynamic_cast<IActorExceptionHandler*>(this);
+                !handler || !handler->OnUnhandledException(e))
+            {
+                throw;
+            }
+        }
     }
 
     void IActor::Registered(TActorSystem* sys, const TActorId& owner) {

@@ -112,6 +112,8 @@ public:
         Functions["ToStream"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["ToSequence"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["Collect"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
+        Functions["PruneAdjacentKeys"] = &TCallableConstraintTransformer::PruneKeysWrap<true>;
+        Functions["PruneKeys"] = &TCallableConstraintTransformer::PruneKeysWrap<false>;
         Functions["FilterNullMembers"] = &TCallableConstraintTransformer::FromFirst<TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TVarIndexConstraintNode>;
         Functions["SkipNullMembers"] = &TCallableConstraintTransformer::FromFirst<TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TVarIndexConstraintNode>;
         Functions["FilterNullElements"] = &TCallableConstraintTransformer::FromFirst<TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TVarIndexConstraintNode>;
@@ -243,7 +245,9 @@ public:
         Functions["WideTopSortBlocks"] = &TCallableConstraintTransformer::WideTopWrap<true>;
         Functions["WideSortBlocks"] = &TCallableConstraintTransformer::WideTopWrap<true>;
         Functions["WideToBlocks"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
+        Functions["ListToBlocks"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["WideFromBlocks"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
+        Functions["ListFromBlocks"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["ReplicateScalars"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["BlockMergeFinalizeHashed"] = &TCallableConstraintTransformer::AggregateWrap<true>;
         Functions["BlockMergeManyFinalizeHashed"] = &TCallableConstraintTransformer::AggregateWrap<true>;
@@ -661,12 +665,18 @@ private:
         };
 
         const auto filterForUnique = [inItemType, outItemType](const TPartOfConstraintBase::TPathType& path) {
-            const auto castResult = CastResult<Strict>(TPartOfConstraintBase::GetSubTypeByPath(path, *inItemType), TPartOfConstraintBase::GetSubTypeByPath(path, *outItemType));
-            return NUdf::ECastOptions::Complete == castResult || NUdf::ECastOptions::MayFail == castResult;
+            if (const auto outType = TPartOfConstraintBase::GetSubTypeByPath(path, *outItemType)) {
+                const auto castResult = CastResult<Strict>(TPartOfConstraintBase::GetSubTypeByPath(path, *inItemType), outType);
+                return NUdf::ECastOptions::Complete == castResult || NUdf::ECastOptions::MayFail == castResult;
+            }
+            return false;
         };
 
         const auto filterForDistinct = [inItemType, outItemType](const TPartOfConstraintBase::TPathType& path) {
-            return NUdf::ECastOptions::Complete == CastResult<Strict>(TPartOfConstraintBase::GetSubTypeByPath(path, *inItemType), TPartOfConstraintBase::GetSubTypeByPath(path, *outItemType));
+            if (const auto outType = TPartOfConstraintBase::GetSubTypeByPath(path, *outItemType)) {
+                return NUdf::ECastOptions::Complete == CastResult<Strict>(TPartOfConstraintBase::GetSubTypeByPath(path, *inItemType), outType);
+            }
+            return false;
         };
 
         FilterFromHead<TSortedConstraintNode>(input, filter, ctx);
@@ -803,6 +813,32 @@ private:
         }
 
         return FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>(input, output, ctx);
+    }
+
+    template <bool Adjacent>
+    TStatus PruneKeysWrap(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) const {
+        if (const auto status = UpdateLambdaConstraints(*input->Child(1)); status != TStatus::Ok) {
+            return status;
+        }
+
+        if constexpr (Adjacent) {
+            if (const auto status = CopyAllFrom<0>(input, output, ctx); status != TStatus::Ok) {
+                return status;
+            }
+
+            TPartOfConstraintBase::TSetType keys = GetPathsToKeys<true>(input->Child(1)->Tail(), input->Child(1)->Head().Head());
+            TPartOfConstraintBase::TSetOfSetsType uniqueKeys;
+            for (const auto& elem : keys) {
+                uniqueKeys.insert(TPartOfConstraintBase::TSetType{elem});
+            }
+            if (!keys.empty()) {
+                input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(TUniqueConstraintNode::TContentType{uniqueKeys}));
+                input->AddConstraint(ctx.MakeConstraint<TDistinctConstraintNode>(TDistinctConstraintNode::TContentType{uniqueKeys}));
+            }
+            return TStatus::Ok;
+        }
+
+        return FromFirst<TEmptyConstraintNode>(input, output, ctx);
     }
 
     template<class TConstraint>

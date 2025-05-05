@@ -147,9 +147,13 @@ getTdefsByNumber(int nTable)
 }
 */
 
+int getStdefsMaxSize() {
+   return (int)(sizeof(s_tdefs) / sizeof(s_tdefs[0]));
+}
+
 void checkTdefsSize(int nTable) {
    // Prevent array overflow. Fixing coverity issue OVERRUN
-   if (nTable < 0 || nTable >= (int)(sizeof(s_tdefs) / sizeof(s_tdefs[0]))) {
+   if (nTable < 0 || nTable >= getStdefsMaxSize()) {
       INTERNAL("Array s_tdefs overflow");
       exit(EXIT_FAILURE);
    }
@@ -168,21 +172,21 @@ getSimpleTdefsByNumber(int nTable)
 tdef *
 getTdefsByNumber(int nTable)
 {
-   if (is_set("UPDATE") && is_set("VALIDATE"))
+   if (is_set("UPDATE") && is_set("VALIDATE")
+      && nTable >= S_BRAND && (s_tdefs[nTable - S_BRAND].flags & FL_PASSTHRU))
    {
-      checkTdefsSize(nTable);
-      if (s_tdefs[nTable].flags & FL_PASSTHRU)
+      checkTdefsSize(nTable - S_BRAND);
+      int wtdefsIndex = -1;
+      switch(nTable)
       {
-         switch(nTable + S_BRAND)
-         {
-         case S_CATALOG_PAGE: nTable = CATALOG_PAGE; break;
-         case S_CUSTOMER_ADDRESS: nTable = CUSTOMER_ADDRESS; break;
-         case S_PROMOTION: nTable = PROMOTION; break;
-         }
-         return(&w_tdefs[nTable]);
+      case S_CATALOG_PAGE: wtdefsIndex = CATALOG_PAGE; break;
+      case S_CUSTOMER_ADDRESS: wtdefsIndex = CUSTOMER_ADDRESS; break;
+      case S_PROMOTION: wtdefsIndex = PROMOTION; break;
       }
-      else
-         return(&s_tdefs[nTable]);
+      // Use w_tdefs only if we decreased the index
+      if (wtdefsIndex != -1) {
+         return(&w_tdefs[wtdefsIndex]);
+      }
    }
 
    return(getSimpleTdefsByNumber(nTable));
@@ -230,8 +234,8 @@ getTableFromColumn(int nColumn)
 {
     int i;
    tdef *pT;
-    
-    for (i=0; i <= MAX_TABLE; i++)
+
+    for (i=0; i < S_BRAND + getStdefsMaxSize(); i++)
     {
       pT = getSimpleTdefsByNumber(i);
       if ((nColumn >= pT->nFirstColumn) && (nColumn <= pT->nLastColumn))

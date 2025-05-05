@@ -1,9 +1,10 @@
 #pragma once
 
-#include "util_basics.h"
 #include "flat_scan_lead.h"
 #include "flat_row_eggs.h"
 #include "flat_row_scheme.h"
+#include "util_basics.h"
+#include "util_fmt_abort.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -74,7 +75,7 @@ namespace NTable {
 
     class IDriver {
     public:
-        virtual void Touch(EScan) noexcept = 0;
+        virtual void Touch(EScan) = 0;
     };
 
 
@@ -112,11 +113,11 @@ namespace NTable {
             TConf Conf;     /* Scan conveyer configuration  */
         };
 
-        virtual TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) noexcept = 0;
-        virtual EScan Seek(TLead&, ui64 seq) noexcept = 0;
-        virtual EScan Feed(TArrayRef<const TCell>, const TRow&) noexcept = 0;
-        virtual TAutoPtr<IDestructable> Finish(EAbort) noexcept = 0;
-        virtual void Describe(IOutputStream&) const noexcept = 0;
+        virtual TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) = 0;
+        virtual EScan Seek(TLead&, ui64 seq) = 0;
+        virtual EScan Feed(TArrayRef<const TCell>, const TRow&) = 0;
+        virtual TAutoPtr<IDestructable> Finish(EAbort) = 0;
+        virtual void Describe(IOutputStream&) const = 0;
 
         /**
          * Called on page faults during iteration
@@ -124,7 +125,7 @@ namespace NTable {
          * The default is to return EScan::Feed, to keep trying to fetch data
          * until the next row is available or iteration is exhausted.
          */
-        virtual EScan PageFault() noexcept {
+        virtual EScan PageFault() {
             return EScan::Feed;
         }
 
@@ -134,7 +135,7 @@ namespace NTable {
          * The default is to return EScan::Reset, causing another Seek for
          * compatibility and making it possible to iterate multiple times.
          */
-        virtual EScan Exhausted() noexcept {
+        virtual EScan Exhausted() {
             return EScan::Reset;
         }
     };
@@ -142,17 +143,17 @@ namespace NTable {
 
     class IVersionScan : public IScan {
     private:
-        EScan Feed(TArrayRef<const TCell>, const TRow&) noexcept override final {
-            Y_ABORT("Unexpected unversioned call");
+        EScan Feed(TArrayRef<const TCell>, const TRow&) override final {
+            Y_TABLET_ERROR("Unexpected unversioned call");
         }
 
     public:
-        virtual EScan BeginKey(TArrayRef<const TCell>) noexcept = 0;
-        virtual EScan BeginDeltas() noexcept = 0;
-        virtual EScan Feed(const TRow&, ui64) noexcept = 0;
-        virtual EScan EndDeltas() noexcept = 0;
-        virtual EScan Feed(const TRow&, TRowVersion&) noexcept = 0;
-        virtual EScan EndKey() noexcept = 0;
+        virtual EScan BeginKey(TArrayRef<const TCell>) = 0;
+        virtual EScan BeginDeltas() = 0;
+        virtual EScan Feed(const TRow&, ui64) = 0;
+        virtual EScan EndDeltas() = 0;
+        virtual EScan Feed(const TRow&, TRowVersion&) = 0;
+        virtual EScan EndKey() = 0;
     };
 
 }

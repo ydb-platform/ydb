@@ -55,13 +55,14 @@
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/alloc.pb.h>
-#include <ydb/core/protos/http_config.pb.h>
-#include <ydb/core/protos/datashard_config.pb.h>
-#include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/protos/bootstrap.pb.h>
-#include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/cms.pb.h>
+#include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/http_config.pb.h>
+#include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/protos/replication.pb.h>
+#include <ydb/core/protos/stream.pb.h>
+#include <ydb/core/protos/workload_manager_config.pb.h>
 
 #include <ydb/core/mind/local.h>
 #include <ydb/core/mind/tenant_pool.h>
@@ -149,6 +150,7 @@
 #include <ydb/library/actors/util/memory_track.h>
 #include <ydb/library/actors/prof/tag.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
+#include <ydb/library/signal_backtrace/signal_backtrace.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
 #include <util/charset/wide.h>
@@ -475,6 +477,7 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         if (securityConfig.MonitoringAllowedSIDsSize() > 0) {
             monConfig.AllowedSIDs.assign(securityConfig.GetMonitoringAllowedSIDs().begin(), securityConfig.GetMonitoringAllowedSIDs().end());
         }
+        monConfig.AllowOrigin = appConfig.GetMonitoringConfig().GetAllowOrigin();
 
         if (ModuleFactories && ModuleFactories->MonitoringFactory) {
             Monitoring = ModuleFactories->MonitoringFactory(std::move(monConfig), appConfig);
@@ -759,8 +762,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         }
 
         if (hasTableService) {
-            server.AddService(new NGRpcService::TGRpcYdbTableService(ActorSystem.Get(), Counters, grpcRequestProxies,
-                hasTableService.IsRlAllowed(), grpcConfig.GetHandlersPerCompletionQueue()));
+            server.AddService(new NGRpcService::TGRpcYdbTableService(ActorSystem.Get(), Counters, AppData->InFlightLimiterRegistry,
+                grpcRequestProxies, hasTableService.IsRlAllowed(), grpcConfig.GetHandlersPerCompletionQueue()));
         }
 
         if (hasClickhouseInternal) {
@@ -946,6 +949,40 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         opts.SetMaxMessageSize(grpcConfig.HasMaxMessageSize() ? grpcConfig.GetMaxMessageSize() : NYdbGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT);
         opts.SetMaxGlobalRequestInFlight(grpcConfig.GetMaxInFlight());
         opts.SetLogger(NYdbGrpc::CreateActorSystemLogger(*ActorSystem.Get(), NKikimrServices::GRPC_SERVER));
+        switch(grpcConfig.GetDefaultCompressionAlgorithm()) {
+            case NKikimrConfig::TGRpcConfig::YDB_GRPC_COMPRESS_NONE: {
+                opts.SetDefaultCompressionAlgorithm(GRPC_COMPRESS_NONE);
+                break;
+            }
+            case NKikimrConfig::TGRpcConfig::YDB_GRPC_COMPRESS_DEFLATE: {
+                opts.SetDefaultCompressionAlgorithm(GRPC_COMPRESS_DEFLATE);
+                break;
+            }
+            case NKikimrConfig::TGRpcConfig::YDB_GRPC_COMPRESS_GZIP: {
+                opts.SetDefaultCompressionAlgorithm(GRPC_COMPRESS_GZIP);
+                break;
+            }
+        }
+
+        switch(grpcConfig.GetDefaultCompressionLevel()) {
+            case NKikimrConfig::TGRpcConfig::YDB_GRPC_COMPRESS_LEVEL_NONE: {
+                opts.SetDefaultCompressionLevel(GRPC_COMPRESS_LEVEL_NONE);
+                break;
+            }
+
+            case NKikimrConfig::TGRpcConfig::YDB_GRPC_COMPRESS_LEVEL_LOW: {
+                opts.SetDefaultCompressionLevel(GRPC_COMPRESS_LEVEL_LOW);
+                break;
+            }
+            case NKikimrConfig::TGRpcConfig::YDB_GRPC_COMPRESS_LEVEL_MED: {
+                opts.SetDefaultCompressionLevel(GRPC_COMPRESS_LEVEL_MED);
+                break;
+            }
+            case NKikimrConfig::TGRpcConfig::YDB_GRPC_COMPRESS_LEVEL_HIGH: {
+                opts.SetDefaultCompressionLevel(GRPC_COMPRESS_LEVEL_HIGH);
+                break;
+            }
+        }
 
         if (appConfig.HasDomainsConfig() &&
             appConfig.GetDomainsConfig().HasSecurityConfig() &&
@@ -1092,6 +1129,9 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->IoContextFactory = ModuleFactories ? ModuleFactories->IoContextFactory.get() : nullptr;
     AppData->SchemeOperationFactory = ModuleFactories ? ModuleFactories->SchemeOperationFactory.get() : nullptr;
     AppData->ConfigSwissKnife = ModuleFactories ? ModuleFactories->ConfigSwissKnife.get() : nullptr;
+    if (ModuleFactories) {
+        AppData->TransferWriterFactory = ModuleFactories->TransferWriterFactory;
+    }
 
     AppData->SqsAuthFactory = ModuleFactories
         ? ModuleFactories->SqsAuthFactory.get()
@@ -1203,6 +1243,18 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasReplicationConfig()) {
         AppData->ReplicationConfig = runConfig.AppConfig.GetReplicationConfig();
+    }
+
+    if (runConfig.AppConfig.HasHealthCheckConfig()) {
+        AppData->HealthCheckConfig = runConfig.AppConfig.GetHealthCheckConfig();
+    }
+
+    if (runConfig.AppConfig.HasWorkloadManagerConfig()) {
+        AppData->WorkloadManagerConfig = runConfig.AppConfig.GetWorkloadManagerConfig();
+    }
+
+    if (runConfig.AppConfig.HasQueryServiceConfig()) {
+        AppData->QueryServiceConfig = runConfig.AppConfig.GetQueryServiceConfig();
     }
 
     // setup resource profiles
@@ -1753,6 +1805,9 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 }
 
 void TKikimrRunner::KikimrStart() {
+    for (auto plugin: Plugins) {
+        plugin->Start();
+    }
 
     if (!!PollerThreads) {
         PollerThreads->Start();
@@ -1914,6 +1969,9 @@ void TKikimrRunner::KikimrStop(bool graceful) {
     if (YdbDriver) {
         YdbDriver->Stop(true);
     }
+    for (auto plugin: Plugins) {
+        plugin->Stop();
+    }
 }
 
 void TKikimrRunner::BusyLoop() {
@@ -1938,6 +1996,10 @@ void TKikimrRunner::SetSignalHandlers() {
 #endif
     signal(SIGINT, &TKikimrRunner::OnTerminate);
     signal(SIGTERM, &TKikimrRunner::OnTerminate);
+
+    if (IsTrue(GetEnv("YDB_ENABLE_SIGNAL_BACKTRACE"))) {
+        Singleton<TTraceCollector>(TTraceCollector::DEFAULT_SIGNALS);
+    }
 
 #if !defined(_win_)
     SetAsyncSignalHandler(SIGHUP, [](int) {
@@ -1980,6 +2042,14 @@ void TKikimrRunner::InitializeRegistries(const TKikimrRunConfig& runConfig) {
     NKikHouse::RegisterFormat(*FormatFactory);
 }
 
+void TKikimrRunner::InitializePlugins(const TKikimrRunConfig& runConfig) {
+    for (const auto& initializer: runConfig.Plugins) {
+        if (auto plugin = initializer->CreatePlugin()) {
+            Plugins.push_back(plugin);
+        }
+    }
+}
+
 TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
         const TKikimrRunConfig& runConfig,
         std::shared_ptr<TModuleFactories> factories) {
@@ -1996,6 +2066,7 @@ TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
     runner->InitializeKqpController(runConfig);
     runner->InitializeGracefulShutdown(runConfig);
     runner->InitializeGRpc(runConfig);
+    runner->InitializePlugins(runConfig);
     return runner;
 }
 

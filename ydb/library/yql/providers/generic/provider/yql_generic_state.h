@@ -5,7 +5,7 @@
 #include <yql/essentials/core/yql_data_provider.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/client.h>
-#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 namespace NKikimr::NMiniKQL {
     class IFunctionRegistry;

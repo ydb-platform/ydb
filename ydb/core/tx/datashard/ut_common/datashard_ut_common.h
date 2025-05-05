@@ -828,7 +828,7 @@ class TEvWriteRows : public std::vector<TEvWriteRow> {
     const TEvWriteRow& ProcessRow(const TTableId& tableId, ui64 txId) {
         bool allTablesEmpty = std::all_of(begin(), end(), [](const auto& row) { return !bool(row.TableId); });
         auto row = std::find_if(begin(), end(), [tableId, allTablesEmpty](const auto& row) { return !row.IsUsed && (allTablesEmpty || row.TableId == tableId); });
-        Y_VERIFY_S(row != end(), "There should be at least one EvWrite row to process.");
+        Y_ENSURE(row != end(), "There should be at least one EvWrite row to process.");
 
         row->IsUsed = true;
         Cerr << "Processing EvWrite row " << txId << Endl;
@@ -858,6 +858,11 @@ struct IsTxResultComplete {
         if (ev.GetTypeRewrite() == TEvDataShard::EvProposeTransactionResult) {
             auto status = ev.Get<TEvDataShard::TEvProposeTransactionResult>()->GetStatus();
             if (status == NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE)
+                return true;
+        }
+        if (ev.GetTypeRewrite() == NKikimr::NEvents::TDataEvents::EvWriteResult) {
+            auto status = ev.Get<NKikimr::NEvents::TDataEvents::TEvWriteResult>()->GetStatus();
+            if (status == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED)
                 return true;
         }
         return false;

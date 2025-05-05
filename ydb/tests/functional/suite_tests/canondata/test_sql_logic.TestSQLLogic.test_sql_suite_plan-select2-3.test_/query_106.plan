@@ -62,6 +62,7 @@
                                                             "e (-\u221e, +\u221e)"
                                                         ],
                                                         "ReadRangesPointPrefixLen": "0",
+                                                        "Reverse": false,
                                                         "Scan": "Sequential",
                                                         "Table": "sqllogictest_select2-3.test_plan/t1"
                                                     }

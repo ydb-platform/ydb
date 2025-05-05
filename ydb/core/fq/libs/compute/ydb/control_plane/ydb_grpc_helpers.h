@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/library/ycloud/api/events.h>
-#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 namespace NFq {
 

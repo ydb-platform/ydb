@@ -11,6 +11,7 @@ class TpcdsSuiteBase(LoadSuiteBase):
     workload_type: WorkloadType = WorkloadType.TPC_DS
     iterations: int = 3
     tables_size: dict[str, int] = {}
+    check_canonical: CheckCanonicalPolicy = CheckCanonicalPolicy.ERROR
 
     @classmethod
     def _get_tables_size(cls) -> dict[str, int]:
@@ -35,7 +36,7 @@ class TpcdsSuiteBase(LoadSuiteBase):
 
     @classmethod
     def do_setup_class(cls):
-        if getenv('NO_VERIFY_DATA', '0') == '1' or getenv('NO_VERIFY_DATA_TPCH', '0') == '1' or getenv(f'NO_VERIFY_DATA_TPCH_{cls.scale}'):
+        if not cls.verify_data or getenv('NO_VERIFY_DATA', '0') == '1' or getenv('NO_VERIFY_DATA_TPCH', '0') == '1' or getenv(f'NO_VERIFY_DATA_TPCH_{cls.scale}'):
             return
         cls.check_tables_size(folder=cls._get_path(False), tables=cls._get_tables_size())
 
@@ -46,7 +47,6 @@ class TpcdsSuiteBase(LoadSuiteBase):
 
 class TestTpcds1(TpcdsSuiteBase):
     scale: int = 1
-    check_canonical: bool = CheckCanonicalPolicy.ERROR
     tables_size: dict[str, int] = {
         'call_center': 6,
         'catalog_page': 11718,
@@ -71,7 +71,6 @@ class TestTpcds1(TpcdsSuiteBase):
 
 class TestTpcds10(TpcdsSuiteBase):
     scale: int = 10
-    check_canonical: bool = CheckCanonicalPolicy.WARNING
     timeout = max(TpcdsSuiteBase.timeout, 300.)
     query_settings = {
         # temporary, https://github.com/ydb-platform/ydb/issues/11767#issuecomment-2553353146
@@ -101,7 +100,6 @@ class TestTpcds10(TpcdsSuiteBase):
 
 class TestTpcds100(TpcdsSuiteBase):
     scale: int = 100
-    check_canonical: bool = CheckCanonicalPolicy.WARNING
     iterations: int = 2
     timeout = max(TpcdsSuiteBase.timeout, 3600.)
     query_settings = {
@@ -132,5 +130,25 @@ class TestTpcds100(TpcdsSuiteBase):
 
 class TestTpcds1000(TpcdsSuiteBase):
     scale: int = 1000
-    iterations: int = 2
-    timeout = max(TpcdsSuiteBase.timeout, 3*3600.)
+    iterations: int = 1
+    timeout = max(TpcdsSuiteBase.timeout, 3600.)
+    tables_size: dict[str, int] = {
+        'call_center': 42,
+        'catalog_page': 30000,
+        'catalog_returns': 143996756,
+        'catalog_sales': 1439980416,
+        'customer': 12000000,
+        'customer_address': 6000000,
+        'inventory': 783000000,
+        'item': 300000,
+        'promotion': 1500,
+        'reason': 65,
+        'store': 1002,
+        'store_returns': 287999764,
+        'store_sales': 2879987999,
+        'warehouse': 20,
+        'web_page': 3000,
+        'web_returns': 71997522,
+        'web_sales': 720000376,
+        'web_site': 54,
+    }

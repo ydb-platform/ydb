@@ -86,6 +86,8 @@ public:
                 return "uncategorized_plan_mismatch";
             case TQueryReplayEvents::MissingTableMetadata:
                 return "missing_table_metadata";
+            case TQueryReplayEvents::UncategorizedFailure:
+                return "uncategorized_failure";
             default:
                 return "unspecified";
         }

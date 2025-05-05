@@ -1,30 +1,11 @@
 #pragma once
 
-#include <library/cpp/json/json_reader.h>
 #include <library/cpp/threading/future/core/future.h>
-#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/library/yql/providers/solomon/proto/dq_solomon_shard.pb.h>
-#include <ydb/library/yql/providers/solomon/solomon_accessor/grpc/solomon_accessor_pb.pb.h>
+#include <ydb/library/yql/providers/solomon/solomon_accessor/client/solomon_client_utils.h>
 
 namespace NYql::NSo {
-
-class TMetric {
-public:
-    explicit TMetric(const NJson::TJsonValue& value);
-
-public:
-    std::map<TString, TString> Labels;
-    yandex::monitoring::api::v3::MetricType Type;
-    TString CreatedAt;
-};
-
-class TTimeseries {
-public:
-    TString Name;
-    yandex::monitoring::api::v3::MetricType Type;
-    std::vector<int64_t> Timestamps;
-    std::vector<double> Values;
-};
 
 class ISolomonAccessorClient {
 public:
@@ -34,34 +15,15 @@ public:
     virtual ~ISolomonAccessorClient() = default;
 
     static TPtr Make(
-        NYql::NSo::NProto::TDqSolomonSource&& settings,
+        NYql::NSo::NProto::TDqSolomonSource source,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider);
     
-    class TListMetricsResult {
-    public:
-        TListMetricsResult(const TString& errorMsg);
-        TListMetricsResult(std::vector<TMetric>&& result);
-
-    public:
-        bool Success;
-        TString ErrorMsg;
-        std::vector<TMetric> Result;
-    };
-
-    class TGetDataResult {
-    public:
-        TGetDataResult(const TString& errorMsg);
-        TGetDataResult(std::vector<TTimeseries>&& result);
-
-    public:
-        bool Success;
-        TString ErrorMsg;
-        std::vector<TTimeseries> Result;
-    };
-
 public:
-    virtual NThreading::TFuture<TListMetricsResult> ListMetrics(const TString& selectors, int pageSize, int page) = 0;
-    virtual NThreading::TFuture<TGetDataResult> GetData(const std::vector<TString>& selectors) = 0;
+    virtual NThreading::TFuture<TGetLabelsResponse> GetLabelNames(const std::map<TString, TString>& selectors) const = 0;
+    virtual NThreading::TFuture<TListMetricsResponse> ListMetrics(const std::map<TString, TString>& selectors, int pageSize, int page) const = 0;
+    virtual NThreading::TFuture<TGetPointsCountResponse> GetPointsCount(const std::map<TString, TString>& selectors) const = 0;
+    virtual NThreading::TFuture<TGetDataResponse> GetData(const std::map<TString, TString>& selectors, TInstant from, TInstant to) const = 0;
+    virtual NThreading::TFuture<TGetDataResponse> GetData(TString selectors, TInstant from, TInstant to) const = 0;
 };
 
 } // namespace NYql::NSo

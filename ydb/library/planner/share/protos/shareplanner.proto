@@ -1,0 +1,38 @@
+package NScheduling;
+
+option java_package = "ru.yandex.scheduling.proto";
+
+enum EPlanningModel {
+    PM_STATIC = 0;
+    PM_MAX = 1;
+    PM_DENSITY = 2;
+}
+
+enum EPullType {
+    PT_STRICT = 0;
+    PT_INSENSITIVE = 1;
+    PT_NONE = 2;
+}
+
+enum EBillingType {
+    BT_STATIC = 0;
+    BT_PRESENT_SHARE = 1;
+}
+
+message TSharePlannerConfig {
+    optional string Name = 1 [ default = "shareplanner" ];
+
+    // Puller params
+    optional EPullType Pull = 2 [ default = PT_STRICT ];
+    optional double PullLength = 8 [ default = 100 ];
+
+    // Model params
+    optional EPlanningModel Model = 3 [ default = PM_DENSITY ];
+    optional double DenseLength = 4 [ default = 1.0 ];
+    optional double AveragingLength = 5 [ default = 0.1 ];
+
+    // Billing params
+    optional EBillingType Billing = 6 [ default = BT_STATIC ];
+    optional double StaticTariff = 7 [ default = 1.0 ]; // Used only if Billing=BT_STATIC
+    optional bool BillingIsMemoryless = 9; // Used only if Billing=BT_PRESENT_SHARE
+}

@@ -1,9 +1,10 @@
 #pragma once
 
 #include "common.h"
+#include "client_command_options.h"
 
-#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
-#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/colorizer/colors.h>
@@ -34,7 +35,7 @@ public:
     bool Dangerous = false;
     bool OnlyExplicitProfile = false;
     const TClientCommand* Parent;
-    NLastGetopt::TOpts Opts;
+    TClientCommandOptions Opts;
     TString Argument;
     TMap<ui32, TString> Args;
 
@@ -97,8 +98,8 @@ public:
         char** ArgV;
         int InitialArgC;
         char** InitialArgV;
-        NLastGetopt::TOpts* Opts;
-        const NLastGetopt::TOptsParseResult* ParseResult;
+        TClientCommandOptions* Opts = nullptr;
+        const TOptionsParseResult* ParseResult;
         TVector<TString> Tokens;
         TString SecurityToken;
         TList<TCommandInfo> ParentCommands;
@@ -124,8 +125,10 @@ public:
 
         TMap<TString, TVector<TConnectionParam>> ConnectionParams;
         bool EnableSsl = false;
+        bool SkipDiscovery = false;
         bool IsNetworkIntensive = false;
         TString Oauth2KeyFile;
+        TString Oauth2KeyParams;
 
         EVerbosityLevel VerbosityLevel = EVerbosityLevel::NONE;
         size_t HelpCommandVerbosiltyLevel = 1; // No options -h or one - 1, -hh - 2, -hhh - 3 etc
@@ -143,6 +146,7 @@ public:
         TString YCToken;
         bool UseMetadataCredentials = false;
         TString SaKeyFile;
+        TString SaKeyParams;
         TString IamEndpoint;
         TString YScope;
         TString ChosenAuthMethod;
@@ -165,6 +169,8 @@ public:
 
         TCredentialsGetter CredentialsGetter;
         std::shared_ptr<ICredentialsProviderFactory> SingletonCredentialsProviderFactory = nullptr;
+
+        bool ThrowOnOptsParseError = false;
 
         TConfig(int argc, char** argv)
             : ArgC(argc)
@@ -259,7 +265,7 @@ public:
         }
 
         void PrintHelpAndExit() {
-            NLastGetopt::TOptsParser parser(Opts, ArgC, ArgV);
+            NLastGetopt::TOptsParser parser(&Opts->GetOpts(), ArgC, ArgV);
             parser.PrintUsage(Cerr);
             throw TMisuseWithHelpException();
         }
@@ -291,9 +297,9 @@ public:
                         while (*end != '\0' && *end != '\'' && *end != '\"') {
                             ++end;
                         }
-                        opt = Opts->FindLongOption(TString(pos + 1, end));
+                        opt = Opts->GetOpts().FindLongOption(TString(pos + 1, end));
                     } else {
-                        opt = Opts->FindCharOption(*pos);
+                        opt = Opts->GetOpts().FindCharOption(*pos);
                     }
                     if (opt && opt->GetHasArg() == NLastGetopt::NO_ARGUMENT) {
                         optionArgument = false;
@@ -326,7 +332,10 @@ public:
         }
     };
 
-    class TOptsParseOneLevelResult : public NLastGetopt::TOptsParseResult {
+    class TOptsParseOneLevelResult : public TOptionsParseResult {
+        TOptsParseOneLevelResult(TConfig& config, std::pair<int, const char**> argv);
+        static std::pair<int, const char**> GetArgv(TConfig& config);
+
     public:
         TOptsParseOneLevelResult(TConfig& config);
     };
@@ -356,10 +365,12 @@ public:
         END
     };
 
-    void RenderOneCommandDescription(
+    virtual void RenderCommandDescription(
         TStringStream& stream,
+        bool renderTree,
         const NColorizer::TColors& colors = NColorizer::TColors(false),
-        RenderEntryType type = BEGIN
+        RenderEntryType type = BEGIN,
+        TString prefix = {}
     );
 
     void Hide();
@@ -377,7 +388,7 @@ protected:
     virtual void SetCustomUsage(TConfig& config);
 
 protected:
-    std::shared_ptr<NLastGetopt::TOptsParseResult> ParseResult;
+    std::shared_ptr<TOptionsParseResult> ParseResult;
 
 private:
     void HideOption(const TString& name);
@@ -394,10 +405,13 @@ public:
     void AddHiddenCommand(std::unique_ptr<TClientCommand> command);
     void AddDangerousCommand(std::unique_ptr<TClientCommand> command);
     virtual void Prepare(TConfig& config) override;
-    void RenderCommandsDescription(
+    void RenderCommandDescription(
         TStringStream& stream,
-        const NColorizer::TColors& colors = NColorizer::TColors(false)
-    );
+        bool renderTree,
+        const NColorizer::TColors& colors = NColorizer::TColors(false),
+        RenderEntryType type = BEGIN,
+        TString prefix = {}
+    ) override;
     virtual void SetFreeArgs(TConfig& config);
     bool HasSelectedCommand() const { return SelectedCommand; }
 

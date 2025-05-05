@@ -486,24 +486,10 @@ document.addEventListener("DOMContentLoaded", ready);
                 }
                 DIV_CLASS("panel-body") {
                     KEYVALUE_TABLE({
-
-                        ui64 total = 0;
-                        ui64 trashInFlight = 0;
-                        ui64 trashPending = 0;
-                        Data->EnumerateRefCount([&](const auto& key, ui32) {
-                            TOverloaded callback{
-                                [&](TLogoBlobID id) { total += id.BlobSize(); },
-                                [&](TS3Locator) {}
-                            };
-                            callback(key);
-                        });
-                        Data->EnumerateTrash([&](ui32 /*groupId*/, TLogoBlobID id, bool inFlight) {
-                            (inFlight ? trashInFlight : trashPending) += id.BlobSize();
-                        });
-
-                        KEYVALUE_UP("Data, bytes", "data", FormatByteSize(total));
-                        KEYVALUE_UP("Trash in flight, bytes", "trash_in_flight", FormatByteSize(trashInFlight));
-                        KEYVALUE_UP("Trash pending, bytes", "trash_pending", FormatByteSize(trashPending));
+                        KEYVALUE_UP("Data, bytes", "data", FormatByteSize(Data->GetTotalStoredDataSize()));
+                        KEYVALUE_UP("Data in S3, bytes", "data_s3", FormatByteSize(Data->GetTotalS3DataSize()));
+                        KEYVALUE_UP("Trash in flight, bytes", "trash_in_flight", FormatByteSize(Data->GetInFlightTrashSize()));
+                        KEYVALUE_UP("Trash pending, bytes", "trash_pending", FormatByteSize(Data->GetTotalStoredTrashSize()));
 
                         std::vector<ui32> groups;
                         for (const auto& [groupId, _] : Groups) {
@@ -513,7 +499,7 @@ document.addEventListener("DOMContentLoaded", ready);
                         for (const ui32 groupId : groups) {
                             TGroupInfo& group = Groups[groupId];
                             KEYVALUE_UP(TStringBuilder() << "Data in GroupId# " << groupId << ", bytes",
-                                'g' << groupId, FormatByteSize(group.AllocatedBytes));
+                                TStringBuilder() << 'g' << groupId, FormatByteSize(group.AllocatedBytes));
                         }
                     })
                 }
@@ -552,6 +538,10 @@ document.addEventListener("DOMContentLoaded", ready);
                             KEYVALUE_UP("Blobs read with error", "d.blobs_read_error", AsStats.BlobsReadError);
                             KEYVALUE_UP("Blobs put with OK", "d.blobs_put_ok", AsStats.BlobsPutOk);
                             KEYVALUE_UP("Blobs put with error", "d.blobs_put_error", AsStats.BlobsPutError);
+                            KEYVALUE_UP("CollectGarbage in flight", "d.collect_garbage_in_flight", AsStats.CollectGarbageInFlight);
+                            KEYVALUE_UP("CollectGarbage queue", "d.collect_garbage_queue", AsStats.CollectGarbageQueue);
+                            KEYVALUE_UP("CollectGarbage OK", "d.collect_garbage_ok", AsStats.CollectGarbageOK);
+                            KEYVALUE_UP("CollectGarbage error", "d.collect_garbage_error", AsStats.CollectGarbageError);
                         })
                     }
                 }
@@ -579,28 +569,15 @@ document.addEventListener("DOMContentLoaded", ready);
             }
         };
 
-        ui64 total = 0;
-        ui64 trashInFlight = 0;
-        ui64 trashPending = 0;
-        Data->EnumerateRefCount([&](const auto& key, ui32) {
-            TOverloaded callback{
-                [&](TLogoBlobID id) { total += id.BlobSize(); },
-                [&](TS3Locator) {}
-            };
-            callback(key);
-        });
-        Data->EnumerateTrash([&](ui32 /*groupId*/, TLogoBlobID id, bool inFlight) {
-            (inFlight ? trashInFlight : trashPending) += id.BlobSize();
-        });
-
         NJson::TJsonMap data{
-            {"data", formatSize(total)},
-            {"trash_in_flight", formatSize(trashInFlight)},
-            {"trash_pending", formatSize(trashPending)},
+            {"data", formatSize(Data->GetTotalStoredDataSize())},
+            {"data_s3", formatSize(Data->GetTotalS3DataSize())},
+            {"trash_in_flight", formatSize(Data->GetInFlightTrashSize())},
+            {"trash_pending", formatSize(Data->GetTotalStoredTrashSize())},
         };
 
         for (const auto& [groupId, group] : Groups) {
-            data[TStringBuilder() << "g" << groupId] = formatSize(group.AllocatedBytes);
+            data[TStringBuilder() << 'g' << groupId] = formatSize(group.AllocatedBytes);
         }
 
         if (Configured && Config.GetIsDecommittingGroup()) {

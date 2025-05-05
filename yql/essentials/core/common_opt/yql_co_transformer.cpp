@@ -15,13 +15,17 @@
 #include <unordered_set>
 
 namespace NYql {
+
+static const char CheckMissingWorldOptName[] = "CheckMissingWorld";
+
 namespace {
 
 class TCommonOptTransformer final : public TSyncTransformerBase {
 public:
-    TCommonOptTransformer(TTypeAnnotationContext* typeCtx, bool final)
+    TCommonOptTransformer(TTypeAnnotationContext* typeCtx, bool final, bool forPeephole)
         : TypeCtx(typeCtx)
         , Final(final)
+        , ForPeephole(forPeephole)
     {}
 
     IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
@@ -44,21 +48,27 @@ private:
     THashSet<TIssue> AddedErrors;
     TTypeAnnotationContext* TypeCtx;
     const bool Final;
+    const bool ForPeephole;
+    bool CheckMissingWorld = false;
 };
 
 }
 
-TAutoPtr<IGraphTransformer> CreateCommonOptTransformer(TTypeAnnotationContext* typeCtx) {
-    return new TCommonOptTransformer(typeCtx, false);
+TAutoPtr<IGraphTransformer> CreateCommonOptTransformer(bool forPeephole, TTypeAnnotationContext* typeCtx) {
+    return new TCommonOptTransformer(typeCtx, false, forPeephole);
 }
 
 TAutoPtr<IGraphTransformer> CreateCommonOptFinalTransformer(TTypeAnnotationContext* typeCtx) {
-    return new TCommonOptTransformer(typeCtx, true);
+    return new TCommonOptTransformer(typeCtx, true, false);
 }
 
 IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     IGraphTransformer::TStatus status = IGraphTransformer::TStatus::Ok;
     output = std::move(input);
+
+    if (IsOptimizerEnabled<CheckMissingWorldOptName>(*TypeCtx) && !IsOptimizerDisabled<CheckMissingWorldOptName>(*TypeCtx)) {
+        CheckMissingWorld = true;
+    }
 
     if (Final) {
         return DoTransform(input = std::move(output), output, ctx, TCoCallableRules::Instance().FinalCallables, FinalProcessedNodes, true);
@@ -91,6 +101,7 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(TExprNode::TPtr in
 }
 
 void TCommonOptTransformer::Rewind() {
+    CheckMissingWorld = false;
     AddedErrors.clear();
     ErrorProcessedNodes.clear();
     FinalProcessedNodes.clear();
@@ -139,6 +150,7 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(
     TParentsMap parentsMap;
     TOptimizeContext optCtx;
     optCtx.Types = TypeCtx;
+    optCtx.ForPeephole = ForPeephole;
     if (withParents) {
         GatherParents(*input, parentsMap);
         optCtx.ParentsMap = &parentsMap;
@@ -150,7 +162,7 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(
         defaultOpt = defaultIt->second;
     }
 
-    return OptimizeExpr(input, output, [&callables, &optCtx, defaultOpt](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+    return OptimizeExpr(input, output, [&callables, &optCtx, defaultOpt, checkMissingWorld = CheckMissingWorld](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         const auto rule = callables.find(node->Content());
         TExprNode::TPtr result = node;
         if (rule != callables.cend()) {
@@ -159,6 +171,12 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(
 
         if (defaultOpt && result == node) {
             result = defaultOpt(node, ctx, optCtx);
+        }
+
+        if (checkMissingWorld && result && result != node && !node->GetTypeAnn()->ReturnsWorld() && !node->IsCallable(RightName)) {
+            if (HasMissingWorlds(result, *node, *optCtx.Types)) {
+                throw yexception() << "Missing world over " << result->Dump();
+            }
         }
 
         return result;

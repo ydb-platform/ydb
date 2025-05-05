@@ -48,23 +48,18 @@ NHttpClient::IHttpResponsePtr SkyShareTable(
     const std::vector<TYPath>& tablePaths,
     const TSkyShareTableOptions& options);
 
-void InsertRows(
+std::unique_ptr<IOutputStream> WriteTable(
     const TClientContext& context,
-    const TYPath& path,
-    const TNode::TListType& rows,
-    const TInsertRowsOptions& options);
+    const TTransactionId& transactionId,
+    const TRichYPath& path,
+    const TMaybe<TFormat>& format,
+    const TTableWriterOptions& options);
 
-TNode::TListType LookupRows(
+std::unique_ptr<IOutputStream> WriteFile(
     const TClientContext& context,
-    const TYPath& path,
-    const TNode::TListType& keys,
-    const TLookupRowsOptions& options);
-
-void DeleteRows(
-    const TClientContext& context,
-    const TYPath& path,
-    const TNode::TListType& keys,
-    const TDeleteRowsOptions& options);
+    const TTransactionId& transactionId,
+    const TRichYPath& path,
+    const TFileWriterOptions& options);
 
 TAuthorizationInfo WhoAmI(const TClientContext& context);
 

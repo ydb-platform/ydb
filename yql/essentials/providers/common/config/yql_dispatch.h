@@ -15,6 +15,7 @@
 #include <util/generic/strbuf.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/set.h>
 #include <util/generic/yexception.h>
 #include <util/generic/vector.h>
 #include <util/generic/guid.h>
@@ -344,6 +345,11 @@ public:
         if (!Handlers.insert({NormalizeName(name), handler}).second) {
             ythrow yexception() << "Duplicate configuration setting name " << name.Quote();
         }
+
+        if (!name.StartsWith('_')) {
+            Names.insert(name);
+        }
+
         return *handler;
     }
 
@@ -383,10 +389,12 @@ public:
     void Restore();
     static TErrorCallback GetDefaultErrorCallback();
     static TErrorCallback GetErrorCallback(TPositionHandle pos, TExprContext& ctx);
+    void Enumerate(std::function<void(std::string_view)> callback);
 
 protected:
     THashSet<TString> ValidClusters;
     THashMap<TString, TSettingHandler::TPtr> Handlers;
+    TSet<TString> Names;
 };
 
 } // namespace NCommon

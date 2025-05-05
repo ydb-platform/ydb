@@ -32,6 +32,10 @@ public:
         NTransactionClient::TTransactionId transactionId,
         const NApi::TTransactionAttachOptions& options) override;
 
+    NApi::IPrerequisitePtr AttachPrerequisite(
+        NPrerequisiteClient::TPrerequisiteId prerequisiteId,
+        const NApi::TPrerequisiteAttachOptions& options) override;
+
     // Tables.
     TFuture<void> MountTable(
         const NYPath::TYPath& path,
@@ -347,6 +351,10 @@ public:
         const std::vector<NYPath::TRichYPath>& paths,
         const NApi::TPartitionTablesOptions& options) override;
 
+    TFuture<ITablePartitionReaderPtr> CreateTablePartitionReader(
+        const TTablePartitionCookiePtr& tablePartitionDescriptor,
+        const TReadTablePartitionOptions& options) override;
+
     TFuture<void> TruncateJournal(
         const NYPath::TYPath& path,
         i64 rowCount,
@@ -580,6 +588,12 @@ public:
         const NYPath::TYPath& pipelinePath,
         const NYPath::TYPath& viewPath,
         const TGetFlowViewOptions& options) override;
+
+    TFuture<TFlowExecuteResult> FlowExecute(
+        const NYPath::TYPath& pipelinePath,
+        const TString& command,
+        const NYson::TYsonString& argument,
+        const TFlowExecuteOptions& options = {}) override;
 
     // Shuffle service client
     TFuture<TShuffleHandlePtr> StartShuffle(

@@ -58,6 +58,7 @@ namespace NKikimr::NStorage {
         // issue updates
         NodeIds = std::move(nodeIds);
         BindQueue.Update(NodeIds);
+        NodeIdsSet = {NodeIds.begin(), NodeIds.end()};
     }
 
     void TDistributedConfigKeeper::IssueNextBindRequest() {
@@ -323,7 +324,8 @@ namespace NKikimr::NStorage {
         const auto [it, inserted] = AllBoundNodes.try_emplace(std::move(nodeId));
         TIndirectBoundNode& node = it->second;
 
-        if (inserted) { // disable this node from target binding set, this is the first mention of this node
+        if (inserted && NodeIdsSet.contains(it->first.NodeId())) {
+            // disable this node from target binding set, this is the first mention of this node
             BindQueue.Disable(it->first.NodeId());
         }
 
@@ -363,7 +365,9 @@ namespace NKikimr::NStorage {
 
         if (node.Refs.empty()) {
             AllBoundNodes.erase(it);
-            BindQueue.Enable(nodeId.NodeId());
+            if (NodeIdsSet.contains(nodeId.NodeId())) {
+                BindQueue.Enable(nodeId.NodeId());
+            }
             if (msg) {
                 nodeId.Serialize(msg->Record.AddDeletedBoundNodeIds());
             }
@@ -381,6 +385,12 @@ namespace NKikimr::NStorage {
 
         STLOG(PRI_DEBUG, BS_NODE, NWDC02, "TEvNodeConfigPush", (NodeId, senderNodeId), (Cookie, ev->Cookie),
             (SessionId, ev->InterconnectSession), (Binding, Binding), (Record, record));
+
+        if (!NodeIdsSet.contains(senderNodeId)) {
+            // node has been already deleted from the config, but new subscription is coming through -- ignoring it
+            SendEvent(*ev, TEvNodeConfigReversePush::MakeRejected());
+            return;
+        }
 
         // check if we can't accept this message (or else it would make a cycle)
         if (record.GetInitial() && senderNodeId == GetRootNodeId()) {

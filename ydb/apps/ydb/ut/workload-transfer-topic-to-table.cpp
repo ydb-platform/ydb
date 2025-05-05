@@ -6,8 +6,8 @@
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb-cpp-sdk/client/topic/client.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 namespace {
 class TFixture : public NUnitTest::TBaseFixture {
@@ -24,7 +24,14 @@ class TFixture : public NUnitTest::TBaseFixture {
             TableName = GenerateTableName();
 
             try {
-                ExecYdb({"init", "--topic", TopicName, "--table", TableName});
+                ExecYdb({
+                    "init", 
+                    "--topic", TopicName, 
+                    "--table", TableName,
+                    // we run with 3 partitions cause CI doesn't manage to start 
+                    // reading default 128 partitions in 10 seconds of DEFAULT_RUN test
+                    "--topic-partitions", "3"
+                });
             } catch (const yexception) {
                 // ignore errors
             }

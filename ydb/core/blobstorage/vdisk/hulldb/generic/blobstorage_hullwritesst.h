@@ -412,6 +412,8 @@ namespace NKikimr {
         static_assert((SuffixSize >> 2 << 2) == SuffixSize, "expect (SuffixSize >> 2 << 2) == SuffixSize");
         static_assert(sizeof(TIdxDiskLinker) <= sizeof(TIdxDiskPlaceHolder), "expect sizeof(TIdxDiskLinker) <= sizeof(TIdxDiskPlaceHolder)");
 
+        typedef TRecIndexBase<TKey, TMemRec>::TRec TRec;
+
     public:
         TIndexBuilder(TVDiskContextPtr vctx, EWriterDataType type, ui8 owner, ui64 ownerRound, ui32 chunkSize,
                       ui32 appendBlockSize, ui32 writeBlockSize, ui64 sstId, bool createdByRepl,
@@ -654,10 +656,17 @@ namespace NKikimr {
             }
             info.CTime = TAppData::TimeProvider->Now();
 
-            // move Recs/Outbound into LevelSegment we are going to use
-            Recs.shrink_to_fit();
+            if constexpr (std::is_same_v<TKey, TKeyLogoBlob>) {
+                // load optimized SST index
+                LevelSegment->LoadLinearIndex(Recs);
+            } else {
+                // move Recs into LevelSegment we are going to use
+                Recs.shrink_to_fit();
+                LevelSegment->LoadedIndex = std::move(Recs);
+            }
+
+            // move Outbound into LevelSegment we are going to use
             Outbound.shrink_to_fit();
-            LevelSegment->LoadedIndex = std::move(Recs);
             LevelSegment->LoadedOutbound = std::move(Outbound);
 
             // fill in all chunks vector used in the sst

@@ -20,9 +20,6 @@ namespace NKikimr::NBlobDepot {
             TActorId WriterActorId;
             ui64 ConnectionInstanceOnStart;
 
-            struct TLifetimeToken {};
-            std::shared_ptr<TLifetimeToken> LifetimeToken;
-
         public:
             using TBlobStorageQuery::TBlobStorageQuery;
 
@@ -345,6 +342,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void HandlePrepareWriteS3Result(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvPrepareWriteS3Result& msg) {
+#ifndef KIKIMR_DISABLE_S3_OPS
                 Y_ABORT_UNLESS(msg.ItemsSize() == 1);
                 const auto& item = msg.GetItems(0);
                 if (item.GetStatus() != NKikimrProto::OK) {
@@ -357,65 +355,21 @@ namespace NKikimr::NBlobDepot {
 
                 LocatorInFlight.emplace(TS3Locator::FromProto(*locator));
 
-                class TWriteActor : public TActor<TWriteActor> {
-                    std::weak_ptr<TLifetimeToken> LifetimeToken;
-                    TPutQuery* const PutQuery;
-
-                public:
-                    TWriteActor(std::weak_ptr<TLifetimeToken> lifetimeToken, TPutQuery *putQuery)
-                        : TActor(&TThis::StateFunc)
-                        , LifetimeToken(std::move(lifetimeToken))
-                        , PutQuery(putQuery)
-                    {}
-
-                    void Handle(NWrappers::TEvExternalStorage::TEvPutObjectResponse::TPtr ev) {
-                        auto& msg = *ev->Get();
-                        Finish(msg.IsSuccess()
-                            ? std::nullopt
-                            : std::make_optional<TString>(msg.GetError().GetMessage()));
-                    }
-
-                    void HandleUndelivered() {
-                        Finish("event undelivered");
-                    }
-
-                    void Finish(std::optional<TString>&& error) {
-                        if (!LifetimeToken.expired()) {
-                            InvokeOtherActor(PutQuery->Agent, &TBlobDepotAgent::Invoke, [&] {
-                                PutQuery->OnPutS3ObjectResponse(std::move(error));
-                            });
-                        }
-                        PassAway();
-                    }
-
-                    STRICT_STFUNC(StateFunc,
-                        hFunc(NWrappers::TEvExternalStorage::TEvPutObjectResponse, Handle)
-                        cFunc(TEvents::TSystem::Undelivered, HandleUndelivered)
-                        cFunc(TEvents::TSystem::Poison, PassAway)
-                    )
-                };
-
                 TString key = TS3Locator::FromProto(*locator).MakeObjectName(Agent.S3BasePath);
 
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA54, "starting WriteActor", (AgentId, Agent.LogId),
                     (QueryId, GetQueryId()), (Key, key));
 
-                LifetimeToken = std::make_shared<TLifetimeToken>();
-                WriterActorId = Agent.RegisterWithSameMailbox(new TWriteActor(LifetimeToken, this));
-
-                TActivationContext::Send(new IEventHandle(Agent.S3WrapperId, WriterActorId,
-                    new NWrappers::TEvExternalStorage::TEvPutObjectRequest(
-                        Aws::S3::Model::PutObjectRequest()
-                            .WithBucket(std::move(Agent.S3BackendSettings->GetSettings().GetBucket()))
-                            .WithKey(std::move(key))
-                            .AddMetadata("key", Request.Id.ToString()),
-                        Request.Buffer.ExtractUnderlyingContainerOrCopy<TString>()),
-                    IEventHandle::FlagTrackDelivery));
+                WriterActorId = IssueWriteS3(std::move(key), std::move(Request.Buffer), Request.Id);
 
                 ConnectionInstanceOnStart = Agent.ConnectionInstance;
+#else
+                Y_UNUSED(msg);
+                Y_ABORT("S3 is not supported");
+#endif
             }
 
-            void OnPutS3ObjectResponse(std::optional<TString>&& error) {
+            void OnPutS3ObjectResponse(std::optional<TString>&& error) override {
                 STLOG(error ? PRI_WARN : PRI_DEBUG, BLOB_DEPOT_AGENT, BDA53, "OnPutS3ObjectResponse",
                     (AgentId, Agent.LogId), (QueryId, GetQueryId()), (Error, error));
 

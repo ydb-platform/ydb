@@ -1248,6 +1248,9 @@ struct TMultiTablePartition
 
     /// Aggregate statistics of all the table ranges in the partition.
     TStatistics AggregateStatistics;
+
+    /// Partition cookie that can be passed to @ref NYT::IClientBase::CreatePartitionReader
+    TMaybe<TString> Cookie;
 };
 
 /// Table partitions from GetTablePartitions command.

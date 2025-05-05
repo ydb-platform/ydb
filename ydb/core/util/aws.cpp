@@ -1,7 +1,5 @@
 #include "aws.h"
 
-#ifndef KIKIMR_DISABLE_S3_OPS
-
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/internal/AWSHttpResourceClient.h>
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include/aws/core/Aws.h>
 #include <contrib/libs/curl/include/curl/curl.h>
@@ -26,14 +24,3 @@ void ShutdownAwsAPI() {
 }
 
 } // NKikimr
-
-#else
-
-namespace NKikimr {
-
-void InitAwsAPI() {}
-void ShutdownAwsAPI() {}
-
-} // NKikimr
-
-#endif

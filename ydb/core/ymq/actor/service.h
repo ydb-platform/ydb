@@ -9,7 +9,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <util/generic/hash.h>

@@ -6,7 +6,7 @@ namespace NGRpcService {
 //using namespace NActors;
 
 NYdbGrpc::IGRpcRequestLimiterPtr TCreateLimiterCB::operator()(const char* serviceName, const char* requestName, i64 limit) const {
-    TString fullName = TString(serviceName) + "_" + requestName;
+    TString fullName = "GRpcControls.RequestConfigs." + TString(serviceName) + "_" + requestName;
     return LimiterRegistry->RegisterRequestType(fullName, limit);
 }
 
@@ -34,7 +34,7 @@ NYdbGrpc::IGRpcRequestLimiterPtr TInFlightLimiterRegistry::RegisterRequestType(T
     TGuard<TMutex> g(Lock);
     if (!PerTypeLimiters.count(name)) {
         TControlWrapper control(limit, 0, 1000000);
-        Icb->RegisterSharedControl(control, name + "_MaxInFlight");
+        Icb->RegisterSharedControl(control, name + ".MaxInFlight");
         PerTypeLimiters[name] = new TRequestInFlightLimiter(control);
     }
 

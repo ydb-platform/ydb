@@ -151,13 +151,15 @@ Table = namedtuple('Table', (
     'yqlrun_file',
     'attr',
     'format',
-    'exists'
+    'exists',
+    'cluster'
 ))
 
 
 def new_table(full_name, file_path=None, yqlrun_file=None, content=None, res_dir=None,
               attr=None, format_name='yson', def_attr=None, should_exist=False, src_file_alternative=None):
     assert '.' in full_name, 'expected name like cedar.Input'
+    cluster = full_name.split('.')[0]
     name = '.'.join(full_name.split('.')[1:])
 
     if res_dir is None:
@@ -231,7 +233,8 @@ def new_table(full_name, file_path=None, yqlrun_file=None, content=None, res_dir
         new_yqlrun_file,
         attr,
         format_name,
-        exists
+        exists,
+        cluster
     )
 
 
@@ -463,6 +466,14 @@ def get_tables(suite, cfg, data_path, def_attr=None):
     return in_tables, out_tables
 
 
+def get_table_clusters(suite, cfg, data_path):
+    in_tables, out_tables = get_tables(suite, cfg, data_path)
+    clusters = set()
+    for t in in_tables + out_tables:
+        clusters.add(t.cluster)
+    return clusters
+
+
 def get_supported_providers(cfg):
     providers = 'yt', 'kikimr', 'dq', 'hybrid'
     for item in cfg:
@@ -483,6 +494,13 @@ def is_xfail(cfg):
         if item[0] == 'xfail':
             return True
     return False
+
+
+def get_langver(cfg):
+    for item in cfg:
+        if item[0] == 'langver':
+            return item[1]
+    return None
 
 
 def is_skip_forceblocks(cfg):
@@ -554,6 +572,7 @@ def execute(
         output_tables=None,
         pretty_plan=True,
         parameters={},
+        langver=None
 ):
     '''
     Executes YQL/SQL
@@ -592,7 +611,8 @@ def execute(
         check_error=check_error,
         tables=(output_tables + input_tables),
         pretty_plan=pretty_plan,
-        parameters=parameters
+        parameters=parameters,
+        langver=langver
     )
 
     try:

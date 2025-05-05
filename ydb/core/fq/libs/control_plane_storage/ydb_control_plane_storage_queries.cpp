@@ -14,7 +14,7 @@
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 
 #include <ydb/public/api/protos/draft/fq.pb.h>
-#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <ydb/core/fq/libs/shared_resources/db_exec.h>
 
@@ -45,6 +45,8 @@ FederatedQuery::IamAuth::IdentityCase GetIamAuth(const FederatedQuery::Connectio
             return setting.mysql_cluster().auth().identity_case();
         case FederatedQuery::ConnectionSetting::kLogging:
             return setting.logging().auth().identity_case();
+        case FederatedQuery::ConnectionSetting::kIceberg:
+            return setting.iceberg().warehouse_auth().identity_case();
         case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
             return FederatedQuery::IamAuth::IDENTITY_NOT_SET;
     }

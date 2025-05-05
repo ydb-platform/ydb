@@ -52,6 +52,7 @@ PEERDIR(
     yt/yql/providers/yt/lib/mkql_helpers
     yt/yql/providers/yt/lib/res_pull
     yt/yql/providers/yt/lib/schema
+    yt/yql/providers/yt/lib/secret_masker
     yt/yql/providers/yt/lib/skiff
     yt/yql/providers/yt/lib/url_mapper
     yt/yql/providers/yt/lib/yson_helpers

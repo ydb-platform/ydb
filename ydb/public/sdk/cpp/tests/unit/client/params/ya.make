@@ -1,6 +1,4 @@
-UNITTEST()
-
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
+GTEST()
 
 IF (SANITIZER_TYPE == "thread")
     SIZE(LARGE)
@@ -13,7 +11,6 @@ FORK_SUBTESTS()
 
 PEERDIR(
     ydb/public/sdk/cpp/src/client/params
-    ydb/public/lib/yson_value
 )
 
 SRCS(

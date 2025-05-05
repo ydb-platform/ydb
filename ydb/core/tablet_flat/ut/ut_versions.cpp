@@ -18,7 +18,7 @@ using TCheckIter = TChecker<TWrapIter, TSubset>;
 using TCheckReverseIter = TChecker<TWrapReverseIter, TSubset>;
 
 namespace {
-    NPage::TConf PageConf(size_t groups) noexcept
+    NPage::TConf PageConf(size_t groups)
     {
         NPage::TConf conf{ false, 2 * 1024 };
 
@@ -57,7 +57,7 @@ namespace {
 
         for (auto &one: eggs) {
             for (const auto &part : one->Parts) {
-                Y_ABORT_UNLESS(part->Slices, "Missing part slices");
+                Y_ENSURE(part->Slices, "Missing part slices");
                 partView.push_back({ part, nullptr, part->Slices });
             }
         }

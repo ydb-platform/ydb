@@ -1,6 +1,6 @@
 #include "ydb_storage_config.h"
 
-#include <ydb-cpp-sdk/client/config/config.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/config/config.h>
 #include <ydb/library/yaml_config/public/yaml_config.h>
 
 #include <openssl/sha.h>

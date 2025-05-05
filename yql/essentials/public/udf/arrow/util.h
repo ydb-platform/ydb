@@ -48,6 +48,7 @@ inline bool IsNull(const arrow::ArrayData& data, size_t index) {
     return data.GetNullCount() > 0 && !arrow::BitUtil::GetBit(data.GetValues<uint8_t>(0, 0), index + data.offset);
 }
 
+ui64 GetSizeOfArrayDataInBytes(const arrow::ArrayData& data);
 ui64 GetSizeOfArrowBatchInBytes(const arrow::RecordBatch& batch);
 ui64 GetSizeOfArrowExecBatchInBytes(const arrow::compute::ExecBatch& batch);
 
@@ -247,7 +248,11 @@ inline bool IsSingularType(const ITypeInfoHelper& typeInfoHelper, const TType* t
            kind == ETypeKind::EmptyList;
 }
 
+const TType* SkipTaggedType(const ITypeInfoHelper& typeInfoHelper, const TType* type);
+
 inline bool NeedWrapWithExternalOptional(const ITypeInfoHelper& typeInfoHelper, const TType* type) {
+    type = SkipTaggedType(typeInfoHelper, type);
+
     return TPgTypeInspector(typeInfoHelper, type) || IsSingularType(typeInfoHelper, type);
 }
 

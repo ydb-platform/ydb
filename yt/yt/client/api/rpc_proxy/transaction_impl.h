@@ -61,10 +61,10 @@ public:
     NTransactionClient::EDurability GetDurability() const override;
     TDuration GetTimeout() const override;
 
-    TFuture<void> Ping(const NApi::TTransactionPingOptions& options = {}) override;
+    TFuture<void> Ping(const NApi::TPrerequisitePingOptions& options = {}) override;
     TFuture<NApi::TTransactionFlushResult> Flush() override;
     TFuture<NApi::TTransactionCommitResult> Commit(const NApi::TTransactionCommitOptions&) override;
-    TFuture<void> Abort(const NApi::TTransactionAbortOptions& options = {}) override;
+    TFuture<void> Abort(const NApi::TTransactionAbortOptions& options) override;
     void Detach() override;
     void RegisterAlienTransaction(const ITransactionPtr& transaction) override;
 

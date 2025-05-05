@@ -9,6 +9,7 @@
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/parser/pg_wrapper/interface/arrow.h>
+#include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/yson/detail.h>
@@ -150,11 +151,13 @@ arrow::Datum StringConverterImpl(NUdf::IArrayBuilder* builder, std::shared_ptr<a
 }
 
 template<bool IsDictionary, bool IsTopLevelYson>
-class TPrimitiveColumnConverter {
+class TPrimitiveColumnConverter : public IYtColumnConverter {
 public:
-    TPrimitiveColumnConverter(TYtColumnConverterSettings& settings) : Settings_(settings) {
+    TPrimitiveColumnConverter(std::shared_ptr<TYtColumnConverterSettings> settings)
+        : Settings_(std::move(settings))
+    {
         if constexpr (IsDictionary) {
-            switch (Settings_.ArrowType->id()) {
+            switch (Settings_->ArrowType->id()) {
             case arrow::Type::BOOL:     PrimitiveConverterImpl_ = GEN_TYPE(Boolean); break;
             case arrow::Type::INT8:     PrimitiveConverterImpl_ = GEN_TYPE(Int8); break;
             case arrow::Type::UINT8:    PrimitiveConverterImpl_ = GEN_TYPE(UInt8); break;
@@ -174,12 +177,12 @@ public:
         }
     }
 
-    arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> block) {
+    arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> block) override {
         if constexpr (IsDictionary) {
-            return PrimitiveConverterImpl_(Settings_.Builder.get(), block);
+            return PrimitiveConverterImpl_(Settings_->Builder.get(), block);
         }
         if constexpr (IsTopLevelYson) {
-            auto builder = Settings_.Builder.get();
+            auto builder = Settings_->Builder.get();
             arrow::BinaryArray binary(block);
             if (binary.null_count()) {
                 for (int64_t i = 0; i < binary.length(); ++i) {
@@ -199,8 +202,119 @@ public:
         return block;
     }
 private:
-    TYtColumnConverterSettings& Settings_;
+    std::shared_ptr<TYtColumnConverterSettings> Settings_;
     arrow::Datum (*PrimitiveConverterImpl_)(NUdf::IArrayBuilder*, std::shared_ptr<arrow::ArrayData>);
+};
+
+template<typename TConverterType, typename... Args>
+std::unique_ptr<IYtColumnConverter> CreatePrimitiveColumnConverter(
+    std::shared_ptr<TYtColumnConverterSettings> settings,
+    Args&&... args
+) {
+    return std::make_unique<TConverterType>(
+        std::move(settings),
+        std::make_unique<TPrimitiveColumnConverter<true, false>>(settings),
+        std::forward<Args>(args)...
+    );
+};
+
+class TArrowNativeFixedSizeDictConverter : public IYtColumnConverter {
+public:
+    TArrowNativeFixedSizeDictConverter(std::shared_ptr<TYtColumnConverterSettings> settings, std::shared_ptr<arrow::DataType> arrowType)
+        : Settings_(std::move(settings))
+    {
+        switch (arrowType->id()) {
+        case arrow::Type::DATE32:
+            DictConverterImpl_ = GEN_TYPE(Date32);
+            ArrayBuilder_ = CreateArrayBuilder<i32>(std::move(arrowType));
+            break;
+
+        case arrow::Type::DATE64:
+            DictConverterImpl_ = GEN_TYPE(Date64);
+            ArrayBuilder_ = CreateArrayBuilder<i64>(std::move(arrowType));
+            break;
+
+        case arrow::Type::TIMESTAMP:
+            DictConverterImpl_ = GEN_TYPE(Timestamp);
+            ArrayBuilder_ = CreateArrayBuilder<i64>(std::move(arrowType));
+            break;
+
+        default:
+            YQL_ENSURE(false, "unsupported arrow type");
+        };
+    }
+
+    arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> block) override {
+        return DictConverterImpl_(ArrayBuilder_.get(), block);
+    }
+
+private:
+    template<typename TLayout>
+    std::unique_ptr<NUdf::IArrayBuilder> CreateArrayBuilder(std::shared_ptr<arrow::DataType> arrowType) {
+        size_t maxBlockItemSize = sizeof(TLayout);
+        size_t maxBlockLen = CalcBlockLen(maxBlockItemSize);
+
+#define ARRAY_BUILDER(optional)                                                   \
+        return std::make_unique<NUdf::TFixedSizeArrayBuilder<TLayout, optional>>( \
+            TTypeInfoHelper(),                                                    \
+            std::move(arrowType),                                                 \
+            Settings_->Pool,                                                      \
+            maxBlockLen,                                                          \
+            NUdf::TArrayBuilderBase::TParams {}                                   \
+        );
+
+        if (Settings_->IsTopOptional) {
+            ARRAY_BUILDER(true)
+        } else {
+            ARRAY_BUILDER(false)
+        }
+
+#undef ARRAY_BUILDER
+    }
+
+private:
+    std::shared_ptr<TYtColumnConverterSettings> Settings_;
+    arrow::Datum (*DictConverterImpl_)(NUdf::IArrayBuilder*, std::shared_ptr<arrow::ArrayData>);
+    std::unique_ptr<NUdf::IArrayBuilder> ArrayBuilder_;
+};
+
+template<typename TBaseConverter>
+class TWithArrowNativeConverter : public TBaseConverter {
+public:
+    template<typename... Args>
+    TWithArrowNativeConverter(
+        std::shared_ptr<TYtColumnConverterSettings> settings,
+        std::shared_ptr<arrow::DataType> origArrowType,
+        Args&&... args
+    )
+        : TBaseConverter(
+            settings,
+            std::make_unique<TArrowNativeFixedSizeDictConverter>(settings, origArrowType),
+            std::forward<Args>(args)...
+        )
+        , ExpectedOrigType_(origArrowType)
+    {}
+
+    arrow::Datum Cast(arrow::Datum datum) const override {
+        YQL_ENSURE(datum.type()->Equals(ExpectedOrigType_));
+        return TBaseConverter::Cast(datum);
+    }
+
+private:
+    std::shared_ptr<arrow::DataType> ExpectedOrigType_;
+};
+
+template<typename TConverterType, typename... Args>
+std::unique_ptr<IYtColumnConverter> CreateArrowNativeColumnConverter(
+    std::shared_ptr<TYtColumnConverterSettings> settings,
+    std::shared_ptr<arrow::DataType> origArrowType,
+    Args&&... args
+) {
+    return std::make_unique<TWithArrowNativeConverter<TConverterType>>(
+        std::move(settings),
+        std::move(origArrowType),
+        std::forward<Args>(args)...
+    );
 };
 
 namespace {
@@ -272,7 +386,7 @@ NUdf::TBlockItem ReadYson(TYsonBuffer& buf) {
 template<bool Nullable, bool Native>
 class TTupleYsonReader final : public IYsonYQLComplexTypeReader<Native> {
 public:
-    TTupleYsonReader(TVector<IYsonComplexTypeReader::TPtr>&& children)
+    TTupleYsonReader(TVector<IYsonComplexTypeReader::TPtr>&& children, const NUdf::TType*)
         : Children_(std::move(children))
         , Items_(Children_.size())
     {}
@@ -304,6 +418,8 @@ private:
 template<typename T, bool Nullable, NKikimr::NUdf::EDataSlot OriginalT, bool Native>
 class TStringYsonReader final : public IYsonYQLComplexTypeReader<Native> {
 public:
+    TStringYsonReader(const NUdf::TType*) {}
+
     NUdf::TBlockItem GetItem(TYsonBuffer& buf) override final {
         if constexpr (Nullable) {
             return this->GetNullableItem(buf);
@@ -369,6 +485,12 @@ public:
 template<typename T, bool Nullable, bool Native>
 class TFixedSizeYsonReader final : public IYsonYQLComplexTypeReader<Native> {
 public:
+    TFixedSizeYsonReader(const NUdf::TType* type) {
+        NUdf::TDataTypeInspector typeData(TTypeInfoHelper(), type);
+        YQL_ENSURE(typeData);
+        DataSlot_ = NUdf::GetDataSlot(typeData.GetTypeId());
+    }
+
     NUdf::TBlockItem GetItem(TYsonBuffer& buf) override final {
         if constexpr (Nullable) {
             return this->GetNullableItem(buf);
@@ -396,11 +518,33 @@ public:
             if constexpr (std::is_signed_v<T>) {
                 YQL_ENSURE(buf.Current() == Int64Marker);
                 buf.Next();
-                return NUdf::TBlockItem(T(buf.ReadVarI64()));
+                T value = buf.ReadVarI64();
+
+                if (DataSlot_ == NUdf::EDataSlot::Interval) {
+                    YQL_ENSURE(-static_cast<i64>(NUdf::MAX_TIMESTAMP) < value && value < static_cast<i64>(NUdf::MAX_TIMESTAMP));
+                }
+
+                return NUdf::TBlockItem(value);
             } else {
                 YQL_ENSURE(buf.Current() == Uint64Marker);
                 buf.Next();
-                return NUdf::TBlockItem(T(buf.ReadVarUI64()));
+                T value = buf.ReadVarUI64();
+
+                switch (DataSlot_) {
+                case NUdf::EDataSlot::Date:
+                    YQL_ENSURE(value < NUdf::MAX_DATE);
+                    break;
+                case NUdf::EDataSlot::Datetime:
+                    YQL_ENSURE(value < NUdf::MAX_DATETIME);
+                    break;
+                case NUdf::EDataSlot::Timestamp:
+                    YQL_ENSURE(value < NUdf::MAX_TIMESTAMP);
+                    break;
+                default:
+                    break;
+                }
+
+                return NUdf::TBlockItem(value);
             }
         } else if constexpr (std::is_floating_point_v<T>) {
             YQL_ENSURE(buf.Current() == DoubleMarker);
@@ -410,12 +554,15 @@ public:
             static_assert(std::is_floating_point_v<T>);
         }
     }
+
+private:
+    NUdf::EDataSlot DataSlot_;
 };
 
 template<bool Native>
 class TExternalOptYsonReader final : public IYsonYQLComplexTypeReader<Native> {
 public:
-    TExternalOptYsonReader(IYsonComplexTypeReader::TPtr&& inner)
+    TExternalOptYsonReader(IYsonComplexTypeReader::TPtr&& inner, const NUdf::TType*)
         : Underlying_(std::move(inner))
     {}
 
@@ -460,23 +607,28 @@ struct TComplexTypeYsonReaderTraits {
     using TStrings = TStringYsonReader<TStringType, Nullable, OriginalT, Native>;
     using TExtOptional = TExternalOptYsonReader<Native>;
 
-    constexpr static bool PassType = false;
+    constexpr static bool PassType = true;
 
-    static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
+    static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder, const NUdf::TType* type) {
         Y_UNUSED(pgBuilder);
+        Y_UNUSED(type);
         return BuildPgYsonColumnReader(desc);
     }
 
-    static std::unique_ptr<TResult> MakeResource(bool) {
+    static std::unique_ptr<TResult> MakeResource(bool isOptional, const NUdf::TType* type) {
+        Y_UNUSED(isOptional);
+        Y_UNUSED(type);
         ythrow yexception() << "Complex type Yson reader not implemented for block resources";
     }
 
-    static std::unique_ptr<TResult> MakeSingular() {
+    static std::unique_ptr<TResult> MakeSingular(const NUdf::TType* type) {
+        Y_UNUSED(type);
         ythrow yexception() << "Complex type Yson reader not implemented for singular types.";
     }
 
     template<typename TTzDate>
-    static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
+    static std::unique_ptr<TResult> MakeTzDate(bool isOptional, const NUdf::TType* type) {
+        Y_UNUSED(type);
         if (isOptional) {
             using TTzDateReader = TTzDateYsonReader<TTzDate, true, Native>;
             return std::make_unique<TTzDateReader>();
@@ -500,12 +652,12 @@ Y_FORCE_INLINE void AddFromYson(auto& reader, auto& builder, std::string_view ys
 template<bool Native, bool IsTopOptional>
 class TComplexTypeYsonColumnConverter final : public IYtColumnConverter {
 public:
-    TComplexTypeYsonColumnConverter(TYtColumnConverterSettings&& settings) : Settings_(std::move(settings)) {
-        Reader_ = NUdf::DispatchByArrowTraits<TComplexTypeYsonReaderTraits<Native>>(TTypeInfoHelper(), settings.Type, settings.PgBuilder);
+    TComplexTypeYsonColumnConverter(std::shared_ptr<TYtColumnConverterSettings> settings) : Settings_(std::move(settings)) {
+        Reader_ = NUdf::DispatchByArrowTraits<TComplexTypeYsonReaderTraits<Native>>(TTypeInfoHelper(), Settings_->Type, Settings_->PgBuilder);
     }
 
     arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> block) {
-        auto& builder = Settings_.Builder;
+        auto& builder = Settings_->Builder;
         if (block->type->id() != arrow::Type::DICTIONARY) {
             // complex types comes in yson (which is binary type)
             YQL_ENSURE(block->type->id() == arrow::Type::BINARY);
@@ -535,7 +687,7 @@ public:
         if (dict.null_count()) {
             for (i64 i = 0; i < block->length; ++i) {
                 if (dict.IsNull(i)) {
-                    Settings_.Builder->Add(NUdf::TBlockItem{});
+                    Settings_->Builder->Add(NUdf::TBlockItem{});
                 } else {
                     AddFromYson<Native, IsTopOptional>(Reader_, builder, GetNotNullString(binary, data[i]));
                 }
@@ -545,20 +697,20 @@ public:
                 AddFromYson<Native, IsTopOptional>(Reader_, builder, GetNotNullString(binary, data[i]));
             }
         }
-        return Settings_.Builder->Build(false);
+        return Settings_->Builder->Build(false);
     }
 
 private:
     std::shared_ptr<typename TComplexTypeYsonReaderTraits<Native>::TResult> Reader_;
-    TYtColumnConverterSettings Settings_;
+    std::shared_ptr<TYtColumnConverterSettings> Settings_;
 };
 
 class TTopLevelYsonYtConverter final : public IYtColumnConverter {
 public:
-    TTopLevelYsonYtConverter(TYtColumnConverterSettings&& settings)
-        : Settings_(std::move(settings))
-        , TopLevelYsonDictConverter_(Settings_)
-        , TopLevelYsonConverter_(Settings_)
+    TTopLevelYsonYtConverter(std::shared_ptr<TYtColumnConverterSettings> settings)
+        : Settings_(settings)
+        , TopLevelYsonDictConverter_(settings)
+        , TopLevelYsonConverter_(settings)
     {}
 
     arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> block) override {
@@ -569,58 +721,179 @@ public:
         }
     }
 private:
-    TYtColumnConverterSettings Settings_;
+    std::shared_ptr<TYtColumnConverterSettings> Settings_;
     TPrimitiveColumnConverter<true, true> TopLevelYsonDictConverter_;
     TPrimitiveColumnConverter<false, true> TopLevelYsonConverter_;
 };
 
 template<arrow::Type::type Expected>
-class TTopLevelSimpleCastConverter final : public IYtColumnConverter {
+class TCastConverterBase : public IYtColumnConverter {
 public:
-    TTopLevelSimpleCastConverter(TYtColumnConverterSettings&& settings)
+    TCastConverterBase(std::shared_ptr<TYtColumnConverterSettings> settings, std::unique_ptr<IYtColumnConverter> dictConverter)
         : Settings_(std::move(settings))
-        , DictPrimitiveConverter_(Settings_)
+        , DictConverter_(std::move(dictConverter))
     {}
 
     arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> block) override {
         if (arrow::Type::DICTIONARY == block->type->id()) {
             auto blockType = static_cast<const arrow::DictionaryType&>(*block->type).value_type();
             YQL_ENSURE(Expected == blockType->id());
-            auto result = arrow::compute::Cast(DictPrimitiveConverter_.Convert(block), Settings_.ArrowType);
-            YQL_ENSURE(result.ok());
-            return *result;
+            return Cast(DictConverter_->Convert(block));
         } else {
             auto blockType = block->type;
             YQL_ENSURE(Expected == blockType->id());
-            auto result = arrow::compute::Cast(arrow::Datum(*block), Settings_.ArrowType);
-            YQL_ENSURE(result.ok());
-            return *result;
+            return Cast(arrow::Datum(*block));
         }
     }
+
+protected:
+    virtual arrow::Datum Cast(arrow::Datum datum) const = 0;
+
+protected:
+    std::shared_ptr<TYtColumnConverterSettings> Settings_;
+    std::unique_ptr<IYtColumnConverter> DictConverter_;
+};
+
+template<arrow::Type::type Expected>
+class TIntermediateCastConverter : public TCastConverterBase<Expected> {
+    using TBase = TCastConverterBase<Expected>;
+
+public:
+    TIntermediateCastConverter(std::shared_ptr<TYtColumnConverterSettings> settings, std::unique_ptr<IYtColumnConverter> dictConverter, std::vector<std::shared_ptr<arrow::DataType>> intermTypes)
+        : TBase(std::move(settings), std::move(dictConverter))
+        , IntermTypes_(std::move(intermTypes))
+    {}
+
+    arrow::Datum Cast(arrow::Datum datum) const override {
+        for (auto& intermType : IntermTypes_) {
+            auto result = arrow::compute::Cast(datum, intermType);
+            YQL_ENSURE(result.ok());
+            datum = *result;
+        }
+
+        auto result = arrow::compute::Cast(datum, this->Settings_->ArrowType);
+        YQL_ENSURE(result.ok());
+        return *result;
+    }
+
+protected:
+    std::vector<std::shared_ptr<arrow::DataType>> IntermTypes_;
+};
+
+template<arrow::Type::type Expected, typename TTargetLayout, bool CheckMin = false>
+class TCastAndBoundCheckConverter : public TIntermediateCastConverter<Expected> {
+    using TBase = TIntermediateCastConverter<Expected>;
+
+    using TTargetLayoutArrow = arrow::CTypeTraits<TTargetLayout>::ArrowType;
+    using TTargetLayoutArrowScalar = arrow::CTypeTraits<TTargetLayout>::ScalarType;
+
+public:
+    TCastAndBoundCheckConverter(
+        std::shared_ptr<TYtColumnConverterSettings> settings,
+        std::unique_ptr<IYtColumnConverter> dictConverter,
+        std::vector<std::shared_ptr<arrow::DataType>> intermTypes,
+        TTargetLayout max, bool maxIncluded,
+        TTargetLayout min = 0, bool minIncluded = false
+    )
+        : TBase(std::move(settings), std::move(dictConverter), std::move(intermTypes))
+    {
+        MaxScalar_ = std::make_shared<TTargetLayoutArrowScalar>(max);
+        MinScalar_ = std::make_shared<TTargetLayoutArrowScalar>(min);
+
+        MaxFunc_ = maxIncluded ? "less_equal" : "less";
+        MinFunc_ = minIncluded ? "greater_equal" : "greater";
+
+        YQL_ENSURE(this->Settings_->ArrowType->id() == TTargetLayoutArrow::type_id);
+    }
+
+    TCastAndBoundCheckConverter(
+        std::shared_ptr<TYtColumnConverterSettings> settings,
+        std::unique_ptr<IYtColumnConverter> dictConverter,
+        std::shared_ptr<arrow::DataType> intermType,
+        TTargetLayout max, bool maxIncluded,
+        TTargetLayout min = 0, bool minIncluded = false
+    )
+        : TCastAndBoundCheckConverter(
+            std::move(settings), std::move(dictConverter), std::vector {std::move(intermType)},
+            max, maxIncluded, min, minIncluded
+        )
+    {}
+
+    TCastAndBoundCheckConverter(
+        std::shared_ptr<TYtColumnConverterSettings> settings,
+        std::unique_ptr<IYtColumnConverter> dictConverter,
+        TTargetLayout max, bool maxIncluded,
+        TTargetLayout min = 0, bool minIncluded = false
+    )
+        : TCastAndBoundCheckConverter(
+            std::move(settings), std::move(dictConverter), std::vector<std::shared_ptr<arrow::DataType>> {},
+            max, maxIncluded, min, minIncluded
+        )
+    {}
+
+    arrow::Datum Cast(arrow::Datum datum) const override {
+        datum = TBase::Cast(datum);
+
+        if constexpr (CheckMin) {
+            DoBoundCheck(MinFunc_, MinScalar_, datum);
+        }
+        DoBoundCheck(MaxFunc_, MaxScalar_, datum);
+
+        return datum;
+    }
+
 private:
-    TYtColumnConverterSettings Settings_;
-    TPrimitiveColumnConverter<true, false> DictPrimitiveConverter_;
+    static void DoBoundCheck(const std::string& func, const std::shared_ptr<TTargetLayoutArrowScalar>& bound, const arrow::Datum& datum) {
+        auto cmpResult = ARROW_RESULT(arrow::compute::CallFunction(func, {datum, arrow::Datum(bound)}));
+        auto inBound = ARROW_RESULT(arrow::compute::All(cmpResult)).template scalar_as<arrow::BooleanScalar>().value;
+
+        YQL_ENSURE(inBound, "bound check failed for arrow type " << arrow::TypeIdTraits<Expected>::Type::type_name()
+            << " (values are expected to be " << func << " than " << bound->value << ")");
+    }
+
+private:
+    std::shared_ptr<TTargetLayoutArrowScalar> MinScalar_;
+    std::shared_ptr<TTargetLayoutArrowScalar> MaxScalar_;
+
+    std::string MinFunc_;
+    std::string MaxFunc_;
+};
+
+template<arrow::Type::type Expected>
+class TTopLevelSimpleCastConverter final : public TCastConverterBase<Expected> {
+    using TBase = TCastConverterBase<Expected>;
+
+public:
+    TTopLevelSimpleCastConverter(std::shared_ptr<TYtColumnConverterSettings> settings)
+        : TBase(settings, std::make_unique<TPrimitiveColumnConverter<true, false>>(settings))
+    {}
+
+    arrow::Datum Cast(arrow::Datum datum) const override {
+        auto result = arrow::compute::Cast(datum, this->Settings_->ArrowType);
+        YQL_ENSURE(result.ok());
+        return *result;
+    }
 };
 
 class TTopLevelAsIsConverter final : public IYtColumnConverter {
 public:
-    TTopLevelAsIsConverter(TYtColumnConverterSettings&& settings)
-        : Settings_(std::move(settings))
-        , DictPrimitiveConverter_(Settings_)
+    TTopLevelAsIsConverter(std::shared_ptr<TYtColumnConverterSettings> settings)
+        : Settings_(settings)
+        , DictPrimitiveConverter_(settings)
     {}
 
     arrow::Datum Convert(std::shared_ptr<arrow::ArrayData> block) override {
         if (arrow::Type::DICTIONARY == block->type->id()) {
             auto blockType = static_cast<const arrow::DictionaryType&>(*block->type).value_type();
-            YQL_ENSURE(blockType->Equals(Settings_.ArrowType));
+            YQL_ENSURE(blockType->Equals(Settings_->ArrowType));
             return DictPrimitiveConverter_.Convert(block);
         } else {
-            YQL_ENSURE(block->type->Equals(Settings_.ArrowType));
+            YQL_ENSURE(block->type->Equals(Settings_->ArrowType));
             return block;
         }
     }
 private:
-    TYtColumnConverterSettings Settings_;
+    std::shared_ptr<TYtColumnConverterSettings> Settings_;
     TPrimitiveColumnConverter<true, false> DictPrimitiveConverter_;
 };
 
@@ -662,9 +935,9 @@ struct TBoolDispatcher {
     }
 };
 
-std::unique_ptr<IYtColumnConverter> MakeYtColumnConverter(TType* type, const NUdf::IPgBuilder* pgBuilder, arrow::MemoryPool& pool, bool isNative) {
-    TYtColumnConverterSettings settings(type, pgBuilder, pool, isNative);
-    bool isTopOptional = settings.IsTopOptional;
+std::unique_ptr<IYtColumnConverter> MakeYtColumnConverter(TType* type, const NUdf::IPgBuilder* pgBuilder, arrow::MemoryPool& pool, ui64 nativeYtTypeFlags) {
+    auto settings = std::make_shared<TYtColumnConverterSettings>(type, pgBuilder, pool, nativeYtTypeFlags);
+    bool isTopOptional = settings->IsTopOptional;
     auto requestedType = type;
     if (isTopOptional) {
         requestedType = static_cast<TOptionalType*>(type)->GetItemType();
@@ -672,13 +945,16 @@ std::unique_ptr<IYtColumnConverter> MakeYtColumnConverter(TType* type, const NUd
 
     if (type->IsPg()) {
         // top-level pg is T? where T is int/string
-        return BuildPgTopLevelColumnReader(std::move(settings.Builder), static_cast<TPgType*>(type));
+        return BuildPgTopLevelColumnReader(std::move(settings->Builder), static_cast<TPgType*>(type));
     }
 
     if (type->IsData() && static_cast<TDataType*>(type)->GetDataSlot() == NUdf::EDataSlot::Yson) {
         // Special case: YT now has no non-optional Yson support
         return std::make_unique<TTopLevelYsonYtConverter>(std::move(settings));
     }
+
+    // Arrow doesn't allow direct casts from datetime types to narrower numeric types,
+    // so there are intermediate casts to corresponding underlying numeric types
 
     if (requestedType->IsData()) {
         // T, T? where T is data
@@ -689,6 +965,83 @@ std::unique_ptr<IYtColumnConverter> MakeYtColumnConverter(TType* type, const NUd
             return std::make_unique<TTopLevelSimpleCastConverter<arrow::Type::BOOL>>(std::move(settings));
         case NUdf::EDataSlot::Json:
             return std::make_unique<TTopLevelSimpleCastConverter<arrow::Type::BINARY>>(std::move(settings));
+        case NUdf::EDataSlot::Float:
+            if (nativeYtTypeFlags & NTCF_FLOAT) {
+                return std::make_unique<TTopLevelAsIsConverter>(std::move(settings));
+            } else {
+                // Floats are stored as doubles - cast is required
+                return std::make_unique<TTopLevelSimpleCastConverter<arrow::Type::DOUBLE>>(std::move(settings));
+            }
+        case NUdf::EDataSlot::Date:
+            if (nativeYtTypeFlags & NTCF_DATE) {
+                // YT arrow type is arrow::date32 (int32 underlying)
+                // YQL arrow type is arrow::uint16
+                return CreateArrowNativeColumnConverter<TCastAndBoundCheckConverter<arrow::Type::DATE32, uint16_t>>(
+                    std::move(settings),
+                    arrow::date32(),
+                    arrow::int32(),
+                    NUdf::MAX_DATE, false
+                );
+            } else {
+                // Bound check only
+                return CreatePrimitiveColumnConverter<TCastAndBoundCheckConverter<arrow::Type::UINT16, uint16_t>>(
+                    std::move(settings),
+                    NUdf::MAX_DATE, false
+                );
+            }
+        case NUdf::EDataSlot::Datetime:
+            if (nativeYtTypeFlags & NTCF_DATE) {
+                // YT arrow type is arrow::date64 - milliseconds since epoch (int64 underlying)
+                // YQL arrow type is arrow::uint32 - seconds since epoch
+                //
+                // Additional cast to arrow::timestamp(second) (int64 underlying) is required
+                // to convert milliseconds to seconds
+                return CreateArrowNativeColumnConverter<TCastAndBoundCheckConverter<arrow::Type::DATE64, uint32_t>>(
+                    std::move(settings),
+                    arrow::date64(),
+                    std::vector {arrow::timestamp(arrow::TimeUnit::SECOND), arrow::int64()},
+                    NUdf::MAX_DATETIME, false
+                );
+            } else {
+                // Bound check only
+                return CreatePrimitiveColumnConverter<TCastAndBoundCheckConverter<arrow::Type::UINT32, uint32_t>>(
+                    std::move(settings),
+                    NUdf::MAX_DATETIME, false
+                );
+            }
+        case NUdf::EDataSlot::Timestamp:
+            if (nativeYtTypeFlags & NTCF_DATE) {
+                // YT arrow type is arrow::timestamp (int64 underlying) (microseconds are expected)
+                // YQL arrow type is arrow::uint64
+                return CreateArrowNativeColumnConverter<TCastAndBoundCheckConverter<arrow::Type::TIMESTAMP, uint64_t>>(
+                    std::move(settings),
+                    arrow::timestamp(arrow::TimeUnit::MICRO),
+                    arrow::int64(),
+                    NUdf::MAX_TIMESTAMP, false
+                );
+            } else {
+                // Bound check only
+                return CreatePrimitiveColumnConverter<TCastAndBoundCheckConverter<arrow::Type::UINT64, uint64_t>>(
+                    std::move(settings),
+                    NUdf::MAX_TIMESTAMP, false
+                );
+            }
+        case NUdf::EDataSlot::Interval:
+            // Both YT and YQL arrow types are arrow::int64 (microseconds are expected)
+            // Bound check only
+            return CreatePrimitiveColumnConverter<TCastAndBoundCheckConverter<arrow::Type::INT64, int64_t, true>>(
+                std::move(settings),
+                NUdf::MAX_TIMESTAMP, false, -NUdf::MAX_TIMESTAMP, false
+            );
+        case NUdf::EDataSlot::Date32:
+        case NUdf::EDataSlot::Datetime64:
+        case NUdf::EDataSlot::Timestamp64:
+        case NUdf::EDataSlot::Interval64:
+            if (nativeYtTypeFlags & NTCF_BIGDATE) {
+                YQL_ENSURE(false, "Big date types are unsupported by YT Arrow encoder");
+            } else {
+                return std::make_unique<TTopLevelAsIsConverter>(std::move(settings));
+            }
         case NUdf::EDataSlot::JsonDocument:
         case NUdf::EDataSlot::String:
         case NUdf::EDataSlot::Yson:
@@ -709,6 +1062,6 @@ std::unique_ptr<IYtColumnConverter> MakeYtColumnConverter(TType* type, const NUd
         }
     }
     // Complex type and/or 2+ optional levels
-    return TBoolDispatcher<IYtColumnConverter, TComplexTypeYsonColumnConverter, TYtColumnConverterSettings>().Dispatch(std::move(settings), isNative, isTopOptional);
+    return TBoolDispatcher<IYtColumnConverter, TComplexTypeYsonColumnConverter, std::shared_ptr<TYtColumnConverterSettings>>().Dispatch(std::move(settings), nativeYtTypeFlags, isTopOptional);
 }
 }

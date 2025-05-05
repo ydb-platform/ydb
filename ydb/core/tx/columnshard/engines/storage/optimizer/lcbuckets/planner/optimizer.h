@@ -1,6 +1,7 @@
 #pragma once
 #include "abstract.h"
 #include "counters.h"
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
@@ -16,6 +17,15 @@ private:
     std::map<ui64, std::shared_ptr<IPortionsLevel>, std::greater<ui64>> LevelsByWeight;
     const std::shared_ptr<IStoragesManager> StoragesManager;
     const std::shared_ptr<arrow::Schema> PrimaryKeysSchema;
+    virtual bool DoIsOverloaded() const override {
+        for (auto&& i : Levels) {
+            if (i->IsOverloaded()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     virtual std::vector<TTaskDescription> DoGetTasksDescription() const override {
         std::vector<TTaskDescription> result;
         for (auto&& i : Levels) {
@@ -138,7 +148,7 @@ public:
         return result;
     }
 
-    TOptimizerPlanner(const ui64 pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
+    TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::vector<TLevelConstructorContainer>& levelConstructors);
 };
 

@@ -22,7 +22,7 @@ public:
     {}
 
     void Add(THolder<TStatsScreenedPartIterator> iterator) {
-        Y_ABORT_UNLESS(iterator->IsValid());
+        Y_ENSURE(iterator->IsValid());
         Iterators.PushBack(std::move(iterator));
         TStatsScreenedPartIterator* iteratorPtr = Iterators.back();
         Heap.push(iteratorPtr);
@@ -71,12 +71,12 @@ public:
     }
 
     TDbTupleRef GetCurrentKey() const {
-        Y_ABORT_UNLESS(!Heap.empty());
+        Y_ENSURE(!Heap.empty());
         return Heap.top()->GetCurrentKey();
     }
 
 private:
-    int CompareKeys(const TDbTupleRef& a, const TDbTupleRef& b) const noexcept {
+    int CompareKeys(const TDbTupleRef& a, const TDbTupleRef& b) const {
         return ComparePartKeys(a.Cells(), b.Cells(), *KeyDefaults);
     }
 
@@ -126,7 +126,7 @@ struct TStats {
         DataSizeHistogram.swap(other.DataSizeHistogram);
     }
 
-    TString ToString() const noexcept {
+    TString ToString() const {
         return TStringBuilder() 
             << "RowCount: " << RowCount
             << " DataSize: " << DataSize.Size
@@ -174,7 +174,7 @@ public:
 
         TString old = Sample[idx].first;
         auto oit = KeyRefCount.find(old);
-        Y_ABORT_UNLESS(oit != KeyRefCount.end());
+        Y_ENSURE(oit != KeyRefCount.end());
         --oit->second;
 
         // Delete the key if this was the last reference

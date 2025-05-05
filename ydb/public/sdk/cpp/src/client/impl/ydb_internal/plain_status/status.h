@@ -1,17 +1,17 @@
 #pragma once
 
-#include <src/client/impl/ydb_internal/internal_header.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/internal_header.h>
 
-#include <ydb-cpp-sdk/client/types/status_codes.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
-#include <src/library/grpc/client/grpc_client_low.h>
-#include <ydb-cpp-sdk/library/issue/yql_issue.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/issue/yql_issue.h>
 
 #include <util/string/subst.h>
 
 #include <ydb/public/api/protos/ydb_operation.pb.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 struct TPlainStatus {
     EStatus Status;

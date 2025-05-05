@@ -26,6 +26,39 @@ namespace {
 
 static const TString UdfName("UDF");
 
+class TPrefixLogger : public NUdf::ILogger {
+public:
+    TPrefixLogger(const TString& moduleName, const NUdf::TLoggerPtr& inner)
+        : ModuleName_(moduleName)
+        , Inner_(inner)
+    {}
+
+    NUdf::TLogComponentId RegisterComponent(const NUdf::TStringRef& component) final {
+        TString fullName = TStringBuilder() << ModuleName_ << "." << component;
+        return Inner_->RegisterComponent(fullName);
+    }
+
+    void SetDefaultLevel(NUdf::ELogLevel level) final {
+        Inner_->SetDefaultLevel(level);
+    }
+
+    void SetComponentLevel(NUdf::TLogComponentId component, NUdf::ELogLevel level) final {
+        Inner_->SetComponentLevel(component, level);
+    }
+
+    bool IsActive(NUdf::TLogComponentId component, NUdf::ELogLevel level) const final {
+        return Inner_->IsActive(component, level);
+    }
+
+    void Log(NUdf::TLogComponentId component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
+        Inner_->Log(component, level, message);
+    }
+
+private:
+    const TString ModuleName_;
+    const NUdf::TLoggerPtr Inner_;
+};
+
 class TPgTypeIndex {
     using TUdfTypes = TVector<NYql::NUdf::TPgTypeDescription>;
     TUdfTypes Types;
@@ -1627,6 +1660,12 @@ bool ConvertArrowTypeImpl(TType* itemType, std::shared_ptr<arrow::DataType>& typ
         return true;
     }
 
+    if (itemType->IsTagged()) {
+        auto taggedType = AS_TYPE(TTaggedType, itemType);
+        auto baseType = taggedType->GetBaseType();
+        return ConvertArrowTypeImpl(baseType, type, onFail, output);
+    }
+
     if (IsSingularType(unpacked)) {
         type = arrow::null();
         return true;
@@ -1683,13 +1722,16 @@ void TArrowType::Export(ArrowSchema* out) const {
 // TFunctionTypeInfoBuilder
 //////////////////////////////////////////////////////////////////////////////
 TFunctionTypeInfoBuilder::TFunctionTypeInfoBuilder(
+        NYql::TLangVersion langver,
         const TTypeEnvironment& env,
         NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
         const TStringBuf& moduleName,
         NUdf::ICountersProvider* countersProvider,
         const NUdf::TSourcePosition& pos,
-        const NUdf::ISecureParamsProvider* provider)
-    : Env_(env)
+        const NUdf::ISecureParamsProvider* secureParamsProvider,
+        const NUdf::ILogProvider* logProvider)
+    : LangVer_(langver)
+    , Env_(env)
     , ReturnType_(nullptr)
     , RunConfigType_(Env_.GetTypeOfVoidLazy())
     , UserType_(Env_.GetTypeOfVoidLazy())
@@ -1697,7 +1739,8 @@ TFunctionTypeInfoBuilder::TFunctionTypeInfoBuilder(
     , ModuleName_(moduleName)
     , CountersProvider_(countersProvider)
     , Pos_(pos)
-    , SecureParamsProvider_(provider)
+    , SecureParamsProvider_(secureParamsProvider)
+    , LogProvider_(logProvider)
 {
 }
 
@@ -1779,6 +1822,32 @@ bool TFunctionTypeInfoBuilder::GetSecureParam(NUdf::TStringRef key, NUdf::TStrin
     if (SecureParamsProvider_)
         return SecureParamsProvider_->GetSecureParam(key, value);
     return false;
+}
+
+NUdf::TLoggerPtr TFunctionTypeInfoBuilder::MakeLogger(bool synchronized) const {
+    if (!LogProvider_) {
+        return NUdf::MakeNullLogger();
+    }
+
+    auto inner = LogProvider_->MakeLogger();
+    NUdf::TLoggerPtr ret(new TPrefixLogger(TString(ModuleName_), inner));
+    if (synchronized) {
+        ret = NUdf::MakeSynchronizedLogger(ret);
+    }
+
+    return ret;
+}
+
+void TFunctionTypeInfoBuilder::SetMinLangVer(ui32 langver) {
+    MinLangVer_ = langver;
+
+}
+void TFunctionTypeInfoBuilder::SetMaxLangVer(ui32 langver) {
+    MaxLangVer_ = langver;
+}
+
+ui32 TFunctionTypeInfoBuilder::GetCurrentLangVer() const {
+    return LangVer_;
 }
 
 NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::ReturnsImpl(
@@ -1899,6 +1968,8 @@ void TFunctionTypeInfoBuilder::Build(TFunctionTypeInfo* funcInfo)
     funcInfo->IRFunctionName = std::move(IRFunctionName_);
     funcInfo->SupportsBlocks = SupportsBlocks_;
     funcInfo->IsStrict = IsStrict_;
+    funcInfo->MinLangVer = MinLangVer_;
+    funcInfo->MaxLangVer = MaxLangVer_;
 }
 
 NUdf::TType* TFunctionTypeInfoBuilder::Primitive(NUdf::TDataTypeId typeId) const
@@ -2497,6 +2568,11 @@ size_t CalcMaxBlockItemSize(const TType* type) {
         return 0;
     }
 
+    if (type->IsTagged()) {
+        auto taggedType = AS_TYPE(TTaggedType, type);
+        return CalcMaxBlockItemSize(taggedType->GetBaseType());
+    }
+
     if (type->IsData()) {
         auto slot = *AS_TYPE(TDataType, type)->GetDataSlot();
         switch (slot) {
@@ -2755,6 +2831,47 @@ TType* TTypeBuilder::NewResourceType(const std::string_view& tag) const {
 
 TType* TTypeBuilder::NewVariantType(TType* underlyingType) const {
     return TVariantType::Create(underlyingType, Env);
+}
+
+TType* TTypeBuilder::ValidateBlockStructType(const TStructType* structType) const {
+    MKQL_ENSURE(structType->GetMembersCount() > 0, "Expected at least one column");
+
+    std::vector<std::pair<std::string_view, TType*>> outStructItems;
+    outStructItems.reserve(structType->GetMembersCount() - 1);
+    bool hasBlockLengthColumn = false;
+    for (size_t i = 0; i < structType->GetMembersCount(); i++) {
+        auto blockType = AS_TYPE(TBlockType, structType->GetMemberType(i));
+        bool isScalar = blockType->GetShape() == TBlockType::EShape::Scalar;
+        auto itemType = blockType->GetItemType();
+        if (structType->GetMemberName(i) == NYql::BlockLengthColumnName) {
+            MKQL_ENSURE(isScalar, "Block length column should be scalar");
+            MKQL_ENSURE(AS_TYPE(TDataType, itemType)->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
+
+            hasBlockLengthColumn = true;
+        } else {
+            outStructItems.emplace_back(structType->GetMemberName(i), itemType);
+        }
+    }
+    MKQL_ENSURE(hasBlockLengthColumn, "Block struct must contain block length column");
+    return NewStructType(outStructItems);
+}
+
+TType* TTypeBuilder::BuildBlockStructType(const TStructType* structType) const {
+    std::vector<std::pair<std::string_view, TType*>> blockStructItems;
+    blockStructItems.reserve(structType->GetMembersCount() + 1);
+    for (size_t i = 0; i < structType->GetMembersCount(); i++) {
+        auto itemType = structType->GetMemberType(i);
+        MKQL_ENSURE(!itemType->IsBlock() , "Block types are not allowed here");
+        blockStructItems.emplace_back(
+            structType->GetMemberName(i),
+            NewBlockType(itemType, TBlockType::EShape::Many)
+        );
+    }
+    blockStructItems.emplace_back(
+        NYql::BlockLengthColumnName,
+        NewBlockType(NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar)
+    );
+    return NewStructType(blockStructItems);
 }
 
 void RebuildTypeIndex() {

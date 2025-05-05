@@ -5,6 +5,12 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
+namespace {
+    constexpr ui64 GCErrorInitialBackoffMs = 20;
+    constexpr ui64 GCErrorMaxBackoffMs = 10000;
+    constexpr ui64 GCMaxErrors = 20;  // ~3.33 min in total
+}
+
 TExecutorGCLogic::TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo> info, TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies)
     : TabletStorageInfo(std::move(info))
     , Cookies(cookies)
@@ -66,7 +72,7 @@ TGCLogEntry TExecutorGCLogic::SnapshotLog(ui32 step) {
     TGCLogEntry snapshot(snapshotTime);
     for (const auto& chIt : ChannelInfo) {
         for (const auto& le : chIt.second.CommittedDelta) {
-            Y_ABORT_UNLESS(le.first <= snapshotTime);
+            Y_ENSURE(le.first <= snapshotTime);
             TExecutorGCLogic::MergeVectors(snapshot.Delta.Created, le.second.Created);
             TExecutorGCLogic::MergeVectors(snapshot.Delta.Deleted, le.second.Deleted);
         }
@@ -118,7 +124,7 @@ void TExecutorGCLogic::OnCommitLog(ui32 step, ui32 confirmedOnSend, const TActor
         SendCollectGarbage(ctx);
 }
 
-void TExecutorGCLogic::OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ptr) {
+TDuration TExecutorGCLogic::OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ptr) {
     TEvBlobStorage::TEvCollectGarbageResult* ev = ptr->Get();
     TChannelInfo& channel = ChannelInfo[ev->Channel];
     if (ev->Status == NKikimrProto::EReplyStatus::OK) {
@@ -126,6 +132,7 @@ void TExecutorGCLogic::OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageR
     } else {
         channel.OnCollectGarbageFailure();
     }
+    return channel.TryScheduleGcRequestRetries();
 }
 
 void TExecutorGCLogic::ApplyLogEntry(TGCLogEntry& entry) {
@@ -142,11 +149,11 @@ void TExecutorGCLogic::ApplyLogSnapshot(TGCLogEntry &snapshot, const TVector<std
 }
 
 void TExecutorGCLogic::HoldBarrier(ui32 step) {
-    Y_ABORT_UNLESS(true == HoldBarriersSet.insert(TGCTime(Generation, step)).second);
+    Y_ENSURE(true == HoldBarriersSet.insert(TGCTime(Generation, step)).second);
 }
 
 void TExecutorGCLogic::ReleaseBarrier(ui32 step) {
-    Y_ABORT_UNLESS(1 == HoldBarriersSet.erase(TGCTime(Generation, step)));
+    Y_ENSURE(1 == HoldBarriersSet.erase(TGCTime(Generation, step)));
 }
 
 ui32 TExecutorGCLogic::GetActiveGcBarrier() {
@@ -164,7 +171,7 @@ void TExecutorGCLogic::ApplyDelta(TGCTime time, TGCBlobDelta &delta) {
     for (const TLogoBlobID &blobId : delta.Created) {
         auto &channel = ChannelInfo[blobId.Channel()];
         TGCTime gcTime(blobId.Generation(), blobId.Step());
-        Y_ABORT_UNLESS(channel.KnownGcBarrier < gcTime);
+        Y_ENSURE(channel.KnownGcBarrier < gcTime);
         channel.CommittedDelta[gcTime].Created.push_back(blobId);
     }
 
@@ -186,6 +193,12 @@ bool TExecutorGCLogic::HasGarbageBefore(TGCTime snapshotTime) {
     return false;
 }
 
+void TExecutorGCLogic::RetryGcRequests(ui32 channel, const TActorContext& ctx) {
+    if (auto* channelInfo = ChannelInfo.FindPtr(channel)) {
+        channelInfo->RetryGcRequests(TabletStorageInfo.Get(), channel, Generation, ctx);
+    }
+}
+
 void TExecutorGCLogic::SendCollectGarbage(const TActorContext& ctx) {
     if (!AllowGarbageCollection)
         return;
@@ -204,6 +217,10 @@ void TExecutorGCLogic::SendCollectGarbage(const TActorContext& ctx) {
 TExecutorGCLogic::TChannelInfo::TChannelInfo()
     : GcCounter(1)
     , GcWaitFor(0)
+    , TryCounter(0)
+    , BackoffTimer(GCErrorInitialBackoffMs, GCErrorMaxBackoffMs)
+    , RetryIsScheduled(false)
+    , FailCount(0)
 {
 }
 
@@ -323,16 +340,14 @@ TExecutorGCLogic::TIntrospection TExecutorGCLogic::IntrospectStateSize() const {
 namespace {
     void ValidateGCVector(ui64 tabletId, ui32 channel, const char* name, const TVector<TLogoBlobID>& vec) {
         for (size_t i = 0; i < vec.size(); ++i) {
-            Y_ABORT_UNLESS(vec[i].TabletID() == tabletId,
-                "Foreign blob %s in %s vector (tablet %" PRIu64 ", channel %" PRIu32 ")",
-                vec[i].ToString().c_str(), name, tabletId, channel);
-            Y_ABORT_UNLESS(vec[i].Channel() == channel,
-                "Wrong channel blob %s in %s vector (tablet %" PRIu64 ", channel %" PRIu32 ")",
-                vec[i].ToString().c_str(), name, tabletId, channel);
+            Y_ENSURE(vec[i].TabletID() == tabletId,
+                "Foreign blob " << vec[i] << " in " << name << " vector (tablet " << tabletId << ", channel " << channel << ")");
+            Y_ENSURE(vec[i].Channel() == channel,
+                "Wrong channel blob " << vec[i] << " in " << name << " vector (tablet " << tabletId << ", channel " << channel << ")");
             if (i > 0) {
-                Y_ABORT_UNLESS(vec[i-1] < vec[i],
-                    "Out of order blobs %s and %s in %s vector (tablet %" PRIu64 ", channel %" PRIu32 ")",
-                    vec[i-1].ToString().c_str(), vec[i].ToString().c_str(), name, tabletId, channel);
+                Y_ENSURE(vec[i-1] < vec[i],
+                    "Out of order blobs " << vec[i-1] << " and " << vec[i]
+                    << " in " << name << " vector (tablet " << tabletId << ", channel " << channel << ")");
             }
         }
     }
@@ -365,6 +380,8 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
         return;
 
     MinUncollectedTime = uncommittedTime;
+    RetryIsScheduled = false;
+    FailCount = 0;
 
     TVector<TLogoBlobID> keep;
     TVector<TLogoBlobID> notKeep;
@@ -396,7 +413,7 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
         KnownGcBarrier = collectBarrier;
 
         const auto *channelInfo = tabletStorageInfo->ChannelInfo(channel);
-        Y_ABORT_UNLESS(channelInfo);
+        Y_ENSURE(channelInfo);
 
 
         const ui32 lastCommitedGcBarrier = CommitedGcBarrier.Generation;
@@ -465,11 +482,31 @@ void TExecutorGCLogic::TChannelInfo::OnCollectGarbageSuccess() {
 
     CollectSent.Clear();
     CommitedGcBarrier = KnownGcBarrier;
+    TryCounter = 0;
+    BackoffTimer.Reset();
 }
 
 void TExecutorGCLogic::TChannelInfo::OnCollectGarbageFailure() {
     CollectSent.Clear();
     --GcWaitFor;
+    ++FailCount;
+}
+
+TDuration TExecutorGCLogic::TChannelInfo::TryScheduleGcRequestRetries() {
+    if (GcWaitFor == 0 && FailCount > 0) {
+        if (!RetryIsScheduled && TryCounter < GCMaxErrors) {
+            ++TryCounter;
+            RetryIsScheduled = true;
+            return TDuration::MilliSeconds(BackoffTimer.NextBackoffMs());
+        }
+    }
+    return TDuration{};
+}
+
+void TExecutorGCLogic::TChannelInfo::RetryGcRequests(const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& ctx) {
+    if (RetryIsScheduled) {
+        SendCollectGarbage(MinUncollectedTime, tabletStorageInfo, channel, generation, ctx);
+    }
 }
 
 }

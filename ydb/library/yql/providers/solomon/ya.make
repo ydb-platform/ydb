@@ -1,5 +1,7 @@
 RECURSE(
-    async_io
+    actors
+    common
+    events
     expr_nodes
     gateway
     provider

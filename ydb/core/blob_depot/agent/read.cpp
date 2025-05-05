@@ -173,100 +173,29 @@ namespace NKikimr::NBlobDepot {
         }
 
         for (TS3ReadItem& item : s3items) {
-            class TGetActor : public TActor<TGetActor> {
-                size_t OutputOffset;
-                std::shared_ptr<TReadContext> ReadContext;
-                TQuery* const Query;
-
-                TString AgentLogId;
-                TString QueryId;
-                ui64 ReadId;
-
-                NMonitoring::TDynamicCounters::TCounterPtr GetBytesOk;
-                NMonitoring::TDynamicCounters::TCounterPtr GetsOk;
-                NMonitoring::TDynamicCounters::TCounterPtr GetsError;
-
-            public:
-                TGetActor(size_t outputOffset, std::shared_ptr<TReadContext> readContext, TQuery *query,
-                        NMonitoring::TDynamicCounters::TCounterPtr getBytesOk,
-                        NMonitoring::TDynamicCounters::TCounterPtr getsOk,
-                        NMonitoring::TDynamicCounters::TCounterPtr getsError)
-                    : TActor(&TThis::StateFunc)
-                    , OutputOffset(outputOffset)
-                    , ReadContext(std::move(readContext))
-                    , Query(query)
-                    , AgentLogId(query->Agent.LogId)
-                    , QueryId(query->GetQueryId())
-                    , ReadId(ReadContext->GetTag())
-                    , GetBytesOk(std::move(getBytesOk))
-                    , GetsOk(std::move(getsOk))
-                    , GetsError(std::move(getsError))
-                {}
-
-                void Handle(NWrappers::TEvExternalStorage::TEvGetObjectResponse::TPtr ev) {
-                    auto& msg = *ev->Get();
-
-                    STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA55, "received TEvGetObjectResponse",
-                        (AgentId, AgentLogId), (QueryId, QueryId), (ReadId, ReadId),
-                        (Response, msg.Result), (BodyLen, std::size(msg.Body)));
-
-                    if (msg.IsSuccess()) {
-                        ++*GetsOk;
-                        *GetBytesOk += msg.Body.size();
-                    } else {
-                        ++*GetsError;
-                    }
-
-                    if (msg.IsSuccess()) {
-                        Finish(std::move(msg.Body), "");
-                    } else if (const auto& error = msg.GetError(); error.GetErrorType() == Aws::S3::S3Errors::NO_SUCH_KEY) {
-                        Finish(std::nullopt, "data has disappeared from S3");
-                    } else {
-                        Finish(std::nullopt, msg.GetError().GetMessage().c_str());
-                    }
-                }
-
-                void HandleUndelivered() {
-                    STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA56, "received TEvUndelivered",
-                        (AgentId, AgentLogId), (QueryId, QueryId), (ReadId, ReadId));
-                    Finish(std::nullopt, "wrapper actor terminated");
-                }
-
-                void Finish(std::optional<TString> data, const char *error) {
-                    auto& context = *ReadContext;
-                    if (!context.Terminated && !context.StopProcessingParts) {
-                        if (data) {
-                            context.Buffer.Write(OutputOffset, TRope(std::move(*data)));
-                            if (!--context.NumPartsPending) {
-                                context.EndWithSuccess(Query);
-                            }
-                        } else {
-                            context.EndWithError(Query, NKikimrProto::ERROR, TStringBuilder()
-                                << "failed to fetch data from S3: " << error);
-                        }
-                    }
-                    PassAway();
-                }
-
-                STRICT_STFUNC(StateFunc,
-                    hFunc(NWrappers::TEvExternalStorage::TEvGetObjectResponse, Handle)
-                    cFunc(TEvents::TSystem::Undelivered, HandleUndelivered)
-                    cFunc(TEvents::TSystem::Poison, PassAway)
-                )
-            };
+#ifndef KIKIMR_DISABLE_S3_OPS
             STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA57, "starting S3 read", (AgentId, Agent.LogId), (QueryId, GetQueryId()),
                 (ReadId, context->GetTag()), (Key, item.Key), (Offset, item.Offset), (Size, item.Size),
                 (OutputOffset, item.OutputOffset));
-            const TActorId actorId = Agent.RegisterWithSameMailbox(new TGetActor(item.OutputOffset, context, this,
-                Agent.S3GetBytesOk, Agent.S3GetsOk, Agent.S3GetsError));
-            auto request = std::make_unique<NWrappers::TEvExternalStorage::TEvGetObjectRequest>(
-                Aws::S3::Model::GetObjectRequest()
-                    .WithBucket(Agent.S3BackendSettings->GetSettings().GetBucket())
-                    .WithKey(std::move(item.Key))
-                    .WithRange(TStringBuilder() << "bytes=" << item.Offset << '-' << item.Offset + item.Size - 1)
-            );
-            TActivationContext::Send(new IEventHandle(Agent.S3WrapperId, actorId, request.release(), IEventHandle::FlagTrackDelivery));
+            auto finish = [contextPtr = context, outputOffset = item.OutputOffset, this](std::optional<TString> data, const char *error) {
+                auto& context = *contextPtr;
+                if (!context.Terminated && !context.StopProcessingParts) {
+                    if (data) {
+                        context.Buffer.Write(outputOffset, TRope(std::move(*data)));
+                        if (!--context.NumPartsPending) {
+                            context.EndWithSuccess(this);
+                        }
+                    } else {
+                        context.EndWithError(this, NKikimrProto::ERROR, TStringBuilder()
+                            << "failed to fetch data from S3: " << error);
+                    }
+                }
+            };
+            IssueReadS3(item.Key, item.Offset, item.Size, finish, context->GetTag());
             ++context->NumPartsPending;
+#else
+            Y_ABORT("S3 is not supported");
+#endif
         }
 
         Y_ABORT_UNLESS(context->NumPartsPending);

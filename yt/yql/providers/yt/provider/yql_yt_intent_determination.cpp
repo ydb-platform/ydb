@@ -51,8 +51,6 @@ public:
             return TStatus::Error;
         }
 
-        auto cluster = TString{read.DataSource().Cluster().Value()};
-
         EYtSettingTypes acceptedSettings = EYtSettingType::View | EYtSettingType::Anonymous
             | EYtSettingType::InferScheme | EYtSettingType::ForceInferScheme
             | EYtSettingType::DoNotFailOnInvalidSchema | EYtSettingType::XLock
@@ -64,7 +62,7 @@ public:
                 }
 
                 TYtTableInfo tableInfo(table.Cast(), false);
-                if (!ProcessInputTableIntent(ctx.GetPosition(input.Pos()), cluster, tableInfo, ctx)) {
+                if (!ProcessInputTableIntent(ctx.GetPosition(input.Pos()), tableInfo, ctx)) {
                     return TStatus::Error;
                 }
             }
@@ -137,13 +135,11 @@ public:
     TStatus HandleReadTable(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         TYtReadTable read = TYtReadTable(input);
 
-        auto cluster = TString{read.DataSource().Cluster().Value()};
-
         for (auto section: read.Input()) {
             for (auto path: section.Paths()) {
                 if (auto table = path.Table().Maybe<TYtTable>()) {
                     TYtTableInfo tableInfo(table.Cast(), false);
-                    if (!ProcessInputTableIntent(ctx.GetPosition(input->Pos()), cluster, tableInfo, ctx)) {
+                    if (!ProcessInputTableIntent(ctx.GetPosition(input->Pos()), tableInfo, ctx)) {
                         return TStatus::Error;
                     }
                 }
@@ -160,10 +156,8 @@ public:
     TStatus HandleReadTableScheme(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         TYtReadTableScheme scheme = TYtReadTableScheme(input);
 
-        auto cluster = TString{scheme.DataSource().Cluster().Value()};
-
         TYtTableInfo tableInfo(scheme.Table(), false);
-        if (!ProcessInputTableIntent(ctx.GetPosition(input->Pos()), cluster, tableInfo, ctx)) {
+        if (!ProcessInputTableIntent(ctx.GetPosition(input->Pos()), tableInfo, ctx)) {
             return TStatus::Error;
         }
 
@@ -177,13 +171,11 @@ public:
 
     TStatus HandleOperation(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         auto op = TYtTransientOpBase(input);
-        auto cluster = TString{op.DataSink().Cluster().Value()};
-
         for (auto section: op.Input()) {
             for (auto path: section.Paths()) {
                 if (auto table = path.Table().Maybe<TYtTable>()) {
                     TYtTableInfo tableInfo(table.Cast(), false);
-                    if (!ProcessInputTableIntent(ctx.GetPosition(input->Pos()), cluster, tableInfo, ctx)) {
+                    if (!ProcessInputTableIntent(ctx.GetPosition(input->Pos()), tableInfo, ctx)) {
                         return TStatus::Error;
                     }
                 }
@@ -370,21 +362,22 @@ private:
         }
     }
 
-    bool ProcessInputTableIntent(TPosition pos, const TString& cluster, const TYtTableInfo& tableInfo, TExprContext& ctx) {
-        if (!State_->Checkpoints.empty() && State_->Checkpoints.contains(std::make_pair(cluster, tableInfo.Name))) {
+    bool ProcessInputTableIntent(TPosition pos, const TYtTableInfo& tableInfo, TExprContext& ctx) {
+        YQL_ENSURE(tableInfo.Cluster && tableInfo.Cluster != YtUnspecifiedCluster);
+        if (!State_->Checkpoints.empty() && State_->Checkpoints.contains(std::make_pair(tableInfo.Cluster, tableInfo.Name))) {
             ctx.AddError(TIssue(pos, TStringBuilder() << "Reading from checkpoint " << tableInfo.Name.Quote() << " is not allowed"));
             return false;
         }
 
         TYtTableDescription& tableDesc = State_->TablesData->GetOrAddTable(
-            cluster,
+            tableInfo.Cluster,
             tableInfo.Name,
             tableInfo.Epoch
         );
 
         if (NYql::HasSetting(tableInfo.Settings.Cast().Ref(), EYtSettingType::Anonymous)) {
             tableDesc.IsAnonymous = true;
-            RegisterAnonymouseTable(cluster, tableInfo.Name);
+            RegisterAnonymouseTable(tableInfo.Cluster, tableInfo.Name);
         }
 
         TYtTableIntents intents = TYtTableIntent::Read;

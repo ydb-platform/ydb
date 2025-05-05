@@ -39,9 +39,14 @@ public:
     static void Set(INodeBrokerHooks* hooks);
 };
 
+enum class ENodeState : ui8 {
+    Active = 0,
+    Expired = 1,
+    Removed = 2,
+};
+
 class TNodeBroker : public TActor<TNodeBroker>
-                  , public TTabletExecutedFlat
-                  , public ITxExecutor {
+                  , public TTabletExecutedFlat {
 public:
     struct TEvPrivate {
         enum EEv {
@@ -77,18 +82,6 @@ private:
 
     static constexpr TDuration MIN_LEASE_DURATION = TDuration::Minutes(5);
 
-    enum EConfigKey {
-        ConfigKeyConfig = 1,
-    };
-
-    enum EParamKey {
-        ParamKeyConfigSubscription = 1,
-        ParamKeyCurrentEpochId,
-        ParamKeyCurrentEpochVersion,
-        ParamKeyCurrentEpochStart,
-        ParamKeyCurrentEpochEnd,
-        ParamKeyNextEpochEnd,
-    };
 
     struct TNodeInfo : public TEvInterconnect::TNodeInfo {
         TNodeInfo() = delete;
@@ -101,11 +94,17 @@ private:
                   const TNodeLocation &location)
             : TEvInterconnect::TNodeInfo(nodeId, address, host, resolveHost,
                                          port, location)
-            , Lease(0)
         {
         }
 
+        TNodeInfo(ui32 nodeId, ENodeState state, ui64 version, const NKikimrNodeBroker::TNodeInfoSchema& schema);
+        TNodeInfo(ui32 nodeId, ENodeState state, ui64 version);
+
         TNodeInfo(const TNodeInfo &other) = default;
+
+        NKikimrNodeBroker::TNodeInfoSchema SerializeToSchema() const;
+        bool EqualCachedData(const TNodeInfo &other) const;
+        bool EqualExceptVersion(const TNodeInfo &other) const;
 
         bool IsFixed() const
         {
@@ -119,10 +118,9 @@ private:
             return expire.ToRfc822StringLocal();
         }
 
-        TString IdString() const
-        {
-            return TStringBuilder() << "#" << NodeId << " " << Host << ":" << Port;
-        }
+        TString IdString() const;
+        TString IdShortString() const;
+        TString ToString() const;
 
         TString ExpirationString() const
         {
@@ -130,11 +128,13 @@ private:
         }
 
         // Lease is incremented each time node extends its lifetime.
-        ui32 Lease;
+        ui32 Lease = 0;
         TInstant Expire;
         bool AuthorizedByCertificate = false;
         std::optional<ui32> SlotIndex;
         TSubDomainKey ServicedSubDomain;
+        ENodeState State = ENodeState::Removed;
+        ui64 Version = 0;
     };
 
     // State changes to apply while moving to the next epoch.
@@ -142,20 +142,57 @@ private:
         TVector<ui32> NodesToExpire;
         TVector<ui32> NodesToRemove;
         TEpochInfo NewEpoch;
+        TApproximateEpochStartInfo NewApproxEpochStart;
+    };
+
+    struct TCacheVersion {
+        ui64 Version;
+        ui64 CacheEndOffset;
+
+        bool operator<(ui64 version) const {
+            return Version < version;
+        }
+    };
+
+    struct TPipeServerInfo {
+        TPipeServerInfo(TActorId id, TActorId icSession)
+            : Id(id)
+            , IcSession(icSession)
+        {}
+
+        TActorId Id;
+        TActorId IcSession;
+        THashSet<TActorId> Subscribers;
+    };
+
+    struct TSubscriberInfo {
+        TSubscriberInfo(TActorId id, ui64 seqNo, TPipeServerInfo* pipeServerInfo)
+            : Id(id)
+            , SeqNo(seqNo)
+            , PipeServerInfo(pipeServerInfo)
+        {}
+
+        TActorId Id;
+        ui64 SeqNo = 0;
+        TPipeServerInfo* PipeServerInfo;
     };
 
     class TTxExtendLease;
     class TTxInitScheme;
     class TTxLoadState;
+    class TTxMigrateState;
     class TTxRegisterNode;
     class TTxGracefulShutdown;
     class TTxUpdateConfig;
     class TTxUpdateConfigSubscription;
     class TTxUpdateEpoch;
 
+    struct TDbChanges;
+
     ITransaction *CreateTxExtendLease(TEvNodeBroker::TEvExtendLeaseRequest::TPtr &ev);
     ITransaction *CreateTxInitScheme();
     ITransaction *CreateTxLoadState();
+    ITransaction *CreateTxMigrateState(TDbChanges&& dbChanges);
     ITransaction *CreateTxRegisterNode(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev);
     ITransaction *CreateTxGracefulShutdown(TEvNodeBroker::TEvGracefulShutdownRequest::TPtr &ev);
     ITransaction *CreateTxUpdateConfig(TEvConsole::TEvConfigNotificationRequest::TPtr &ev);
@@ -209,10 +246,12 @@ private:
             HFuncTraced(TEvNodeBroker::TEvCompactTables, Handle);
             HFuncTraced(TEvNodeBroker::TEvGetConfigRequest, Handle);
             HFuncTraced(TEvNodeBroker::TEvSetConfigRequest, Handle);
+            HFuncTraced(TEvNodeBroker::TEvSubscribeNodesRequest, Handle);
+            HFuncTraced(TEvNodeBroker::TEvSyncNodesRequest, Handle);
             HFuncTraced(TEvPrivate::TEvUpdateEpoch, Handle);
             HFuncTraced(TEvPrivate::TEvResolvedRegistrationRequest, Handle);
-            IgnoreFunc(TEvTabletPipe::TEvServerConnected);
-            IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
+            HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
+            hFunc(TEvTabletPipe::TEvServerConnected, Handle);
             IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
             IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse);
 
@@ -225,17 +264,6 @@ private:
         }
     }
 
-    void ClearState();
-
-    // Internal state modifiers. Don't affect DB.
-    void AddNode(const TNodeInfo &info);
-    void RemoveNode(ui32 nodeId);
-    void ExtendLease(TNodeInfo &node);
-    void FixNodeId(TNodeInfo &node);
-    void RecomputeFreeIds();
-    void RecomputeSlotIndexesPools();
-    bool IsBannedId(ui32 id) const;
-
     void AddDelayedListNodesRequest(ui64 epoch,
                                     TEvNodeBroker::TEvListNodes::TPtr &ev);
     void ProcessListNodesRequest(TEvNodeBroker::TEvListNodes::TPtr &ev);
@@ -247,54 +275,23 @@ private:
     void FillNodeName(const std::optional<ui32> &slotIndex,
                       NKikimrNodeBroker::TNodeInfo &info) const;
 
-    void ComputeNextEpochDiff(TStateDiff &diff);
-    void ApplyStateDiff(const TStateDiff &diff);
-    void UpdateEpochVersion();
     void PrepareEpochCache();
+    void PrepareUpdateNodesLog();
     void AddNodeToEpochCache(const TNodeInfo &node);
+    void AddDeltaToEpochDeltasCache(const TString& delta, ui64 version);
+    void AddNodeToUpdateNodesLog(const TNodeInfo &node);
 
     void SubscribeForConfigUpdates(const TActorContext &ctx);
 
-    void ProcessTx(ITransaction *tx,
-                   const TActorContext &ctx);
-    void ProcessTx(ui32 nodeId,
-                   ITransaction *tx,
-                   const TActorContext &ctx);
-    void TxCompleted(ITransaction *tx,
-                     const TActorContext &ctx);
-    void TxCompleted(ui32 nodeId,
-                     ITransaction *tx,
-                     const TActorContext &ctx);
+    void SendUpdateNodes(const TActorContext &ctx);
+    void SendUpdateNodes(const TSubscriberInfo &subscriber, ui64 version, const TActorContext &ctx);
+    void SendToSubscriber(const TSubscriberInfo &subscriber, IEventBase* event, const TActorContext &ctx) const;
+    void SendToSubscriber(const TSubscriberInfo &subscriber, IEventBase* event, ui64 cookie, const TActorContext &ctx) const;
 
-    void LoadConfigFromProto(const NKikimrNodeBroker::TConfig &config);
+    TSubscriberInfo& AddSubscriber(TActorId subscriberId, TActorId pipeServerId, ui64 seqNo, const TActorContext &ctx);
+    void RemoveSubscriber(TActorId subscriber, const TActorContext &ctx);
+    bool HasOutdatedSubscription(TActorId subscriber, ui64 newSeqNo) const;
 
-    // Local database manipulations.
-    void DbAddNode(const TNodeInfo &node,
-                   TTransactionContext &txc);
-    void DbApplyStateDiff(const TStateDiff &diff,
-                          TTransactionContext &txc);
-    void DbFixNodeId(const TNodeInfo &node,
-                     TTransactionContext &txc);
-    bool DbLoadState(TTransactionContext &txc,
-                     const TActorContext &ctx);
-    void DbRemoveNodes(const TVector<ui32> &nodes,
-                       TTransactionContext &txc);
-    void DbUpdateConfig(const NKikimrNodeBroker::TConfig &config,
-                        TTransactionContext &txc);
-    void DbUpdateConfigSubscription(ui64 subscriptionId,
-                                    TTransactionContext &txc);
-    void DbUpdateEpoch(const TEpochInfo &epoch,
-                       TTransactionContext &txc);
-    void DbUpdateEpochVersion(ui64 version,
-                              TTransactionContext &txc);
-    void DbUpdateNodeLease(const TNodeInfo &node,
-                           TTransactionContext &txc);
-    void DbUpdateNodeLocation(const TNodeInfo &node,
-                              TTransactionContext &txc);
-    void DbReleaseSlotIndex(const TNodeInfo &node,
-                            TTransactionContext &txc);
-    void DbUpdateNodeAuthorizedByCertificate(const TNodeInfo &node,
-                              TTransactionContext &txc);
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                 const TActorContext &ctx);
     void Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
@@ -315,46 +312,151 @@ private:
                 const TActorContext &ctx);
     void Handle(TEvNodeBroker::TEvSetConfigRequest::TPtr &ev,
                 const TActorContext &ctx);
+    void Handle(TEvNodeBroker::TEvSubscribeNodesRequest::TPtr &ev,
+                const TActorContext &ctx);
+    void Handle(TEvNodeBroker::TEvSyncNodesRequest::TPtr &ev,
+                const TActorContext &ctx);
+    void Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev);
+    void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev,
                 const TActorContext &ctx);
     void Handle(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev,
                 const TActorContext &ctx);
 
-    // All registered dynamic nodes.
-    THashMap<ui32, TNodeInfo> Nodes;
-    THashMap<ui32, TNodeInfo> ExpiredNodes;
-    // Maps <Host/Addr:Port> to NodeID.
-    THashMap<std::tuple<TString, TString, ui16>, ui32> Hosts;
-    // Bitmap with free Node IDs (with no lower 5 bits).
-    TDynBitMap FreeIds;
-    // Maps tenant to its slot indexes pool.
-    std::unordered_map<TSubDomainKey, TSlotIndexesPool, THash<TSubDomainKey>> SlotIndexesPools;
     bool EnableStableNodeNames = false;
-    // Epoch info.
-    TEpochInfo Epoch;
-    // Current config.
-    NKikimrNodeBroker::TConfig Config;
     ui64 MaxStaticId;
     ui64 MinDynamicId;
     ui64 MaxDynamicId;
-    TDuration EpochDuration;
-    TVector<std::pair<ui32, ui32>> BannedIds;
-    ui64 ConfigSubscriptionId;
-    TString StableNodeNamePrefix;
-
     // Events collected during initialization phase.
     TMultiMap<ui64, TEvNodeBroker::TEvListNodes::TPtr> DelayedListNodesRequests;
-    // Transactions queue.
-    TTxProcessor::TPtr TxProcessor;
     TSchedulerCookieHolder EpochTimerCookieHolder;
-    TString EpochCache;
 
+    // old epoch protocol
+    TString EpochCache;
     TString EpochDeltasCache;
-    TVector<ui64> EpochDeltasVersions;
-    TVector<ui64> EpochDeltasEndOffsets;
+    TVector<TCacheVersion> EpochDeltasVersions;
+
+    // new delta protocol
+    TString UpdateNodesLog;
+    TVector<TCacheVersion> UpdateNodesLogVersions;
+    ui64 SentVersion;
+    THashMap<TActorId, TPipeServerInfo> PipeServers;
+    THashMap<TActorId, TSubscriberInfo> Subscribers;
 
     TTabletCountersBase* TabletCounters;
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
+
+    struct TState {
+        TState(TNodeBroker* self);
+        virtual ~TState() = default;
+
+        // Internal state modifiers. Don't affect DB.
+        void RegisterNewNode(const TNodeInfo &info);
+        void AddNode(const TNodeInfo &info);
+        void ExtendLease(TNodeInfo &node);
+        void FixNodeId(TNodeInfo &node);
+        void RecomputeFreeIds();
+        void RecomputeSlotIndexesPools();
+        bool IsBannedId(ui32 id) const;
+        void ComputeNextEpochDiff(TStateDiff &diff);
+        void ApplyStateDiff(const TStateDiff &diff);
+        void UpdateEpochVersion();
+        void LoadConfigFromProto(const NKikimrNodeBroker::TConfig &config);
+        void ReleaseSlotIndex(TNodeInfo &node);
+        void ClearState();
+        void UpdateLocation(TNodeInfo &node, const TNodeLocation &location);
+        TNodeInfo* FindNode(ui32 nodeId);
+
+        // All registered dynamic nodes.
+        THashMap<ui32, TNodeInfo> Nodes;
+        THashMap<ui32, TNodeInfo> ExpiredNodes;
+        THashMap<ui32, TNodeInfo> RemovedNodes;
+        // Maps <Host/Addr:Port> to NodeID.
+        THashMap<std::tuple<TString, TString, ui16>, ui32> Hosts;
+        // Bitmap with free Node IDs (with no lower 5 bits).
+        TDynBitMap FreeIds;
+        // Maps tenant to its slot indexes pool.
+        std::unordered_map<TSubDomainKey, TSlotIndexesPool, THash<TSubDomainKey>> SlotIndexesPools;
+        // Epoch info.
+        TEpochInfo Epoch;
+        TApproximateEpochStartInfo ApproxEpochStart;
+        // Current config.
+        NKikimrNodeBroker::TConfig Config;
+        TDuration EpochDuration = TDuration::Hours(1);
+        TVector<std::pair<ui32, ui32>> BannedIds;
+        ui64 ConfigSubscriptionId = 0;
+        TString StableNodeNamePrefix = "slot-";
+
+    protected:
+        virtual TStringBuf LogPrefix() const;
+
+        TNodeBroker* Self;
+    };
+
+    struct TDbChanges {
+        bool Ready = true;
+        bool UpdateEpoch = false;
+        bool UpdateApproxEpochStart = false;
+        bool UpdateMainNodesTable = false;
+        TVector<ui32> NewVersionUpdateNodes;
+        TVector<ui32> UpdateNodes;
+
+        void Merge(const TDbChanges &other);
+        bool HasNodeUpdates() const;
+    };
+
+    struct TDirtyState : public TState {
+        TDirtyState(TNodeBroker* self);
+
+        // Local database manipulations.
+        void DbAddNode(const TNodeInfo &node,
+                TTransactionContext &txc);
+        void DbRemoveNode(const TNodeInfo &node, TTransactionContext &txc);
+        void DbUpdateNode(ui32 nodeId, TTransactionContext &txc);
+        void DbApplyStateDiff(const TStateDiff &diff,
+                    TTransactionContext &txc);
+        void DbFixNodeId(const TNodeInfo &node,
+                TTransactionContext &txc);
+        void DbUpdateNodes(const TVector<ui32> &nodes, TTransactionContext &txc);
+        void DbUpdateConfig(const NKikimrNodeBroker::TConfig &config,
+                    TTransactionContext &txc);
+        void DbUpdateConfigSubscription(ui64 subscriptionId,
+                                TTransactionContext &txc);
+        void DbUpdateEpoch(const TEpochInfo &epoch,
+                    TTransactionContext &txc);
+        void DbUpdateApproxEpochStart(const TApproximateEpochStartInfo &approxEpochStart, TTransactionContext &txc);
+        void DbUpdateMainNodesTable(TTransactionContext &txc);
+        void DbUpdateEpochVersion(ui64 version,
+                        TTransactionContext &txc);
+        void DbUpdateNodeLease(const TNodeInfo &node,
+                        TTransactionContext &txc);
+        void DbUpdateNodeLocation(const TNodeInfo &node,
+                        TTransactionContext &txc);
+        void DbReleaseSlotIndex(const TNodeInfo &node,
+                        TTransactionContext &txc);
+        void DbUpdateNodeAuthorizedByCertificate(const TNodeInfo &node,
+                        TTransactionContext &txc);
+
+        TDbChanges DbLoadState(TTransactionContext &txc, const TActorContext &ctx);
+        TDbChanges DbLoadNodes(auto &nodesRowset, const TActorContext &ctx);
+        TDbChanges DbMigrateNodes(auto &nodesV2Rowset, const TActorContext &ctx);
+        TDbChanges DbLoadNodesV2(auto &nodesV2Rowset, const TActorContext &ctx);
+        TDbChanges DbMigrateNodesV2();
+
+    protected:
+        TStringBuf LogPrefix() const override;
+        TStringBuf DbLogPrefix() const;
+    };
+
+    /**
+     * NodeBroker in-memory state is divided into two parts to take advantage of pipelining:
+     *
+     *  1) Dirty - state that is read and updated only during Execute() of LocalDB transactions.
+     *  2) Committed - state that is updated only in Complete() of LocalDB transactions. 
+     *     This state is safe to use when responding to requests, its data is persistently stored. 
+     */
+    TDirtyState Dirty;
+    TState Committed;
 
 public:
     TNodeBroker(const TActorId &tablet, TTabletStorageInfo *info);
@@ -362,11 +464,6 @@ public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType()
     {
         return NKikimrServices::TActivity::NODE_BROKER_ACTOR;
-    }
-
-    void Execute(ITransaction *transaction, const TActorContext &ctx) override
-    {
-        TTabletExecutedFlat::Execute(transaction, ctx);
     }
 };
 

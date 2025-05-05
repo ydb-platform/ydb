@@ -6,6 +6,7 @@
 
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/lexer/check/check_lexers.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
@@ -152,6 +153,16 @@ bool TestFormat(
     return true;
 }
 
+bool TestLexers(const TString& query) {
+    NYql::TIssues issues;
+    if (!NSQLTranslationV1::CheckLexers({}, query, issues)) {
+        Cerr << issues.ToString();
+        return false;
+    }
+
+    return true;
+}
+
 class TStoreMappingFunctor: public NLastGetopt::IOptHandler {
 public:
     TStoreMappingFunctor(THashMap<TString, TString>* target, char delim = '@')
@@ -211,6 +222,7 @@ int BuildAST(int argc, char* argv[]) {
     opts.AddLongOption("test-format", "compare formatted query's AST with the original query's AST (only syntaxVersion=1 is supported).").NoArgument();
     opts.AddLongOption("test-double-format", "check if formatting already formatted query produces the same result").NoArgument();
     opts.AddLongOption("test-antlr4", "check antlr4 parser").NoArgument();
+    opts.AddLongOption("test-lexers", "check other lexers").NoArgument();
     opts.AddLongOption("format-output", "Saves formatted query to it").RequiredArgument("format-output").StoreResult(&outFileNameFormat);
     opts.SetFreeArgDefaultTitle("query file");
     opts.AddHelpOption();
@@ -376,6 +388,10 @@ int BuildAST(int argc, char* argv[]) {
 
             if (res.Has("test-format") && syntaxVersion == 1 && !hasError && parseRes.Root) {
                 hasError = !TestFormat(translators, query, settings, queryFile, parseRes, outFileNameFormat, res.Has("test-double-format"));
+            }
+
+            if (res.Has("test-lexers") && syntaxVersion == 1 && !hasError && parseRes.Root) {
+                hasError = !TestLexers(query);
             }
 
             if (hasError) {

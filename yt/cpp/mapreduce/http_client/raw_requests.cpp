@@ -22,6 +22,8 @@
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
+#include <yt/cpp/mapreduce/io/helpers.h>
+
 #include <library/cpp/yson/node/node_io.h>
 
 #include <util/generic/guid.h>
@@ -309,69 +311,95 @@ NHttpClient::IHttpResponsePtr SkyShareTable(
     return RequestWithoutRetry(skyApiHost, mutationId, header, "");
 }
 
-void InsertRows(
-    const TClientContext& context,
-    const TYPath& path,
-    const TNode::TListType& rows,
-    const TInsertRowsOptions& options)
+struct THttpRequestStream
+    : public IOutputStream
 {
-    TMutationId mutationId;
-    THttpHeader header("PUT", "insert_rows");
-    header.SetInputFormat(TFormat::YsonBinary());
-    header.MergeParameters(NRawClient::SerializeParametersForInsertRows(context.Config->Prefix, path, options));
-    auto body = NodeListToYsonString(rows);
+public:
+    THttpRequestStream(NHttpClient::IHttpRequestPtr request)
+        : Request_(std::move(request))
+        , Underlying_(Request_->GetStream())
+    { }
+
+private:
+    void DoWrite(const void* buf, size_t len) override
+    {
+        Underlying_->Write(buf, len);
+    }
+
+    void DoFinish() override
+    {
+        Underlying_->Finish();
+        Request_->Finish()->GetResponse();
+    }
+
+private:
+    NHttpClient::IHttpRequestPtr Request_;
+    IOutputStream* Underlying_;
+};
+
+struct THttpBufferedRequestStream
+    : public IOutputStream
+{
+public:
+    THttpBufferedRequestStream(NHttpClient::IHttpRequestPtr request, size_t bufferSize)
+        : Request_(std::move(request))
+        , Underlying_(std::make_unique<TBufferedOutput>(Request_->GetStream(), bufferSize))
+    { }
+
+private:
+    void DoWrite(const void* buf, size_t len) override
+    {
+        Underlying_->Write(buf, len);
+    }
+
+    void DoFinish() override
+    {
+        Underlying_->Finish();
+        Request_->Finish()->GetResponse();
+    }
+
+private:
+    NHttpClient::IHttpRequestPtr Request_;
+    std::unique_ptr<IOutputStream> Underlying_;
+};
+
+std::unique_ptr<IOutputStream> WriteTable(
+    const TClientContext& context,
+    const TTransactionId& transactionId,
+    const TRichYPath& path,
+    const TMaybe<TFormat>& format,
+    const TTableWriterOptions& options)
+{
+    THttpHeader header("PUT", GetWriteTableCommand(context.Config->ApiVersion));
+    header.AddTransactionId(transactionId);
+    header.SetInputFormat(format);
+    header.SetRequestCompression(ToString(context.Config->ContentEncoding));
+    header.MergeParameters(FormIORequestParameters(path, options));
+
     TRequestConfig config;
     config.IsHeavy = true;
-    RequestWithoutRetry(context, mutationId, header, body, config)->GetResponse();
+    auto request = StartRequestWithoutRetry(context, header, config);
+    if (options.SingleHttpRequest_) {
+        return std::make_unique<THttpBufferedRequestStream>(std::move(request), options.BufferSize_);
+    }
+    return std::make_unique<THttpRequestStream>(std::move(request));
 }
 
-TNode::TListType LookupRows(
+std::unique_ptr<IOutputStream> WriteFile(
     const TClientContext& context,
-    const TYPath& path,
-    const TNode::TListType& keys,
-    const TLookupRowsOptions& options)
+    const TTransactionId& transactionId,
+    const TRichYPath& path,
+    const TFileWriterOptions& options)
 {
-    TMutationId mutationId;
-    THttpHeader header("PUT", "lookup_rows");
-    header.AddPath(AddPathPrefix(path, context.Config->ApiVersion));
-    header.SetInputFormat(TFormat::YsonBinary());
-    header.SetOutputFormat(TFormat::YsonBinary());
+    THttpHeader header("PUT", GetWriteFileCommand(context.Config->ApiVersion));
+    header.AddTransactionId(transactionId);
+    header.SetRequestCompression(ToString(context.Config->ContentEncoding));
+    header.MergeParameters(FormIORequestParameters(path, options));
 
-    header.MergeParameters(BuildYsonNodeFluently().BeginMap()
-        .DoIf(options.Timeout_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("timeout").Value(static_cast<i64>(options.Timeout_->MilliSeconds()));
-        })
-        .Item("keep_missing_rows").Value(options.KeepMissingRows_)
-        .DoIf(options.Versioned_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("versioned").Value(*options.Versioned_);
-        })
-        .DoIf(options.Columns_.Defined(), [&] (TFluentMap fluent) {
-            fluent.Item("column_names").Value(*options.Columns_);
-        })
-    .EndMap());
-
-    auto body = NodeListToYsonString(keys);
     TRequestConfig config;
     config.IsHeavy = true;
-    auto responseInfo = RequestWithoutRetry(context, mutationId, header, body, config);
-    return NodeFromYsonString(responseInfo->GetResponse(), ::NYson::EYsonType::ListFragment).AsList();
-}
-
-void DeleteRows(
-    const TClientContext& context,
-    const TYPath& path,
-    const TNode::TListType& keys,
-    const TDeleteRowsOptions& options)
-{
-    TMutationId mutationId;
-    THttpHeader header("PUT", "delete_rows");
-    header.SetInputFormat(TFormat::YsonBinary());
-    header.MergeParameters(NRawClient::SerializeParametersForDeleteRows(context.Config->Prefix, path, options));
-
-    auto body = NodeListToYsonString(keys);
-    TRequestConfig config;
-    config.IsHeavy = true;
-    RequestWithoutRetry(context, mutationId, header, body, config)->GetResponse();
+    auto request = StartRequestWithoutRetry(context, header, config);
+    return std::make_unique<THttpRequestStream>(std::move(request));
 }
 
 TAuthorizationInfo WhoAmI(const TClientContext& context)

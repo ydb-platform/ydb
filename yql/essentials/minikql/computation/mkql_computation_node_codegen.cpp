@@ -259,7 +259,7 @@ Value* GenEqualsFunction<false>(NUdf::EDataSlot slot, Value* lv, Value* rv, TCod
     const auto& info = NUdf::GetDataTypeInfo(slot);
 
     if ((info.Features & NUdf::EDataTypeFeatures::CommonType) && (info.Features & NUdf::EDataTypeFeatures::StringType || NUdf::EDataSlot::Uuid == slot || NUdf::EDataSlot::DyNumber == slot)) {
-        return CallBinaryUnboxedValueFunction(&MyEquteStrings, Type::getInt1Ty(context), lv, rv, ctx.Codegen, block);
+        return CallBinaryUnboxedValueFunction<&MyEquteStrings>(Type::getInt1Ty(context), lv, rv, ctx.Codegen, block);
     }
 
     const auto lhs = GetterFor(slot, lv, context, block);
@@ -338,7 +338,7 @@ Value* GenCompareFunction<false>(NUdf::EDataSlot slot, Value* lv, Value* rv, TCo
     const auto& info = NUdf::GetDataTypeInfo(slot);
 
     if ((info.Features & NUdf::EDataTypeFeatures::CommonType) && (info.Features & NUdf::EDataTypeFeatures::StringType || NUdf::EDataSlot::Uuid == slot || NUdf::EDataSlot::DyNumber == slot)) {
-        return CallBinaryUnboxedValueFunction(&MyCompareStrings, Type::getInt32Ty(context), lv, rv, ctx.Codegen, block);
+        return CallBinaryUnboxedValueFunction<&MyCompareStrings>(Type::getInt32Ty(context), lv, rv, ctx.Codegen, block);
     }
 
     const bool extra = info.Features & (NUdf::EDataTypeFeatures::FloatType | NUdf::EDataTypeFeatures::TzDateType);
@@ -507,7 +507,7 @@ Value* GenHashFunction<false>(NUdf::EDataSlot slot, Value* value, TCodegenContex
     const auto& info = NUdf::GetDataTypeInfo(slot);
 
     if ((info.Features & NUdf::EDataTypeFeatures::CommonType) && (info.Features & NUdf::EDataTypeFeatures::StringType || NUdf::EDataSlot::Uuid == slot || NUdf::EDataSlot::DyNumber == slot)) {
-        return CallUnaryUnboxedValueFunction(&MyHashString, Type::getInt64Ty(context), value, ctx.Codegen, block);
+        return CallUnaryUnboxedValueFunction<&MyHashString>(Type::getInt64Ty(context), value, ctx.Codegen, block);
     }
 
     const auto val = GetterFor(slot, value, context, block);
@@ -1865,7 +1865,7 @@ Value* MakeVariant(Value* item, Value* variant, const TCodegenContext& ctx, Basi
         block = boxed;
 
         const auto factory = ctx.GetFactory();
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::CreateBoxedVariantHolder));
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::CreateBoxedVariantHolder>());
 
         const auto signature = FunctionType::get(item->getType(), {factory->getType(), item->getType(), variant->getType()}, false);
         const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
@@ -1943,7 +1943,7 @@ ICodegeneratorInlineWideNode::TGenerateResult GetNodeValues(IComputationWideFlow
 Value* GenNewArray(const TCodegenContext& ctx, Value* size, Value* items, BasicBlock* block) {
     auto& context = ctx.Codegen.GetContext();
     const auto fact = ctx.GetFactory();
-    const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::CreateDirectArrayHolder));
+    const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::CreateDirectArrayHolder>());
     const auto valueType = Type::getInt128Ty(context);
     const auto funType = FunctionType::get(valueType, {fact->getType(), size->getType(), items->getType()}, false);
     const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
@@ -1957,7 +1957,7 @@ Value* GetMemoryUsed(ui64 limit, const TCodegenContext& ctx, BasicBlock* block) 
 
     auto& context = ctx.Codegen.GetContext();
     const auto fact = ctx.GetFactory();
-    const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::GetMemoryUsed));
+    const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::GetMemoryUsed>());
     const auto funType = FunctionType::get(Type::getInt64Ty(context), {fact->getType()}, false);
     const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "get_used", block);
     return CallInst::Create(funType, funcPtr, {fact}, "mem_used", block);
@@ -1987,7 +1987,7 @@ Value* CheckAdjustedMemLimit(ui64 limit, Value* init, const TCodegenContext& ctx
         BranchInst::Create(call, skip, now, block);
 
         block = call;
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TComputationContext::UpdateUsageAdjustor));
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TComputationContext::UpdateUsageAdjustor>());
         const auto funType = FunctionType::get(Type::getVoidTy(context), {ctx.Ctx->getType(), Type::getInt64Ty(context)}, false);
         const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "update", block);
         CallInst::Create(funType, funcPtr, {ctx.Ctx, ConstantInt::get(init->getType(), limit)}, "", block);

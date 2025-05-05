@@ -32,6 +32,11 @@ COMPILE_OPTIMIZATION_FLAGS = ('-N',)
 IGNORED_FLAGS = ['-fprofile-instr-generate', '-fcoverage-mapping']
 
 
+def get_sanitizer_libs(peers):
+    MSAN='{}/{}'.format(std_lib_prefix, 'msan').replace('//', '/')
+    ASAN='{}/{}'.format(std_lib_prefix, 'asan').replace('//', '/')
+    return filter(lambda it: it.startswith(MSAN) or it.startswith(ASAN), peers)
+
 def get_trimpath_args(args):
     return ['-trimpath', args.trimpath] if args.trimpath else []
 
@@ -453,7 +458,12 @@ def do_compile_asm(args):
     cmd = [args.go_asm]
     cmd += get_trimpath_args(args)
     cmd += ['-I', args.output_root, '-I', os.path.join(args.pkg_root, 'include')]
-    cmd += ['-D', 'GOOS_' + args.targ_os, '-D', 'GOARCH_' + args.targ_arch, '-o', args.output]
+    cmd += ['-D', 'GOOS_' + args.targ_os]
+    if args.targ_arch == 'armv7':
+        cmd += ['-D', 'GOARCH_arm', '-D', 'GOARM_7']
+    else:
+        cmd += ['-D', 'GOARCH_' + args.targ_arch]
+    cmd += ['-o', args.output]
 
     # if compare_versions('1.16', args.goversion) >= 0:
     cmd += ['-p', args.import_path]
@@ -527,11 +537,13 @@ def do_link_exe(args):
     if args.extldflags is not None:
         extldflags.extend(args.extldflags)
     cgo_peers = []
-    if args.cgo_peers is not None and len(args.cgo_peers) > 0:
+    san_peers = list(get_sanitizer_libs(args.peers))
+    if args.cgo_peers or san_peers:
         is_group = args.targ_os == 'linux'
         if is_group:
             cgo_peers.append('-Wl,--start-group')
         cgo_peers.extend(args.cgo_peers)
+        cgo_peers.extend(san_peers)
         if is_group:
             cgo_peers.append('-Wl,--end-group')
     try:
@@ -654,6 +666,9 @@ def gen_test_main(args, test_lib_args, xtest_lib_args):
     my_env['GOROOT'] = ''
     my_env['GOPATH'] = go_path_root
     my_env['GOARCH'] = args.targ_arch
+    if args.targ_arch == 'armv7':
+        my_env['GOARCH'] = 'arm'
+        my_env['GOARM'] = '7'
     my_env['GOOS'] = args.targ_os
 
     tests = []
@@ -859,10 +874,10 @@ if __name__ == '__main__':
     parser.add_argument('++host-os', choices=['linux', 'darwin', 'windows'], required=True)
     parser.add_argument('++host-arch', choices=['amd64', 'arm64'], required=True)
     parser.add_argument('++targ-os', choices=['linux', 'darwin', 'windows'], required=True)
-    parser.add_argument('++targ-arch', choices=['amd64', 'x86', 'arm64'], required=True)
+    parser.add_argument('++targ-arch', choices=['amd64', 'x86', 'arm64', 'armv7'], required=True)
     parser.add_argument('++peers', nargs='*')
     parser.add_argument('++non-local-peers', nargs='*')
-    parser.add_argument('++cgo-peers', nargs='*')
+    parser.add_argument('++cgo-peers', nargs='*', default=[])
     parser.add_argument('++asmhdr', nargs='?', default=None)
     parser.add_argument('++test-import-path', nargs='?')
     parser.add_argument('++test-miner', nargs='?')

@@ -24,12 +24,12 @@ void TFetchedData::SyncTableColumns(
 
 void TFetchedData::AddFetchers(const std::vector<std::shared_ptr<IKernelFetchLogic>>& fetchers) {
     for (auto&& i : fetchers) {
-        AFL_VERIFY(Fetchers.emplace(i->GetColumnId(), i).second);
+        AFL_VERIFY(Fetchers.emplace(i->GetEntityId(), i).second);
     }
 }
 
 void TFetchedData::AddFetcher(const std::shared_ptr<IKernelFetchLogic>& fetcher) {
-    AFL_VERIFY(Fetchers.emplace(fetcher->GetColumnId(), fetcher).second);
+    AFL_VERIFY(Fetchers.emplace(fetcher->GetEntityId(), fetcher).second);
 }
 
 }   // namespace NKikimr::NOlap::NReader::NCommon

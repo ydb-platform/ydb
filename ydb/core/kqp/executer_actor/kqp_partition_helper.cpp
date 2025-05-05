@@ -712,11 +712,13 @@ THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyOpReadOlapRan
         return shardInfoMap;
 
     for (const auto& partition :  stageInfo.Meta.ShardKey->GetPartitions()) {
-        auto& shardInfo = shardInfoMap[partition.ShardId];
+        if (!readRanges.HasTabletId() || readRanges.GetTabletId() == partition.ShardId) {
+            auto& shardInfo = shardInfoMap[partition.ShardId];
 
-        YQL_ENSURE(!shardInfo.KeyReadRanges);
-        shardInfo.KeyReadRanges.ConstructInPlace();
-        shardInfo.KeyReadRanges->CopyFrom(ranges);
+            YQL_ENSURE(!shardInfo.KeyReadRanges);
+            shardInfo.KeyReadRanges.ConstructInPlace();
+            shardInfo.KeyReadRanges->CopyFrom(ranges);
+        }
     }
 
     return shardInfoMap;
@@ -1015,19 +1017,28 @@ TPhysicalShardReadSettings ExtractReadSettings(const NKqpProto::TKqpPhyTableOper
     switch(operation.GetTypeCase()){
         case NKqpProto::TKqpPhyTableOperation::kReadRanges: {
             readSettings.ItemsLimit = ExtractItemsLimit(stageInfo, operation.GetReadRanges().GetItemsLimit(), holderFactory, typeEnv);
-            readSettings.Reverse = operation.GetReadRanges().GetReverse();
+            if (operation.GetReadRanges().GetReverse()) {
+                readSettings.SetSorting(ERequestSorting::DESC);
+            }
             break;
         }
 
         case NKqpProto::TKqpPhyTableOperation::kReadRange: {
             readSettings.ItemsLimit = ExtractItemsLimit(stageInfo, operation.GetReadRange().GetItemsLimit(), holderFactory, typeEnv);
-            readSettings.Reverse = operation.GetReadRange().GetReverse();
+            if (operation.GetReadRange().GetReverse()) {
+                readSettings.SetSorting(ERequestSorting::DESC);
+            }
             break;
         }
 
         case NKqpProto::TKqpPhyTableOperation::kReadOlapRange: {
-            readSettings.Sorted = operation.GetReadOlapRange().GetSorted();
-            readSettings.Reverse = operation.GetReadOlapRange().GetReverse();
+            if (operation.GetReadOlapRange().GetReverse()) {
+                readSettings.SetSorting(ERequestSorting::DESC);
+            } else if (operation.GetReadOlapRange().GetSorted()) {
+                readSettings.SetSorting(ERequestSorting::ASC);
+            } else {
+                readSettings.SetSorting(ERequestSorting::NONE);
+            }
             readSettings.ItemsLimit = ExtractItemsLimit(stageInfo, operation.GetReadOlapRange().GetItemsLimit(), holderFactory, typeEnv);
             NKikimrMiniKQL::TType minikqlProtoResultType;
             ConvertYdbTypeToMiniKQLType(operation.GetReadOlapRange().GetResultType(), minikqlProtoResultType);

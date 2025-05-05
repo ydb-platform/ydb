@@ -91,9 +91,9 @@
 {{ ydb-cli }} -p quickstart operation forget ydb://buildindex/7?id=2814749869
 ```
 
-## Удаление вторичного индекса {#drop}
+## Удаление индекса {#drop}
 
-Удаление вторичного индекса выполняется командой `table index drop`:
+Удаление индекса выполняется командой `table index drop`:
 
 ```bash
 {{ ydb-cli }} [connection options] table index drop <table> --index-name STR

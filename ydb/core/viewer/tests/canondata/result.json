@@ -3,6 +3,18 @@
         "status_code": 200,
         "text": "1\n"
     },
+    "test.test_operations_list": {
+        "next_page_token": "0",
+        "status": "SUCCESS"
+    },
+    "test.test_operations_list_page": {
+        "next_page_token": "0",
+        "status": "SUCCESS"
+    },
+    "test.test_operations_list_page_bad": {
+        "status_code": 400,
+        "text": "offset must be a multiple of limit"
+    },
     "test.test_pqrb_tablet": {
         "response_create_topic": {
             "version": "not-zero-number"
@@ -43,6 +55,271 @@
                     "Type": "PersQueueReadBalancer"
                 }
             ]
+        }
+    },
+    "test.test_scheme_directory": {
+        "1-get": {
+            "children": [
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": ".metadata",
+                    "owner": "metadata@system",
+                    "type": "DIRECTORY"
+                },
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": "topic1",
+                    "owner": "root@builtin",
+                    "type": "TOPIC"
+                },
+                {
+                    "created_at": {},
+                    "name": ".sys",
+                    "type": "DIRECTORY"
+                }
+            ],
+            "self": {
+                "created_at": {
+                    "tx_id": "not-zero-number-text"
+                },
+                "effective_permissions": [
+                    {
+                        "permission_names": [
+                            "ydb.database.connect"
+                        ],
+                        "subject": "USERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.list"
+                        ],
+                        "subject": "METADATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.select_row"
+                        ],
+                        "subject": "DATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.tables.modify"
+                        ],
+                        "subject": "DATA-WRITERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.create_directory",
+                            "ydb.granular.write_attributes",
+                            "ydb.granular.create_table",
+                            "ydb.granular.remove_schema",
+                            "ydb.granular.create_queue",
+                            "ydb.granular.alter_schema"
+                        ],
+                        "subject": "DDL-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.access.grant"
+                        ],
+                        "subject": "ACCESS-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.manage"
+                        ],
+                        "subject": "DATABASE-ADMINS"
+                    }
+                ],
+                "name": "Root/dedicated_db",
+                "owner": "root@builtin",
+                "type": "DATABASE"
+            }
+        },
+        "2-post": {},
+        "3-get": {
+            "children": [
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": ".metadata",
+                    "owner": "metadata@system",
+                    "type": "DIRECTORY"
+                },
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": "test_dir",
+                    "owner": "root@builtin",
+                    "type": "DIRECTORY"
+                },
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": "topic1",
+                    "owner": "root@builtin",
+                    "type": "TOPIC"
+                },
+                {
+                    "created_at": {},
+                    "name": ".sys",
+                    "type": "DIRECTORY"
+                }
+            ],
+            "self": {
+                "created_at": {
+                    "tx_id": "not-zero-number-text"
+                },
+                "effective_permissions": [
+                    {
+                        "permission_names": [
+                            "ydb.database.connect"
+                        ],
+                        "subject": "USERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.list"
+                        ],
+                        "subject": "METADATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.select_row"
+                        ],
+                        "subject": "DATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.tables.modify"
+                        ],
+                        "subject": "DATA-WRITERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.create_directory",
+                            "ydb.granular.write_attributes",
+                            "ydb.granular.create_table",
+                            "ydb.granular.remove_schema",
+                            "ydb.granular.create_queue",
+                            "ydb.granular.alter_schema"
+                        ],
+                        "subject": "DDL-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.access.grant"
+                        ],
+                        "subject": "ACCESS-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.manage"
+                        ],
+                        "subject": "DATABASE-ADMINS"
+                    }
+                ],
+                "name": "Root/dedicated_db",
+                "owner": "root@builtin",
+                "type": "DATABASE"
+            }
+        },
+        "4-delete": {},
+        "5-get": {
+            "children": [
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": ".metadata",
+                    "owner": "metadata@system",
+                    "type": "DIRECTORY"
+                },
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": "topic1",
+                    "owner": "root@builtin",
+                    "type": "TOPIC"
+                },
+                {
+                    "created_at": {},
+                    "name": ".sys",
+                    "type": "DIRECTORY"
+                }
+            ],
+            "self": {
+                "created_at": {
+                    "tx_id": "not-zero-number-text"
+                },
+                "effective_permissions": [
+                    {
+                        "permission_names": [
+                            "ydb.database.connect"
+                        ],
+                        "subject": "USERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.list"
+                        ],
+                        "subject": "METADATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.select_row"
+                        ],
+                        "subject": "DATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.tables.modify"
+                        ],
+                        "subject": "DATA-WRITERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.create_directory",
+                            "ydb.granular.write_attributes",
+                            "ydb.granular.create_table",
+                            "ydb.granular.remove_schema",
+                            "ydb.granular.create_queue",
+                            "ydb.granular.alter_schema"
+                        ],
+                        "subject": "DDL-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.access.grant"
+                        ],
+                        "subject": "ACCESS-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.manage"
+                        ],
+                        "subject": "DATABASE-ADMINS"
+                    }
+                ],
+                "name": "Root/dedicated_db",
+                "owner": "root@builtin",
+                "type": "DATABASE"
+            }
         }
     },
     "test.test_storage_groups": {
@@ -505,6 +782,335 @@
             }
         ],
         "TotalGroups": 5
+    },
+    "test.test_topic_data": {
+        "both_offset_and_ts": {
+            "status_code": 400,
+            "text": "Only read_timestamp or offset parameter may be specified, not both"
+        },
+        "no_partition": {
+            "status_code": 400,
+            "text": "Parameter 'partition' is necessary"
+        },
+        "response_compressed": {
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTA=",
+                    "Offset": 11,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 12,
+                    "StorageSize": 38,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTE=",
+                    "Offset": 12,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 13,
+                    "StorageSize": 38,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTI=",
+                    "Offset": 13,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 14,
+                    "StorageSize": 38,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTM=",
+                    "Offset": 14,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 15,
+                    "StorageSize": 38,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTQ=",
+                    "Offset": 15,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 16,
+                    "StorageSize": 38,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
+        },
+        "response_metadata": {
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZV93aXRoX21ldGE=",
+                    "MessageMetadata": [
+                        {
+                            "Key": "key1",
+                            "Value": "value1"
+                        },
+                        {
+                            "Key": "key2",
+                            "Value": "value2"
+                        }
+                    ],
+                    "Offset": 10,
+                    "OriginalSize": 17,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 11,
+                    "StorageSize": 37,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
+        },
+        "response_not_truncated": {
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTk=",
+                    "Offset": 20,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 21,
+                    "StorageSize": 38,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
+        },
+        "response_truncated": {
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "Y29tcHI=",
+                    "Offset": 20,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 21,
+                    "StorageSize": 38,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": true
+        },
+        "response_last_offset": {
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0w",
+                    "Offset": 0,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 1,
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0x",
+                    "Offset": 1,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 2,
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0y",
+                    "Offset": 2,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 3,
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
+        },
+        "response_read": {
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0w",
+                    "Offset": 0,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 1,
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0x",
+                    "Offset": 1,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 2,
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0y",
+                    "Offset": 2,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 3,
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0z",
+                    "Offset": 3,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 4,
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS00",
+                    "Offset": 4,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 5,
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
+        }
+    },
+    "test.test_transfer_describe": {
+        "connection_params": {
+            "connection_string": "text",
+            "database": "/Root/dedicated_db",
+            "endpoint": "text",
+            "oauth": {}
+        },
+        "error": {
+            "issues": [
+                {
+                    "message": "Discovery error: /Root/dedicated_db/TableNotExists: SCHEME_ERROR ({ <main>: Error: Path not found })",
+                    "severity": 1
+                }
+            ]
+        },
+        "row_consistency": {},
+        "self": {
+            "created_at": {
+                "plan_step": "not-zero-number-text",
+                "tx_id": "not-zero-number-text"
+            },
+            "effective_permissions": [
+                {
+                    "permission_names": [
+                        "ydb.database.connect"
+                    ],
+                    "subject": "USERS"
+                },
+                {
+                    "permission_names": [
+                        "ydb.generic.list"
+                    ],
+                    "subject": "METADATA-READERS"
+                },
+                {
+                    "permission_names": [
+                        "ydb.granular.select_row"
+                    ],
+                    "subject": "DATA-READERS"
+                },
+                {
+                    "permission_names": [
+                        "ydb.tables.modify"
+                    ],
+                    "subject": "DATA-WRITERS"
+                },
+                {
+                    "permission_names": [
+                        "ydb.granular.create_directory",
+                        "ydb.granular.write_attributes",
+                        "ydb.granular.create_table",
+                        "ydb.granular.remove_schema",
+                        "ydb.granular.create_queue",
+                        "ydb.granular.alter_schema"
+                    ],
+                    "subject": "DDL-ADMINS"
+                },
+                {
+                    "permission_names": [
+                        "ydb.access.grant"
+                    ],
+                    "subject": "ACCESS-ADMINS"
+                },
+                {
+                    "permission_names": [
+                        "ydb.generic.manage"
+                    ],
+                    "subject": "DATABASE-ADMINS"
+                }
+            ],
+            "name": "TestAsyncReplication",
+            "owner": "root@builtin",
+            "type": "REPLICATION"
+        }
     },
     "test.test_viewer_acl": {
         "/Root": {
@@ -1412,8 +2018,8 @@
         "Hosts": "2",
         "LoadAverage": "not-zero-number",
         "MapDataCenters": {
-            "1": 1,
-            "value": 2
+            "": 2,
+            "1": 1
         },
         "MapNodeRoles": {
             "Bootstrapper": 1,
@@ -2178,10 +2784,11 @@
                                 "Usage": "number"
                             }
                         ],
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
-                        "TotalSessions": 0
+                        "TotalSessions": "number"
                     },
                     "UptimeSeconds": "number",
                     "VDisks": [
@@ -2520,13 +3127,14 @@
                                 "Usage": "number"
                             }
                         ],
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
                         "Tenants": [
                             "/Root/dedicated_db"
                         ],
-                        "TotalSessions": 0
+                        "TotalSessions": "number"
                     },
                     "Tablets": [
                         {
@@ -2720,42 +3328,33 @@
                                 "Usage": "number"
                             }
                         ],
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
                         "Tenants": [
                             "/Root/shared_db"
                         ],
-                        "TotalSessions": 0
+                        "TotalSessions": "number"
                     },
                     "Tablets": [
                         {
-                            "Count": 4,
+                            "Count": 1,
                             "State": "Green",
                             "Type": "Coordinator"
                         },
                         {
-                            "Count": 1,
-                            "State": "Green",
-                            "Type": "Hive"
-                        },
-                        {
-                            "Count": 6,
+                            "Count": 3,
                             "State": "Green",
                             "Type": "Mediator"
                         },
                         {
-                            "Count": 2,
+                            "Count": 1,
                             "State": "Green",
                             "Type": "SchemeShard"
                         },
                         {
                             "Count": 1,
-                            "State": "Green",
-                            "Type": "StatisticsAggregator"
-                        },
-                        {
-                            "Count": 2,
                             "State": "Green",
                             "Type": "SysViewProcessor"
                         }
@@ -2920,17 +3519,18 @@
                                 "Usage": "number"
                             }
                         ],
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
                         "Tenants": [
                             "/Root/shared_db"
                         ],
-                        "TotalSessions": 0
+                        "TotalSessions": "number"
                     },
                     "Tablets": [
                         {
-                            "Count": 4,
+                            "Count": 3,
                             "State": "Green",
                             "Type": "Coordinator"
                         },
@@ -2940,12 +3540,12 @@
                             "Type": "Hive"
                         },
                         {
-                            "Count": 6,
+                            "Count": 3,
                             "State": "Green",
                             "Type": "Mediator"
                         },
                         {
-                            "Count": 2,
+                            "Count": 1,
                             "State": "Green",
                             "Type": "SchemeShard"
                         },
@@ -2955,7 +3555,7 @@
                             "Type": "StatisticsAggregator"
                         },
                         {
-                            "Count": 2,
+                            "Count": 1,
                             "State": "Green",
                             "Type": "SysViewProcessor"
                         }
@@ -3038,10 +3638,11 @@
                                 "Usage": "number"
                             }
                         ],
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
-                        "TotalSessions": 0
+                        "TotalSessions": "number"
                     },
                     "UptimeSeconds": "number"
                 },
@@ -3105,13 +3706,14 @@
                                 "Usage": "number"
                             }
                         ],
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
                         "Tenants": [
                             "/Root/shared_db"
                         ],
-                        "TotalSessions": 0
+                        "TotalSessions": "number"
                     },
                     "UptimeSeconds": "number"
                 },
@@ -3175,13 +3777,14 @@
                                 "Usage": "number"
                             }
                         ],
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
                         "Tenants": [
                             "/Root/dedicated_db"
                         ],
-                        "TotalSessions": 0
+                        "TotalSessions": "number"
                     },
                     "UptimeSeconds": "number"
                 }
@@ -3244,7 +3847,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/dedicated_db": {
             "result": [
@@ -3262,7 +3865,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/serverless_db": {
             "result": [
@@ -3280,7 +3883,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/shared_db": {
             "result": [
@@ -3298,7 +3901,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         }
     },
     "test.test_viewer_query_issue_13757": {
@@ -3321,7 +3924,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/dedicated_db": {
             "result": [
@@ -3342,7 +3945,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/serverless_db": {
             "result": [
@@ -3363,7 +3966,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/shared_db": {
             "result": [
@@ -3384,7 +3987,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         }
     },
     "test.test_viewer_query_issue_13945": {
@@ -3404,7 +4007,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/dedicated_db": {
             "result": [
@@ -3422,7 +4025,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/serverless_db": {
             "result": [
@@ -3440,7 +4043,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/shared_db": {
             "result": [
@@ -3458,7 +4061,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         }
     },
     "test.test_viewer_sysinfo": {
@@ -3529,7 +4132,7 @@
                 "Tenants": [
                     "/Root/shared_db"
                 ],
-                "TotalSessions": 0
+                "TotalSessions": "number"
             },
             {
                 "ChangeTime": "not-zero-number-text",
@@ -3595,7 +4198,7 @@
                 "Tenants": [
                     "/Root/dedicated_db"
                 ],
-                "TotalSessions": 0
+                "TotalSessions": "number"
             },
             {
                 "ChangeTime": "not-zero-number-text",
@@ -3659,7 +4262,7 @@
                 "Roles": "not-empty-array",
                 "StartTime": "not-zero-number-text",
                 "SystemState": 1,
-                "TotalSessions": 0
+                "TotalSessions": "number"
             }
         ]
     },

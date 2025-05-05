@@ -573,6 +573,20 @@ void TKqpTableMetadataLoader::OnLoadedTableMetadata(TTableMetadataResult& loadTa
     }
 }
 
+NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> TKqpTableMetadataLoader::LoadSysViewRewrittenMetadata(
+    const NSysView::ISystemViewResolver::TSystemViewPath& sysViewPath, const TString& cluster, const TString& table
+) {
+    TNavigate::TEntry entry;
+
+    auto schema = SystemViewRewrittenResolver->GetSystemViewSchema(sysViewPath.ViewName, NSysView::ISystemViewResolver::ETarget::Domain);
+    entry.Kind = TNavigate::KindTable;
+    entry.Columns = std::move(schema->Columns);
+    entry.TableId = TTableId(TSysTables::SysSchemeShard, 0, sysViewPath.ViewName);
+
+    auto result = GetTableMetadataResult(entry, cluster, table);
+
+    return MakeFuture(result);
+}
 
 NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMetadata(const TString& cluster, const TString& table,
     const NYql::IKikimrGateway::TLoadTableMetadataSettings& settings, const TString& database,
@@ -582,7 +596,14 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
     auto ptr = weak_from_base();
     try {
-        auto tableMetaFuture = LoadTableMetadataCache(cluster, table, settings, database, userToken);
+        NThreading::TFuture<TTableMetadataResult> tableMetaFuture;
+
+        NSysView::ISystemViewResolver::TSystemViewPath sysViewPath;
+        if (settings.SysViewRewritten_ && SystemViewRewrittenResolver->IsSystemViewPath(SplitPath(table), sysViewPath)) {
+            tableMetaFuture = LoadSysViewRewrittenMetadata(sysViewPath, cluster, table);
+        } else {
+            tableMetaFuture = LoadTableMetadataCache(cluster, table, settings, database, userToken);
+        }
         return tableMetaFuture.Apply([ptr, database, userToken](const TFuture<TTableMetadataResult>& future) mutable {
             try {
                 auto result = future.GetValue();
@@ -869,7 +890,14 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
                             NExternalSource::IExternalSource::TPtr externalSource;
                             if (settings.ExternalSourceFactory) {
-                                externalSource = settings.ExternalSourceFactory->GetOrCreate(externalDataSourceMetadata.Metadata->ExternalSource.Type);
+                                try {
+                                    externalSource = settings.ExternalSourceFactory->GetOrCreate(externalDataSourceMetadata.Metadata->ExternalSource.Type);
+                                } catch (const std::exception& exception) {
+                                    TTableMetadataResult wrapper;
+                                    wrapper.SetException(yexception() << "couldn't get external source with type " << externalDataSourceMetadata.Metadata->ExternalSource.Type << ", " <<  exception.what());
+                                    promise.SetValue(wrapper);
+                                    return;
+                                }
                             }
 
                             if (externalSource && externalSource->CanLoadDynamicMetadata()) {
@@ -940,7 +968,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
             catch (yexception& e) {
                 promise.SetValue(ResultFromException<TResult>(e));
             }
-        });
+        }
+    );
 
     // Create an apply for the future that will fetch table statistics and save it in the metadata
     // This method will only run if cost based optimization is enabled

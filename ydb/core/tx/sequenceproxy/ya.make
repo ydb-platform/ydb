@@ -10,6 +10,7 @@ PEERDIR(
 SRCS(
     sequenceproxy.cpp
     sequenceproxy_allocate.cpp
+    sequenceproxy_get_sequence.cpp
     sequenceproxy_impl.cpp
     sequenceproxy_resolve.cpp
 )

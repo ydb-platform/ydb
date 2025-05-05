@@ -360,7 +360,7 @@ public:
         const auto it = Callbacks_.find(input.Get());
         YQL_ENSURE(it != Callbacks_.cend());
         auto& future = it->second;
-        YQL_ENSURE(future.HasValue());
+        HandleFutureException(future);
         const auto status = future.GetValue()(input, output, ctx);
         Callbacks_.erase(it);
         return status;
@@ -447,6 +447,10 @@ inline std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> Sync
 
 inline std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> SyncRepeat() {
     return SyncStatus(IGraphTransformer::TStatus::Repeat);
+}
+
+inline std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> SyncRepeatWithRestart() {
+    return SyncStatus(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true));
 }
 
 typedef std::unordered_map<TExprNode::TPtr, ui64, TExprNode::TPtrHash> TSyncMap;

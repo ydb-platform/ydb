@@ -12,7 +12,7 @@
 #include <ydb/core/tx/columnshard/data_sharing/initiator/status/abstract.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 
-#include <ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/sdk/cpp/src/client/ss_tasks/task.h>
 
 namespace NKikimr::NKqp {
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
         TTypedLocalHelper Helper;
         NYDBTest::TControllers::TGuard<NYDBTest::NColumnShard::TController> Controller;
         std::vector<ui64> ShardIds;
-        std::vector<ui64> PathIds;
+        std::vector<NColumnShard::TInternalPathId> PathIds;
         YDB_ACCESSOR(bool, RebootTablet, false);
     public:
         const TTypedLocalHelper& GetHelper() const {
@@ -109,12 +109,12 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
             Helper.CreateTestOlapTable(ShardsCount, ShardsCount);
             ShardIds = Controller->GetShardActualIds();
             AFL_VERIFY(ShardIds.size() == ShardsCount)("count", ShardIds.size())("ids", JoinSeq(",", ShardIds));
-            std::set<ui64> pathIdsSet;
+            std::set<NColumnShard::TInternalPathId> pathIdsSet;
             for (auto&& i : ShardIds) {
                 auto pathIds = Controller->GetPathIds(i);
                 pathIdsSet.insert(pathIds.begin(), pathIds.end());
             }
-            PathIds = std::vector<ui64>(pathIdsSet.begin(), pathIdsSet.end());
+            PathIds = std::vector<NColumnShard::TInternalPathId>(pathIdsSet.begin(), pathIdsSet.end());
             AFL_VERIFY(PathIds.size() == 1)("count", PathIds.size())("ids", JoinSeq(",", PathIds));
         }
 
@@ -140,13 +140,13 @@ Y_UNIT_TEST_SUITE(KqpOlapBlobsSharing) {
                 AFL_VERIFY(i < ShardIds.size());
                 sources.emplace_back(ShardIds[i]);
             }
-            std::set<ui64> pathIds;
+            std::set<NColumnShard::TInternalPathId> pathIds;
             for (auto&& i : pathIdxs) {
                 AFL_VERIFY(i < PathIds.size());
                 AFL_VERIFY(pathIds.emplace(PathIds[i]).second);
             }
             Cerr << "SHARING: " << JoinSeq(",", sources) << "->" << destination << Endl;
-            THashMap<ui64, ui64> pathIdsRemap;
+            THashMap<NColumnShard::TInternalPathId, NColumnShard::TInternalPathId> pathIdsRemap;
             for (auto&& i : pathIds) {
                 pathIdsRemap.emplace(i, i);
             }

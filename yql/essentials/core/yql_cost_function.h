@@ -34,9 +34,10 @@ namespace NDq {
  * attribute name, used in join conditions
 */
 struct TJoinColumn {
-    TString RelName{};
+    TString RelName{};  // TODO: this should be a list. now list of relations is separated by comma in this string
     TString AttributeName{};
     TString AttributeNameWithAliases{};
+    std::optional<TString> OriginalRelName;
     std::optional<ui32> EquivalenceClass{};
     bool IsConstant = false;
 

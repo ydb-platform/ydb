@@ -128,9 +128,9 @@ TFuture<void> PingDistributedWriteSession(
     auto concreteSession = ConvertTo<TDistributedWriteSession>(TYsonStringBuf(session.Underlying()->Payload()));
 
     // NB(arkady-e1ppa): AutoAbort = false by default.
-    auto mainTx = client->AttachTransaction(concreteSession.MainTransactionId);
+    auto mainTransaction = client->AttachTransaction(concreteSession.MainTransactionId);
 
-    return mainTx->Ping();
+    return mainTransaction->Ping();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

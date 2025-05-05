@@ -2,6 +2,10 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/raw_socket/sock_config.h>
 #include <ydb/core/util/address_classifier.h>
+#include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
+#include <ydb/core/kafka_proxy/actors/kafka_balancer_actor.h>
+#include <ydb/core/kafka_proxy/actors/kafka_metadata_actor.h>
+
 
 #include "actors/actors.h"
 #include "kafka_connection.h"
@@ -47,6 +51,7 @@ public:
     TEvPollerReady* InactivityEvent = nullptr;
 
     const TActorId ListenerActorId;
+    const TActorId KafkaTxnCoordinatorActorId = NKafka::MakeKafkaTransactionsServiceID();
 
     TIntrusivePtr<TSocketDescriptor> Socket;
     TSocketAddressType Address;
@@ -83,8 +88,7 @@ public:
     TKafkaConnection(const TActorId& listenerActorId,
                      TIntrusivePtr<TSocketDescriptor> socket,
                      TNetworkConfig::TSocketAddressType address,
-                     const NKikimrConfig::TKafkaProxyConfig& config,
-                     const TActorId& discoveryCacheActorId)
+                     const NKikimrConfig::TKafkaProxyConfig& config)
         : ListenerActorId(listenerActorId)
         , Socket(std::move(socket))
         , Address(address)
@@ -96,7 +100,6 @@ public:
     {
         SetNonBlock();
         IsSslRequired = Socket->IsSslSupported();
-        Context->DiscoveryCacheActor = discoveryCacheActorId;
     }
 
     void Bootstrap() {
@@ -237,36 +240,52 @@ protected:
         Send(ProduceActorId, new TEvKafka::TEvProduceRequest(header->CorrelationId, message));
     }
 
-    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TSyncGroupRequestData>& message, const TActorContext& ctx) {
-        if (!ReadSessionActorId) {
-            ReadSessionActorId = ctx.RegisterWithSameMailbox(CreateKafkaReadSessionActor(Context, 0));
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TJoinGroupRequestData>& message, const TActorContext& /*ctx*/) {
+        if (NKikimr::AppData()->FeatureFlags.GetEnableKafkaNativeBalancing()) {
+            HandleKillReadSession();
+            Register(new TKafkaBalancerActor(Context, 0, header->CorrelationId, message));
+        } else {
+            if (!ReadSessionActorId) {
+                ReadSessionActorId = RegisterWithSameMailbox(CreateKafkaReadSessionActor(Context, 0));
+            }
+            Send(ReadSessionActorId, new TEvKafka::TEvJoinGroupRequest(header->CorrelationId, message));
         }
-
-        Send(ReadSessionActorId, new TEvKafka::TEvSyncGroupRequest(header->CorrelationId, message));
     }
 
-    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<THeartbeatRequestData>& message, const TActorContext& ctx) {
-        if (!ReadSessionActorId) {
-            ReadSessionActorId = ctx.RegisterWithSameMailbox(CreateKafkaReadSessionActor(Context, 0));
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TSyncGroupRequestData>& message, const TActorContext& /*ctx*/) {
+        if (NKikimr::AppData()->FeatureFlags.GetEnableKafkaNativeBalancing()) {
+            HandleKillReadSession();
+            Register(new TKafkaBalancerActor(Context, 0, header->CorrelationId, message));
+        } else {
+            if (!ReadSessionActorId) {
+                ReadSessionActorId = RegisterWithSameMailbox(CreateKafkaReadSessionActor(Context, 0));
+            }
+            Send(ReadSessionActorId, new TEvKafka::TEvSyncGroupRequest(header->CorrelationId, message));
         }
-
-        Send(ReadSessionActorId, new TEvKafka::TEvHeartbeatRequest(header->CorrelationId, message));
     }
 
-    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TJoinGroupRequestData>& message, const TActorContext& ctx) {
-        if (!ReadSessionActorId) {
-            ReadSessionActorId = ctx.RegisterWithSameMailbox(CreateKafkaReadSessionActor(Context, 0));
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<THeartbeatRequestData>& message, const TActorContext& /*ctx*/) {
+        if (NKikimr::AppData()->FeatureFlags.GetEnableKafkaNativeBalancing()) {
+            HandleKillReadSession();
+            Register(new TKafkaBalancerActor(Context, 0, header->CorrelationId, message));
+        } else {
+            if (!ReadSessionActorId) {
+                ReadSessionActorId = RegisterWithSameMailbox(CreateKafkaReadSessionActor(Context, 0));
+            }
+            Send(ReadSessionActorId, new TEvKafka::TEvHeartbeatRequest(header->CorrelationId, message));
         }
-
-        Send(ReadSessionActorId, new TEvKafka::TEvJoinGroupRequest(header->CorrelationId, message));
     }
 
-    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TLeaveGroupRequestData>& message, const TActorContext& ctx) {
-        if (!ReadSessionActorId) {
-            ReadSessionActorId = ctx.RegisterWithSameMailbox(CreateKafkaReadSessionActor(Context, 0));
+    void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TLeaveGroupRequestData>& message, const TActorContext& /*ctx*/) {
+        if (NKikimr::AppData()->FeatureFlags.GetEnableKafkaNativeBalancing()) {
+            HandleKillReadSession();
+            Register(new TKafkaBalancerActor(Context, 0, header->CorrelationId, message));
+        } else {
+            if (!ReadSessionActorId) {
+                ReadSessionActorId = RegisterWithSameMailbox(CreateKafkaReadSessionActor(Context, 0));
+            }
+            Send(ReadSessionActorId, new TEvKafka::TEvLeaveGroupRequest(header->CorrelationId, message));
         }
-
-        Send(ReadSessionActorId, new TEvKafka::TEvLeaveGroupRequest(header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TInitProducerIdRequestData>& message) {
@@ -274,7 +293,11 @@ protected:
     }
 
     void HandleMessage(TRequestHeaderData* header, const TMessagePtr<TMetadataRequestData>& message) {
-        Register(CreateKafkaMetadataActor(Context, header->CorrelationId, message, Context->DiscoveryCacheActor));
+        Register(CreateKafkaMetadataActor(Context, header->CorrelationId, message, NKafka::MakeKafkaDiscoveryCacheID()));
+    }
+
+    void HandleMessage(TRequestHeaderData* header, const TMessagePtr<TDescribeConfigsRequestData>& message) {
+        Register(CreateKafkaDescribeConfigsActor(Context, header->CorrelationId, message));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TSaslAuthenticateRequestData>& message) {
@@ -406,6 +429,10 @@ protected:
 
             case CREATE_TOPICS:
                 HandleMessage(&Request->Header, Cast<TCreateTopicsRequestData>(Request));
+                break;
+
+            case DESCRIBE_CONFIGS:
+                HandleMessage(&Request->Header, Cast<TDescribeConfigsRequestData>(Request));
                 break;
 
             case CREATE_PARTITIONS:
@@ -718,8 +745,8 @@ protected:
     }
 
     bool RequireAuthentication(EApiKey apiKey) {
-        return !(EApiKey::API_VERSIONS == apiKey || 
-                EApiKey::SASL_HANDSHAKE == apiKey || 
+        return !(EApiKey::API_VERSIONS == apiKey ||
+                EApiKey::SASL_HANDSHAKE == apiKey ||
                 EApiKey::SASL_AUTHENTICATE == apiKey);
     }
 
@@ -787,9 +814,8 @@ protected:
 NActors::IActor* CreateKafkaConnection(const TActorId& listenerActorId,
                                        TIntrusivePtr<TSocketDescriptor> socket,
                                        TNetworkConfig::TSocketAddressType address,
-                                       const NKikimrConfig::TKafkaProxyConfig& config,
-                                       const TActorId& discoveryCacheActorId) {
-    return new TKafkaConnection(listenerActorId, std::move(socket), std::move(address), config, discoveryCacheActorId);
+                                       const NKikimrConfig::TKafkaProxyConfig& config) {
+    return new TKafkaConnection(listenerActorId, std::move(socket), std::move(address), config);
 }
 
 } // namespace NKafka

@@ -54,10 +54,10 @@ namespace NActors {
         using TUnorderedCacheActivationQueue = TUnorderedCache<ui32, 512, 4>;
 
         const i16 PoolThreads;
-        const bool UseRingQueue;
-        TIntrusivePtr<TAffinity> ThreadsAffinity;
-        TAtomic Semaphore = 0;
-        std::variant<TUnorderedCacheActivationQueue, TRingActivationQueue> Activations;
+        const bool UseRingQueueValue;
+        alignas(64) TIntrusivePtr<TAffinity> ThreadsAffinity;
+        alignas(64) TAtomic Semaphore = 0;
+        alignas(64) std::variant<TUnorderedCacheActivationQueue, TRingActivationQueue> Activations;
         TAtomic ActivationsRevolvingCounter = 0;
         std::atomic_bool StopFlag = false;
     public:
@@ -67,6 +67,7 @@ namespace NActors {
         void SpecificScheduleActivation(TMailbox* mailbox) override;
         TAffinity* Affinity() const override;
         ui32 GetThreads() const override;
+        bool UseRingQueue() const;
     };
 
     void DoActorInit(TActorSystem*, IActor*, const TActorId&, const TActorId&);

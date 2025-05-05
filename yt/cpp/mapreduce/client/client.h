@@ -130,6 +130,11 @@ public:
         const TFormat& format,
         const TTableReaderOptions& options) override;
 
+    TRawTableReaderPtr CreateRawTablePartitionReader(
+        const TString& cookie,
+        const TFormat& format,
+        const TTablePartitionReaderOptions& options) override;
+
     TRawTableWriterPtr CreateRawWriter(
         const TRichYPath& path,
         const TFormat& format,
@@ -265,6 +270,21 @@ private:
     ::TIntrusivePtr<ISkiffRowReaderImpl> CreateSkiffRowReader(
         const TRichYPath& path,
         const TTableReaderOptions& options,
+        const ISkiffRowSkipperPtr& skipper,
+        const NSkiff::TSkiffSchemaPtr& schema) override;
+
+    ::TIntrusivePtr<INodeReaderImpl> CreateNodeTablePartitionReader(
+        const TString& cookie,
+        const TTablePartitionReaderOptions& options) override;
+
+    ::TIntrusivePtr<IProtoReaderImpl> CreateProtoTablePartitionReader(
+        const TString& cookie,
+        const TTablePartitionReaderOptions& options,
+        const Message* prototype) override;
+
+    ::TIntrusivePtr<ISkiffRowReaderImpl> CreateSkiffRowTablePartitionReader(
+        const TString& cookie,
+        const TTablePartitionReaderOptions& options,
         const ISkiffRowSkipperPtr& skipper,
         const NSkiff::TSkiffSchemaPtr& schema) override;
 

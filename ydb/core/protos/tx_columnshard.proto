@@ -139,7 +139,7 @@ enum ETransactionKind {
     TX_KIND_NONE = 0;
     TX_KIND_SCHEMA = 1;
     TX_KIND_COMMIT = 2;
-    TX_KIND_TTL = 3; // Immediate (not planned)
+    reserved 3; // TX_KIND_TTL
     TX_KIND_DATA = 4;
     TX_KIND_COMMIT_WRITE = 5;
     TX_KIND_BACKUP = 6;
@@ -320,13 +320,6 @@ message TSchemaTxBody {
     optional NKikimrSchemeOp.TGranuleShardingInfo GranuleShardingInfo = 20;
 }
 
-message TTtlTxBody {
-    optional string TtlColumnName = 1;
-    optional uint64 UnixTimeSeconds = 2;
-    optional uint32 TtlPresetId = 3;
-    optional string TtlPresetName = 4;
-    repeated uint64 PathIds = 5;
-}
 
 message TBlobRange {
     optional bytes BlobId = 1;

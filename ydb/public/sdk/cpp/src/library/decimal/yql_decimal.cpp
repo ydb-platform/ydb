@@ -4,7 +4,9 @@
 #include <ostream>
 #include <string>
 
-namespace NYdb::NDecimal {
+namespace NYdb {
+inline namespace Dev {
+namespace NDecimal {
 
 static const TUint128 Ten(10U);
 
@@ -248,4 +250,6 @@ bool IsValid(const std::string_view& str) {
     return true;
 }
 
+}
+}
 }

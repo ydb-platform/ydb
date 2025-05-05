@@ -1,5 +1,7 @@
 #pragma once
 
+#include <util/generic/yexception.h>
+#include <util/system/yassert.h>
 #include <atomic>
 
 namespace NKikimr {
@@ -105,7 +107,7 @@ namespace NUtil {
         };
 
     public:
-        TConcurrentStore() { }
+        TConcurrentStore() noexcept { }
 
         ~TConcurrentStore() noexcept {
             size_t count = Count.exchange(0, std::memory_order_release);
@@ -173,7 +175,7 @@ namespace NUtil {
          */
         void truncate(size_t new_size) {
             size_t prev_size = Count.load(std::memory_order_relaxed);
-            Y_ABORT_UNLESS(new_size <= prev_size);
+            Y_ENSURE(new_size <= prev_size);
 
             if (new_size < prev_size) {
                 auto* tail = Tail.load(std::memory_order_acquire);
@@ -224,13 +226,13 @@ namespace NUtil {
          */
         template<class TCallback>
         void Enumerate(size_t index, size_t endIndex, TCallback&& callback) {
-            Y_ABORT_UNLESS(index <= endIndex);
+            Y_ENSURE(index <= endIndex);
             if (index == endIndex) {
                 return;
             }
 
             size_t count = Count.load(std::memory_order_acquire);
-            Y_ABORT_UNLESS(endIndex <= count);
+            Y_ENSURE(endIndex <= count);
 
             auto* tail = Tail.load(std::memory_order_acquire);
             while (tail && index < tail->Offset) {

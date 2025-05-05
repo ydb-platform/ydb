@@ -8,7 +8,7 @@
 #include <ydb/core/fq/libs/ydb/util.h>
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>

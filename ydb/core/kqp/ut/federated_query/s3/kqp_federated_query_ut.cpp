@@ -3,11 +3,11 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <yql/essentials/utils/log/log.h>
-#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
-#include <ydb-cpp-sdk/client/operation/operation.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
-#include <ydb-cpp-sdk/client/types/operation/operation.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <fmt/format.h>
 
@@ -785,7 +785,10 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
     Y_UNIT_TEST(InsertIntoBucketWithSelect) {
         const TString writeDataSourceName = "/Root/write_data_source";
         const TString writeBucket = "test_bucket_write_with_select";
-        const TString writeObject = "test_object_write/";
+
+        // Also tests large object path with size >= 128 
+        // for atomic upload commit case
+        const TString writeObject = TStringBuilder() << "test_object_write/" << TString(512, 'x') << "/";
 
         {
             Aws::S3::S3Client s3Client = MakeS3Client();
@@ -811,6 +814,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
 
         const TString sql = fmt::format(R"(
+                PRAGMA s3.AtomicUploadCommit = "true";
+
                 INSERT INTO `{write_source}`.`{write_object}` WITH (FORMAT = "csv_with_names")
                 SELECT * FROM AS_TABLE([<|id: 0, payload: "#######"|>]);
 
@@ -2016,7 +2021,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         appConfig.MutableFeatureFlags()->SetEnableTempTables(true);
-        auto kikimr = NTestUtils::MakeKikimrRunner(appConfig, "TestDomain");
+        auto kikimr = NTestUtils::MakeKikimrRunner(appConfig, {.DomainRoot = "TestDomain"});
 
         CreateBucketWithObject(bucket, "test_object", TEST_CONTENT);
 
@@ -2515,7 +2520,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         const TString source = "source";
         const TString table1 = "table1";
         const TString table2 = "table2";
-        const TString bucket  = "bucket";
+        const TString bucket = "bucket";
 
         CreateBucket(bucket);
 
@@ -2628,6 +2633,109 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
             UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
         }
+    }
+
+    void ReadLargeParquetFiles(std::shared_ptr<NKikimr::NKqp::TKikimrRunner> kikimr, const TString& bucket) {
+        CreateBucket(bucket);
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        {
+            const TString query = fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `test_bucket` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="NONE"
+                );)",
+                "location"_a = GetBucketLocation(bucket)
+            );
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto db = kikimr->GetQueryClient();
+        {
+            const TString query = R"(
+                INSERT INTO test_bucket.`test-inset-splitting/` WITH (FORMAT = "parquet")
+                SELECT Random(data) AS data FROM AS_TABLE(ListReplicate(
+                    <|data: "x"|>,
+                    1000000
+                ));
+            )";
+
+            // Create two large parquet files
+            {
+                const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+            {
+                const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+        }
+
+        {   // Actual splitting here:
+            // start two read tasks on different nodes
+            // write tasks will be scheduled locally
+            // so one of the channels is remote
+            const TString query = R"(
+                PRAGMA s3.UseRuntimeListing = "false";
+                PRAGMA ydb.OverridePlanner = @@ [
+                    { "tx": 0, "stage": 0, "tasks": 2 }
+                ] @@;
+
+                INSERT INTO test_bucket.`/result/` WITH (FORMAT = "parquet")
+                SELECT * FROM test_bucket.`/test-inset-splitting/` WITH (
+                    FORMAT = "parquet",
+                    SCHEMA (
+                        data Double
+                    )
+                )
+            )";
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TString query = R"(
+            SELECT COUNT(*) FROM test_bucket.`/result/` WITH (
+                FORMAT = "parquet",
+                SCHEMA (
+                    data Double
+                )
+            )
+        )";
+        const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+
+        TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnsCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetUint64(), 2000000);
+    }
+
+    Y_UNIT_TEST(TestReadLargeParquetFile) {
+        NKikimrConfig::TAppConfig config;
+        auto& tableService = *config.MutableTableServiceConfig();
+        tableService.SetArrayBufferMinFillPercentage(75);
+        tableService.SetBlockChannelsMode(NKikimrConfig::TTableServiceConfig::BLOCK_CHANNELS_FORCE);
+        tableService.MutableResourceManager()->SetChannelChunkSizeLimit(100000);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner(config, {.NodeCount = 2});
+        WaitResourcesPublish(*kikimr);
+        ReadLargeParquetFiles(kikimr, "test_read_large_file_bucket");
+    }
+
+    Y_UNIT_TEST(TestLocalReadLargeParquetFile) {
+        NKikimrConfig::TAppConfig config;
+        auto& tableService = *config.MutableTableServiceConfig();
+        tableService.ClearArrayBufferMinFillPercentage();
+        tableService.SetBlockChannelsMode(NKikimrConfig::TTableServiceConfig::BLOCK_CHANNELS_FORCE);
+        tableService.MutableResourceManager()->SetChannelChunkSizeLimit(100000);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner(config);
+        ReadLargeParquetFiles(kikimr, "test_local_read_large_file_bucket");
     }
 }
 

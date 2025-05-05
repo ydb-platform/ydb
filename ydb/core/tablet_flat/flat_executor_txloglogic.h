@@ -55,7 +55,7 @@ public:
     TLogicRedo(TAutoPtr<NPageCollection::TSteppedCookieAllocator>, TCommitManager*, TAutoPtr<NRedo::TQueue>);
     ~TLogicRedo();
 
-    void Describe(IOutputStream &out) const noexcept;
+    void Describe(IOutputStream &out) const;
     void InstallCounters(TExecutorCounters *counters, TTabletCountersWithTxTypes* appTxCounters);
     bool CommitROTransaction(std::unique_ptr<TSeat> seat, const TActorContext &ownerCtx);
     TCommitRWTransactionResult CommitRWTransaction(std::unique_ptr<TSeat> seat, NTable::TChange &change, bool force);
@@ -66,8 +66,8 @@ public:
 
     void CutLog(ui32 table, NTable::TSnapEdge, TGCBlobDelta&);
     void SnapToLog(NKikimrExecutorFlat::TLogSnapshot&);
-    NRedo::TStats LogStats() const noexcept;
-    TArrayRef<const NRedo::TUsage> GrabLogUsage() const noexcept;
+    NRedo::TStats LogStats() const;
+    TArrayRef<const NRedo::TUsage> GrabLogUsage() const;
 };
 
 void CompleteRoTransaction(std::unique_ptr<TSeat>, const TActorContext &ownerCtx, TExecutorCounters *counters, TTabletCountersWithTxTypes *appTxCounters);

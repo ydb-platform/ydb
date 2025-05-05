@@ -174,6 +174,8 @@ namespace NKikimr {
         ui32 ReplPrefetchDataSize;
         ui32 ReplMaxResponseSize;
         ui32 ReplInterconnectChannel;
+        TDuration ReplMaxDonorNotReadyDuration;
+        ui32 ReplMaxDonorNotReadyCount;
         ui32 HandoffMaxWaitQueueSize;
         ui32 HandoffMaxWaitQueueByteSize;
         ui32 HandoffMaxInFlightSize;
@@ -257,6 +259,9 @@ namespace NKikimr {
         TControlWrapper ThrottlingMaxOccupancyPerMille;
         TControlWrapper ThrottlingMinLogChunkCount;
         TControlWrapper ThrottlingMaxLogChunkCount;
+
+        ///////////// SYNC SETTINGS //////////////////
+        TControlWrapper MaxInProgressSyncCount;
 
         ///////////// FEATURE FLAGS ////////////////////////
         NKikimrConfig::TFeatureFlags FeatureFlags;

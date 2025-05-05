@@ -43,10 +43,12 @@ public:
         const auto& newConfig = record.GetConfig();
 
         if (oldConfig.HasTransferSpecific()) {
-            auto& oldLambda = oldConfig.GetTransferSpecific().GetTargets(0).GetTransformLambda();
-            auto& newLambda = newConfig.GetTransferSpecific().GetTargets(0).GetTransformLambda();
+            auto& oldSpecific = oldConfig.GetTransferSpecific();
+            auto& newSpecific = newConfig.GetTransferSpecific();
 
-            alter = oldLambda != newLambda;
+            alter = oldSpecific.GetTarget().GetTransformLambda() != newSpecific.GetTarget().GetTransformLambda()
+                || oldSpecific.GetBatching().GetBatchSizeBytes() != newSpecific.GetBatching().GetBatchSizeBytes()
+                || oldSpecific.GetBatching().GetFlushIntervalMilliSeconds() != newSpecific.GetBatching().GetFlushIntervalMilliSeconds();
         }
 
         auto desiredState = Replication->GetState();
@@ -54,6 +56,14 @@ public:
             switch (record.GetSwitchState().GetStateCase()) {
                 case NKikimrReplication::TReplicationState::kDone:
                     desiredState = TReplication::EState::Done;
+                    alter = true;
+                    break;
+                case NKikimrReplication::TReplicationState::kPaused:
+                    desiredState = TReplication::EState::Paused;
+                    alter = true;
+                    break;
+                case NKikimrReplication::TReplicationState::kStandBy:
+                    desiredState = TReplication::EState::Ready;
                     alter = true;
                     break;
                 default:

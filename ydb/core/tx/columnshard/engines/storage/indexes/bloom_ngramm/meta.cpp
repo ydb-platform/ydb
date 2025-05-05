@@ -1,9 +1,7 @@
-#include "checker.h"
 #include "const.h"
 #include "meta.h"
 
 #include <ydb/core/formats/arrow/hash/calcer.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom/checker.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
@@ -12,12 +10,14 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/generic/bitmap.h>
+#include <util/string/ascii.h>
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
 class TNGrammBuilder {
 private:
     const ui32 HashesCount;
+    const bool CaseSensitive;
 
     template <ui32 CharsRemained>
     class THashesBuilder {
@@ -62,26 +62,27 @@ private:
         static void BuildHashesImpl(
             const ui8* data, const ui32 dataSize, const std::optional<NRequest::TLikePart::EOperation> op, TActor& actor) {
             TBuffer fakeString;
-            if (!op || op == NRequest::TLikePart::EOperation::StartsWith) {
-                for (ui32 c = 1; c <= CharsCount; ++c) {
-                    fakeString.Clear();
-                    fakeString.Fill('\0', CharsCount - c);
-                    fakeString.Append((const char*)data, std::min((ui32)c, dataSize));
-                    if (fakeString.size() < CharsCount) {
-                        fakeString.Fill('\0', CharsCount - fakeString.size());
-                    }
+            fakeString.Reserve(CharsCount * 2);
+            if (!op || op == NRequest::TLikePart::EOperation::StartsWith || op == NRequest::TLikePart::EOperation::Equals) {
+                fakeString.Clear();
+                fakeString.Fill('\0', CharsCount - 1);
+                fakeString.Append((const char*)data, std::min(CharsCount - 1, dataSize));
+                for (ui32 c = 0; c + CharsCount <= fakeString.Size(); ++c) {
                     THashesCountSelector<HashesCount, CharsCount>::BuildHashes((const ui8*)fakeString.data(), actor);
                 }
             }
-            ui32 c = 0;
-            for (; c + CharsCount <= dataSize; ++c) {
+            for (ui32 c = 0; c + CharsCount <= dataSize; ++c) {
                 THashesCountSelector<HashesCount, CharsCount>::BuildHashes(data + c, actor);
             }
-            if (!op || op == NRequest::TLikePart::EOperation::EndsWith) {
-                for (; c < dataSize; ++c) {
-                    fakeString.Clear();
-                    fakeString.Append((const char*)data + c, dataSize - c);
-                    fakeString.Fill('\0', CharsCount - fakeString.size());
+            if (!op || op == NRequest::TLikePart::EOperation::EndsWith || op == NRequest::TLikePart::EOperation::Equals) {
+                fakeString.Clear();
+                if (dataSize < CharsCount) {
+                    fakeString.Append((const char*)data, dataSize);
+                } else {
+                    fakeString.Append((const char*)data + dataSize - CharsCount + 1, CharsCount - 1);
+                }
+                fakeString.Fill('\0', CharsCount - 1);
+                for (ui32 c = 0; c + CharsCount <= fakeString.Size(); ++c) {
                     THashesCountSelector<HashesCount, CharsCount>::BuildHashes((const ui8*)fakeString.data(), actor);
                 }
             }
@@ -134,17 +135,29 @@ private:
             AFL_VERIFY(false);
         }
     };
+    TBuffer LowerStringBuffer;
 
 public:
-    TNGrammBuilder(const ui32 hashesCount)
-        : HashesCount(hashesCount) {
+    TNGrammBuilder(const ui32 hashesCount, const bool caseSensitive)
+        : HashesCount(hashesCount)
+        , CaseSensitive(caseSensitive) {
     }
 
     template <class TAction>
     void BuildNGramms(
         const char* data, const ui32 dataSize, const std::optional<NRequest::TLikePart::EOperation> op, const ui32 nGrammSize, TAction& pred) {
-        THashesSelector<TConstants::MaxHashesCount, TConstants::MaxNGrammSize>::BuildHashes(
-            (const ui8*)data, dataSize, HashesCount, nGrammSize, op, pred);
+        if (CaseSensitive) {
+            THashesSelector<TConstants::MaxHashesCount, TConstants::MaxNGrammSize>::BuildHashes(
+                (const ui8*)data, dataSize, HashesCount, nGrammSize, op, pred);
+        } else {
+            LowerStringBuffer.Clear();
+            LowerStringBuffer.Resize(dataSize);
+            for (ui32 i = 0; i < dataSize; ++i) {
+                LowerStringBuffer.Data()[i] = AsciiToLower(data[i]);
+            }
+            THashesSelector<TConstants::MaxHashesCount, TConstants::MaxNGrammSize>::BuildHashes(
+                (const ui8*)LowerStringBuffer.Data(), dataSize, HashesCount, nGrammSize, op, pred);
+        }
     }
 
     template <class TFiller>
@@ -173,20 +186,29 @@ public:
 
     template <class TFiller>
     void FillNGrammHashes(const ui32 nGrammSize, const NRequest::TLikePart::EOperation op, const TString& userReq, TFiller& fillData) {
-        BuildNGramms(userReq.data(), userReq.size(), op, nGrammSize, fillData);
+        if (CaseSensitive) {
+            BuildNGramms(userReq.data(), userReq.size(), op, nGrammSize, fillData);
+        } else {
+            const TString lowerString = to_lower(userReq);
+            BuildNGramms(lowerString.data(), lowerString.size(), op, nGrammSize, fillData);
+        }
     }
 };
 
 class TVectorInserter {
 private:
-    TDynBitMap& Values;
+    TDynBitMap Values;
     const ui32 Size;
 
 public:
-    TVectorInserter(TDynBitMap& values)
-        : Values(values)
-        , Size(values.Size()) {
-        AFL_VERIFY(values.Size());
+    TDynBitMap ExtractBits() {
+        return std::move(Values);
+    }
+
+    TVectorInserter(const ui32 bitsSize)
+        : Size(bitsSize) {
+        AFL_VERIFY(bitsSize);
+        Values.Reserve(bitsSize);
     }
 
     void operator()(const ui64 hash) {
@@ -194,16 +216,16 @@ public:
     }
 };
 
+template <ui64 BitsSize>
 class TVectorInserterPower2 {
 private:
-    TDynBitMap& Values;
-    const ui32 SizeMask;
+    TBitMapOps<TFixedBitMapTraits<BitsSize, ui64>> Values;
+    static constexpr ui32 SizeMask = BitsSize - 1;
+    static_assert(((BitsSize - 1) & BitsSize) == 0);
 
 public:
-    TVectorInserterPower2(TDynBitMap& values)
-        : Values(values)
-        , SizeMask(values.Size() - 1) {
-        AFL_VERIFY(values.Size());
+    TBitMapOps<TFixedBitMapTraits<BitsSize, ui64>> ExtractBits() {
+        return std::move(Values);
     }
 
     void operator()(const ui64 hash) {
@@ -211,11 +233,53 @@ public:
     }
 };
 
+namespace {
+
+template <ui64 Size>
+class TBitmapDetector {
+private:
+    const TSkipBitmapIndex* Meta;
+    const ui32 ExtSize;
+    static constexpr ui64 NextSize = Size >> 1;
+
+public:
+    TBitmapDetector(const TSkipBitmapIndex* meta, const ui32 size)
+        : Meta(meta)
+        , ExtSize(size) {
+        AFL_VERIFY(ExtSize <= Size);
+    }
+
+    template <class TFiller>
+    TString Detector(const TFiller& filler) const {
+        if (ExtSize == Size) {
+            TVectorInserterPower2<Size> inserter;
+            filler(inserter);
+            return Meta->GetBitsStorageConstructor()->Build(inserter.ExtractBits())->SerializeToString();
+        } else {
+            return TBitmapDetector<NextSize>(Meta, ExtSize).Detector(filler);
+        }
+    }
+};
+
+template <>
+class TBitmapDetector<0> {
+public:
+    TBitmapDetector(const TSkipBitmapIndex* /*meta*/, const ui32 /*size*/) {
+        AFL_VERIFY(false);
+    }
+
+    template <class TFiller>
+    static TString Detector(const TFiller& /*filler*/) {
+        AFL_VERIFY(false);
+        return "";
+    }
+};
+}   // namespace
+
 TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const {
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
-    TNGrammBuilder builder(HashesCount);
+    TNGrammBuilder builder(HashesCount, CaseSensitive);
 
-    TDynBitMap bitMap;
     ui32 size = FilterSizeBytes * 8;
     if ((size & (size - 1)) == 0) {
         ui32 recordsCountBase = RecordsCount;
@@ -226,8 +290,7 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 rec
     } else {
         size *= ((recordsCount <= RecordsCount) ? 1.0 : (1.0 * recordsCount / RecordsCount));
     }
-    bitMap.Reserve(size * 8);
-
+    size = std::max<ui32>(16, size);
     const auto doFillFilter = [&](auto& inserter) {
         for (reader.Start(); reader.IsCorrect();) {
             AFL_VERIFY(reader.GetColumnsCount() == 1);
@@ -246,37 +309,60 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 rec
     };
 
     if ((size & (size - 1)) == 0) {
-        TVectorInserterPower2 inserter(bitMap);
-        doFillFilter(inserter);
-    } else {
-        TVectorInserter inserter(bitMap);
-        doFillFilter(inserter);
-    }
-    return TFixStringBitsStorage(bitMap).GetData();
-}
-
-void TIndexMeta::DoFillIndexCheckers(
-    const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& /*schema*/) const {
-    for (auto&& branch : info->GetBranches()) {
-        for (auto&& i : branch->GetLikes()) {
-            if (i.first.GetColumnId() != GetColumnId()) {
-                continue;
-            }
-            ui64 hashBase;
-            if (!GetDataExtractor()->CheckForIndex(i.first, hashBase)) {
-                continue;
-            }
-            std::set<ui64> hashes;
-            const auto predSet = [&](const ui64 hashSecondary) {
-                hashes.emplace(hashSecondary);
-            };
-            TNGrammBuilder builder(HashesCount);
-            for (auto&& ls : i.second.GetLikeSequences()) {
-                builder.FillNGrammHashes(NGrammSize, ls.second.GetOperation(), ls.second.GetValue(), predSet);
-            }
-            branch->MutableIndexes().emplace_back(std::make_shared<TFilterChecker>(GetIndexId(), std::move(hashes)));
+        if (size == 1024) {
+            return TBitmapDetector<1024>(this, 1024).Detector(doFillFilter);
+        } else if (size == 2048) {
+            return TBitmapDetector<2048>(this, 2048).Detector(doFillFilter);
+        } else if (size == 4096) {
+            return TBitmapDetector<4096>(this, 4096).Detector(doFillFilter);
+        } else if (size == 4096 * 2) {
+            return TBitmapDetector<4096 * 2>(this, 4096 * 2).Detector(doFillFilter);
+        } else if (size == 4096 * 4) {
+            return TBitmapDetector<4096 * 4>(this, 4096 * 4).Detector(doFillFilter);
+        } else if (size == 4096 * 8) {
+            return TBitmapDetector<4096 * 8>(this, 4096 * 8).Detector(doFillFilter);
+        } else if (size == 4096 * 16) {
+            return TBitmapDetector<4096 * 16>(this, 4096 * 16).Detector(doFillFilter);
         }
     }
+    TVectorInserter inserter(size);
+    doFillFilter(inserter);
+    return GetBitsStorageConstructor()->Build(inserter.ExtractBits())->SerializeToString();
+}
+
+bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
+    const NArrow::NSSA::TIndexCheckOperation& op) const {
+    AFL_VERIFY(!category);
+    AFL_VERIFY(value->type->id() == arrow::utf8()->id() || value->type->id() == arrow::binary()->id())("id", value->type->ToString());
+    bool result = true;
+    const ui32 bitsCount = data.GetBitsCount();
+    const auto predSet = [&](const ui64 hashSecondary) {
+        if (!data.Get(hashSecondary % bitsCount)) {
+            result = false;
+        }
+    };
+    TNGrammBuilder builder(HashesCount, CaseSensitive);
+    AFL_VERIFY(!CaseSensitive || op.GetCaseSensitive());
+
+    NRequest::TLikePart::EOperation opLike;
+    switch (op.GetOperation()) {
+        case TSkipIndex::EOperation::Equals:
+            opLike = NRequest::TLikePart::EOperation::Equals;
+            break;
+        case TSkipIndex::EOperation::Contains:
+            opLike = NRequest::TLikePart::EOperation::Contains;
+            break;
+        case TSkipIndex::EOperation::StartsWith:
+            opLike = NRequest::TLikePart::EOperation::StartsWith;
+            break;
+        case TSkipIndex::EOperation::EndsWith:
+            opLike = NRequest::TLikePart::EOperation::EndsWith;
+            break;
+    }
+    auto strVal = std::static_pointer_cast<arrow::BinaryScalar>(value);
+    const TString valString((const char*)strVal->value->data(), strVal->value->size());
+    builder.FillNGrammHashes(NGrammSize, opLike, valString, predSet);
+    return result;
 }
 
 }   // namespace NKikimr::NOlap::NIndexes::NBloomNGramm

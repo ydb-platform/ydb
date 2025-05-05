@@ -45,11 +45,11 @@ private:
     virtual void DoVisitAll(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& dataArray, const TChunkVisitor& chunkVisitor,
         const TRecordVisitor& recordVisitor) const override;
 
-    virtual bool DoCheckForIndex(const NRequest::TOriginalDataAddress& request, ui64& /*hashBase*/) const override {
+    virtual bool DoCheckForIndex(const NRequest::TOriginalDataAddress& request, ui64* /*hashBase*/) const override {
         return request.GetSubColumnName() == SubColumnName;
     }
 
-    virtual ui32 DoGetIndexHitsCount(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& dataArray) const override;
+    virtual THashMap<ui64, ui32> DoGetIndexHitsCount(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& dataArray) const override;
 
 public:
     virtual TString GetClassName() const override {

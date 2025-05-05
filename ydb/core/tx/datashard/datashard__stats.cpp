@@ -80,21 +80,21 @@ public:
         Send(MakeSharedPageCacheId(), new NSharedCache::TEvUnregister);
     }
 
-    TResult Locate(const TMemTable*, ui64, ui32) noexcept override {
-        Y_ABORT("IPages::Locate(TMemTable*, ...) shouldn't be used here");
+    TResult Locate(const TMemTable*, ui64, ui32) override {
+        Y_ENSURE(false, "IPages::Locate(TMemTable*, ...) shouldn't be used here");
     }
 
-    TResult Locate(const TPart*, ui64, ELargeObj) noexcept override {
-        Y_ABORT("IPages::Locate(TPart*, ...) shouldn't be used here");
+    TResult Locate(const TPart*, ui64, ELargeObj) override {
+        Y_ENSURE(false, "IPages::Locate(TPart*, ...) shouldn't be used here");
     }
 
     const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override {
-        Y_ABORT_UNLESS(groupId.IsMain(), "Unsupported column group");
+        Y_ENSURE(groupId.IsMain(), "Unsupported column group");
 
         auto partStore = CheckedCast<const TPartStore*>(part);
         auto info = partStore->PageCollections.at(groupId.Index).Get();
         auto type = info->GetPageType(pageId);
-        Y_ABORT_UNLESS(type == EPage::FlatIndex || type == EPage::BTreeIndex);
+        Y_ENSURE(type == EPage::FlatIndex || type == EPage::BTreeIndex);
 
         auto& partPages = Pages[part];
         auto page = partPages.FindPtr(pageId);
@@ -104,7 +104,7 @@ public:
 
         auto fetchEv = new NPageCollection::TFetch{ {}, info->PageCollection, TVector<TPageId>{ pageId } };
         PagesSize += info->GetPageSize(pageId);
-        Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(NSharedCache::EPriority::Bkgr, fetchEv, SelfActorId));
+        Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(NSharedCache::EPriority::Bkgr, fetchEv));
 
         Spent->Alter(false); // pause measurement
         ReleaseResources();
@@ -127,7 +127,7 @@ public:
         }
 
         page = partPages.FindPtr(pageId);
-        Y_ABORT_UNLESS(page != nullptr);
+        Y_ENSURE(page != nullptr);
 
         return page;
     }
@@ -175,6 +175,14 @@ private:
             << (ev->PartOwners.size() > 1 || ev->PartOwners.size() == 1 && *ev->PartOwners.begin() != TabletId ? ", with borrowed parts" : "")
             << (ev->HasSchemaChanges ? ", with schema changes" : "")
             << ", LoadedSize " << PagesSize << ", " << NFmt::Do(*Spent));
+        
+        if (const auto& stats = ev->Stats; stats.DataSize.Size > 10_MB && stats.RowCount > 100
+            && Min(stats.RowCountHistogram.size(), stats.DataSizeHistogram.size()) < HistogramBucketsCount / 2)
+        {
+            LOG_ERROR_S(GetActorContext(), NKikimrServices::TABLET_STATS_BUILDER, "Stats at datashard " << TabletId << ", for tableId " << TableId
+                << " don't have enough keys: "
+                << ev->Stats.ToString());
+        }
 
         Send(ReplyTo, ev.Release());
 
@@ -223,8 +231,8 @@ private:
 
         auto ev = WaitForSpecificEvent<TEvResourceBroker::TEvResourceAllocated>(&TTableStatsCoroBuilder::ProcessUnexpectedEvent);
         auto msg = ev->Get();
-        Y_ABORT_UNLESS(!msg->Cookie.Get(), "Unexpected cookie in TEvResourceAllocated");
-        Y_ABORT_UNLESS(msg->TaskId == 1, "Unexpected task id in TEvResourceAllocated");
+        Y_ENSURE(!msg->Cookie.Get(), "Unexpected cookie in TEvResourceAllocated");
+        Y_ENSURE(msg->TaskId == 1, "Unexpected task id in TEvResourceAllocated");
 
         CoroutineDeadline = GetCycleCountFast() + DurationToCycles(MaxCoroutineExecutionTime);
     }

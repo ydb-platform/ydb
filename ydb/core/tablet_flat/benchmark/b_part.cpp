@@ -30,7 +30,7 @@ namespace {
     using TCheckIter = TChecker<TWrapIter, TSubset>;
     using TCheckReverseIter = TChecker<TWrapReverseIter, TSubset>;
 
-    NPage::TConf PageConf(size_t groups, bool writeBTreeIndex) noexcept
+    NPage::TConf PageConf(size_t groups, bool writeBTreeIndex)
     {
         NPage::TConf conf;
 

@@ -14,6 +14,7 @@ public:
     bool TimeRequests;
     bool ProgressRequests;
     TString Address;
+    bool EnableSsl = true;
     TString Token;
     TString TokenFile;
     TString CaCertsFile;

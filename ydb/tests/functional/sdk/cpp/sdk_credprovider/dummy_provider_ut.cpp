@@ -3,7 +3,7 @@
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/sdk/cpp/src/client/types/core_facility/core_facility.h>
 
 #define INCLUDE_YDB_INTERNAL_H

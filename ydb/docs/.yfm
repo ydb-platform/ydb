@@ -7,7 +7,11 @@ singlePage: true
 
 resources:
   style:
-    - _assets/tags.css   
+    - _assets/tags.css
+    - _assets/badge.css
+  csp:
+    - "img-src":
+        - "https://github.ydb.tech"
 
 docs-viewer:
   project-name: ydb
@@ -21,6 +25,7 @@ docs-viewer:
   unrestrict-revision-access: true
   need_pdf: true
   pdf: true
+
   
   logo-options:
     url:

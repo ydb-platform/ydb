@@ -254,7 +254,7 @@ TFuture<TYsonString> TClientBase::GetNode(
 
     // COMPAT(max42): after 22.3 is everywhere, drop legacy field.
     if (options.Attributes) {
-        ToProto(req->mutable_legacy_attributes()->mutable_keys(), options.Attributes.Keys);
+        ToProto(req->mutable_legacy_attributes()->mutable_keys(), options.Attributes.Keys());
         ToProto(req->mutable_attributes(), options.Attributes);
     } else {
         req->mutable_legacy_attributes()->set_all(true);
@@ -290,7 +290,7 @@ TFuture<TYsonString> TClientBase::ListNode(
 
     // COMPAT(max42): after 22.3 is everywhere, drop legacy field.
     if (options.Attributes) {
-        ToProto(req->mutable_legacy_attributes()->mutable_keys(), options.Attributes.Keys);
+        ToProto(req->mutable_legacy_attributes()->mutable_keys(), options.Attributes.Keys());
         ToProto(req->mutable_attributes(), options.Attributes);
     } else {
         req->mutable_legacy_attributes()->set_all(true);
@@ -1077,6 +1077,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     req->set_merge_versioned_rows(options.MergeVersionedRows);
     ToProto(req->mutable_versioned_read_options(), options.VersionedReadOptions);
     YT_OPTIONAL_SET_PROTO(req, use_lookup_cache, options.UseLookupCache);
+    req->set_expression_builder_version(options.ExpressionBuilderVersion);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSelectRowsPtr& rsp) {
         TSelectRowsResult result;

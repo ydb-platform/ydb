@@ -10,7 +10,7 @@ namespace NYT::NYTree {
 
 template <class T>
 TAttributeFilter::TAttributeFilter(std::initializer_list<T> keys)
-    : Keys({keys.begin(), keys.end()})
+    : Keys_({keys.begin(), keys.end()})
     , Universal(false)
 { }
 

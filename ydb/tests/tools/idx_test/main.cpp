@@ -7,8 +7,8 @@
 #include <library/cpp/resource/resource.h>
 
 #include <ydb/public/lib/idx_test/idx_test.h>
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 using namespace NYdb;
 using namespace NYdb::NTable;

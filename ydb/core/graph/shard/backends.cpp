@@ -192,7 +192,7 @@ void TMemoryBackend::GetMetrics(const NKikimrGraph::TEvGetMetrics& get, NKikimrG
     if (!get.GetSkipBorders()) {
         if (get.HasTimeTo()) {
             TInstant to(TInstant::Seconds(get.GetTimeTo()));
-            if (metricValues.Timestamps.empty() || std::prev(itRight)->Timestamp < to) {
+            if (metricValues.Timestamps.empty() || (itLeft != itRight && std::prev(itRight)->Timestamp < to)) {
                 metricValues.Timestamps.push_back(to);
                 for (size_t num = 0; num < indexes.size(); ++num) {
                     metricValues.Values[num].push_back(NAN);

@@ -7,7 +7,7 @@
 #include <ydb/library/formats/arrow/switch/switch_type.h>
 #include <ydb/core/security/certificate_check/cert_auth_utils.h>
 #include <ydb/services/ydb/ydb_dummy.h>
-#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <util/system/tempfile.h>
 
@@ -120,6 +120,9 @@ public:
         ServerSettings->SetEnableYq(enableYq);
         ServerSettings->Formats = new TFormatFactory;
         ServerSettings->PQConfig = appConfig.GetPQConfig();
+        ServerSettings->AppConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        ServerSettings->AppConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("PostgreSQL");
+
         if (appConfig.HasMeteringConfig() && appConfig.GetMeteringConfig().HasMeteringFilePath()) {
             ServerSettings->SetMeteringFilePath(appConfig.GetMeteringConfig().GetMeteringFilePath());
         }

@@ -3,6 +3,7 @@
 #include "yql_mkql_input_stream.h"
 
 #include <yt/yql/providers/yt/codec/yt_codec.h>
+#include <yt/yql/providers/yt/comp_nodes/yql_mkql_file_input_state.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/computation/mkql_custom_list.h>
 
@@ -28,19 +29,21 @@ public:
 protected:
     class TIterator : public NKikimr::NMiniKQL::TComputationValue<TIterator> {
     public:
-        TIterator(NKikimr::NMiniKQL::TMemoryUsageInfo* memInfo, THolder<IInputState>&& state, std::optional<ui64> length);
+        TIterator(NKikimr::NMiniKQL::TMemoryUsageInfo* memInfo, const TMkqlIOSpecs& spec, THolder<TFileInputState>&& state, std::optional<ui64> length);
 
     private:
         bool Next(NUdf::TUnboxedValue& value) override;
 
         bool AtStart_ = true;
-        THolder<IInputState> State_;
+        THolder<TFileInputState> State_;
         std::optional<ui64> ExpectedLength_;
+
+        const TMkqlIOSpecs& Spec_;
     };
 
     NUdf::TUnboxedValue GetListIterator() const override;
 
-    virtual THolder<IInputState> MakeState() const = 0;
+    virtual THolder<TFileInputState> MakeState() const = 0;
 
 protected:
     const TMkqlIOSpecs& Spec;
@@ -66,7 +69,7 @@ public:
     }
 
 protected:
-    THolder<IInputState> MakeState() const override;
+    THolder<TFileInputState> MakeState() const override;
 
 private:
     const TVector<TString> FilePaths;

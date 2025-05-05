@@ -1,6 +1,7 @@
 items:
-- { name: Обзор,     href: index.md           }
-- { name: INDEX,     href: secondary_index.md }
-- { name: FAMILY,    href: family.md          }
-- { name: TEMPORARY, href: temporary.md       }
-- { name: WITH,      href: with.md            }
+- { name: Обзор,           href: index.md           }
+- { name: SECONDARY INDEX, href: secondary_index.md }
+- { name: VECTOR INDEX,    href: vector_index.md    }
+- { name: FAMILY,          href: family.md          }
+- { name: TEMPORARY,       href: temporary.md       }
+- { name: WITH,            href: with.md            }

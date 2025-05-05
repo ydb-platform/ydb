@@ -153,6 +153,15 @@ Y_UNIT_TEST(ShowCreateTable) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(ShowCreateView) {
+    TCases cases = {
+        {"use plato;show create view user;","USE plato;\n\nSHOW CREATE VIEW user;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(Use) {
     TCases cases = {
         {"use user;","USE user;\n"},

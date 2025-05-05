@@ -167,6 +167,7 @@ def add_python_lint_checks(unit, py_ver, files):
             "taxi/uservices/",
             "travel/",
             "market/report/lite/",  # MARKETOUT-38662, deadline: 2021-08-12
+            "market/sre",  # YMAKE-626 -> MARKET-???
             "passport/backend/oauth/",  # PASSP-35982
             "sdg/sdc/contrib/",  # SDC contrib
             "sdg/sdc/third_party/",  # SDC contrib
@@ -589,7 +590,7 @@ def onpy_srcs(unit, *args):
                 root_rel_path = rootrel_arc_src(path, unit)
                 if with_py:
                     key = '/py_modules/' + mod
-                    res += [path, key, '-', 'resfs/src/{}=${{rootrel;input;context=TEXT:"{}"}}'.format(key, path)]
+                    res += [path, key, '-', 'resfs/src/{}=${{rootrel;context=TEXT;input=TEXT:"{}"}}'.format(key, path)]
                 if with_pyc:
                     src = unit.resolve_arc_path(path) or path
                     dst = path + uniq_suffix(path, unit)

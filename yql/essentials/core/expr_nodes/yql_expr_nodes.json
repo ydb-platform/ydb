@@ -145,6 +145,15 @@
             ]
         },
         {
+            "Name": "TCoWithWorld",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "WithWorld"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "World", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TCoTypeOf",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "TypeOf"},
@@ -320,6 +329,24 @@
                 {"Index": 0, "Name": "Item", "Type": "TExprBase"},
                 {"Index": 1, "Name": "Extractor", "Type": "TCoLambda"}
             ]
+        },
+        {
+            "Name": "TCoPruneKeysBase",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "CallableBase"},
+            "Children": [
+                {"Index": 1, "Name": "Extractor", "Type": "TCoLambda"}
+            ]
+        },
+        {
+            "Name": "TCoPruneKeys",
+            "Base": "TCoPruneKeysBase",
+            "Match": {"Type": "Callable", "Name": "PruneKeys"}
+        },
+        {
+            "Name": "TCoPruneAdjacentKeys",
+            "Base": "TCoPruneKeysBase",
+            "Match": {"Type": "Callable", "Name": "PruneAdjacentKeys"}
         },
         {
             "Name": "TCoFlatMapBase",
@@ -1254,6 +1281,11 @@
             "Match": {"Type": "Callable", "Name": "=="}
         },
         {
+            "Name": "TCoCmpEqualsIgnoreCase",
+            "Base": "TCoCompare",
+            "Match": {"Type": "Callable", "Name": "EqualsIgnoreCase"}
+        },
+        {
             "Name": "TCoCmpNotEqual",
             "Base": "TCoCompare",
             "Match": {"Type": "Callable", "Name": "!="}
@@ -1274,14 +1306,30 @@
             "Match": {"Type": "Callable", "Name": "StartsWith"}
         },
         {
+            "Name": "TCoCmpStartsWithIgnoreCase",
+            "Base": "TCoCompare",
+            "Match": {"Type": "Callable", "Name": "StartsWithIgnoreCase"}
+        },
+        {
             "Name": "TCoCmpEndsWith",
             "Base": "TCoCompare",
             "Match": {"Type": "Callable", "Name": "EndsWith"}
         },
         {
+            "Name": "TCoCmpEndsWithIgnoreCase",
+            "Base": "TCoCompare",
+            "Match": {"Type": "Callable", "Name": "EndsWithIgnoreCase"}
+        },
+
+        {
             "Name": "TCoCmpStringContains",
             "Base": "TCoCompare",
             "Match": {"Type": "Callable", "Name": "StringContains"}
+        },
+        {
+            "Name": "TCoCmpStringContainsIgnoreCase",
+            "Base": "TCoCompare",
+            "Match": {"Type": "Callable", "Name": "StringContainsIgnoreCase"}
         },
         {
             "Name": "TCoInc",
@@ -1412,7 +1460,8 @@
                 {"Index": 1, "Name": "FunctionName", "Type": "TCoAtom"},
                 {"Index": 2, "Name": "FunctionType", "Type": "TExprBase"},
                 {"Index": 3, "Name": "Script", "Type": "TExprBase"},
-                {"Index": 4, "Name": "Options", "Type": "TCoNameValueTupleList", "Optional": true}
+                {"Index": 4, "Name": "Options", "Type": "TCoNameValueTupleList", "Optional": true},
+                {"Index": 5, "Name": "FileAlias", "Type": "TCoAtom", "Optional": true}
             ]
         },
         {
@@ -2530,6 +2579,11 @@
             "Match": {"Type": "Callable", "Name": "WideFromBlocks"}
         },
         {
+            "Name": "TCoListFromBlocks",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "ListFromBlocks"}
+        },
+        {
             "Name": "TCoReplicateScalars",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "ReplicateScalars"},
@@ -2541,6 +2595,11 @@
             "Name": "TCoWideToBlocks",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "WideToBlocks"}
+        },
+        {
+            "Name": "TCoListToBlocks",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "ListToBlocks"}
         },
         {
             "Name": "TCoPgSelect",

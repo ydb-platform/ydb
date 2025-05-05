@@ -17,7 +17,7 @@ namespace NPageCollection {
 
         }
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "Fetch{" << Pages.size() << " pages"

@@ -56,12 +56,6 @@ WHERE  o.id_customer = $customer_id
 
 ### Автоматическое использование индексов при выборке
 
-{% note warning %}
-
-Данный механизм является экспериментальным и по умолчанию пока выключен. Его включение производится с помощью [настройки `index_auto_choose_mode` в `table_service_config`](https://github.com/ydb-platform/ydb/blob/d5caec3e4939a9fd3dc738161da3c9f7f205e267/ydb/core/protos/table_service_config.proto#L276). Настройка также будет влиять на поведение query service.
-
-{% endnote %}
-
 Явное указание секции `VIEW` имеет приоритет над решением оптимизатора о использовании вторичных индексов. То есть запрос
 
 ```yql

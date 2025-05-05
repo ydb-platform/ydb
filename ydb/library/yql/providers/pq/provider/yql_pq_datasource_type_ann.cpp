@@ -31,6 +31,38 @@ public:
         AddHandler({TPqTopic::CallableName()}, Hndl(&TSelf::HandleTopic));
         AddHandler({TDqPqTopicSource::CallableName()}, Hndl(&TSelf::HandleDqTopicSource));
         AddHandler({TCoSystemMetadata::CallableName()}, Hndl(&TSelf::HandleMetadata));
+        AddHandler({TDqPqFederatedCluster::CallableName()}, Hndl(&TSelf::HandleFederatedCluster));
+    }
+
+    TStatus HandleFederatedCluster(TExprBase input, TExprContext& ctx) {
+        const auto cluster = input.Cast<NNodes::TDqPqFederatedCluster>();
+        if (!EnsureMinMaxArgsCount(input.Ref(), 3, 4, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureAtom(cluster.Name().Ref(), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureAtom(cluster.Endpoint().Ref(), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!EnsureAtom(cluster.Database().Ref(), ctx)) {
+            return TStatus::Error;
+        }
+
+        if (TDqPqFederatedCluster::idx_PartitionsCount < input.Ref().ChildrenSize()) {
+            if (!EnsureAtom(cluster.PartitionsCount().Ref(), ctx)) {
+                return TStatus::Error;
+            }
+            if (!TryFromString<ui32>(cluster.PartitionsCount().Cast().StringValue())) {
+                ctx.AddError(TIssue(ctx.GetPosition(cluster.PartitionsCount().Cast().Pos()), TStringBuilder() << "Expected integer, but got: " << cluster.PartitionsCount().Cast().StringValue()));
+                return TStatus::Error;
+            }
+        }
+        input.Ptr()->SetTypeAnn(ctx.MakeType<TUnitExprType>());
+        return TStatus::Ok;
     }
 
     TStatus HandleConfigure(const TExprNode::TPtr& input, TExprContext& ctx) {

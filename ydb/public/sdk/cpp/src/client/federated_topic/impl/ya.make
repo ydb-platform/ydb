@@ -1,7 +1,5 @@
 LIBRARY()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
-
 SRCS(
     federated_read_session.h
     federated_read_session.cpp
@@ -13,6 +11,7 @@ SRCS(
     federated_topic.cpp
     federation_observer.h
     federation_observer.cpp
+    federated_deferred_commit.cpp
 )
 
 PEERDIR(

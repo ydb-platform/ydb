@@ -51,7 +51,7 @@ public:
 
     TString GetClusterServer(const TString& cluster) const override;
 
-    NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder) const override;
+    NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder, bool temp, bool anonymous) const override;
 
     NYT::TRichYPath GetWriteTable(const TString& sessionId, const TString& cluster, const TString& table, const TString& tmpFolder) const override;
 
@@ -70,6 +70,10 @@ public:
     TGetTablePartitionsResult GetTablePartitions(TGetTablePartitionsOptions&& options) override;
 
     void AddCluster(const TYtClusterConfig& config) override;
+
+    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) override;
+
+    TMaybe<TString> GetTableFilePath(const TGetTableFilePathOptions&& options) override;
 
 protected:
     IYtGateway::TPtr Slave_;

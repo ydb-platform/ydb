@@ -490,6 +490,11 @@ void TListJobsCommand::Register(TRegistrar registrar)
         [] (TThis* command) -> auto& { return command->Options.WithMonitoringDescriptor; })
         .Optional(/*init*/ false);
 
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
+        "with_interruption_info",
+        [] (TThis* command) -> auto& { return command->Options.WithInterruptionInfo; })
+        .Optional(/*init*/ false);
+
     registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
         "operation_incarnation",
         [] (TThis* command) -> auto& { return command->Options.OperationIncarnation; })
@@ -578,6 +583,13 @@ void TListJobsCommand::Register(TRegistrar registrar)
         "running_jobs_lookbehind_period",
         [] (TThis* command) -> auto& {
             return command->Options.RunningJobsLookbehindPeriod;
+        })
+        .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::optional<THashSet<TString>>>(
+        "attributes",
+        [] (TThis* command) -> auto& {
+            return command->Options.Attributes;
         })
         .Optional(/*init*/ false);
 }

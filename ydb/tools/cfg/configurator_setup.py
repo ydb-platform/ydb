@@ -105,5 +105,9 @@ def get_parser(generate_func, extra_cfg_arguments=[]):
         '--nfs-control', action='store_true', help='Forces cfg command to generate NFS Control configuration'
     )
 
+    parser_cfg.add_argument('--backport-to-template',
+                            action='store_true',
+                            help='Backport blob_storage_config and similar sections to template after generation')
+
     parser_cfg.set_defaults(func=generate_func)
     return parser

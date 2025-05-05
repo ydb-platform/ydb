@@ -12,7 +12,7 @@ namespace Ydb {
     class Value;
 }
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 class TResultSetParser;
 
@@ -539,3 +539,6 @@ public:
 };
 
 } // namespace NYdb
+
+template<>
+void Out<NYdb::TUuidValue>(IOutputStream& o, const NYdb::TUuidValue& value);

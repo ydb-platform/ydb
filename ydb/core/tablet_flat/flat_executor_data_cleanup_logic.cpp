@@ -51,12 +51,12 @@ bool TDataCleanupLogic::TryStartCleanup(ui64 dataCleanupGeneration, const TActor
 }
 
 void TDataCleanupLogic::OnCompactionPrepared(ui32 tableId, ui64 compactionId) {
-    Y_ABORT_UNLESS(State == EDataCleanupState::PendingCompaction);
+    Y_ENSURE(State == EDataCleanupState::PendingCompaction);
     CompactingTables[tableId] = {tableId, compactionId};
 }
 
 void TDataCleanupLogic::WaitCompaction() {
-    Y_ABORT_UNLESS(State == EDataCleanupState::PendingCompaction);
+    Y_ENSURE(State == EDataCleanupState::PendingCompaction);
     if (CompactingTables.empty()) {
         State = EDataCleanupState::PendingFirstSnapshot;
     } else {

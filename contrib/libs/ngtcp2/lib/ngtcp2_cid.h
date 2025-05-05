@@ -149,7 +149,9 @@ void ngtcp2_dcid_copy(ngtcp2_dcid *dest, const ngtcp2_dcid *src);
 
 /*
  * ngtcp2_dcid_copy_cid_token behaves like ngtcp2_dcid_copy, but it
- * only copies cid, seq, and token.
+ * only copies cid, seq, and token.  dest->flags should be initialized
+ * before this call because NGTCP2_DCID_FLAG_TOKEN_PRESENT is set or
+ * unset.
  */
 void ngtcp2_dcid_copy_cid_token(ngtcp2_dcid *dest, const ngtcp2_dcid *src);
 
@@ -162,15 +164,36 @@ int ngtcp2_dcid_verify_uniqueness(const ngtcp2_dcid *dcid, uint64_t seq,
 
 /*
  * ngtcp2_dcid_verify_stateless_reset_token verifies stateless reset
- * token |token| against the one included in |dcid|.  Tokens are
- * compared in constant time.  This function returns 0 if the
- * verification succeeds, or one of the following negative error
- * codes:
+ * token |token| received on |path| against the one included in
+ * |dcid|.  Tokens are compared in constant time.  This function
+ * returns 0 if the verification succeeds, or one of the following
+ * negative error codes:
  *
  * NGTCP2_ERR_INVALID_ARGUMENT
  *     Tokens do not match; or |dcid| does not contain a token.
  */
 int ngtcp2_dcid_verify_stateless_reset_token(const ngtcp2_dcid *dcid,
+                                             const ngtcp2_path *path,
                                              const uint8_t *token);
+
+/* TODO It might be performance win if we store congestion state in
+   this entry, and restore it when migrate back to this path. */
+typedef struct ngtcp2_path_history_entry {
+  /* ps contains path. */
+  ngtcp2_path_storage ps;
+  /* max_udp_payload_size is the maximum size of UDP datagram payload
+     that is allowed to be sent to this path. */
+  size_t max_udp_payload_size;
+  /* ts is the timestamp when this entry is added to the path history.
+     It happens when a local endpoint migrates to the another path. */
+  ngtcp2_tstamp ts;
+} ngtcp2_path_history_entry;
+
+/*
+ * ngtcp2_dcid_apply_validated_path applies the defaults from |ent|
+ * which contains the validated path and its stored configurations.
+ */
+void ngtcp2_dcid_apply_validated_path(ngtcp2_dcid *dcid,
+                                      const ngtcp2_path_history_entry *ent);
 
 #endif /* !defined(NGTCP2_CID_H) */

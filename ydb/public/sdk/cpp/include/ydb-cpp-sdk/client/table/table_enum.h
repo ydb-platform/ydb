@@ -2,7 +2,7 @@
 
 #include <limits>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NTable {
 
 //! Column family compression codec

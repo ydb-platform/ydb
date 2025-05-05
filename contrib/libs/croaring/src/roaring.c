@@ -614,7 +614,7 @@ void roaring_bitmap_remove(roaring_bitmap_t *r, uint32_t val) {
             ra_set_container_at_index(&r->high_low_container, i, container2,
                                       newtypecode);
         }
-        if (container_get_cardinality(container2, newtypecode) != 0) {
+        if (container_nonzero_cardinality(container2, newtypecode)) {
             ra_set_container_at_index(&r->high_low_container, i, container2,
                                       newtypecode);
         } else {

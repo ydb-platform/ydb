@@ -7,13 +7,14 @@ A view logically represents a table formed by a given query. The view does not p
 ## Syntax
 
 ```yql
-CREATE VIEW <name>
+CREATE VIEW [IF NOT EXISTS] <name>
 [ WITH ( <view_option_name> [= <view_option_value>] [, ... ] ) ]
 AS <query>
 ```
 
 ### Parameters
 
+* `IF NOT EXISTS` - when specified, the statement does not return an error if a view with the given name already exists.
 * `name` - the name of the view to be created. The name must be distinct from the names of all other schema objects.
 * `query` - the `SELECT` query, which will be used to produce the logical table the view represents.
 * `WITH ( <view_option_name> [= <view_option_value>] [, ... ] )` specifies optional parameters for a view. The following parameters are supported:

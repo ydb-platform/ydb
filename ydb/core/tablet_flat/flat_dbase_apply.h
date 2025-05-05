@@ -46,10 +46,10 @@ namespace NTable {
         bool SetExecutorResourceProfile(const TString &name);
         bool SetCompactionPolicy(ui32 tableId, const NKikimrCompaction::TCompactionPolicy& newPolicy);
 
-        TTable* Table(ui32 tid) const noexcept
+        TTable* Table(ui32 tid) const
         {
             auto* table = Scheme.GetTableInfo(tid);
-            Y_ABORT_UNLESS(table, "Acccessing table that doesn't exist");
+            Y_ENSURE(table, "Acccessing table that doesn't exist");
             return table;
         }
 
@@ -83,9 +83,9 @@ namespace NTable {
             return false;
         }
 
-        void PreserveTable(ui32 tid) noexcept;
-        void PreserveExecutor() noexcept;
-        void PreserveRedo() noexcept;
+        void PreserveTable(ui32 tid);
+        void PreserveExecutor();
+        void PreserveRedo();
 
     public:
         TScheme &Scheme;

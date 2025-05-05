@@ -1,6 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -616,6 +616,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         {
             auto result = session.ExecuteDataQuery(Q_(R"(
                 PRAGMA FilterPushdownOverJoinOptionalSide;
+                PRAGMA config.flags("OptimizerFlags", "FuseEquiJoinsInputMultiLabels", "PullUpFlatMapOverJoinMultipleLabels");
 
                 SELECT t1.Key1, t1.Key2, t1.Fk1, t1.Value, t2.Key, t2.Value, t3.Key, t3.Value
 
@@ -639,6 +640,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         {
             auto result = session.ExecuteDataQuery(Q_(R"(
                 PRAGMA FilterPushdownOverJoinOptionalSide;
+                PRAGMA config.flags("OptimizerFlags", "FuseEquiJoinsInputMultiLabels", "PullUpFlatMapOverJoinMultipleLabels");
 
                 SELECT t1.Key1, t1.Key2, t1.Fk1, t1.Value, t2.Key, t2.Value, t3.Key, t3.Value
 
@@ -1877,6 +1879,48 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
             [[["02"];#;["02"];["03"];#;["03"];["1"];#;["1"]];[["02"];#;["02"];["05"];#;["05"];["2"];#;["2"]];[["02"];#;["02"];["06"];#;["05"];["2"];#;["2"]];[["03"];["03"];["03"];["08"];["02"];["07"];["1"];["1"];["1"]];[["03"];["03"];["03"];["09"];["03"];["08"];["2"];["2"];["2"]];[["09"];#;["09"];["20"];#;["09"];["1"];#;["1"]];[["09"];#;["09"];["21"];#;["10"];["2"];#;["2"]]]
             )", FormatResultSetYson(result.GetResultSet(0)));
         }
+    }
+
+    Y_UNIT_TEST(HashJoinWithAsTable) {
+        TKikimrRunner kikimr;
+
+        auto client = kikimr.GetQueryClient();
+
+        {
+            const TString query = R"(
+                CREATE TABLE test_table (
+                    test_column Int32,
+                    PRIMARY key (test_column)
+                ))";
+
+                const auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TString joinQuery = R"(
+            PRAGMA ydb.HashJoinMode = "grace";
+            PRAGMA ydb.OptShuffleElimination = "true";
+
+            $as_table = SELECT * FROM AS_TABLE([<|test_column: 42|>]);
+
+            SELECT
+                as_table.test_column
+            FROM $as_table AS as_table
+            LEFT JOIN test_table
+                ON test_table.test_column = as_table.test_column
+        )";
+
+        const auto result = client.ExecuteQuery(joinQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+
+        const auto& resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+
+        TResultSetParser parser(resultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetInt32(), 42);
     }
 }
 

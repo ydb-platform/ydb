@@ -52,6 +52,7 @@ message TProgram {
     uint32 RuntimeVersion = 1;
     bytes Raw = 2;
     TSettings Settings = 3;
+    uint32 LangVer = 4;
 }
 
 message TDqUri {
@@ -137,7 +138,7 @@ message THashV1 {
 
 message TColumnShardHashV1 {
     uint64 ShardCount = 1;
-    repeated uint64 TaskIdByHash = 2;
+    repeated uint64 TaskIndexByHash = 2;
     repeated uint32 KeyColumnTypes = 3;
 }
 

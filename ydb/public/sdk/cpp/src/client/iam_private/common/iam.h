@@ -1,8 +1,8 @@
-#include <ydb-cpp-sdk/client/iam_private/common/types.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam_private/common/types.h>
 
-#include <src/client/iam/common/iam.h>
+#include <ydb/public/sdk/cpp/src/client/iam/common/iam.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 template<typename TRequest, typename TResponse, typename TService>
 

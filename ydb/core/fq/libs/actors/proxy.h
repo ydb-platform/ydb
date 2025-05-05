@@ -35,7 +35,6 @@ namespace NKikimr  {
 
 namespace NFq {
 
-NActors::TActorId MakeYqlAnalyticsHttpProxyId();
 NActors::TActorId MakePendingFetcherId(ui32 nodeId);
 
 NActors::IActor* CreatePendingFetcher(

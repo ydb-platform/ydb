@@ -136,9 +136,37 @@ class UpdateTokenResponse(IFromProto):
         return UpdateTokenResponse()
 
 
+@dataclass
+class CommitOffsetRequest(IToProto):
+    path: str
+    consumer: str
+    partition_id: int
+    offset: int
+
+    def to_proto(self) -> ydb_topic_pb2.CommitOffsetRequest:
+        return ydb_topic_pb2.CommitOffsetRequest(
+            path=self.path,
+            consumer=self.consumer,
+            partition_id=self.partition_id,
+            offset=self.offset,
+        )
+
+
 ########################################################################################################################
 #  StreamWrite
 ########################################################################################################################
+
+
+@dataclass
+class TransactionIdentity(IToProto):
+    tx_id: str
+    session_id: str
+
+    def to_proto(self) -> ydb_topic_pb2.TransactionIdentity:
+        return ydb_topic_pb2.TransactionIdentity(
+            id=self.tx_id,
+            session=self.session_id,
+        )
 
 
 class StreamWriteMessage:
@@ -199,6 +227,7 @@ class StreamWriteMessage:
     class WriteRequest(IToProto):
         messages: typing.List["StreamWriteMessage.WriteRequest.MessageData"]
         codec: int
+        tx_identity: Optional[TransactionIdentity]
 
         @dataclass
         class MessageData(IToProto):
@@ -236,6 +265,9 @@ class StreamWriteMessage:
         def to_proto(self) -> ydb_topic_pb2.StreamWriteMessage.WriteRequest:
             proto = ydb_topic_pb2.StreamWriteMessage.WriteRequest()
             proto.codec = self.codec
+
+            if self.tx_identity is not None:
+                proto.tx.CopyFrom(self.tx_identity.to_proto())
 
             for message in self.messages:
                 proto_mess = proto.messages.add()
@@ -297,6 +329,8 @@ class StreamWriteMessage:
                         )
                     except ValueError:
                         message_write_status = reason
+                elif proto_ack.HasField("written_in_tx"):
+                    message_write_status = StreamWriteMessage.WriteResponse.WriteAck.StatusWrittenInTx()
                 else:
                     raise NotImplementedError("unexpected ack status")
 
@@ -308,6 +342,9 @@ class StreamWriteMessage:
             @dataclass
             class StatusWritten:
                 offset: int
+
+            class StatusWrittenInTx:
+                pass
 
             @dataclass
             class StatusSkipped:
@@ -417,12 +454,13 @@ class StreamReadMessage:
     @dataclass
     class InitRequest(IToProto):
         topics_read_settings: List["StreamReadMessage.InitRequest.TopicReadSettings"]
-        consumer: str
+        consumer: Optional[str]
         auto_partitioning_support: bool
 
         def to_proto(self) -> ydb_topic_pb2.StreamReadMessage.InitRequest:
             res = ydb_topic_pb2.StreamReadMessage.InitRequest()
-            res.consumer = self.consumer
+            if self.consumer is not None:
+                res.consumer = self.consumer
             for settings in self.topics_read_settings:
                 res.topics_read_settings.append(settings.to_proto())
             res.auto_partitioning_support = self.auto_partitioning_support
@@ -906,10 +944,11 @@ class Consumer(IToProto, IFromProto, IFromPublic, IToPublic):
             read_from=self.read_from,
             supported_codecs=self.supported_codecs.to_public(),
             attributes=self.attributes,
+            consumer_stats=self.consumer_stats.to_public(),
         )
 
     @dataclass
-    class ConsumerStats(IFromProto):
+    class ConsumerStats(IFromProto, IToPublic):
         min_partitions_last_read_time: datetime.datetime
         max_read_time_lag: datetime.timedelta
         max_write_time_lag: datetime.timedelta
@@ -924,6 +963,14 @@ class Consumer(IToProto, IFromProto, IFromPublic, IToPublic):
                 max_read_time_lag=timedelta_from_proto_duration(msg.max_read_time_lag),
                 max_write_time_lag=timedelta_from_proto_duration(msg.max_write_time_lag),
                 bytes_read=MultipleWindowsStat.from_proto(msg.bytes_read),
+            )
+
+        def to_public(self) -> ydb_topic_public_types.PublicConsumer.ConsumerStats:
+            return ydb_topic_public_types.PublicConsumer.ConsumerStats(
+                min_partitions_last_read_time=self.min_partitions_last_read_time,
+                max_read_time_lag=self.max_read_time_lag,
+                max_write_time_lag=self.max_write_time_lag,
+                bytes_read=self.bytes_read,
             )
 
 
@@ -1185,6 +1232,52 @@ class MeteringMode(int, IFromProto, IFromPublic, IToPublic):
             return ydb_topic_public_types.PublicMeteringMode(int(self))
         except KeyError:
             return ydb_topic_public_types.PublicMeteringMode.UNSPECIFIED
+
+
+@dataclass
+class UpdateOffsetsInTransactionRequest(IToProto):
+    tx: TransactionIdentity
+    topics: List[UpdateOffsetsInTransactionRequest.TopicOffsets]
+    consumer: str
+
+    def to_proto(self):
+        return ydb_topic_pb2.UpdateOffsetsInTransactionRequest(
+            tx=self.tx.to_proto(),
+            consumer=self.consumer,
+            topics=list(
+                map(
+                    UpdateOffsetsInTransactionRequest.TopicOffsets.to_proto,
+                    self.topics,
+                )
+            ),
+        )
+
+    @dataclass
+    class TopicOffsets(IToProto):
+        path: str
+        partitions: List[UpdateOffsetsInTransactionRequest.TopicOffsets.PartitionOffsets]
+
+        def to_proto(self):
+            return ydb_topic_pb2.UpdateOffsetsInTransactionRequest.TopicOffsets(
+                path=self.path,
+                partitions=list(
+                    map(
+                        UpdateOffsetsInTransactionRequest.TopicOffsets.PartitionOffsets.to_proto,
+                        self.partitions,
+                    )
+                ),
+            )
+
+        @dataclass
+        class PartitionOffsets(IToProto):
+            partition_id: int
+            partition_offsets: List[OffsetsRange]
+
+            def to_proto(self) -> ydb_topic_pb2.UpdateOffsetsInTransactionRequest.TopicOffsets.PartitionOffsets:
+                return ydb_topic_pb2.UpdateOffsetsInTransactionRequest.TopicOffsets.PartitionOffsets(
+                    partition_id=self.partition_id,
+                    partition_offsets=list(map(OffsetsRange.to_proto, self.partition_offsets)),
+                )
 
 
 @dataclass

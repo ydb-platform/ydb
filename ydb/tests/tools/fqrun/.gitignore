@@ -7,3 +7,4 @@ sync_dir
 *.json
 *.svg
 *.txt
+*.yql

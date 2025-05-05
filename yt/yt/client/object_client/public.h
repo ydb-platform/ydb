@@ -201,6 +201,7 @@ DEFINE_ENUM(EObjectType,
     ((ErasureJournalChunkPart_15)                   (140))
     ((ChunkLocation)                                (141))
     ((ChunkLocationMap)                             (142))
+    ((NbdChunk)                                     (143))
 
     // The following represent versioned objects (AKA Cypress nodes).
     // These must be created by calling TCypressYPathProxy::Create.
@@ -341,6 +342,7 @@ DEFINE_ENUM(EObjectType,
     ((ChaosReplicatedTable)                        (1206))
     ((ReplicationCardCollocation)                  (1207))
     ((VirtualChaosCellMap)                         (1208))
+    ((ChaosLease)                                  (1209))
 
     // Other cluster components stuff
     ((ClusterProxyNode)                            (1500))

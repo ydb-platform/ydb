@@ -2,6 +2,41 @@
 
 Описанная ниже файловая структура применяется для выгрузки как в файловую систему, так и в S3-совместимое объектное хранилище. При работе с S3 в ключ объекта записывается путь к файлу, а директория выгрузки является префиксом ключа.
 
+## Кластер {#cluster}
+
+{% note info %}
+
+Выгрузка кластера доступна только в файловую систему.
+
+{% endnote %}
+
+Кластеру соответствует директория в файловой структуре, в которой находятся:
+
+- Директории, содержащие информацию о [базах данных](#db) в кластере, за исключением:
+  - Схемных объектов базы данных
+  - Пользователей и групп базы данных, не являющихся администраторами базы данных
+- Файл `permissions.pb`, содержащий информацию об ACL корня кластера и его владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
+- Файл `create_user.sql`, содержащий информацию о пользователях кластера в формате YQL
+- Файл `create_group.sql`, содержащий информацию о группах кластера в формате YQL
+- Файл `alter_group.sql`, содержащий информацию о вхождении пользователей в группы кластера в формате YQL
+
+## База данных {#db}
+
+{% note info %}
+
+Выгрузка в S3-совместимое объектное хранилище поддерживает только выгрузку схемных объекты базы данных.
+
+{% endnote %}
+
+Базе данных соответствует директория в файловой структуре, в которой находятся:
+
+- Директории, содержащие информацию о схемных объектах базы данных, например, о [таблицах](#tables)
+- Файл `database.pb`, содержащий информацию о настройках базы данных в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
+- Файл `permissions.pb`, содержащий информацию об ACL базы данных и её владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
+- Файл `create_user.sql`, содержащий информацию о пользователях базы данных в формате YQL
+- Файл `create_group.sql`, содержащий информацию о группах базы данных в формате YQL
+- Файл `alter_group.sql`, содержащий информацию о вхождении пользователей в группы базы данных в формате YQL
+
 ## Директории {#dir}
 
 Каждой директории в базе данных соответствует директория в файловой структуре. В каждой из них находится файл `permissions.pb`, содержащий информацию об ACL директории и её владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format). Иерархия директорий в файловой структуре соответствует иерархии директорий в базе данных. Если в какой-либо директории базы данных отсутствуют объекты (таблицы или поддиректории), то в файловой структуре такая директория содержит файл нулевого размера с именем `empty_dir`.
@@ -12,10 +47,10 @@
 
 - Файл `scheme.pb`, содержащий информацию о структуре таблицы и её параметрах в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
 - Файл `permissions.pb`, содержащий информацию об ACL таблицы и её владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
-- Один или несколько файлов `data_XX.csv`, содержащих данные таблицы в формате `csv`, где `XX` - порядковый номер файла. Выгрузка начинается с файла `data_00.csv`, каждый следующий файл создается при превышении размера текущего файла в 100MB.
+- Один или несколько файлов `data_XX.csv`, содержащих данные таблицы в формате `csv`, где `XX` - порядковый номер файла. Выгрузка начинается с файла `data_00.csv`, каждый следующий файл создается при превышении размера текущего файла в 100MB
 - Директории для описания [потоков изменений](https://ydb.tech/docs/ru/concepts/cdc). Имя директории соответствует названию потока изменений. В директории находятся:
-  - Файл `changefeed_description.pb`, содержащий информацию о потоке изменений в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format).
-  - Файл `topic_description.pb`, содержащий информацию о нижележащем топике в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format).
+  - Файл `changefeed_description.pb`, содержащий информацию о потоке изменений в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
+  - Файл `topic_description.pb`, содержащий информацию о нижележащем топике в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
 
 ## Файлы с данными {#datafiles}
 
@@ -43,6 +78,47 @@ scheme.pb: OK
 ```
 
 ## Примеры {#example}
+
+### Кластер {#example-cluster}
+
+При выгрузке кластера с базыми данных `/Root/db1` и `/Root/db2` будет создана следующая структура файлов:
+
+```text
+backup
+├─ Root
+│  ├─ db1
+│  │  ├─ alter_group.sql
+│  │  ├─ create_group.sql
+│  │  ├─ create_user.sql
+│  │  ├─ permissions.pb
+│  │  └─ database.pb
+│  └─ db2
+│    ├─ alter_group.sql
+│    ├─ create_group.sql
+│    ├─ create_user.sql
+│    ├─ permissions.pb
+│    └─ database.pb
+├─ alter_group.sql
+├─ create_group.sql
+├─ create_user.sql
+└─ permissions.pb
+```
+
+### Базы данных {#example-db}
+
+При выгрузке базы данных c таблицей `episodes` будет создана следующая структура файлов:
+
+```text
+├─ episodes
+│    ├─ data00.csv
+│    ├─ scheme.pb
+│    └─ permissions.pb
+├─ alter_group.sql
+├─ create_group.sql
+├─ create_user.sql
+├─ permissions.sql
+└─ database.pb
+```
 
 ### Таблицы {#example-table}
 
@@ -147,20 +223,20 @@ consumers {
 
 ### Директории {#example-directory}
 
-При выгрузке пустой директории `directory` будет создана следующая структура файлов:
+При выгрузке пустой директории `series` будет создана следующая структура файлов:
 
 ```markdown
-└── directory
+└── series
     ├── permissions.pb
     └── empty_dir
 ```
 
-При выгрузке директории `directory` с вложенной таблицей `table` будет создана следующая структура файлов:
+При выгрузке директории `series` с вложенной таблицей `episodes` будет создана следующая структура файлов:
 
 ```markdown
-└── directory
+└── series
     ├── permissions.pb
-    └── table
+    └── episodes
         ├── data_00.csv
         ├── permissions.pb
         └── scheme.pb

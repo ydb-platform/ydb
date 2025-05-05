@@ -3,6 +3,7 @@
 #include "merge.h"
 
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
@@ -25,8 +26,8 @@ private:
     NColumnShard::TConcreteScanCounters::TScanIntervalStateGuard IntervalStateGuard;
 
 public:
-    std::set<ui64> GetPathIds() const {
-        std::set<ui64> result;
+    std::set<TInternalPathId> GetPathIds() const {
+        std::set<TInternalPathId> result;
         for (auto&& i : Sources) {
             result.emplace(i.second->GetPathId());
         }

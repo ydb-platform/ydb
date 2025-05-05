@@ -3,6 +3,7 @@ on:
   pull_request_target:
     branches:
       - 'main'
+      - 'docs-**'
     types:
       - 'opened'
       - 'edited'

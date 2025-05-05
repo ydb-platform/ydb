@@ -35,9 +35,9 @@ void TStatsIterator::AppendStats(
         arrow::util::string_view lastColumnName;
         arrow::util::string_view lastTierName;
         for (auto&& r : records) {
-            NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId());
+            NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId().GetRawValue());
             NArrow::Append<arrow::StringType>(*builders[1], prodView);
-            NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->TabletId);
+            NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->GetTabletId());
             NArrow::Append<arrow::UInt64Type>(*builders[3], r->GetMeta().GetRecordsCount());
             NArrow::Append<arrow::UInt64Type>(*builders[4], r->GetMeta().GetRawBytes());
             NArrow::Append<arrow::UInt64Type>(*builders[5], portion.GetPortionId());
@@ -92,9 +92,9 @@ void TStatsIterator::AppendStats(
             std::reverse(indexes.begin(), indexes.end());
         }
         for (auto&& r : indexes) {
-            NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId());
+            NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId().GetRawValue());
             NArrow::Append<arrow::StringType>(*builders[1], prodView);
-            NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->TabletId);
+            NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->GetTabletId());
             NArrow::Append<arrow::UInt64Type>(*builders[3], r->GetRecordsCount());
             NArrow::Append<arrow::UInt64Type>(*builders[4], r->GetRawBytes());
             NArrow::Append<arrow::UInt64Type>(*builders[5], portion.GetPortionId());
@@ -131,8 +131,7 @@ std::vector<std::pair<TString, NKikimr::NScheme::TTypeInfo>> TReadStatsMetadata:
 std::shared_ptr<NAbstract::TReadStatsMetadata> TConstructor::BuildMetadata(
     const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
     auto* index = self->GetIndexOptional();
-    return std::make_shared<TReadStatsMetadata>(index ? index->CopyVersionedIndexPtr() : nullptr, self->TabletID(),
-        IsReverse ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC, read.GetProgram(),
+    return std::make_shared<TReadStatsMetadata>(index ? index->CopyVersionedIndexPtr() : nullptr, self->TabletID(), Sorting, read.GetProgram(),
         index ? index->GetVersionedIndex().GetLastSchema() : nullptr, read.GetSnapshot());
 }
 

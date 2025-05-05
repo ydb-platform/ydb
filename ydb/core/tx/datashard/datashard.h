@@ -349,6 +349,9 @@ namespace TEvDataShard {
         EvForceDataCleanup,
         EvForceDataCleanupResult,
 
+        EvPrefixKMeansRequest,
+        EvPrefixKMeansResponse,
+
         EvEnd
     };
 
@@ -486,7 +489,7 @@ namespace TEvDataShard {
             const TStringBuf& txBody, const NKikimrSubDomains::TProcessingParams &processingParams, ui32 flags = NDataShard::TTxFlags::Default)
             : TEvProposeTransaction(txKind, source, txId, txBody, flags)
         {
-            Y_ABORT_UNLESS(txKind == NKikimrTxDataShard::TX_KIND_SCHEME);
+            Y_ENSURE(txKind == NKikimrTxDataShard::TX_KIND_SCHEME);
             Record.SetSchemeShardId(ssId);
             Record.MutableProcessingParams()->CopyFrom(processingParams);
         }
@@ -952,7 +955,7 @@ namespace TEvDataShard {
             return TBase::SerializeToArcadiaStream(chunker);
         }
 
-        static NActors::IEventBase* Load(TEventSerializedData* data);
+        static TEvRead* Load(const TEventSerializedData* data);
 
     private:
         void FillRecord();
@@ -998,7 +1001,7 @@ namespace TEvDataShard {
             return TBase::SerializeToArcadiaStream(chunker);
         }
 
-        static NActors::IEventBase* Load(TEventSerializedData* data);
+        static TEvReadResult* Load(const TEventSerializedData* data);
 
         size_t GetRowsCount() const {
             return Record.GetRowCount();
@@ -1340,7 +1343,7 @@ namespace TEvDataShard {
             : TxId(txId)
             , Info(info)
         {
-            Y_ABORT_UNLESS(Info.DataETag);
+            Y_ENSURE(Info.DataETag);
         }
 
         TString ToString() const override {
@@ -1387,7 +1390,7 @@ namespace TEvDataShard {
             , Record(*RecordHolder)
             , Info(info)
         {
-            Y_ABORT_UNLESS(Info.DataETag);
+            Y_ENSURE(Info.DataETag);
         }
 
         TString ToString() const override {
@@ -1512,6 +1515,18 @@ namespace TEvDataShard {
         : public TEventPB<TEvLocalKMeansResponse,
                           NKikimrTxDataShard::TEvLocalKMeansResponse,
                           TEvDataShard::EvLocalKMeansResponse> {
+    };
+
+    struct TEvPrefixKMeansRequest
+        : public TEventPB<TEvPrefixKMeansRequest,
+                          NKikimrTxDataShard::TEvPrefixKMeansRequest,
+                          TEvDataShard::EvPrefixKMeansRequest> {
+    };
+
+    struct TEvPrefixKMeansResponse
+        : public TEventPB<TEvPrefixKMeansResponse,
+                          NKikimrTxDataShard::TEvPrefixKMeansResponse,
+                          TEvDataShard::EvPrefixKMeansResponse> {
     };
 
     struct TEvKqpScan

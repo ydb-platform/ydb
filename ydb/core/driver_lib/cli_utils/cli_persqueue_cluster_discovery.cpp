@@ -2,7 +2,7 @@
 
 #include <ydb/core/driver_lib/cli_base/cli_grpc.h>
 
-#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>

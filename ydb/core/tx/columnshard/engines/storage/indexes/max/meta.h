@@ -22,9 +22,6 @@ protected:
         Y_UNUSED(newMeta);
         return TConclusionStatus::Fail("max index not modifiable");
     }
-    virtual void DoFillIndexCheckers(
-        const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const override;
-
     virtual TString DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const override;
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override {

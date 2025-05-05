@@ -62,4 +62,5 @@ class Driver(pool.ConnectionPool):
 
     async def stop(self, timeout=10):
         await self.table_client._stop_pool_if_needed(timeout=timeout)
+        self.topic_client.close()
         await super().stop(timeout=timeout)

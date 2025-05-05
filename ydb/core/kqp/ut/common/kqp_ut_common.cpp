@@ -1,11 +1,12 @@
 #include "kqp_ut_common.h"
 
 #include <ydb/core/base/backtrace.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <yql/essentials/core/yql_data_provider.h>
 #include <yql/essentials/utils/backtrace/backtrace.h>
@@ -134,6 +135,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetEnableTablePgTypes(true);
     ServerSettings->SetEnablePgSyntax(true);
     ServerSettings->S3ActorsFactory = settings.S3ActorsFactory;
+    ServerSettings->Controls = settings.Controls;
     ServerSettings->SetEnableForceFollowers(settings.EnableForceFollowers);
 
     if (!settings.FeatureFlags.HasEnableOlapCompression()) {
@@ -341,6 +343,18 @@ void TKikimrRunner::CreateSampleTables() {
         WITH (
             PARTITION_AT_KEYS = (105)
         );
+
+        CREATE TABLE `TuplePrimaryDescending` (
+            Col1 Uint32,
+            Col2 Uint64,
+            Col3 Int64,
+            Col4 Int64,
+            PRIMARY KEY (Col2, Col1, Col3)
+        )
+        WITH (
+            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
+            PARTITION_AT_KEYS = (2, 3)
+        );
     )").GetValueSync());
 
     AssertSuccessResult(session.ExecuteDataQuery(R"(
@@ -451,6 +465,24 @@ void TKikimrRunner::CreateSampleTables() {
             (105, "Two",   "Name4", "Value28"),
             (106, "One",   "Name3", "Value29"),
             (108, "One",    NULL,   "Value31");
+
+        REPLACE INTO `TuplePrimaryDescending` (Col1, Col2, Col3, Col4) VALUES
+            (0, 1, 0, 3),
+            (1, 1, 0, 1),
+            (1, 1, 1, 0),
+            (1, 1, 2, 1),
+            (2, 1, 0, 2),
+            (1, 2, 0, 1),
+            (1, 2, 1, 0),
+            (2, 2, 0, 1),
+            (3, 2, 1, 5),
+            (0, 3, 0, 1),
+            (1, 3, 3, 0),
+            (2, 3, 0, 1),
+            (0, 3, 2, 4),
+            (1, 3, 1, 1),
+            (2, 3, 1, 2),
+            (3, 3, 0, 1);
     )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync());
 
 }
@@ -527,6 +559,8 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD);
     SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD_SCAN);
     SetupLogLevelFromTestParam(NKikimrServices::LOCAL_PGWIRE);
+    SetupLogLevelFromTestParam(NKikimrServices::SSA_GRAPH_EXECUTION);
+
 
     RunCall([this, domain = settings.DomainRoot]{
         this->Client->InitRootScheme(domain);
@@ -683,6 +717,14 @@ TDataQueryResult ExecQueryAndTestResult(TSession& session, const TString& query,
 
     CompareYson(expectedYson, FormatResultSetYson(result.GetResultSet(0)));
 
+    return result;
+}
+
+NYdb::NQuery::TExecuteQueryResult ExecQueryAndTestEmpty(NYdb::NQuery::TSession& session, const TString& query) {
+    auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx())
+        .ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+    CompareYson("[[0u]]", FormatResultSetYson(result.GetResultSet(0)));
     return result;
 }
 
@@ -1472,7 +1514,39 @@ void WaitForZeroReadIterators(Tests::TServer& server, const TString& path) {
     UNIT_ASSERT_C(iterators == 0, "Unable to wait for proper read iterator count, it looks like cancelation doesn`t work (" << iterators << ")");
 }
 
+TTableId ResolveTableId(Tests::TServer* server, TActorId sender, const TString& path) {
+    auto response = Navigate(*server->GetRuntime(), sender, path, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+    return response->ResultSet.at(0).TableId;
+}
+
+NKikimrTxDataShard::TEvCompactTableResult CompactTable(
+    Tests::TServer* server, ui64 shardId, const TTableId& tableId, bool compactBorrowed)
+{
+    TTestActorRuntime* runtime = server->GetRuntime();
+    auto sender = runtime->AllocateEdgeActor();
+    auto request = MakeHolder<TEvDataShard::TEvCompactTable>(tableId.PathId);
+    request->Record.SetCompactBorrowed(compactBorrowed);
+    runtime->SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+    auto ev = runtime->GrabEdgeEventRethrow<TEvDataShard::TEvCompactTableResult>(sender);
+    return ev->Get()->Record;
+}
+
+void WaitForCompaction(Tests::TServer* server, const TString& path, bool compactBorrowed) {
+    TTestActorRuntime* runtime = server->GetRuntime();
+    auto sender = runtime->AllocateEdgeActor();
+    auto shards = GetTableShards(server, sender, path);
+    auto tableId = ResolveTableId(server, sender, path);
+    for (auto shard : shards) {
+        CompactTable(server, shard, tableId, compactBorrowed);
+    }
+}
+
 NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& params) {
+    Cout << opt.GetStringRobust() << Endl;
+    if (!opt.IsMap()) {
+        return {};
+    }
     const auto& [_, nodeType] = *opt.GetMapSafe().find("Node Type");
     bool isShuffle = nodeType.GetStringSafe().find("HashShuffle") != TString::npos;
 
@@ -1488,7 +1562,7 @@ NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& par
             opName.find("Join") != TString::npos ||
             opName.find("Union") != TString::npos ||
             (opName.find("Filter") != TString::npos && params.IncludeFilters) ||
-            (opName.find("HashShuffle") != TString::npos && params.IncludeShuffles) 
+            (opName.find("HashShuffle") != TString::npos && params.IncludeShuffles)
         ) {
             NJson::TJsonValue newChildren;
 
@@ -1504,8 +1578,12 @@ NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& par
         }
     }
 
-    auto firstPlan = opt.GetMapSafe().at("Plans").GetArraySafe()[0];
-    return SimplifyPlan(firstPlan, params);
+    if (opt.IsMap() && opt.GetMapSafe().contains("Plans")) {
+        auto firstPlan = opt.GetMapSafe().at("Plans").GetArraySafe()[0];
+        return SimplifyPlan(firstPlan, params);
+    }
+
+    return {};
 }
 
 bool JoinOrderAndAlgosMatch(const NJson::TJsonValue& opt, const NJson::TJsonValue& ref) {
@@ -1583,6 +1661,10 @@ NJson::TJsonValue GetDetailedJoinOrder(const TString& deserializedPlan, const TG
 }
 
 NJson::TJsonValue GetJoinOrderImpl(const NJson::TJsonValue& opt) {
+    if (!opt.IsMap()) {
+        return {};
+    }
+
     if (!opt.GetMapSafe().contains("Plans")) {
         auto op = opt.GetMapSafe().at("Operators").GetArraySafe()[0];
         return op.GetMapSafe().at("Table").GetStringSafe();
@@ -1606,6 +1688,10 @@ NJson::TJsonValue GetJoinOrder(const TString& deserializedPlan) {
 }
 
 NJson::TJsonValue GetJoinOrderFromDetailedJoinOrderImpl(const NJson::TJsonValue& opt) {
+    if (!opt.IsMap()) {
+        return {};
+    }
+    
     if (!opt.GetMapSafe().contains("table")) {
         NJson::TJsonValue res;
         auto args = opt.GetMapSafe().at("args").GetArraySafe();
@@ -1622,6 +1708,53 @@ NJson::TJsonValue GetJoinOrderFromDetailedJoinOrder(const TString& deserializedD
     NJson::TJsonValue optRoot;
     NJson::ReadJsonTree(deserializedDetailedJoinOrder, &optRoot, true);
     return GetJoinOrderFromDetailedJoinOrderImpl(optRoot);
+}
+
+TTestExtEnv::TTestExtEnv(TTestExtEnv::TEnvSettings envSettings) {
+    auto mbusPort = PortManager.GetPort();
+    auto grpcPort = PortManager.GetPort();
+
+    Settings = new Tests::TServerSettings(mbusPort);
+    EnvSettings = envSettings;
+
+    Settings->SetDomainName("Root");
+    Settings->SetNodeCount(EnvSettings.StaticNodeCount);
+    Settings->SetDynamicNodeCount(EnvSettings.DynamicNodeCount);
+    Settings->SetUseRealThreads(EnvSettings.UseRealThreads);
+    Settings->AddStoragePoolType(EnvSettings.PoolName);
+    Settings->SetFeatureFlags(EnvSettings.FeatureFlags);
+
+    Server = new Tests::TServer(*Settings);
+    Server->EnableGRpc(grpcPort);
+
+    auto sender = Server->GetRuntime()->AllocateEdgeActor();
+    Server->SetupRootStoragePools(sender);
+
+    Client = MakeHolder<Tests::TClient>(*Settings);
+
+    Tenants = MakeHolder<Tests::TTenants>(Server);
+
+    Endpoint = "localhost:" + ToString(grpcPort);
+    DriverConfig = NYdb::TDriverConfig().SetEndpoint(Endpoint);
+    Driver = MakeHolder<NYdb::TDriver>(DriverConfig);
+}
+
+TTestExtEnv::~TTestExtEnv() {
+    Driver->Stop(true);
+}
+
+void TTestExtEnv::CreateDatabase(const TString& databaseName) {
+    auto fullDbName = "/Root/" + databaseName;
+
+    Ydb::Cms::CreateDatabaseRequest request;
+    request.set_path(fullDbName);
+
+    auto* resources = request.mutable_resources();
+    auto* storage = resources->add_storage_units();
+    storage->set_unit_kind(EnvSettings.PoolName);
+    storage->set_count(1);
+
+    Tenants->CreateTenant(request, EnvSettings.DynamicNodeCount);
 }
 
 } // namspace NKqp

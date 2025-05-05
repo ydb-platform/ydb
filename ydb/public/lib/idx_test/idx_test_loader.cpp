@@ -3,7 +3,7 @@
 #include "idx_test_data_provider.h"
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
-#include <ydb-cpp-sdk/client/params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 
 #include <util/generic/map.h>
 #include <util/string/printf.h>

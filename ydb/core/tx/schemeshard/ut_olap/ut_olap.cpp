@@ -30,6 +30,20 @@ static const TString defaultStoreSchema = R"(
     }
 )";
 
+static const TString invalidStoreSchema = R"(
+    Name: "OlapStore"
+    ColumnShardCount: 1
+    SchemaPresets {
+        Name: "default"
+        Schema {
+            Columns { Name: "timestamp" Type: "Timestamp" NotNull: true }
+            Columns { Name: "data" Type: "Utf8" }
+            Columns { Name: "mess age" Type: "Utf8" }
+            KeyColumnNames: "timestamp"
+        }
+    }
+)";
+
 static const TString defaultTableSchema = R"(
     Name: "ColumnTable"
     ColumnShardCount: 1
@@ -45,7 +59,21 @@ static const TVector<NArrow::NTest::TTestColumn> defaultYdbSchema = {
     NArrow::NTest::TTestColumn("data", TTypeInfo(NTypeIds::Utf8) )
 };
 
-}}
+static const TString tableSchemaFormat = R"(
+    Name: "TestTable"
+    Schema {
+        Columns {
+            Name: "Id"
+            Type: "Int32"
+            NotNull: True
+        }
+        Columns {
+            Name: "%s"
+            Type: "Utf8"
+        }
+        KeyColumnNames: ["Id"]
+    }
+)";
 
 #define DEBUG_HINT (TStringBuilder() << "at line " << __LINE__)
 
@@ -99,6 +127,7 @@ NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runt
 
     return stats;
 }
+}}
 
 Y_UNIT_TEST_SUITE(TOlap) {
     Y_UNIT_TEST(CreateStore) {
@@ -555,6 +584,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TTestBasicRuntime runtime;
         TTestEnvOptions options;
         options.EnableTieringInColumnShard(true);
+        options.RunFakeConfigDispatcher(true);
         TTestEnv env(runtime, options);
         ui64 txId = 100;
 
@@ -724,6 +754,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TTestBasicRuntime runtime;
         TTestEnvOptions options;
         options.EnableTieringInColumnShard(true);
+        options.RunFakeConfigDispatcher(true);
         TTestEnv env(runtime, options);
         ui64 txId = 100;
 
@@ -858,12 +889,12 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         ui64 pathId = 0;
         ui64 shardId = 0;
-        ui64 planStep = 0;
+        NTxUT::TPlanStep planStep;
         auto checkFn = [&](const NKikimrScheme::TEvDescribeSchemeResult& record) {
             auto& self = record.GetPathDescription().GetSelf();
             pathId = self.GetPathId();
             txId = self.GetCreateTxId() + 1;
-            planStep = self.GetCreateStep();
+            planStep =  NTxUT::TPlanStep{self.GetCreateStep()};
             auto& sharding = record.GetPathDescription().GetColumnTableDescription().GetSharding();
             UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
             shardId = sharding.GetColumnShards()[0];
@@ -873,7 +904,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestLsPathId(runtime, 3, checkFn);
         UNIT_ASSERT(shardId);
         UNIT_ASSERT(pathId);
-        UNIT_ASSERT(planStep);
+        UNIT_ASSERT(planStep.Val());
         {
             auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/OlapStore/ColumnTable", true, true);
             Cerr << description.DebugString() << Endl;
@@ -898,11 +929,11 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 std::vector<ui64> writeIds;
                 ++txId;
                 NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
-                NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
+                planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
                 txIds.insert(txId);
             }
 
-            NTxUT::PlanCommit(runtime, sender, shardId, ++planStep, txIds);
+            NTxUT::PlanCommit(runtime, sender, shardId, planStep, txIds);
 
             // emulate timeout
             runtime.UpdateCurrentTime(TInstant::Now());
@@ -911,8 +942,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
             std::vector<ui64> writeIds;
             ++txId;
             NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
-            NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
-            NTxUT::PlanCommit(runtime, sender, shardId, ++planStep, { txId });
+            planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
+            NTxUT::PlanCommit(runtime, sender, shardId, planStep, { txId });
         }
         csController->WaitIndexation(TDuration::Seconds(5));
         {
@@ -1037,12 +1068,12 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         ui64 pathId = 0;
         ui64 shardId = 0;
-        ui64 planStep = 0;
+        NTxUT::TPlanStep planStep;
         auto checkFn = [&](const NKikimrScheme::TEvDescribeSchemeResult& record) {
             auto& self = record.GetPathDescription().GetSelf();
             pathId = self.GetPathId();
             txId = self.GetCreateTxId() + 1;
-            planStep = self.GetCreateStep();
+            planStep = NTxUT::TPlanStep{self.GetCreateStep()};
             auto& sharding = record.GetPathDescription().GetColumnTableDescription().GetSharding();
             UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
             shardId = sharding.GetColumnShards()[0];
@@ -1052,7 +1083,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestLsPathId(runtime, 4, checkFn);
         UNIT_ASSERT(shardId);
         UNIT_ASSERT(pathId);
-        UNIT_ASSERT(planStep);
+        UNIT_ASSERT(planStep.Val());
         {
             auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase/OlapStore/ColumnTable", true, true);
             Cerr << description.DebugString() << Endl;
@@ -1077,11 +1108,11 @@ Y_UNIT_TEST_SUITE(TOlap) {
                 std::vector<ui64> writeIds;
                 ++txId;
                 NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
-                NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
+                planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
                 txIds.insert(txId);
             }
 
-            NTxUT::PlanCommit(runtime, sender, shardId, ++planStep, txIds);
+            NTxUT::PlanCommit(runtime, sender, shardId, planStep, txIds);
 
             WaitTableStats(runtime, shardId);
             CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", true, DEBUG_HINT);
@@ -1126,13 +1157,172 @@ Y_UNIT_TEST_SUITE(TOlap) {
         ++txId;
         bool delResult = NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Delete, txId);
         Y_UNUSED(delResult);
-        NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
+        planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
         txIds.insert(txId);
-        NTxUT::PlanCommit(runtime, sender, shardId, ++planStep, txIds);
+        NTxUT::PlanCommit(runtime, sender, shardId, planStep, txIds);
 
         csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
         csController->WaitCompactions(TDuration::Seconds(60));
         WaitTableStats(runtime, shardId);
         CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TOlapNaming) {
+
+    Y_UNIT_TEST(CreateColumnTableOk) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TString allowedChars = "_-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+        TString tableSchema = Sprintf(tableSchemaFormat.c_str(), allowedChars.c_str());
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema, {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(CreateColumnTableFailed) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+        
+        TVector<TString> notAllowedNames = {"mess age", "~!@#$%^&*()+=asdfa"};
+        
+        for (const auto& colName: notAllowedNames) {
+            TString tableSchema = Sprintf(tableSchemaFormat.c_str(), colName.c_str());
+
+            TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema, {NKikimrScheme::StatusSchemeError});
+            env.TestWaitNotification(runtime, txId);
+        }
+    }
+
+    Y_UNIT_TEST(CreateColumnStoreOk) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        const TString& storeSchema = defaultStoreSchema;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", storeSchema, {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/OlapStore", false, NLs::PathExist);
+    }
+
+    Y_UNIT_TEST(CreateColumnStoreFailed) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        const TString& storeSchema = invalidStoreSchema;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", storeSchema, {NKikimrScheme::StatusSchemeError});
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/OlapStore", false, NLs::PathNotExist);
+    }
+
+    Y_UNIT_TEST(AlterColumnTableOk) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions options;
+        TTestEnv env(runtime, options);
+        ui64 txId = 100;
+
+        TString tableSchema = Sprintf(tableSchemaFormat.c_str(), "message");
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema, {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTable"
+            AlterSchema {
+                AddColumns {
+                    Name: "NewColumn"
+                    Type: "Int32"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(AlterColumnTableFailed) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions options;
+        TTestEnv env(runtime, options);
+        ui64 txId = 100;
+
+        TString tableSchema = Sprintf(tableSchemaFormat.c_str(), "message");
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot", tableSchema, {NKikimrScheme::StatusAccepted});
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "TestTable"
+            AlterSchema {
+                AddColumns {
+                    Name: "New Column"
+                    Type: "Int32"
+                }
+            }
+        )", {NKikimrScheme::StatusSchemeError});
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(AlterColumnStoreOk) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        const TString& olapSchema = defaultStoreSchema;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", olapSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        const TString& tableSchema = defaultTableSchema;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            AlterSchemaPresets {
+                Name: "default"
+                AlterSchema {
+                    AddColumns { Name: "comment" Type: "Utf8" }
+                }
+            }
+        )", {NKikimrScheme::StatusAccepted});
+
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(AlterColumnStoreFailed) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        const TString& olapSchema = defaultStoreSchema;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", olapSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        const TString& tableSchema = defaultTableSchema;
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterOlapStore(runtime, ++txId, "/MyRoot", R"(
+            Name: "OlapStore"
+            AlterSchemaPresets {
+                Name: "default"
+                AlterSchema {
+                    AddColumns { Name: "mess age" Type: "Utf8" }
+                }
+            }
+        )", {NKikimrScheme::StatusSchemeError});
+
+        env.TestWaitNotification(runtime, txId);
     }
 }

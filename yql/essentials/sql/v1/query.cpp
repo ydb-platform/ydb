@@ -3171,6 +3171,11 @@ public:
                             BuildQuotedAtom(Pos, to_lower(ToString(warningPragma.GetAction()))))));
                 }
 
+                if (ctx.RuntimeLogLevel) {
+                    currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                        BuildQuotedAtom(Pos, "RuntimeLogLevel"), BuildQuotedAtom(Pos, ctx.RuntimeLogLevel))));
+                }
+
                 if (ctx.ResultSizeLimit > 0) {
                     currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", resultSink,
                         BuildQuotedAtom(Pos, "SizeLimit"), BuildQuotedAtom(Pos, ToString(ctx.ResultSizeLimit)))));
@@ -3672,9 +3677,10 @@ TNodePtr BuildAnalyze(TPosition pos, const TString& service, const TDeferredAtom
 
 class TShowCreateNode final : public TAstListNode {
 public:
-    TShowCreateNode(TPosition pos, const TTableRef& tr, TScopedStatePtr scoped)
+    TShowCreateNode(TPosition pos, const TTableRef& tr, const TString& type, TScopedStatePtr scoped)
         : TAstListNode(pos)
         , Table(tr)
+        , Type(type)
         , Scoped(scoped)
         , FakeSource(BuildFakeSource(pos))
     {
@@ -3686,9 +3692,9 @@ public:
             if (!Table.Options->Init(ctx, src)) {
                 return false;
             }
-            Table.Options = L(Table.Options, Q(Y(Q("showCreateTable"))));
+            Table.Options = L(Table.Options, Q(Y(Q(Type))));
         } else {
-            Table.Options = Y(Q(Y(Q("showCreateTable"))));
+            Table.Options = Y(Q(Y(Q(Type))));
         }
 
         bool asRef = ctx.PragmaRefSelect;
@@ -3736,12 +3742,14 @@ public:
     }
 private:
     TTableRef Table;
+    // showCreateTable, showCreateView, ...
+    TString Type;
     TScopedStatePtr Scoped;
     TSourcePtr FakeSource;
 };
 
-TNodePtr BuildShowCreate(TPosition pos, const TTableRef& tr, TScopedStatePtr scoped) {
-    return new TShowCreateNode(pos, tr, scoped);
+TNodePtr BuildShowCreate(TPosition pos, const TTableRef& tr, const TString& type, TScopedStatePtr scoped) {
+    return new TShowCreateNode(pos, tr, type, scoped);
 }
 
 class TBaseBackupCollectionNode

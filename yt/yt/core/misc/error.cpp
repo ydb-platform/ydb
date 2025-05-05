@@ -2,6 +2,7 @@
 #include "serialize.h"
 
 #include <yt/yt/core/concurrency/fls.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <yt/yt/core/net/local_address.h>
 

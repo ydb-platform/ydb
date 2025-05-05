@@ -9,9 +9,20 @@ struct TLexers {
     NSQLTranslation::TLexerFactoryPtr Antlr3Ansi;
     NSQLTranslation::TLexerFactoryPtr Antlr4;
     NSQLTranslation::TLexerFactoryPtr Antlr4Ansi;
+    NSQLTranslation::TLexerFactoryPtr Antlr4Pure;
+    NSQLTranslation::TLexerFactoryPtr Antlr4PureAnsi;
+    NSQLTranslation::TLexerFactoryPtr Regex;
+    NSQLTranslation::TLexerFactoryPtr RegexAnsi;
 };
 
-NSQLTranslation::ILexer::TPtr MakeLexer(const TLexers& lexers, bool ansi, bool antlr4);
+enum class ELexerFlavor {
+    Default,
+    Pure,
+    Regex,
+};
+
+NSQLTranslation::ILexer::TPtr MakeLexer(
+    const TLexers& lexers, bool ansi, bool antlr4, ELexerFlavor flavor = ELexerFlavor::Default);
 
 // "Probably" because YQL keyword can be an identifier
 // depending on a query context. For example
@@ -19,6 +30,8 @@ NSQLTranslation::ILexer::TPtr MakeLexer(const TLexers& lexers, bool ansi, bool a
 // in SELECT * FROM ... GROUP BY ... - group is a keyword.
 bool IsProbablyKeyword(const NSQLTranslation::TParsedToken& token);
 
-bool SplitQueryToStatements(const TString& query, NSQLTranslation::ILexer::TPtr& lexer,
-    TVector<TString>& statements, NYql::TIssues& issues, const TString& file = "");
+bool SplitQueryToStatements(
+    const TString& query, NSQLTranslation::ILexer::TPtr& lexer,
+    TVector<TString>& statements, NYql::TIssues& issues, const TString& file = "",
+    bool areBlankSkipped = true);
 }

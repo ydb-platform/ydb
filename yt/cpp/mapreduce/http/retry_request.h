@@ -36,6 +36,11 @@ NHttpClient::IHttpResponsePtr RequestWithoutRetry(
     TMaybe<TStringBuf> body = {},
     const TRequestConfig& config = {});
 
+NHttpClient::IHttpRequestPtr StartRequestWithoutRetry(
+    const TClientContext& context,
+    THttpHeader& header,
+    const TRequestConfig& config = {});
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NDetail

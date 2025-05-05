@@ -1,21 +1,12 @@
-# -*- coding: utf-8 -*-
-"""
-    decorator
-    ~~~~
-    This unit exposes a single decorator which should be used to wrap a
-    Flask route with. It accepts all parameters and options as
-    the CORS extension.
-
-    :copyright: (c) 2016 by Cory Dolphin.
-    :license: MIT, see LICENSE for more details.
-"""
 import logging
 from functools import update_wrapper
-from flask import make_response, request, current_app
 
-from .core import get_cors_options, set_cors_headers, FLASK_CORS_EVALUATED
+from flask import current_app, make_response, request
+
+from .core import FLASK_CORS_EVALUATED, get_cors_options, set_cors_headers
 
 LOG = logging.getLogger(__name__)
+
 
 def cross_origin(*args, **kwargs):
     """
@@ -115,16 +106,16 @@ def cross_origin(*args, **kwargs):
         # If f.provide_automatic_options is unset or True, Flask's route
         # decorator (which is actually wraps the function object we return)
         # intercepts OPTIONS handling, and requests will not have CORS headers
-        if _options.get('automatic_options', True):
-            f.required_methods = getattr(f, 'required_methods', set())
-            f.required_methods.add('OPTIONS')
+        if _options.get("automatic_options", True):
+            f.required_methods = getattr(f, "required_methods", set())
+            f.required_methods.add("OPTIONS")
             f.provide_automatic_options = False
 
         def wrapped_function(*args, **kwargs):
             # Handle setting of Flask-Cors parameters
             options = get_cors_options(current_app, _options)
 
-            if options.get('automatic_options') and request.method == 'OPTIONS':
+            if options.get("automatic_options") and request.method == "OPTIONS":
                 resp = current_app.make_default_options_response()
             else:
                 resp = make_response(f(*args, **kwargs))
@@ -134,4 +125,5 @@ def cross_origin(*args, **kwargs):
             return resp
 
         return update_wrapper(wrapped_function, f)
+
     return decorator

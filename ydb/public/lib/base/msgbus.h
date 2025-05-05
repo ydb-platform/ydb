@@ -41,9 +41,9 @@ enum {
     MTYPE_CLIENT_KEYVALUE_RESPONSE = 10426, // deprecated
     /*MTYPE_CLIENT_MESSAGE_BUS_TRACE*/ MTYPE_CLIENT_DEPRECATED_10427 = 10427,
     /*MTYPE_CLIENT_MESSAGE_BUS_TRACE_STATUS*/ MTYPE_CLIENT_DEPRECATED_10428 = 10428,
-    MTYPE_CLIENT_TABLET_KILL_REQUEST = 10429,
+    MTYPE_CLIENT_DEPRECATED_TABLET_KILL_REQUEST = 10429, // deprecated
     MTYPE_CLIENT_TABLET_STATE_REQUEST = 10430,
-    MTYPE_CLIENT_LOCAL_MINIKQL = 10431,
+    MTYPE_CLIENT_DEPRECATED_LOCAL_MINIKQL = 10431, // deprecated
     MTYPE_CLIENT_FLAT_TX_REQUEST = 10432,
     MTYPE_CLIENT_FLAT_TX_STATUS_REQUEST = 10434,
     MTYPE_CLIENT_OLD_FLAT_DESCRIBE_REQUEST = 10435, // deprecated
@@ -59,7 +59,7 @@ enum {
     MTYPE_CLIENT_KEYVALUE = 10448,
     MTYPE_CLIENT_DB_BATCH = 10449,
     MTYPE_CLIENT_FLAT_DESCRIBE_REQUEST = 10450,
-    MTYPE_CLIENT_LOCAL_SCHEME_TX = 10453,
+    MTYPE_CLIENT_DEPRECATED_LOCAL_SCHEME_TX = 10453, // deprecated
     MTYPE_CLIENT_DB_QUERY = 10456,
     MTYPE_CLIENT_TABLET_COUNTERS_REQUEST = 10457,
     MTYPE_CLIENT_CANCEL_BACKUP = 10458,
@@ -104,11 +104,8 @@ struct TBusHiveCreateTablet : TBusMessage<TBusHiveCreateTablet, NKikimrClient::T
 struct TBusOldHiveCreateTablet : TBusMessage<TBusOldHiveCreateTablet, NKikimrClient::THiveCreateTablet, MTYPE_CLIENT_OLD_HIVE_CREATE_TABLET> {};
 struct TBusHiveCreateTabletResult : TBusMessage<TBusHiveCreateTabletResult, NKikimrClient::THiveCreateTabletResult, MTYPE_CLIENT_HIVE_CREATE_TABLET_RESULT> {};
 struct TBusPersQueue : TBusMessage<TBusPersQueue, NKikimrClient::TPersQueueRequest, MTYPE_CLIENT_PERSQUEUE> {};
-struct TBusTabletKillRequest : TBusMessage<TBusTabletKillRequest, NKikimrClient::TTabletKillRequest, MTYPE_CLIENT_TABLET_KILL_REQUEST> {};
 struct TBusTabletStateRequest : TBusMessage<TBusTabletStateRequest, NKikimrClient::TTabletStateRequest, MTYPE_CLIENT_TABLET_STATE_REQUEST> {};
 struct TBusTabletCountersRequest : TBusMessage<TBusTabletCountersRequest, NKikimrClient::TTabletCountersRequest, MTYPE_CLIENT_TABLET_COUNTERS_REQUEST> {};
-struct TBusTabletLocalMKQL : TBusMessage<TBusTabletLocalMKQL, NKikimrClient::TLocalMKQL, MTYPE_CLIENT_LOCAL_MINIKQL> {};
-struct TBusTabletLocalSchemeTx : TBusMessage<TBusTabletLocalSchemeTx, NKikimrClient::TLocalSchemeTx, MTYPE_CLIENT_LOCAL_SCHEME_TX> {};
 struct TBusSchemeOperation : TBusMessage<TBusSchemeOperation, NKikimrClient::TSchemeOperation, MTYPE_CLIENT_FLAT_TX_REQUEST> {};
 struct TBusSchemeOperationStatus : TBusMessage<TBusSchemeOperationStatus, NKikimrClient::TSchemeOperationStatus, MTYPE_CLIENT_FLAT_TX_STATUS_REQUEST> {};
 struct TBusSchemeDescribe : TBusMessage<TBusSchemeDescribe, NKikimrClient::TSchemeDescribe, MTYPE_CLIENT_FLAT_DESCRIBE_REQUEST> {};
@@ -181,11 +178,8 @@ public:
         RegisterType(new TBusOldHiveCreateTablet);
         RegisterType(new TBusHiveCreateTabletResult);
         RegisterType(new TBusPersQueue);
-        RegisterType(new TBusTabletKillRequest);
         RegisterType(new TBusTabletStateRequest);
         RegisterType(new TBusTabletCountersRequest);
-        RegisterType(new TBusTabletLocalMKQL);
-        RegisterType(new TBusTabletLocalSchemeTx);
         RegisterType(new TBusSchemeOperation);
         RegisterType(new TBusSchemeOperationStatus);
         RegisterType(new TBusSchemeDescribe);

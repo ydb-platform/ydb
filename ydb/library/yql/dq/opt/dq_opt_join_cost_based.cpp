@@ -30,13 +30,13 @@ bool DqCollectJoinRelationsWithStats(
 
         auto stats = typesCtx.GetStats(joinArg.Raw());
 
-        if (!stats) {
-            YQL_CLOG(TRACE, CoreDq) << "Didn't find statistics for scope " << input.Scope().Cast<TCoAtom>().StringValue() << "\n";
+        auto scope = input.Scope();
+        if (!scope.Maybe<TCoAtom>()){
             return false;
         }
 
-        auto scope = input.Scope();
-        if (!scope.Maybe<TCoAtom>()){
+        if (!stats) {
+            YQL_CLOG(TRACE, CoreDq) << "Didn't find statistics for scope " << input.Scope().Cast<TCoAtom>().StringValue() << "\n";
             return false;
         }
 
@@ -309,6 +309,10 @@ public:
         return joinTree;
     }
 
+    void DisableShuffleElimination() {
+        EnableShuffleElimination = false;
+    }
+
 private:
     using TNodeSet64 = std::bitset<64>;
     using TNodeSet128 = std::bitset<128>;
@@ -346,7 +350,7 @@ private:
         if (postEnumerationShuffleElimination) {
             EliminateShuffles(hypergraph, bestJoinOrder, orderingsFSM);
         }
-        auto resTree = ConvertFromInternal(bestJoinOrder, fdStorage);
+        auto resTree = ConvertFromInternal(bestJoinOrder, fdStorage, EnableShuffleElimination);
         AddMissingConditions(hypergraph, resTree);
         return resTree;
     }
@@ -380,14 +384,30 @@ private:
         joinNode->LogicalOrderings = fsm.CreateState();
         switch (joinNode->JoinAlgo) {
             case EJoinAlgoType::GraceJoin: {
-                bool hashFuncArgsMatch =
-                    left->LogicalOrderings.GetShuffleHashFuncArgsCount() == right->LogicalOrderings.GetShuffleHashFuncArgsCount();
+                /* look at dphyp shuffle elimination EmitCsgCmp function. it has the same logic. */
 
-                if (!hashFuncArgsMatch || !left->LogicalOrderings.HasState() || !left->LogicalOrderings.ContainsShuffle(leftJoinKeysOrderingIdx)) {
-                    joinNode->ShuffleLeftSideByOrderingIdx = leftJoinKeysOrderingIdx;
+                bool lhsShuffled =
+                    left->LogicalOrderings.HasState() &&
+                    left->LogicalOrderings.ContainsShuffle(leftJoinKeysOrderingIdx) &&
+                    left->LogicalOrderings.GetShuffleHashFuncArgsCount() == static_cast<std::int64_t>(edge->LeftJoinKeys.size());
+
+                bool rhsShuffled =
+                    right->LogicalOrderings.HasState() &&
+                    right->LogicalOrderings.ContainsShuffle(rightJoinKeysOrderingIdx) &&
+                    right->LogicalOrderings.GetShuffleHashFuncArgsCount() == static_cast<std::int64_t>(edge->RightJoinKeys.size());
+
+                if (lhsShuffled && rhsShuffled /* we don't support not shuffling two inputs in the execution, so we must shuffle at least one*/) {
+                    if (left->Stats.Nrows < right->Stats.Nrows) {
+                        lhsShuffled = false;
+                    } else {
+                        rhsShuffled = false;
+                    }
                 }
 
-                if (!hashFuncArgsMatch || !right->LogicalOrderings.HasState() ||  !right->LogicalOrderings.ContainsShuffle(rightJoinKeysOrderingIdx)) {
+                if (!lhsShuffled) {
+                    joinNode->ShuffleLeftSideByOrderingIdx = leftJoinKeysOrderingIdx;
+                }
+                if (!rhsShuffled) {
                     joinNode->ShuffleRightSideByOrderingIdx = rightJoinKeysOrderingIdx;
                 }
 
@@ -504,6 +524,10 @@ TExprBase DqOptimizeEquiJoinWithCosts(
 
     if (optLevel == 2 && allRowStorage) {
         return node;
+    }
+
+    if (auto optimizer = dynamic_cast<TOptimizerNativeNew*>(&opt); allRowStorage && optimizer != nullptr) {
+        optimizer->DisableShuffleElimination();
     }
 
     equiJoinCounter++;

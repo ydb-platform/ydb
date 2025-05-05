@@ -20,7 +20,7 @@ namespace NRedo {
             Tables.insert(affects.begin(), affects.end());
         }
 
-        TArrayRef<const ui32> Affects() noexcept
+        TArrayRef<const ui32> Affects()
         {
             Affects_.assign(Tables.begin(), Tables.end());
             return Affects_;

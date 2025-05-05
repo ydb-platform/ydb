@@ -115,7 +115,7 @@ namespace NActors {
                 return true;
             }
 
-            static IEventBase* Load(TEventSerializedData* bufs);
+            static TEvRemoteHttpInfo* Load(const TEventSerializedData* bufs);
         };
 
         struct TEvRemoteHttpInfoRes: public NActors::TEventBase<TEvRemoteHttpInfoRes, RemoteHttpInfoRes> {
@@ -145,7 +145,7 @@ namespace NActors {
                 return true;
             }
 
-            static IEventBase* Load(TEventSerializedData* bufs) {
+            static TEvRemoteHttpInfoRes* Load(const TEventSerializedData* bufs) {
                 return new TEvRemoteHttpInfoRes(bufs->GetString());
             }
         };
@@ -177,7 +177,7 @@ namespace NActors {
                 return true;
             }
 
-            static IEventBase* Load(TEventSerializedData* bufs) {
+            static TEvRemoteJsonInfoRes* Load(const TEventSerializedData* bufs) {
                 return new TEvRemoteJsonInfoRes(bufs->GetString());
             }
         };
@@ -209,7 +209,7 @@ namespace NActors {
                 return true;
             }
 
-            static IEventBase* Load(TEventSerializedData* bufs) {
+            static TEvRemoteBinaryInfoRes* Load(const TEventSerializedData* bufs) {
                 return new TEvRemoteBinaryInfoRes(bufs->GetString());
             }
         };

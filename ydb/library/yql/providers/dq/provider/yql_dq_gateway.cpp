@@ -558,6 +558,7 @@ public:
         , Service(GrpcClient.CreateGRpcServiceConnection<Yql::DqsProto::DqService>(GrpcConf))
         , TaskScheduler()
         , OpenSessionTimeout(timeout)
+        , IsStopped(false)
     {
         TaskScheduler.Start();
     }
@@ -567,6 +568,11 @@ public:
     }
 
     void Stop() {
+        bool expected = false;
+        if (!IsStopped.compare_exchange_strong(expected, true)) {
+            return;
+        }
+
         decltype(Sessions) sessions;
         with_lock (Mutex) {
             sessions = std::move(Sessions);
@@ -729,6 +735,8 @@ private:
 
     TMutex Mutex;
     THashMap<TString, std::shared_ptr<TDqGatewaySession>> Sessions;
+
+    std::atomic<bool> IsStopped;
 };
 
 class TDqGateway: public IDqGateway {
@@ -741,6 +749,7 @@ public:
     }
 
     ~TDqGateway() {
+        Stop();
     }
 
     void Stop() override {

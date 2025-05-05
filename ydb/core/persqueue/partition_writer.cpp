@@ -1,4 +1,4 @@
-#include "partition_workzone.h"
+#include "partition_writer.h"
 #include "partition_util.h"
 
 namespace NKikimr::NPQ {

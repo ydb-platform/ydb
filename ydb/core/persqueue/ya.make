@@ -22,7 +22,7 @@ SRCS(
     partition_scale_request.cpp
     partition_scale_manager.cpp
     partition_sourcemanager.cpp
-    partition_workzone.cpp
+    partition_writer.cpp
     partition_write.cpp
     partition.cpp
     percentile_counter.cpp

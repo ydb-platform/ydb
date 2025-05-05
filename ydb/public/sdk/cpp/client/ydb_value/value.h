@@ -319,6 +319,7 @@ public:
     TDecimalValue GetDecimal() const;
     TPgValue GetPg() const;
     TUuidValue GetUuid() const;
+    TUuidValue GetUuidHack() const;
     const TString& GetJsonDocument() const;
     const TString& GetDyNumber() const;
 

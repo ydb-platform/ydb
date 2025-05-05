@@ -1436,7 +1436,7 @@ namespace NKikimr::NYaml {
         PrepareLogConfig(config);
     }
 
-    NKikimrBlobStorage::TConfigRequest BuildInitDistributedStorageCommand(const TString& data) {
+    NKikimrConfig::TEphemeralInputFields ReadEphemeralInputFields(const TString& data) {
         auto yamlNode = YAML::Load(data);
         NJson::TJsonValue json = Yaml2Json(yamlNode, true);
 
@@ -1447,6 +1447,15 @@ namespace NKikimr::NYaml {
         NKikimrConfig::TEphemeralInputFields ephemeralConfig;
         NProtobufJson::MergeJson2Proto(ephemeralJsonNode, ephemeralConfig, GetJsonToProtoConfig());
 
+        return ephemeralConfig;
+    }
+
+    NKikimrBlobStorage::TConfigRequest BuildInitDistributedStorageCommand(const TString& data) {
+        auto ephemeralFields = ReadEphemeralInputFields(data);
+        return BuildInitDistributedStorageCommand(ephemeralFields);
+    }
+
+    NKikimrBlobStorage::TConfigRequest BuildInitDistributedStorageCommand(NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
         NKikimrConfig::TAppConfig config;
         PrepareHosts(ephemeralConfig);
         PrepareNameserviceConfig(config, ephemeralConfig);

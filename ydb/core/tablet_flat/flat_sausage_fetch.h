@@ -10,7 +10,7 @@ namespace NKikimr {
 namespace NPageCollection {
 
     struct TFetch {
-        TFetch(ui64 cookie, TIntrusiveConstPtr<IPageCollection> pageCollection, TVector<NTable::TPageId> pages, NWilson::TTraceId traceId = {})
+        TFetch(ui64 cookie, TIntrusiveConstPtr<IPageCollection> pageCollection, TVector<TPageId> pages, NWilson::TTraceId traceId = {})
             : Cookie(cookie)
             , PageCollection(std::move(pageCollection))
             , Pages(std::move(pages))
@@ -38,14 +38,14 @@ namespace NPageCollection {
 
         ui64 Cookie = Max<ui64>();
         TIntrusiveConstPtr<IPageCollection> PageCollection;
-        TVector<NTable::TPageId> Pages;
+        TVector<TPageId> Pages;
         NWilson::TTraceId TraceId;
     };
 
     struct TLoadedPage {
         TLoadedPage() = default;
 
-        TLoadedPage(NTable::TPageId page, TSharedData data)
+        TLoadedPage(TPageId page, TSharedData data)
             : PageId(page)
             , Data(std::move(data))
         {
@@ -54,10 +54,10 @@ namespace NPageCollection {
 
         explicit operator bool() const noexcept
         {
-            return Data && PageId != Max<NTable::TPageId>();
+            return Data && PageId != Max<TPageId>();
         }
 
-        NTable::TPageId PageId = Max<NTable::TPageId>();
+        TPageId PageId = Max<TPageId>();
         TSharedData Data;
     };
 

@@ -170,7 +170,7 @@ Ask your LLM questions regarding the data stored in {{ ydb-short-name }} using t
   * Parameters:
     * `path`: YDB directory path to list
 
-* `ydb_describe_path`: Get detailed information about a {{ ydb-short-name }} path (table, directory, etc.)
+* `ydb_describe_path`: Get detailed information about a [scheme object](../../../concepts/glossary.md#scheme-object) (table, directory, etc) located at the specified {{ ydb-short-name }} path
   * Parameters:
     * `path`: {{ ydb-short-name }} path to describe
 

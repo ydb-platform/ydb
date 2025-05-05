@@ -1,6 +1,6 @@
 # {{ ydb-short-name }} Model Context Protocol Server
 
-[{{ ydb-short-name }} Model Context Protocol (MCP) server](https://github.com/ydb-platform/ydb-mcp) позволяет работать с базами данных {{ ydb-short-name }} из любой [большой языковой модели (LLM)](https://ru.wikipedia.org/wiki/Большая_языковая_модель), которая поддерживает [MCP](https://github.com/modelcontextprotocol/servers), используя любой из [MCP клиентов](https://modelcontextprotocol.io/clients). Эта интеграция обеспечивает работу с базами данных {{ ydb-short-name }} с помощью ИИ и взаимодействие на естественном языке.
+[{{ ydb-short-name }} Model Context Protocol (MCP) server](https://github.com/ydb-platform/ydb-mcp) позволяет работать с базами данных {{ ydb-short-name }} из любой [большой языковой модели (LLM)](https://ru.wikipedia.org/wiki/Большая_языковая_модель), которая поддерживает [MCP](https://github.com/modelcontextprotocol/servers), используя любой из [MCP клиентов](https://modelcontextprotocol.io/clients). Эта интеграция обеспечивает работу с базами данных {{ ydb-short-name }} с помощью ИИ на естественном языке.
 
 ## Начало работы
 
@@ -8,7 +8,7 @@
 
 {{ ydb-short-name }} MCP сервер — это приложение на Python, которое обычно размещается вместе с MCP клиентом. Существует несколько вариантов установки и запуска {{ ydb-short-name }} MCP сервера, которые описаны ниже, но все они требуют предварительно установленного Python 3.10+ окружения.
 
-### Настройка MCP клиента
+### Настройка MCP-клиента
 
 #### Анонимная аутентификация
 
@@ -18,7 +18,7 @@
 
   [uvx](https://docs.astral.sh/uv/guides/tools/) позволяет запускать приложения Python без явной установки.
 
-  Настройте {{ ydb-short-name }} MCP в настройках вашего MCP клиента:
+  Настройте {{ ydb-short-name }} MCP в настройках вашего MCP-клиента:
 
   ```json
   {
@@ -38,7 +38,7 @@
 
   [pipx](https://pipx.pypa.io/stable/installation/) позволяет запускать приложения из PyPI без явной установки (сам pipx должен быть установлен заранее).
 
-  Настройте {{ ydb-short-name }} MCP в настройках вашего MCP клиента:
+  Настройте {{ ydb-short-name }} MCP в настройках вашего MCP-клиента:
 
   ```json
   {
@@ -62,7 +62,7 @@
   pip install ydb-mcp
   ```
 
-  Настройте {{ ydb-short-name }} MCP в настройках вашего MCP клиента:
+  В настройках вашего MCP-клиента укажите параметры для соединения с {{ ydb-short-name }} MCP:
 
   ```json
   {
@@ -151,13 +151,13 @@
 
 ### Выполнение запросов
 
-Задавайте вашему LLM вопросы относительно данных, хранящихся в {{ ydb-short-name }}, используя настроенного выше клиента MCP. Языковая модель увидит инструмент, доступные ей через MCP, и будет использовать их для выполнения запросов на [YQL](../../../yql/reference/index.md) и других вызовов к API {{ ydb-short-name }}. Пример того, как это может выглядеть:
+Задавайте вашему LLM вопросы относительно данных, хранящихся в {{ ydb-short-name }}, используя настроенного выше клиента MCP. Языковая модель увидит инструменты, доступные ей через MCP, и будет использовать их для выполнения запросов на [YQL](../../../yql/reference/index.md) и других вызовов к API {{ ydb-short-name }}. Пример того, как это может выглядеть:
 
-![Пример использования {{ ydb-short-name }} MCP сервера](_assets/example-usage.png)
+![Пример использования MCP-сервера {{ ydb-short-name }}](_assets/example-usage.png)
 
 ## Доступные инструменты
 
-{{ ydb-short-name }} MCP сервер предоставляет следующие инструменты для взаимодействия с базами данных {{ ydb-short-name }}:
+MCP-сервер {{ ydb-short-name }} предоставляет следующие инструменты для взаимодействия с базами данных {{ ydb-short-name }}:
 
 * `ydb_query`: Выполнение SQL-запроса к базе данных {{ ydb-short-name }}
   * Параметры:

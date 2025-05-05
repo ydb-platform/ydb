@@ -1,11 +1,14 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
 #include "export_s3_buffer.h"
+#include "backup_restore_traits.h"
+#include "export_s3.h"
 #include "type_serialization.h"
 
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
 #include <yql/essentials/types/binary_json/read.h>
+#include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
@@ -429,6 +432,52 @@ void TZStdCompressionProcessor::Reset() {
 }
 
 } // anonymous
+
+IExport::IBuffer* TS3Export::CreateBuffer() const {
+    using namespace NBackupRestoreTraits;
+
+    const auto& scanSettings = Task.GetScanSettings();
+    const ui64 maxRows = scanSettings.GetRowsBatchSize() ? scanSettings.GetRowsBatchSize() : Max<ui64>();
+    const ui64 maxBytes = scanSettings.GetBytesBatchSize();
+    const ui64 minBytes = Task.GetS3Settings().GetLimits().GetMinWriteBatchSize();
+
+    TS3ExportBufferSettings bufferSettings;
+    bufferSettings
+        .WithColumns(Columns)
+        .WithMaxRows(maxRows)
+        .WithMaxBytes(maxBytes)
+        .WithMinBytes(minBytes); // S3 API returns EntityTooSmall error if file part is smaller that 5MB: https://docs.aws.amazon.com/AmazonS3/latest/API/API_CompleteMultipartUpload.html
+    if (Task.GetEnableChecksums()) {
+        bufferSettings.WithChecksum(TS3ExportBufferSettings::Sha256Checksum());
+    }
+
+    switch (CodecFromTask(Task)) {
+    case ECompressionCodec::None:
+        break;
+    case ECompressionCodec::Zstd:
+        bufferSettings
+            .WithCompression(TS3ExportBufferSettings::ZstdCompression(Task.GetCompression().GetLevel()));
+        break;
+    case ECompressionCodec::Invalid:
+        Y_ABORT("unreachable");
+    }
+
+    if (Task.HasEncryptionSettings()) {
+        NBackup::TEncryptionIV iv = NBackup::TEncryptionIV::Combine(
+            NBackup::TEncryptionIV::FromBinaryString(Task.GetEncryptionSettings().GetIV()),
+            NBackup::EBackupFileType::TableData,
+            0, // already combined
+            Task.GetShardNum());
+        bufferSettings.WithEncryption(
+            TS3ExportBufferSettings::TEncryptionSettings()
+                .WithAlgorithm(Task.GetEncryptionSettings().GetEncryptionAlgorithm())
+                .WithKey(NBackup::TEncryptionKey(Task.GetEncryptionSettings().GetSymmetricKey().key()))
+                .WithIV(iv)
+        );
+    }
+
+    return CreateS3ExportBuffer(std::move(bufferSettings));
+}
 
 NExportScan::IBuffer* CreateS3ExportBuffer(TS3ExportBufferSettings&& settings) {
     return new TS3Buffer(std::move(settings));

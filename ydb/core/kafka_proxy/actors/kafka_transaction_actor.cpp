@@ -162,9 +162,9 @@ namespace NKafka {
     template<class ErrorResponseType, class EventType>
     void TTransactionActor::SendFailResponse(TAutoPtr<TEventHandle<EventType>>& evHandle, EKafkaErrors errorCode, const TString& errorMessage) {
         if (errorMessage) {
-            KAFKA_LOG_W(TStringBuilder() << "Sending fail response with error code: " << errorCode << ". Reason:  " << errorMessage);
+            KAFKA_LOG_W("Sending fail response with error code: " << errorCode << ". Reason:  " << errorMessage);
         } else {
-            KAFKA_LOG_W(TStringBuilder() << "Sending fail response with error code: " << errorCode);
+            KAFKA_LOG_W("Sending fail response with error code: " << errorCode);
         }
 
         auto response = NKafkaTransactions::BuildResponse<ErrorResponseType>(evHandle->Get()->Request, errorCode);

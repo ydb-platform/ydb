@@ -14,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 
 class TllTieringTestBase(object):
-
     @classmethod
     def setup_class(cls):
         cls.endpoint = get_external_param("endpoint", None)

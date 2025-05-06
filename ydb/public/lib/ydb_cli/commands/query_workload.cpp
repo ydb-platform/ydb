@@ -106,7 +106,7 @@ void TCommandQueryWorkloadRun::Parse(TConfig& config) {
     if (QueryFile) {
         if (QueryFile == "-") {
             if (IsStdinInteractive()) {
-                throw TMisuseException() << "Path to script file is \"-\", meaning that script text should be read "
+                throw TMisuseException() << "Path to file with query text is \"-\", meaning that query text should be read "
                     "from stdin. This is only available in non-interactive mode";
             }
             Query = Cin.ReadAll();

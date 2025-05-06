@@ -22,7 +22,7 @@ if (!ProducerInRequestIsValid(ev->Get()->Request)) { \
 namespace NKafka {
 
     void TTransactionActor::Handle(TEvKafka::TEvAddPartitionsToTxnRequest::TPtr& ev, const TActorContext&){
-        KAFKA_LOG_D("Receieved ADD_PARTITIONS_TO_TXN request");
+        KAFKA_LOG_D("Received ADD_PARTITIONS_TO_TXN request");
         VALIDATE_PRODUCER_IN_REQUEST(TAddPartitionsToTxnResponseData);
 
         for (auto& topicInRequest : ev->Get()->Request->Topics) {
@@ -37,13 +37,13 @@ namespace NKafka {
     // in YDB Topics we store offsets in table and do not need this extra action.
     // Thus we can just ignore this request.
     void TTransactionActor::Handle(TEvKafka::TEvAddOffsetsToTxnRequest::TPtr& ev, const TActorContext&) {
-        KAFKA_LOG_D("Receieved ADD_OFFSETS_TO_TXN request");
+        KAFKA_LOG_D("Received ADD_OFFSETS_TO_TXN request");
         VALIDATE_PRODUCER_IN_REQUEST(TAddOffsetsToTxnResponseData);
         SendOkResponse<TAddOffsetsToTxnResponseData>(ev);
     }
 
     void TTransactionActor::Handle(TEvKafka::TEvTxnOffsetCommitRequest::TPtr& ev, const TActorContext&) {
-        KAFKA_LOG_D("Receieved TXN_OFFSET_COMMIT request");
+        KAFKA_LOG_D("Received TXN_OFFSET_COMMIT request");
         VALIDATE_PRODUCER_IN_REQUEST(TTxnOffsetCommitResponseData);
 
         // save offsets for future use
@@ -79,7 +79,7 @@ namespace NKafka {
     7. Close KQP session, send to coordinator TEvTransactionActorDied, die.
     */
     void TTransactionActor::Handle(TEvKafka::TEvEndTxnRequest::TPtr& ev, const TActorContext& ctx) {
-        KAFKA_LOG_D("Receieved END_TXN request");
+        KAFKA_LOG_D("Received END_TXN request");
         VALIDATE_PRODUCER_IN_REQUEST(TEndTxnResponseData);
 
         bool txnAborted = !ev->Get()->Request->Committed;
@@ -110,7 +110,7 @@ namespace NKafka {
     }
 
     void TTransactionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        KAFKA_LOG_D("Receieved query response from KQP for " << GetAsStr(LastSentToKqpRequest) << " request");
+        KAFKA_LOG_D("Received query response from KQP for " << GetAsStr(LastSentToKqpRequest) << " request");
         if (auto error = GetErrorFromYdbResponse(ev)) {
             KAFKA_LOG_W(error);
             SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error->data());

@@ -267,8 +267,7 @@ class TestDeleteS3Ttl(TllDeleteBase):
         logger.info(f"Rows older than {self.days_to_cool} days: {self.get_row_count_by_date(table_path, self.days_to_cool)}")
         logger.info(f"Rows older than {self.days_to_freeze} days: {self.get_row_count_by_date(table_path, self.days_to_freeze)}")
 
-        if not self.wait_for(lambda: self.portions_actualized_in_sys(self.table), 120):
-            raise Exception(".sys reports incorrect data portions")
+        assert ColumnTableHelper.portions_actualized_in_sys(self.table)
 
         stmt = f"""
             DELETE FROM `{table_path}`

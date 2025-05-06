@@ -748,12 +748,12 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     }
 
     Y_UNIT_TEST(OnlyDiskIssueOnInitialPDisks) {
-        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, {NKikimrBlobStorage::READY, NKikimrBlobStorage::TPDiskState::Initial}});
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, {NKikimrBlobStorage::READY, NKikimrBlobStorage::TPDiskState::DeviceIoError}});
         Cerr << result.ShortDebugString() << Endl;
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 0);
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0);
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0);
-        CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::YELLOW, 3, "");
+        CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::RED, 3, "");
     }
 
     Y_UNIT_TEST(OnlyDiskIssueOnFaultyPDisks) {
@@ -2411,11 +2411,10 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         bool pdiskIssueFoundInResult = false;
         for (const auto &issue_log : result.issue_log()) {
             if (issue_log.type() == "PDISK") {
-                UNIT_ASSERT_VALUES_EQUAL(issue_log.message(), "Unknown PDisk state: UNKNOWN_STATE?");
                 pdiskIssueFoundInResult = true;
             }
         }
-        UNIT_ASSERT(pdiskIssueFoundInResult);
+        UNIT_ASSERT(!pdiskIssueFoundInResult);
     }
 }
 }

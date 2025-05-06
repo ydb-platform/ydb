@@ -19,7 +19,7 @@ ydb [global options...] monitoring healthcheck [options...]
 || `--format` | Output format. Available options:
 
 * `pretty` — overall database status. Possible values are provided in the [table](../../ydb-sdk/health-check-api.md#selfcheck-result)
-* `json` — a detailed JSON response containing a hierarchical list of detected problems. A list of possible issues can be found in the [Healthcheck API](../../ydb-sdk/health-check-api.md#issues) documentation.
+* `json` — a detailed JSON response containing a hierarchical list of detected problems. Possible issues are listed in the [Healthcheck API](../../ydb-sdk/health-check-api.md#issues) documentation.
 
 Default: `pretty`. ||
 |#

@@ -80,6 +80,12 @@ TDistributor::TDistributor(const TConfig& config, const TString& conveyorName, c
 
 }
 
+TDistributor::~TDistributor() {
+    for (const auto& [_, process] : Processes) {
+        process.GetCPUGroup()->DecProcesses();
+    }
+}
+
 void TDistributor::Bootstrap() {
     WorkersPool = std::make_shared<TWorkersPool>(ConveyorName, SelfId(), Config, Counters);
     if (!EnableProcesses) {
@@ -159,7 +165,7 @@ void TDistributor::HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev) {
         }
         const auto cpuGroup = it->second.GetCPUGroup();
         Processes.erase(it);
-        if (!cpuGroup->HasProcesses()) {
+        if (cpuGroup->DecProcesses()) {
             ChangeAmountCPULimit(-cpuGroup->GetCPUThreadsLimit());
             AFL_VERIFY(CPUGroups.erase(cpuGroup->GetName()));
         }
@@ -209,6 +215,7 @@ void TDistributor::AddProcess(const ui64 processId, const TCPULimitsConfig& cpuL
         it->second->SetCPUThreadsLimit(cpuThreadsLimit);
         ChangeAmountCPULimit(cpuThreadsLimit - previousLimit);
     }
+    it->second->IncProcesses();
 
     ProcessesOrdered.clear();
     AFL_VERIFY(Processes.emplace(processId, TProcess(processId, it->second)).second);

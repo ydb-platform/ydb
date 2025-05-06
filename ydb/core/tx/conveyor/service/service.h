@@ -137,16 +137,13 @@ public:
         AFL_VERIFY(ProcessesCount == 0);
     }
 
-    void DecProcesses() {
+    bool DecProcesses() {
         --ProcessesCount;
+        return ProcessesCount == 0;
     }
 
     void IncProcesses() {
         ++ProcessesCount;
-    }
-
-    bool HasProcesses() const {
-        return ProcessesCount > 0;
     }
 };
 
@@ -176,12 +173,7 @@ public:
         : ProcessId(processId)
         , CPUGroup(std::move(cpuGroup)) {
         AFL_VERIFY(CPUGroup);
-        CPUGroup->IncProcesses();
         IncRegistration();
-    }
-
-    ~TProcess() {
-        CPUGroup->DecProcesses();
     }
 
     void AddCPUTime(const TDuration d) {
@@ -197,7 +189,7 @@ class TWorkersPool {
     class TWorkerInfo {
         YDB_READONLY(bool, RunningTask, false);
         YDB_READONLY(TWorker*, Worker, nullptr);
-        YDB_READONLY(TActorId, WorkerId, {});
+        YDB_READONLY_DEF(TActorId, WorkerId);
     public:
         explicit TWorkerInfo(std::unique_ptr<TWorker> worker)
             : Worker(worker.get())
@@ -286,6 +278,8 @@ public:
     }
 
     TDistributor(const TConfig& config, const TString& conveyorName, const bool enableProcesses, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals);
+
+    ~TDistributor();
 
     void Bootstrap();
 };

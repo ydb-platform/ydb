@@ -96,10 +96,10 @@ public:
 
         if (Finalized) {
             Self->Committed = Self->Dirty;
-            Self->SentVersion = Self->Committed.Epoch.Version;
             Self->Become(&TNodeBroker::StateWork);
             Self->SubscribeForConfigUpdates(ctx);
             Self->ScheduleEpochUpdate(ctx);
+            Self->ScheduleProcessSubscribersQueue(ctx);
             Self->PrepareEpochCache();
             Self->PrepareUpdateNodesLog();
 

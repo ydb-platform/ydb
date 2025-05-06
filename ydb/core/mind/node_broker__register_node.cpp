@@ -225,7 +225,6 @@ public:
         }
 
         Reply(ctx);
-        Self->SendUpdateNodes(ctx);
     }
 
 private:

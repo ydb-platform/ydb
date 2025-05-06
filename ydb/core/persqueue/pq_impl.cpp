@@ -1285,6 +1285,10 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorConte
             reservedSize += p.second.Baseline.Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Get();
     }
     Counters->Simple()[COUNTER_PQ_TABLET_RESERVED_BYTES_SIZE].Set(reservedSize);
+
+    // Features of the implementation of SimpleCounters. It is necessary to restore the value of
+    // indicators for transactions.
+    SetTxCounters();
 }
 
 

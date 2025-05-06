@@ -749,65 +749,47 @@ namespace NKikimr::NYaml {
             auto& domainsConfig = *config.MutableDomainsConfig();
             auto& domain = *domainsConfig.AddDomain();
             domain.SetName("Root");
+            auto& storagePoolType = *domain.AddStoragePoolTypes();
+            auto& poolConfig = *storagePoolType.MutablePoolConfig();
+            if (ephemeralConfig.HasFailDomainType() &&
+                ephemeralConfig.GetFailDomainType() != NKikimrConfig::TEphemeralInputFields::Rack) {
+                auto* geometry = poolConfig.MutableGeometry();
+                const auto& range = FailDomainGeometryRanges.at(ephemeralConfig.GetFailDomainType());
+                geometry->SetRealmLevelBegin(range.RealmLevelBegin);
+                geometry->SetRealmLevelEnd(range.RealmLevelEnd);
+                geometry->SetDomainLevelBegin(range.DomainLevelBegin);
+                geometry->SetDomainLevelEnd(range.DomainLevelEnd);
+            }
+        }
 
-            if (erasureName && defaultDiskTypeLower && dtEnum) {
-                auto& poolType = *domain.AddStoragePoolTypes();
-                poolType.SetKind(*defaultDiskTypeLower);
-                auto& poolConfig = *poolType.MutablePoolConfig();
-                poolConfig.SetErasureSpecies(*erasureName);
+        auto& domainsConfig = *config.MutableDomainsConfig();
+        Y_ENSURE_BT(domainsConfig.DomainSize() == 1, "Only a single domain is currently supported");
+
+        auto& domain = *domainsConfig.MutableDomain(0);
+        ui32 storagePoolTypeId = 0;
+        for (auto& storagePoolType : *domain.MutableStoragePoolTypes()) {
+            auto& info = ctx.PoolConfigInfo[{0, storagePoolTypeId}];
+            if (defaultDiskTypeLower && !storagePoolType.HasKind()) {
+                storagePoolType.SetKind(*defaultDiskTypeLower);
+            }
+            auto& poolConfig = *storagePoolType.MutablePoolConfig();
+
+            if (erasureName && !info.HasErasureSpecies) {
+                poolConfig.SetErasureSpecies(erasureName.GetRef());
+            }
+
+            if (defaultDiskTypeLower && !info.HasKind) {
+                poolConfig.SetKind(*defaultDiskTypeLower);
+            }
+
+            if (defaultDiskType && !poolConfig.PDiskFilterSize()) {
+                poolConfig.AddPDiskFilter()->AddProperty()->SetType(*dtEnum);
+            }
+
+            if (!info.HasVDiskKind) {
                 poolConfig.SetVDiskKind("Default");
-                auto& filter = *poolConfig.AddPDiskFilter();
-                auto& prop = *filter.AddProperty();
-                prop.SetType(*dtEnum);
-
-                if (!poolConfig.HasGeometry()) {
-                    if (ephemeralConfig.HasFailDomainType() &&
-                        ephemeralConfig.GetFailDomainType() != NKikimrConfig::TEphemeralInputFields::Rack) {
-                        auto* geometry = poolConfig.MutableGeometry();
-                        const auto& range = FailDomainGeometryRanges.at(ephemeralConfig.GetFailDomainType());
-                        geometry->SetRealmLevelBegin(range.RealmLevelBegin);
-                        geometry->SetRealmLevelEnd(range.RealmLevelEnd);
-                        geometry->SetDomainLevelBegin(range.DomainLevelBegin);
-                        geometry->SetDomainLevelEnd(range.DomainLevelEnd);
-                    }
-                }
-
             }
-        } else {
-            auto& domainsConfig = *config.MutableDomainsConfig();
-
-            Y_ENSURE_BT(domainsConfig.DomainSize() <= 1, "Only a single domain is currently supported");
-            if (domainsConfig.DomainSize() == 1) {
-                auto& domain = *domainsConfig.MutableDomain(0);
-                ui32 storagePoolTypeId = 0;
-                for (auto& storagePoolType : *domain.MutableStoragePoolTypes()) {
-                    if (defaultDiskTypeLower && !storagePoolType.HasKind()) {
-                        storagePoolType.SetKind(*defaultDiskTypeLower);
-                    }
-
-                    if (storagePoolType.HasPoolConfig()) {
-                        auto& poolConfig = *storagePoolType.MutablePoolConfig();
-                        auto& info = ctx.PoolConfigInfo[{0, storagePoolTypeId}];
-
-                        if (erasureName && !info.HasErasureSpecies) {
-                            poolConfig.SetErasureSpecies(erasureName.GetRef());
-                        }
-
-                        if (defaultDiskTypeLower && !info.HasKind) {
-                            poolConfig.SetKind(*defaultDiskTypeLower);
-                        }
-
-                        if (defaultDiskType && !poolConfig.PDiskFilterSize()) {
-                            poolConfig.AddPDiskFilter()->AddProperty()->SetType(*dtEnum);
-                        }
-
-                        if (!info.HasVDiskKind) {
-                            poolConfig.SetVDiskKind("Default");
-                        }
-                    }
-                    ++storagePoolTypeId;
-                }
-            }
+            ++storagePoolTypeId;
         }
 
         if (!config.HasGRpcConfig()) {
@@ -1429,7 +1411,8 @@ namespace NKikimr::NYaml {
                 ctx.DisableBuiltinAccess = securityConfig.GetDisableBuiltinAccess();
             }
         }
-        if (ephemeralConfig.StoragePoolTypesSize() > 0 && !config.HasDomainsConfig()) {
+        if (ephemeralConfig.StoragePoolTypesSize() > 0) {
+            Y_ENSURE_BT(!config.HasDomainsConfig(), "domains_config is not allowed to be set with storage_pool_types");
             auto& domainsConfig = *config.MutableDomainsConfig();
             auto& domain = *domainsConfig.AddDomain();
             domain.SetName("Root");

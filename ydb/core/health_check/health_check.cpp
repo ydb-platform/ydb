@@ -1159,20 +1159,28 @@ public:
         auto nodeId = ev->Get()->NodeId;
         switch (eventId) {
             case TEvWhiteboard::EvSystemStateRequest:
-                NodeSystemState.erase(nodeId);
-                NodeSystemState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId);
+                if (!NodeSystemState[nodeId].Done()) {
+                    NodeSystemState.erase(nodeId);
+                    NodeSystemState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId);
+                }
                 break;
             case TEvWhiteboard::EvVDiskStateRequest:
-                NodeVDiskState.erase(nodeId);
-                NodeVDiskState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvVDiskStateRequest>(nodeId);
+                if (!NodeVDiskState[nodeId].Done()) {
+                    NodeVDiskState.erase(nodeId);
+                    NodeVDiskState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvVDiskStateRequest>(nodeId);
+                }
                 break;
             case TEvWhiteboard::EvPDiskStateRequest:
-                NodePDiskState.erase(nodeId);
-                NodePDiskState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvPDiskStateRequest>(nodeId);
+                if (!NodePDiskState[nodeId].Done()) {
+                    NodePDiskState.erase(nodeId);
+                    NodePDiskState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvPDiskStateRequest>(nodeId);
+                }
                 break;
             case TEvWhiteboard::EvBSGroupStateRequest:
-                NodeBSGroupState.erase(nodeId);
-                NodeBSGroupState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvBSGroupStateRequest>(nodeId);
+                if (!NodeBSGroupState[nodeId].Done()) {
+                    NodeBSGroupState.erase(nodeId);
+                    NodeBSGroupState[nodeId] = RequestNodeWhiteboard<TEvWhiteboard::TEvBSGroupStateRequest>(nodeId);
+                }
                 break;
             default:
                 RequestDone("unsupported event scheduled");
@@ -1632,14 +1640,41 @@ public:
         RequestDone("TEvListTenantsResponse");
     }
 
+    // void Handle(TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
+    //     TNodeId nodeId = ev.Get()->Cookie;
+    //     Cerr << "iiiiiiii TEvSystemStateResponse: nodeId: " << nodeId << Endl;
+    //     if (!NodeSystemState[nodeId].Done()) {
+    //         auto& nodeSystemState(NodeSystemState[nodeId]);
+    //         nodeSystemState.Set(std::move(ev));
+    //         for (NKikimrWhiteboard::TSystemStateInfo& state : *nodeSystemState->Record.MutableSystemStateInfo()) {
+    //             state.set_nodeid(nodeId);
+    //             MergedNodeSystemState[nodeId] = &state;
+    //         }
+    //     }
+    //     RequestDone("TEvSystemStateResponse");
+    // }
+
     void Handle(TEvWhiteboard::TEvSystemStateResponse::TPtr& ev) {
         TNodeId nodeId = ev.Get()->Cookie;
+        Cerr << "iiiiiiii TEvSystemStateResponse: nodeId: " << nodeId << Endl;
+
         auto& nodeSystemState(NodeSystemState[nodeId]);
         nodeSystemState.Set(std::move(ev));
         for (NKikimrWhiteboard::TSystemStateInfo& state : *nodeSystemState->Record.MutableSystemStateInfo()) {
+            Cerr << "iiiiiiii Fill " << Endl;
             state.set_nodeid(nodeId);
             MergedNodeSystemState[nodeId] = &state;
         }
+
+        TString error = "NodeDisconnected";
+        if (NodeSystemState.count(nodeId) && NodeSystemState[nodeId].Error(error)) {
+            if (!RetryRequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId)) {
+                Cerr << "iiiiiii Retry SystemInfo after ssResponse " << Endl;
+                RequestDone("node disconnected with TEvSystemStateRequest");
+                UnavailableComputeNodes.insert(nodeId);
+            }
+        }
+
         RequestDone("TEvSystemStateResponse");
     }
 
@@ -1891,10 +1926,12 @@ public:
             rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::GREEN);
         }
 
+        Cerr << "iiiiiiii FillComputeNodeStatus: nodeId: " << nodeId << Endl;
         auto itNodeSystemState = MergedNodeSystemState.find(nodeId);
         if (itNodeSystemState != MergedNodeSystemState.end()) {
             const NKikimrWhiteboard::TSystemStateInfo& nodeSystemState(*itNodeSystemState->second);
 
+            Cerr << "iiiiiiii poolstats: " << nodeSystemState.poolstats_size() << Endl;
             for (const auto& poolStat : nodeSystemState.poolstats()) {
                 TSelfCheckContext poolContext(&context, "COMPUTE_POOL");
                 poolContext.Location.mutable_compute()->mutable_pool()->set_name(poolStat.name());
@@ -1943,6 +1980,7 @@ public:
                     }
                 }
             }
+            Cerr << "iiiiiiii nodeSystemState: 2 " << Endl;
         } else {
             // context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
             //                      TStringBuilder() << "Compute node is not available",
@@ -2306,45 +2344,61 @@ public:
 
     void Handle(TEvWhiteboard::TEvVDiskStateResponse::TPtr& ev) {
         TNodeId nodeId = ev.Get()->Cookie;
-        auto& nodeVDiskState(NodeVDiskState[nodeId]);
-        nodeVDiskState.Set(std::move(ev));
-        for (NKikimrWhiteboard::TVDiskStateInfo& state : *nodeVDiskState->Record.MutableVDiskStateInfo()) {
-            state.set_nodeid(nodeId);
-            auto id = GetVDiskId(state.vdiskid());
-            MergedVDiskState[id] = &state;
+        if (!NodeVDiskState.count(nodeId)) {
+            auto& nodeVDiskState(NodeVDiskState[nodeId]);
+            nodeVDiskState.Set(std::move(ev));
+            for (NKikimrWhiteboard::TVDiskStateInfo& state : *nodeVDiskState->Record.MutableVDiskStateInfo()) {
+                state.set_nodeid(nodeId);
+                auto id = GetVDiskId(state.vdiskid());
+                MergedVDiskState[id] = &state;
+            }
         }
+
+        TString error = "NodeDisconnected";
+        if (NodeSystemState.count(nodeId) && NodeSystemState[nodeId].Error(error)) {
+            if (!RetryRequestNodeWhiteboard<TEvWhiteboard::TEvSystemStateRequest>(nodeId)) {
+                Cerr << "iiiiiii Retry" << Endl;
+                RequestDone("node disconnected with TEvSystemStateRequest");
+                UnavailableComputeNodes.insert(nodeId);
+            }
+        }
+
         RequestDone("TEvVDiskStateResponse");
     }
 
     void Handle(TEvWhiteboard::TEvPDiskStateResponse::TPtr& ev) {
         TNodeId nodeId = ev.Get()->Cookie;
-        auto& nodePDiskState(NodePDiskState[nodeId]);
-        nodePDiskState.Set(std::move(ev));
-        for (NKikimrWhiteboard::TPDiskStateInfo& state : *nodePDiskState->Record.MutablePDiskStateInfo()) {
-            state.set_nodeid(nodeId);
-            auto id = GetPDiskId(state);
-            MergedPDiskState[id] = &state;
+        if (!NodePDiskState.count(nodeId)) {
+            auto& nodePDiskState(NodePDiskState[nodeId]);
+            nodePDiskState.Set(std::move(ev));
+            for (NKikimrWhiteboard::TPDiskStateInfo& state : *nodePDiskState->Record.MutablePDiskStateInfo()) {
+                state.set_nodeid(nodeId);
+                auto id = GetPDiskId(state);
+                MergedPDiskState[id] = &state;
+            }
         }
         RequestDone("TEvPDiskStateResponse");
     }
 
     void Handle(TEvWhiteboard::TEvBSGroupStateResponse::TPtr& ev) {
         ui64 nodeId = ev.Get()->Cookie;
-        auto& nodeBSGroupState(NodeBSGroupState[nodeId]);
-        nodeBSGroupState.Set(std::move(ev));
-        for (NKikimrWhiteboard::TBSGroupStateInfo& state : *nodeBSGroupState->Record.MutableBSGroupStateInfo()) {
-            state.set_nodeid(nodeId);
-            TString storagePoolName = state.storagepoolname();
-            TGroupID groupId(state.groupid());
-            const NKikimrWhiteboard::TBSGroupStateInfo*& current(MergedBSGroupState[state.groupid()]);
-            if (current == nullptr || current->GetGroupGeneration() < state.GetGroupGeneration()) {
-                current = &state;
+        if (!NodeBSGroupState.count(nodeId)) {
+            auto& nodeBSGroupState(NodeBSGroupState[nodeId]);
+            nodeBSGroupState.Set(std::move(ev));
+            for (NKikimrWhiteboard::TBSGroupStateInfo& state : *nodeBSGroupState->Record.MutableBSGroupStateInfo()) {
+                state.set_nodeid(nodeId);
+                TString storagePoolName = state.storagepoolname();
+                TGroupID groupId(state.groupid());
+                const NKikimrWhiteboard::TBSGroupStateInfo*& current(MergedBSGroupState[state.groupid()]);
+                if (current == nullptr || current->GetGroupGeneration() < state.GetGroupGeneration()) {
+                    current = &state;
+                }
+                if (storagePoolName.empty() && groupId.ConfigurationType() != EGroupConfigurationType::Static) {
+                    continue;
+                }
+                StoragePoolStateByName[storagePoolName].Groups.emplace(state.groupid());
+                StoragePoolStateByName[storagePoolName].Name = storagePoolName;
             }
-            if (storagePoolName.empty() && groupId.ConfigurationType() != EGroupConfigurationType::Static) {
-                continue;
-            }
-            StoragePoolStateByName[storagePoolName].Groups.emplace(state.groupid());
-            StoragePoolStateByName[storagePoolName].Name = storagePoolName;
         }
         RequestDone("TEvBSGroupStateResponse");
     }

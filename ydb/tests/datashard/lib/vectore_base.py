@@ -10,11 +10,14 @@ from ydb.tests.library.harness.util import LogLevels
 
 logger = logging.getLogger(__name__)
 
+
 class VectoreBase(TestBase):
     @classmethod
     def setup_class(cls):
-        ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY", "ydb/apps/ydbd/ydbd"))
-        logger.error(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
+        ydb_path = yatest.common.build_path(os.environ.get(
+            "YDB_DRIVER_BINARY", "ydb/apps/ydbd/ydbd"))
+        logger.error(yatest.common.execute(
+            [ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
 
         cls.ydb_cli_path = yatest.common.build_path("ydb/apps/ydb/ydb")
 
@@ -31,8 +34,8 @@ class VectoreBase(TestBase):
                                                        'compaction_actualization_lag_ms': 0,
                                                        'optimizer_freshness_check_duration_ms': 0,
                                                        'small_portion_detect_size_limit': 0,
-                                                       },
-                                                   additional_log_configs={
+        },
+            additional_log_configs={
                                                        'TX_TIERING': LogLevels.DEBUG}))
         cls.cluster.start()
         cls.driver = ydb.Driver(

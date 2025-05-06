@@ -11,12 +11,6 @@ class TestVectorIndex(VectoreBase):
     @pytest.mark.parametrize(
         "table_name, pk_types, all_types, index, ttl, unique, sync, vector_type",
         [
-            ("test_vector", {
-                "Int64": lambda i: i,
-                "Int32": lambda i: i,
-                "Int16": lambda i: i,
-                "Int8": lambda i: i,
-            }, {}, {}, "", "", "", "Float"),
             ("table_index_4_UNIQUE_SYNC_float", pk_types, {},
              index_four_sync, "", "UNIQUE", "SYNC", "Float"),
             ("table_index_3_UNIQUE_SYNC_float", pk_types, {},
@@ -96,34 +90,45 @@ class TestVectorIndex(VectoreBase):
             "Float": "ToBinaryStringFloat",
             "Uint8": "ToBinaryStringUint8"
         }
-        self.distance_knn = {
-            "euclidean": "EuclideanDistance",
-            "cosine": "CosineDistance",
-            "manhattan": "ManhattanDistance"
+        self.targets = {
+            "similarity": {
+                "inner_product": "Knn::InnerProductSimilarity",
+                "cosine": "Knn::CosineSimilarity"
+            },
+            "distance": {
+                "cosine": "Knn::CosineDistance",
+                "manhattan": "Knn::ManhattanDistance",
+                "euclidean": "Knn::EuclideanDistance"
+            }
         }
         dml = DMLOperations(self)
         all_types["String"] = lambda i: f"String {i}"
-        distances = ["euclidean", "cosine", "manhattan"]
-        for distance in distances:
-            table_name_distance = table_name + distance
-            dml.create_table(table_name_distance, pk_types, all_types,
-                             index, ttl, unique, sync)
-            self.vectors = []
-            self.insert(table_name_distance, all_types,
-                        pk_types, index, ttl, vector_type)
-            sql_create_vector_index = create_vector_index_sql_request(
-                table_name_distance, "col_String", distance, vector_type.lower(), self.size_vector)
-            dml.query(sql_create_vector_index)
-            self.select(table_name_distance, "col_String", vector_type,
-                        pk_types, all_types, index, ttl, distance, dml)
+        for target in self.targets.keys():
+            for distance in self.targets[target].keys():
+                table_name_distance = f"{table_name}_{distance}_{target}"
+                dml.create_table(table_name_distance, pk_types, all_types,
+                                 index, ttl, unique, sync)
+                self.vectors = []
+                self.insert(table_name_distance, all_types,
+                            pk_types, index, ttl, vector_type)
+                cover = []
+                for type_name in all_types.keys():
+                    if type_name != "String":
+                        cover.append(
+                            "col_" + cleanup_type_name(type_name))
+                sql_create_vector_index = create_vector_index_sql_request(
+                    table_name_distance, "col_String", target, distance, vector_type.lower(), self.size_vector, cover)
+                dml.query(sql_create_vector_index)
+                self.select(table_name_distance, "col_String", vector_type,
+                            pk_types, all_types, index, ttl, self.targets[target][distance], target, dml)
 
-    def get_vector(self, type, size, numb):
+    def get_vector(self, type, numb):
         if type == "Float":
-            values = [float(i) for i in range(size-1)]
+            values = [float(i) for i in range(self.size_vector-1)]
             values.append(float(numb))
             return ",".join(f'{val}f' for val in values)
 
-        values = [i for i in range(size-1)]
+        values = [i for i in range(self.size_vector-1)]
         values.append(numb)
         return ",".join(str(val) for val in values)
 
@@ -137,7 +142,7 @@ class TestVectorIndex(VectoreBase):
                                pk_types, index, ttl, vector_type)
 
     def create_insert(self, table_name: str, value: int, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str, vector_type: str):
-        vector = self.get_vector(vector_type, self.size_vector, value)
+        vector = self.get_vector(vector_type, value)
         self.vectors.append(vector)
         statements_all_type = []
         statements_all_type_value = []
@@ -165,38 +170,73 @@ class TestVectorIndex(VectoreBase):
         """
         self.query(insert_sql)
 
-    def select(self, table_name, col_name, vector_type, pk_types, all_types, index, ttl, distance, dml: DMLOperations):
+    def select(self, table_name, col_name, vector_type, pk_types, all_types, index, ttl, knn_func, target, dml: DMLOperations):
         statements = dml.create_statements(pk_types, all_types, index, ttl)
         statements.remove("col_String")
-        numb = 1
-        for vector in self.vectors:
+        if target == "similarity":
+            vector = self.get_vector(vector_type, 1)
             rows = dml.query(f"""
-                              $Target = Knn::{self.knn_type[vector_type]}(Cast([{vector}] AS List<{vector_type}>));
-                              select {", ".join(statements)}
-                              from {table_name} view idx_vector_{col_name}
-                              order by Knn::{self.distance_knn[distance]}(col_String, $Target)
-                              limit 1;
-                              """)
+                                $Target = Knn::{self.knn_type[vector_type]}(Cast([{vector}] AS List<{vector_type}>));
+                                select {", ".join(statements)}
+                                from {table_name} view idx_vector_{col_name}
+                                order by {knn_func}(col_String, $Target) DESC
+                                limit 100;
+                                """)
+            if knn_func == "Knn::InnerProductSimilarity":
+                rows.reverse()
             count = 0
             for data_type in all_types.keys():
                 if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64' and data_type != 'String':
                     for i in range(len(rows)):
                         dml.assert_type(all_types, data_type,
-                                        numb, rows[0][count])
+                                        i+1, rows[i][count])
                     count += 1
             for data_type in pk_types.keys():
                 if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':
                     for i in range(len(rows)):
                         dml.assert_type(pk_types, data_type,
-                                        numb, rows[0][count])
+                                        i+1, rows[i][count])
                     count += 1
             for data_type in index.keys():
                 if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':
                     for i in range(len(rows)):
-                        dml.assert_type(index, data_type, numb, rows[0][count])
+                        dml.assert_type(index, data_type, i+1, rows[i][count])
                     count += 1
             if ttl != "":
                 for i in range(len(rows)):
-                    dml.assert_type(ttl_types, ttl, numb, rows[0][count])
+                    dml.assert_type(ttl_types, ttl, i+1, rows[i][count])
                 count += 1
-            numb += 1
+        else:
+            numb = 1
+            for vector in self.vectors:
+                rows = dml.query(f"""
+                                $Target = Knn::{self.knn_type[vector_type]}(Cast([{vector}] AS List<{vector_type}>));
+                                select {", ".join(statements)}
+                                from {table_name} view idx_vector_{col_name}
+                                order by {knn_func}(col_String, $Target)
+                                limit 1;
+                                """)
+                count = 0
+                for data_type in all_types.keys():
+                    if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64' and data_type != 'String':
+                        for i in range(len(rows)):
+                            dml.assert_type(all_types, data_type,
+                                            numb, rows[0][count])
+                        count += 1
+                for data_type in pk_types.keys():
+                    if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':
+                        for i in range(len(rows)):
+                            dml.assert_type(pk_types, data_type,
+                                            numb, rows[0][count])
+                        count += 1
+                for data_type in index.keys():
+                    if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':
+                        for i in range(len(rows)):
+                            dml.assert_type(index, data_type,
+                                            numb, rows[0][count])
+                        count += 1
+                if ttl != "":
+                    for i in range(len(rows)):
+                        dml.assert_type(ttl_types, ttl, numb, rows[0][count])
+                    count += 1
+                numb += 1

@@ -791,8 +791,8 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
 
         NHttp::TEvHttpProxy::TEvHttpIncomingResponse* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
 
-        UNIT_ASSERT_EQUAL(response->Error, "ConnectionClosed");
         UNIT_ASSERT(response->Response->IsError());
+        UNIT_ASSERT_EQUAL(response->Error, "ConnectionClosed");
     }
 
     Y_UNIT_TEST(RequestAfter307) {

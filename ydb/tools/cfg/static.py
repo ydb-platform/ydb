@@ -1162,6 +1162,9 @@ class StaticConfigGenerator(object):
 
         property.Type = diskTypeToProto[pool_kind]
 
+        if pool_kind in ['ssdencrypted', 'rotencrypted']:
+            pool_config.EncryptionMode = 1
+
         pool.PoolConfig.CopyFrom(pool_config)
         return pool
 

@@ -58,8 +58,8 @@ auto GetStepAndTxId(const E& event)
 
 bool TPartition::LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const {
     return !IsActive() &&
-        (static_cast<ui64>(std::max<i64>(userInfo.Offset, 0)) == Writer.EndOffset ||
-         Writer.StartOffset == Writer.EndOffset);
+        (static_cast<ui64>(std::max<i64>(userInfo.Offset, 0)) == BlobEncoder.EndOffset ||
+         BlobEncoder.StartOffset == BlobEncoder.EndOffset);
 }
 
 struct TMirrorerInfo {
@@ -201,7 +201,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , WriteInflightSize(0)
     , Tablet(tablet)
     , BlobCache(blobCache)
-    , Writer(partition)
+    , BlobEncoder(partition)
     , GapSize(0)
     , IsServerless(isServerless)
     , ReadingTimestamp(false)
@@ -254,7 +254,7 @@ void TPartition::EmplaceResponse(TMessage&& message, const TActorContext& ctx) {
 }
 
 ui64 TPartition::UserDataSize() const {
-    if (Writer.DataKeysBody.size() <= 1) {
+    if (BlobEncoder.DataKeysBody.size() <= 1) {
         // tiny optimization - we do not meter very small queues up to 16MB
         return 0;
     }
@@ -263,7 +263,7 @@ ui64 TPartition::UserDataSize() const {
     // maintained by the background process. However, the last block may contain several irrelevant
     // messages. Because of them, we throw out the size of the entire blob.
     auto size = Size();
-    auto lastBlobSize = Writer.DataKeysBody[0].Size;
+    auto lastBlobSize = BlobEncoder.DataKeysBody[0].Size;
     Y_DEBUG_ABORT_UNLESS(size >= lastBlobSize, "Metering data size must be positive");
     return size >= lastBlobSize ? size - lastBlobSize : 0;
 }
@@ -274,7 +274,7 @@ ui64 TPartition::MeteringDataSize(TInstant now) const {
     } else {
         // We only add the amount of data that is blocked by an important consumer.
         auto expirationTimestamp = now - TDuration::Seconds(Config.GetPartitionConfig().GetLifetimeSeconds()) - WAKE_TIMEOUT;
-        ui64 size = Writer.GetBodySizeBefore(expirationTimestamp);
+        ui64 size = BlobEncoder.GetBodySizeBefore(expirationTimestamp);
         return size;
     }
 }
@@ -302,14 +302,14 @@ ui64 TPartition::GetUsedStorage(const TInstant& now) {
 }
 
 ui64 TPartition::ImportantClientsMinOffset() const {
-    ui64 minOffset = Writer.EndOffset;
+    ui64 minOffset = BlobEncoder.EndOffset;
     for (const auto& consumer : Config.GetConsumers()) {
         if (!consumer.GetImportant()) {
             continue;
         }
 
         const TUserInfo* userInfo = UsersInfoStorage->GetIfExists(consumer.GetName());
-        ui64 curOffset = Writer.StartOffset;
+        ui64 curOffset = BlobEncoder.StartOffset;
         if (userInfo && userInfo->Offset >= 0) //-1 means no offset
             curOffset = userInfo->Offset;
         minOffset = Min<ui64>(minOffset, curOffset);
@@ -344,7 +344,7 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
     ProcessHasDataRequests(ctx);
 
     for (auto& userInfo : UsersInfoStorage->GetAll()) {
-        userInfo.second.UpdateReadingTimeAndState(Writer.EndOffset, now);
+        userInfo.second.UpdateReadingTimeAndState(BlobEncoder.EndOffset, now);
         for (auto& avg : userInfo.second.AvgReadBytes) {
             avg.Update(now);
         }
@@ -367,8 +367,8 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     TKeyPrefix ikey(TKeyPrefix::TypeMeta, Partition);
 
     NKikimrPQ::TPartitionMeta meta;
-    meta.SetStartOffset(Writer.StartOffset);
-    meta.SetEndOffset(Max(Writer.NewHead.GetNextOffset(), Writer.EndOffset));
+    meta.SetStartOffset(BlobEncoder.StartOffset);
+    meta.SetEndOffset(Max(BlobEncoder.NewHead.GetNextOffset(), BlobEncoder.EndOffset));
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
     meta.SetEndWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
 
@@ -397,7 +397,7 @@ bool TPartition::CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& 
 
     PQ_LOG_T("Have " << request->Record.CmdDeleteRangeSize() << " items to delete old stuff");
 
-    haveChanges |= SourceIdStorage.DropOldSourceIds(request, ctx.Now(), Writer.StartOffset, Partition,
+    haveChanges |= SourceIdStorage.DropOldSourceIds(request, ctx.Now(), BlobEncoder.StartOffset, Partition,
                                                     Config.GetPartitionConfig());
     if (haveChanges) {
         SourceIdStorage.MarkOwnersForDeletedSourceId(Owners);
@@ -410,7 +410,7 @@ bool TPartition::CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& 
 }
 
 bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorContext& ctx) {
-    if (Writer.StartOffset == Writer.EndOffset || Writer.DataKeysBody.size() <= 1) {
+    if (BlobEncoder.StartOffset == BlobEncoder.EndOffset || BlobEncoder.DataKeysBody.size() <= 1) {
         return false;
     }
 
@@ -422,8 +422,8 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
     const ui64 importantConsumerMinOffset = ImportantClientsMinOffset();
 
     bool hasDrop = false;
-    while (Writer.DataKeysBody.size() > 1) {
-        auto& nextKey = Writer.DataKeysBody[1].Key;
+    while (BlobEncoder.DataKeysBody.size() > 1) {
+        auto& nextKey = BlobEncoder.DataKeysBody[1].Key;
         if (importantConsumerMinOffset < nextKey.GetOffset()) {
             // The first message in the next blob was not read by an important consumer.
             // We also save the current blob, since not all messages from it could be read.
@@ -434,9 +434,9 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
             break;
         }
 
-        auto& firstKey = Writer.DataKeysBody.front();
+        auto& firstKey = BlobEncoder.DataKeysBody.front();
         if (hasStorageLimit) {
-            const auto bodySize = Writer.BodySize - firstKey.Size;
+            const auto bodySize = BlobEncoder.BodySize - firstKey.Size;
             if (bodySize < partConfig.GetStorageLimitBytes()) {
                 break;
             }
@@ -446,8 +446,8 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
             }
         }
 
-        Writer.BodySize -= firstKey.Size;
-        Writer.DataKeysBody.pop_front();
+        BlobEncoder.BodySize -= firstKey.Size;
+        BlobEncoder.DataKeysBody.pop_front();
 
         if (!GapOffsets.empty() && nextKey.GetOffset() == GapOffsets.front().second) {
             GapSize -= GapOffsets.front().second - GapOffsets.front().first;
@@ -457,17 +457,17 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
         hasDrop = true;
     }
 
-    Y_ABORT_UNLESS(!Writer.DataKeysBody.empty());
+    Y_ABORT_UNLESS(!BlobEncoder.DataKeysBody.empty());
 
     if (!hasDrop) {
         return false;
     }
 
-    const auto& lastKey = Writer.DataKeysBody.front().Key;
+    const auto& lastKey = BlobEncoder.DataKeysBody.front().Key;
 
-    Writer.StartOffset = lastKey.GetOffset();
+    BlobEncoder.StartOffset = lastKey.GetOffset();
     if (lastKey.GetPartNo() > 0) {
-        ++Writer.StartOffset;
+        ++BlobEncoder.StartOffset;
     }
 
     Y_UNUSED(request);
@@ -546,10 +546,10 @@ bool CheckDiskStatus(const TStorageStatusFlags status) {
 }
 
 void TPartition::InitComplete(const TActorContext& ctx) {
-    if (Writer.StartOffset == Writer.EndOffset && Writer.EndOffset == 0) {
+    if (BlobEncoder.StartOffset == BlobEncoder.EndOffset && BlobEncoder.EndOffset == 0) {
         for (auto& [user, info] : UsersInfoStorage->GetAll()) {
-            if (info.Offset > 0 && Writer.StartOffset < (ui64)info.Offset) {
-                 Writer.Head.Offset = Writer.EndOffset = Writer.StartOffset = info.Offset;
+            if (info.Offset > 0 && BlobEncoder.StartOffset < (ui64)info.Offset) {
+                 BlobEncoder.Head.Offset = BlobEncoder.EndOffset = BlobEncoder.StartOffset = info.Offset;
             }
         }
     }
@@ -558,14 +558,14 @@ void TPartition::InitComplete(const TActorContext& ctx) {
 
     TStringBuilder ss;
     ss << "SYNC INIT topic " << TopicName() << " partitition " << Partition
-       << " so " << Writer.StartOffset << " endOffset " << Writer.EndOffset << " Head " << Writer.Head << "\n";
+       << " so " << BlobEncoder.StartOffset << " endOffset " << BlobEncoder.EndOffset << " Head " << BlobEncoder.Head << "\n";
     for (const auto& s : SourceIdStorage.GetInMemorySourceIds()) {
         ss << "SYNC INIT sourceId " << s.first << " seqNo " << s.second.SeqNo << " offset " << s.second.Offset << "\n";
     }
-    for (const auto& h : Writer.DataKeysBody) {
+    for (const auto& h : BlobEncoder.DataKeysBody) {
         ss << "SYNC INIT DATA KEY: " << h.Key.ToString() << " size " << h.Size << "\n";
     }
-    for (const auto& h : Writer.HeadKeys) {
+    for (const auto& h : BlobEncoder.HeadKeys) {
         ss << "SYNC INIT HEAD KEY: " << h.Key.ToString() << " size " << h.Size << "\n";
     }
     PQ_LOG_D(ss);
@@ -587,7 +587,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     for (const auto& s : SourceIdStorage.GetInMemorySourceIds()) {
         PQ_LOG_D("Init complete for topic '" << TopicName() << "' Partition: " << Partition
                     << " SourceId: " << s.first << " SeqNo: " << s.second.SeqNo << " offset: " << s.second.Offset
-                    << " MaxOffset: " << Writer.EndOffset
+                    << " MaxOffset: " << BlobEncoder.EndOffset
         );
     }
     ProcessHasDataRequests(ctx);
@@ -619,7 +619,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
 
 void TPartition::UpdateUserInfoEndOffset(const TInstant& now) {
     for (auto& userInfo : UsersInfoStorage->GetAll()) {
-        userInfo.second.UpdateReadingTimeAndState(Writer.EndOffset, now);
+        userInfo.second.UpdateReadingTimeAndState(BlobEncoder.EndOffset, now);
     }
 }
 
@@ -651,12 +651,12 @@ void TPartition::Handle(TEvPQ::TEvPipeDisconnected::TPtr& ev, const TActorContex
 TConsumerSnapshot TPartition::CreateSnapshot(TUserInfo& userInfo) const {
     auto now = TAppData::TimeProvider->Now();
 
-    userInfo.UpdateReadingTimeAndState(Writer.EndOffset, now);
+    userInfo.UpdateReadingTimeAndState(BlobEncoder.EndOffset, now);
 
     TConsumerSnapshot result;
     result.Now = now;
 
-    if (userInfo.Offset >= static_cast<i64>(Writer.EndOffset)) {
+    if (userInfo.Offset >= static_cast<i64>(BlobEncoder.EndOffset)) {
         result.LastCommittedMessage.CreateTimestamp = now;
         result.LastCommittedMessage.WriteTimestamp = now;
     } else if (userInfo.ActualTimestamps) {
@@ -673,7 +673,7 @@ TConsumerSnapshot TPartition::CreateSnapshot(TUserInfo& userInfo) const {
     result.ReadOffset = readOffset;
     result.LastReadTimestamp = userInfo.ReadTimestamp;
 
-    if (readOffset >= static_cast<i64>(Writer.EndOffset)) {
+    if (readOffset >= static_cast<i64>(BlobEncoder.EndOffset)) {
         result.LastReadMessage.CreateTimestamp = now;
         result.LastReadMessage.WriteTimestamp = now;
     } else if (userInfo.ReadOffset == -1) {
@@ -687,7 +687,7 @@ TConsumerSnapshot TPartition::CreateSnapshot(TUserInfo& userInfo) const {
         result.LastCommittedMessage.WriteTimestamp = timestamp;
     }
 
-    if (readOffset < (i64)Writer.EndOffset) {
+    if (readOffset < (i64)BlobEncoder.EndOffset) {
         result.ReadLag = result.LastReadTimestamp - result.LastReadMessage.WriteTimestamp;
     }
     result.CommitedLag = result.LastCommittedMessage.WriteTimestamp - now;
@@ -706,7 +706,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
 
     if (DiskIsFull || WaitingForSubDomainQuota(ctx)) {
         result.SetStatus(NKikimrPQ::TStatusResponse::STATUS_DISK_IS_FULL);
-    } else if (Writer.EndOffset - Writer.StartOffset >= static_cast<ui64>(Config.GetPartitionConfig().GetMaxCountInPartition()) ||
+    } else if (BlobEncoder.EndOffset - BlobEncoder.StartOffset >= static_cast<ui64>(Config.GetPartitionConfig().GetMaxCountInPartition()) ||
                Size() >= static_cast<ui64>(Config.GetPartitionConfig().GetMaxSizeInPartition())) {
         result.SetStatus(NKikimrPQ::TStatusResponse::STATUS_PARTITION_IS_FULL);
     } else {
@@ -714,7 +714,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
     }
     result.SetLastInitDurationSeconds(InitDuration.Seconds());
     result.SetCreationTimestamp(CreationTime.Seconds());
-    ui64 headGapSize = Writer.GetHeadGapSize();
+    ui64 headGapSize = BlobEncoder.GetHeadGapSize();
     ui32 gapsCount = GapOffsets.size() + (headGapSize ? 1 : 0);
     result.SetGapCount(gapsCount);
     result.SetGapSize(headGapSize + GapSize);
@@ -787,7 +787,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
 
             clientInfo->SetLastReadTimestampMs(snapshot.LastReadTimestamp.MilliSeconds());
             clientInfo->SetCommitedLagMs(snapshot.CommitedLag.MilliSeconds());
-            if (IsActive() || readOffset < (i64)Writer.EndOffset) {
+            if (IsActive() || readOffset < (i64)BlobEncoder.EndOffset) {
                 clientInfo->SetReadLagMs(snapshot.ReadLag.MilliSeconds());
                 clientInfo->SetWriteLagMs(userInfo.GetWriteLagMs());
                 clientInfo->SetTotalLagMs(snapshot.TotalLag.MilliSeconds());
@@ -807,7 +807,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             clientInfo->SetCommitedLagMs(snapshot.CommitedLag.MilliSeconds());
 
             auto readOffset = userInfo.GetReadOffset();
-            if (IsActive() || readOffset < (i64)Writer.EndOffset) {
+            if (IsActive() || readOffset < (i64)BlobEncoder.EndOffset) {
                 clientInfo->SetReadLagMs(snapshot.ReadLag.MilliSeconds());
                 clientInfo->SetWriteLagMs(userInfo.GetWriteLagMs());
             } else {
@@ -823,8 +823,8 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
         }
     }
 
-    result.SetStartOffset(Writer.StartOffset);
-    result.SetEndOffset(Writer.EndOffset);
+    result.SetStartOffset(BlobEncoder.StartOffset);
+    result.SetEndOffset(BlobEncoder.EndOffset);
 
     if (filterConsumers) {
         for (TString consumer : requiredConsumers) {
@@ -892,8 +892,8 @@ void TPartition::Handle(TEvPQ::TEvGetPartitionClientInfo::TPtr& ev, const TActor
     THolder<TEvPersQueue::TEvPartitionClientInfoResponse> response = MakeHolder<TEvPersQueue::TEvPartitionClientInfoResponse>();
     NKikimrPQ::TClientInfoResponse& result(response->Record);
     result.SetPartition(Partition.InternalPartitionId);
-    result.SetStartOffset(Writer.StartOffset);
-    result.SetEndOffset(Writer.EndOffset);
+    result.SetStartOffset(BlobEncoder.StartOffset);
+    result.SetEndOffset(BlobEncoder.EndOffset);
     result.SetResponseTimestamp(ctx.Now().MilliSeconds());
     for (auto& pr : UsersInfoStorage->GetAll()) {
         auto snapshot = CreateSnapshot(pr.second);
@@ -939,12 +939,12 @@ void TPartition::LogAndCollectError(NKikimrServices::EServiceKikimr service, con
 
 //zero means no such record
 TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
-    if (offset < Writer.StartOffset)
-        offset = Writer.StartOffset;
-    if (offset >= Writer.EndOffset)
+    if (offset < BlobEncoder.StartOffset)
+        offset = BlobEncoder.StartOffset;
+    if (offset >= BlobEncoder.EndOffset)
         return TInstant::Zero();
     const std::deque<TDataKey>& container =
-        Writer.PositionInBody(offset, 0) ? Writer.DataKeysBody : Writer.HeadKeys;
+        BlobEncoder.PositionInBody(offset, 0) ? BlobEncoder.DataKeysBody : BlobEncoder.HeadKeys;
     Y_ABORT_UNLESS(!container.empty());
     auto it = std::upper_bound(container.begin(), container.end(), offset,
                     [](const ui64 offset, const TDataKey& p) {
@@ -954,7 +954,7 @@ TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
     // Always greater
     Y_ABORT_UNLESS(it != container.begin(),
              "Tablet %lu StartOffset %lu, HeadOffset %lu, offset %lu, containter size %lu, first-elem: %s",
-             TabletID, Writer.StartOffset, Writer.Head.Offset, offset, container.size(),
+             TabletID, BlobEncoder.StartOffset, BlobEncoder.Head.Offset, offset, container.size(),
              container.front().Key.ToString().data());
     Y_ABORT_UNLESS(it == container.end() ||
                    offset < it->Key.GetOffset() ||
@@ -1226,7 +1226,7 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoReque
     ClosedInternalPartition = true;
     auto response = new TEvPQ::TEvGetWriteInfoResponse();
     response->Cookie = Partition.InternalPartitionId;
-    response->BodyKeys = std::move(Writer.DataKeysBody);
+    response->BodyKeys = std::move(BlobEncoder.DataKeysBody);
     response->SrcIdInfo = std::move(SourceIdStorage.ExtractInMemorySourceIds());
     ui32 rcount = 0, rsize = 0;
     ui64 insideHeadOffset = 0;
@@ -1443,7 +1443,7 @@ void TPartition::OnReadComplete(TReadInfo& info,
                                 const TActorContext& ctx)
 {
     TReadAnswer answer = info.FormAnswer(
-        ctx, blobResponse, Writer.StartOffset, Writer.EndOffset, Partition, userInfo,
+        ctx, blobResponse, BlobEncoder.StartOffset, BlobEncoder.EndOffset, Partition, userInfo,
         info.Destination, GetSizeLag(info.Offset), Tablet, Config.GetMeteringMode(), IsActive()
     );
     const auto& resp = dynamic_cast<TEvPQ::TEvProxyResponse*>(answer.Event.Get())->Response;
@@ -1518,11 +1518,11 @@ void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
 
 void TPartition::CheckHeadConsistency() const
 {
-    Writer.CheckHeadConsistency(CompactLevelBorder, TotalLevels, TotalMaxCount);
+    BlobEncoder.CheckHeadConsistency(CompactLevelBorder, TotalLevels, TotalMaxCount);
 }
 
 ui64 TPartition::GetSizeLag(i64 offset) {
-    return Writer.GetSizeLag(offset);
+    return BlobEncoder.GetSizeLag(offset);
 }
 
 
@@ -1586,12 +1586,12 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             userInfo.LabeledCounters->GetCounters()[METRIC_READ_TIME_LAG].Set(snapshot.ReadLag.MilliSeconds());
         }
 
-        if (userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_MESSAGE_LAG].Get() != Writer.EndOffset - userInfo.Offset) {
+        if (userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_MESSAGE_LAG].Get() != BlobEncoder.EndOffset - userInfo.Offset) {
             haveChanges = true;
-            userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_MESSAGE_LAG].Set(Writer.EndOffset - userInfo.Offset);
+            userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_MESSAGE_LAG].Set(BlobEncoder.EndOffset - userInfo.Offset);
         }
 
-        auto readMessageLag = Writer.EndOffset - snapshot.ReadOffset;
+        auto readMessageLag = BlobEncoder.EndOffset - snapshot.ReadOffset;
         if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_MESSAGE_LAG].Get() != readMessageLag) {
             haveChanges = true;
             userInfo.LabeledCounters->GetCounters()[METRIC_READ_MESSAGE_LAG].Set(readMessageLag);
@@ -1664,7 +1664,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         PartitionCountersLabeled->GetCounters()[METRIC_MIN_SID_LIFETIME].Set(lifetimeNow.MilliSeconds());
     }
 
-    const ui64 headGapSize = Writer.GetHeadGapSize();
+    const ui64 headGapSize = BlobEncoder.GetHeadGapSize();
     const ui64 gapSize = GapSize + headGapSize;
     if (gapSize != PartitionCountersLabeled->GetCounters()[METRIC_GAPS_SIZE].Get()) {
         haveChanges = true;
@@ -2351,11 +2351,11 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
         TUserInfoBase& userInfo = GetOrCreatePendingUser(consumer);
 
         if (operation.GetOnlyCheckCommitedToFinish()) {
-            if (IsActive() || static_cast<ui64>(userInfo.Offset) != Writer.EndOffset) {
+            if (IsActive() || static_cast<ui64>(userInfo.Offset) != BlobEncoder.EndOffset) {
                result = false;
             }
         } else if (!operation.GetReadSessionId().empty() && operation.GetReadSessionId() != userInfo.Session) {
-            if (IsActive() || operation.GetCommitOffsetsEnd() < Writer.EndOffset || userInfo.Offset != i64(Writer.EndOffset)) {
+            if (IsActive() || operation.GetCommitOffsetsEnd() < BlobEncoder.EndOffset || userInfo.Offset != i64(BlobEncoder.EndOffset)) {
                 PQ_LOG_D("Partition " << Partition <<
                     " Consumer '" << consumer << "'" <<
                     " Bad request (session already dead) " <<
@@ -2379,11 +2379,11 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
                             " Offset " << userInfo.Offset <<
                             " Begin " << operation.GetCommitOffsetsBegin());
                 result = false;
-            } else if (!operation.GetForceCommit() && operation.GetCommitOffsetsEnd() > Writer.EndOffset) {
+            } else if (!operation.GetForceCommit() && operation.GetCommitOffsetsEnd() > BlobEncoder.EndOffset) {
                 PQ_LOG_D("Partition " << Partition <<
                             " Consumer '" << consumer << "'" <<
                             " Bad request (behind the last offset) " <<
-                            " EndOffset " << Writer.EndOffset <<
+                            " EndOffset " << BlobEncoder.EndOffset <<
                             " End " << operation.GetCommitOffsetsEnd());
                 result = false;
             }
@@ -2421,7 +2421,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
     PQ_LOG_D("TPartition::CommitWriteOperations TxId: " << t.GetTxId());
 
     Y_ABORT_UNLESS(PersistRequest);
-    Y_ABORT_UNLESS(!Writer.PartitionedBlob.IsInited());
+    Y_ABORT_UNLESS(!BlobEncoder.PartitionedBlob.IsInited());
 
     if (!t.WriteInfo) {
         return;
@@ -2446,16 +2446,16 @@ void TPartition::CommitWriteOperations(TTransaction& t)
 
     PQ_LOG_D("t.WriteInfo->BodyKeys.size=" << t.WriteInfo->BodyKeys.size() <<
              ", t.WriteInfo->BlobsFromHead.size=" << t.WriteInfo->BlobsFromHead.size());
-    PQ_LOG_D("Head=" << Writer.Head << ", NewHead=" << Writer.NewHead);
+    PQ_LOG_D("Head=" << BlobEncoder.Head << ", NewHead=" << BlobEncoder.NewHead);
 
-    auto oldHeadOffset = Writer.NewHead.Offset;
+    auto oldHeadOffset = BlobEncoder.NewHead.Offset;
 
     if (!t.WriteInfo->BodyKeys.empty()) {
         bool needCompactHead =
-            (Parameters->FirstCommitWriteOperations ? Writer.Head : Writer.NewHead).PackedSize != 0;
+            (Parameters->FirstCommitWriteOperations ? BlobEncoder.Head : BlobEncoder.NewHead).PackedSize != 0;
 
-        Writer.NewPartitionedBlob(Partition,
-                                    Writer.NewHead.Offset,
+        BlobEncoder.NewPartitionedBlob(Partition,
+                                    BlobEncoder.NewHead.Offset,
                                     "", // SourceId
                                     0,  // SeqNo
                                     0,  // TotalParts
@@ -2466,18 +2466,18 @@ void TPartition::CommitWriteOperations(TTransaction& t)
 
         for (auto& k : t.WriteInfo->BodyKeys) {
             PQ_LOG_D("add key " << k.Key.ToString());
-            auto write = Writer.PartitionedBlob.Add(k.Key, k.Size);
+            auto write = BlobEncoder.PartitionedBlob.Add(k.Key, k.Size);
             if (write && !write->Value.empty()) {
                 AddCmdWrite(write, PersistRequest.Get(), ctx);
-                Writer.CompactedKeys.emplace_back(write->Key, write->Value.size());
+                BlobEncoder.CompactedKeys.emplace_back(write->Key, write->Value.size());
             }
             Parameters->CurOffset += k.Key.GetCount();
             // The key does not need to be deleted, as it will be renamed
             k.BlobKeyToken->NeedDelete = false;
         }
 
-        PQ_LOG_D("PartitionedBlob.GetFormedBlobs().size=" << Writer.PartitionedBlob.GetFormedBlobs().size());
-        if (const auto& formedBlobs = Writer.PartitionedBlob.GetFormedBlobs(); !formedBlobs.empty()) {
+        PQ_LOG_D("PartitionedBlob.GetFormedBlobs().size=" << BlobEncoder.PartitionedBlob.GetFormedBlobs().size());
+        if (const auto& formedBlobs = BlobEncoder.PartitionedBlob.GetFormedBlobs(); !formedBlobs.empty()) {
             ui32 curWrites = RenameTmpCmdWrites(PersistRequest.Get());
             RenameFormedBlobs(formedBlobs,
                               *Parameters,
@@ -2486,22 +2486,22 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                               ctx);
         }
 
-        Writer.ClearPartitionedBlob(Partition, MaxBlobSize);
+        BlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
 
-        Writer.NewHead.Clear();
-        Writer.NewHead.Offset = Parameters->CurOffset;
+        BlobEncoder.NewHead.Clear();
+        BlobEncoder.NewHead.Offset = Parameters->CurOffset;
     }
 
     if (!t.WriteInfo->BlobsFromHead.empty()) {
         auto& first = t.WriteInfo->BlobsFromHead.front();
         // In one operation, a partition can write blocks of several transactions. Some of them can be broken down
         // into parts. We need to take this division into account.
-        Writer.NewHead.PartNo += first.GetPartNo();
+        BlobEncoder.NewHead.PartNo += first.GetPartNo();
 
         Parameters->HeadCleared = Parameters->HeadCleared || !t.WriteInfo->BodyKeys.empty();
 
-        Writer.NewPartitionedBlob(Partition,
-                                    Writer.NewHead.Offset,
+        BlobEncoder.NewPartitionedBlob(Partition,
+                                    BlobEncoder.NewHead.Offset,
                                     first.SourceId,
                                     first.SeqNo,
                                     first.GetTotalParts(),
@@ -2571,12 +2571,12 @@ void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
                 continue; // this is stale request, answer ok for it
             }
 
-            if (operation.GetCommitOffsetsEnd() <= Writer.StartOffset) {
+            if (operation.GetCommitOffsetsEnd() <= BlobEncoder.StartOffset) {
                 userInfo.AnyCommits = false;
-                userInfo.Offset = Writer.StartOffset;
-            } else if (operation.GetCommitOffsetsEnd() > Writer.EndOffset) {
+                userInfo.Offset = BlobEncoder.StartOffset;
+            } else if (operation.GetCommitOffsetsEnd() > BlobEncoder.EndOffset) {
                 userInfo.AnyCommits = true;
-                userInfo.Offset = Writer.EndOffset;
+                userInfo.Offset = BlobEncoder.EndOffset;
             } else {
                 userInfo.AnyCommits = true;
                 userInfo.Offset = operation.GetCommitOffsetsEnd();
@@ -2712,7 +2712,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
             userInfo.Generation = actual->Generation;
             userInfo.Step = actual->Step;
             userInfo.Offset = actual->Offset;
-            if (userInfo.Offset <= (i64)Writer.StartOffset) {
+            if (userInfo.Offset <= (i64)BlobEncoder.StartOffset) {
                 userInfo.AnyCommits = false;
             }
             userInfo.ReadRuleGeneration = actual->ReadRuleGeneration;
@@ -2725,8 +2725,8 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
                 }
                 userInfo.SetImportant(actual->Important);
             }
-            if (userInfo.Important && userInfo.Offset < (i64)Writer.StartOffset) {
-                userInfo.Offset = Writer.StartOffset;
+            if (userInfo.Important && userInfo.Offset < (i64)BlobEncoder.StartOffset) {
+                userInfo.Offset = BlobEncoder.StartOffset;
             }
 
             if (offsetHasChanged && !userInfo.UpdateTimestampFromCache()) {
@@ -2946,7 +2946,7 @@ void TPartition::ExecImmediateTx(TTransaction& t)
             return;
         }
 
-        if (!operation.GetForceCommit() && operation.GetCommitOffsetsEnd() > Writer.EndOffset) {
+        if (!operation.GetForceCommit() && operation.GetCommitOffsetsEnd() > BlobEncoder.EndOffset) {
             ScheduleReplyPropose(record,
                                  NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
                                  NKikimrPQ::TError::BAD_REQUEST,
@@ -2955,7 +2955,7 @@ void TPartition::ExecImmediateTx(TTransaction& t)
         }
 
         if (!operation.GetReadSessionId().empty() && operation.GetReadSessionId() != pendingUserInfo.Session) {
-            if (IsActive() || operation.GetCommitOffsetsEnd() < Writer.EndOffset || pendingUserInfo.Offset != i64(Writer.EndOffset)) {
+            if (IsActive() || operation.GetCommitOffsetsEnd() < BlobEncoder.EndOffset || pendingUserInfo.Offset != i64(BlobEncoder.EndOffset)) {
                 ScheduleReplyPropose(record,
                             NKikimrPQ::TEvProposeTransactionResult::BAD_REQUEST,
                             NKikimrPQ::TError::BAD_REQUEST,
@@ -3129,12 +3129,12 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
         return;
     }
 
-    if (strictCommitOffset && act.Offset < Writer.StartOffset) {
+    if (strictCommitOffset && act.Offset < BlobEncoder.StartOffset) {
         // strict commit to past, reply error
         TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
         ScheduleReplyError(act.Cookie,
                            NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_PAST,
-                           TStringBuilder() << "set offset " <<  act.Offset << " to past for consumer " << act.ClientId << " actual start offset is " << Writer.StartOffset);
+                           TStringBuilder() << "set offset " <<  act.Offset << " to past for consumer " << act.ClientId << " actual start offset is " << BlobEncoder.StartOffset);
 
         return;
     }
@@ -3154,19 +3154,19 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
 
     Y_ABORT_UNLESS(offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, offset);
 
-    if (offset > Writer.EndOffset) {
+    if (offset > BlobEncoder.EndOffset) {
         if (strictCommitOffset) {
             TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
             ScheduleReplyError(act.Cookie,
                             NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_FUTURE,
-                            TStringBuilder() << "strict commit can't set offset " <<  act.Offset << " to future, consumer " << act.ClientId << ", actual end offset is " << Writer.EndOffset);
+                            TStringBuilder() << "strict commit can't set offset " <<  act.Offset << " to future, consumer " << act.ClientId << ", actual end offset is " << BlobEncoder.EndOffset);
 
             return;
         }
         PQ_LOG_W("commit to future - topic " << TopicName() << " partition " << Partition
-                << " client " << act.ClientId << " EndOffset " << Writer.EndOffset << " offset " << offset
+                << " client " << act.ClientId << " EndOffset " << BlobEncoder.EndOffset << " offset " << offset
         );
-        act.Offset = Writer.EndOffset;
+        act.Offset = BlobEncoder.EndOffset;
 /*
         TODO:
         TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
@@ -3177,7 +3177,7 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
 */
     }
 
-    if (!IsActive() && act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && static_cast<i64>(Writer.EndOffset) == userInfo.Offset && offset < Writer.EndOffset) {
+    if (!IsActive() && act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET && static_cast<i64>(BlobEncoder.EndOffset) == userInfo.Offset && offset < BlobEncoder.EndOffset) {
         TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
         ScheduleReplyError(act.Cookie,
                            NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_PAST,
@@ -3228,7 +3228,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         userInfo.AnyCommits = false;
 
         if (userInfo.Important) {
-            userInfo.Offset = Writer.StartOffset;
+            userInfo.Offset = BlobEncoder.StartOffset;
         }
     } else {
         if (createSession || dropSession) {
@@ -3260,11 +3260,11 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         Y_ABORT_UNLESS(offset <= (ui64)Max<i64>(), "Unexpected Offset: %" PRIu64, offset);
         PQ_LOG_D("Topic '" << TopicName() << "' partition " << Partition << " user " << user
                     << (createSession || dropSession ? " session" : " offset")
-                    << " is set to " << offset << " (startOffset " << Writer.StartOffset << ") session " << session
+                    << " is set to " << offset << " (startOffset " << BlobEncoder.StartOffset << ") session " << session
         );
 
         userInfo.Offset = offset;
-        if (userInfo.Offset <= (i64)Writer.StartOffset) {
+        if (userInfo.Offset <= (i64)BlobEncoder.StartOffset) {
             userInfo.AnyCommits = false;
         }
 
@@ -3540,9 +3540,9 @@ THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyGetClientOffsetOk(const ui
         Y_ABORT_UNLESS(writeTimestamp);
         user->SetCreateTimestampMS(createTimestamp.MilliSeconds());
     }
-    user->SetEndOffset(Writer.EndOffset);
+    user->SetEndOffset(BlobEncoder.EndOffset);
     user->SetWriteTimestampEstimateMS(WriteTimestampEstimate.MilliSeconds());
-    if (IsActive() || (offset > -1 && offset < (i64)Writer.EndOffset)) {
+    if (IsActive() || (offset > -1 && offset < (i64)BlobEncoder.EndOffset)) {
         user->SetSizeLag(GetSizeLag(offset));
     } else {
         user->SetSizeLag(0);
@@ -3590,7 +3590,7 @@ void TPartition::ScheduleUpdateAvailableSize(const TActorContext& ctx) {
 }
 
 void TPartition::ClearOldHead(const ui64 offset, const ui16 partNo) {
-    for (auto it = Writer.HeadKeys.rbegin(); it != Writer.HeadKeys.rend(); ++it) {
+    for (auto it = BlobEncoder.HeadKeys.rbegin(); it != BlobEncoder.HeadKeys.rend(); ++it) {
         if (it->Key.GetOffset() > offset || it->Key.GetOffset() == offset && it->Key.GetPartNo() >= partNo) {
             // The repackaged blocks will be deleted after writing.
             DefferedKeysForDeletion.push_back(std::move(it->BlobKeyToken));
@@ -3674,7 +3674,7 @@ size_t TPartition::GetQuotaRequestSize(const TEvKeyValue::TEvRequest& request) {
 
 void TPartition::CreateMirrorerActor() {
     Mirrorer = MakeHolder<TMirrorerInfo>(
-        Register(new TMirrorer(Tablet, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC, Writer.EndOffset, Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters)),
+        Register(new TMirrorer(Tablet, SelfId(), TopicConverter, Partition.InternalPartitionId, IsLocalDC, BlobEncoder.EndOffset, Config.GetPartitionConfig().GetMirrorFrom(), TabletCounters)),
         TabletCounters
     );
 }

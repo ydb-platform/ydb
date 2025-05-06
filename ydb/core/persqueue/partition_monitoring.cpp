@@ -56,12 +56,12 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
 
                     PROPERTIES("Information") {
                         PROPERTY("Total partition size, bytes", Size());
-                        PROPERTY("Total message count", (Writer.Head.GetNextOffset() - Writer.StartOffset));
-                        PROPERTY("StartOffset", Writer.StartOffset);
-                        PROPERTY("EndOffset", Writer.EndOffset);
-                        PROPERTY("LastOffset", Writer.Head.GetNextOffset());
+                        PROPERTY("Total message count", (BlobEncoder.Head.GetNextOffset() - BlobEncoder.StartOffset));
+                        PROPERTY("StartOffset", BlobEncoder.StartOffset);
+                        PROPERTY("EndOffset", BlobEncoder.EndOffset);
+                        PROPERTY("LastOffset", BlobEncoder.Head.GetNextOffset());
                         PROPERTY("Last message WriteTimestamp", EndWriteTimestamp.ToRfc822String());
-                        PROPERTY("HeadOffset", Writer.Head.Offset << ", count: " << Writer.Head.GetCount());
+                        PROPERTY("HeadOffset", BlobEncoder.Head.Offset << ", count: " << BlobEncoder.Head.GetCount());
                     }
                 }
 
@@ -72,15 +72,15 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                         PROPERTY("OwnerPipes", OwnerPipes.size());
                         PROPERTY("Owners", Owners.size());
                         PROPERTY("Currently writing", Responses.size());
-                        PROPERTY("MaxCurrently writing", Writer.MaxWriteResponsesSize);
-                        PROPERTY("DataKeysBody size", Writer.DataKeysBody.size());
+                        PROPERTY("MaxCurrently writing", BlobEncoder.MaxWriteResponsesSize);
+                        PROPERTY("DataKeysBody size", BlobEncoder.DataKeysBody.size());
                     }
 
                     PROPERTIES("DataKeysHead size") {
-                        for (ui32 i = 0; i < Writer.DataKeysHead.size(); ++i) {
-                            PROPERTY(TStringBuilder() << i, Writer.DataKeysHead[i].KeysCount() << " sum: " << Writer.DataKeysHead[i].Sum()
-                                << " border: " << Writer.DataKeysHead[i].Border() << " recs: " << Writer.DataKeysHead[i].RecsCount()
-                                << " intCount: " << Writer.DataKeysHead[i].InternalPartsCount());
+                        for (ui32 i = 0; i < BlobEncoder.DataKeysHead.size(); ++i) {
+                            PROPERTY(TStringBuilder() << i, BlobEncoder.DataKeysHead[i].KeysCount() << " sum: " << BlobEncoder.DataKeysHead[i].Sum()
+                                << " border: " << BlobEncoder.DataKeysHead[i].Border() << " recs: " << BlobEncoder.DataKeysHead[i].RecsCount()
+                                << " intCount: " << BlobEncoder.DataKeysHead[i].InternalPartsCount());
                         }
                     }
 
@@ -115,7 +115,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                         }
                         TABLEBODY() {
                             ui32 i = 0;
-                            for (const auto& d : Writer.DataKeysBody) {
+                            for (const auto& d : BlobEncoder.DataKeysBody) {
                                 TABLER() {
                                     TABLED() {out << "DataBody";}
                                     TABLED() {out << i++;}
@@ -128,19 +128,19 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                                 }
                             }
                             ui32 currentLevel = 0;
-                            for (ui32 p = 0; p < Writer.HeadKeys.size(); ++p) {
-                                ui32 size  = Writer.HeadKeys[p].Size;
+                            for (ui32 p = 0; p < BlobEncoder.HeadKeys.size(); ++p) {
+                                ui32 size  = BlobEncoder.HeadKeys[p].Size;
                                 while (currentLevel + 1 < TotalLevels && size < CompactLevelBorder[currentLevel + 1])
                                     ++currentLevel;
                                 Y_ABORT_UNLESS(size < CompactLevelBorder[currentLevel]);
                                 TABLER() {
                                     TABLED() {out << "DataHead[" << currentLevel << "]";}
                                     TABLED() {out << i++;}
-                                    TABLED() {out << ToStringLocalTimeUpToSeconds(Writer.HeadKeys[p].Timestamp);}
-                                    TABLED() {out << Writer.HeadKeys[p].Key.GetOffset();}
-                                    TABLED() {out << Writer.HeadKeys[p].Key.GetPartNo();}
-                                    TABLED() {out << Writer.HeadKeys[p].Key.GetCount();}
-                                    TABLED() {out << Writer.HeadKeys[p].Key.GetInternalPartsCount();}
+                                    TABLED() {out << ToStringLocalTimeUpToSeconds(BlobEncoder.HeadKeys[p].Timestamp);}
+                                    TABLED() {out << BlobEncoder.HeadKeys[p].Key.GetOffset();}
+                                    TABLED() {out << BlobEncoder.HeadKeys[p].Key.GetPartNo();}
+                                    TABLED() {out << BlobEncoder.HeadKeys[p].Key.GetCount();}
+                                    TABLED() {out << BlobEncoder.HeadKeys[p].Key.GetInternalPartsCount();}
                                     TABLED() {out << size;}
                                 }
                             }
@@ -167,11 +167,11 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                                     TABLED() {out << (i++);}
                                 }
                             }
-                            if (!Writer.DataKeysBody.empty() && Writer.DataKeysBody.back().Key.GetOffset() + Writer.DataKeysBody.back().Key.GetCount() < Writer.Head.Offset) {
+                            if (!BlobEncoder.DataKeysBody.empty() && BlobEncoder.DataKeysBody.back().Key.GetOffset() + BlobEncoder.DataKeysBody.back().Key.GetCount() < BlobEncoder.Head.Offset) {
                                 TABLER() {
-                                    TABLED() {out << (Writer.DataKeysBody.back().Key.GetOffset() + Writer.DataKeysBody.back().Key.GetCount());}
-                                    TABLED() {out << Writer.Head.Offset;}
-                                    TABLED() {out << (Writer.Head.Offset - (Writer.DataKeysBody.back().Key.GetOffset() + Writer.DataKeysBody.back().Key.GetCount()));}
+                                    TABLED() {out << (BlobEncoder.DataKeysBody.back().Key.GetOffset() + BlobEncoder.DataKeysBody.back().Key.GetCount());}
+                                    TABLED() {out << BlobEncoder.Head.Offset;}
+                                    TABLED() {out << (BlobEncoder.Head.Offset - (BlobEncoder.DataKeysBody.back().Key.GetOffset() + BlobEncoder.DataKeysBody.back().Key.GetCount()));}
                                     TABLED() {out << (i++);}
                                 }
 
@@ -237,7 +237,7 @@ void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorCo
                                 TABLER() {
                                     TABLED() {out << EncodeHtmlPcdata(user);}
                                     TABLED() {out << userInfo.Offset;}
-                                    TABLED() {out << (Writer.EndOffset - userInfo.Offset);}
+                                    TABLED() {out << (BlobEncoder.EndOffset - userInfo.Offset);}
                                     TABLED() {out << ToStringLocalTimeUpToSeconds(userInfo.ReadFromTimestamp);}
                                     TABLED() {out << ToStringLocalTimeUpToSeconds(snapshot.LastCommittedMessage.WriteTimestamp);}
                                     TABLED() {out << ToStringLocalTimeUpToSeconds(snapshot.LastCommittedMessage.WriteTimestamp);}

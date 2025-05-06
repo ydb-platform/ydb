@@ -471,7 +471,7 @@ public:
     void Bootstrap(const TActorContext& ctx);
 
     ui64 Size() const {
-        return Writer.GetSize();
+        return BlobEncoder.GetSize();
     }
 
     // The size of the data realy was persisted in the storage by the partition
@@ -697,7 +697,7 @@ private:
     std::deque<TString> DeletedKeys;
     std::deque<TBlobKeyTokenPtr> DefferedKeysForDeletion;
 
-    TPartitionBlobEncoder Writer;
+    TPartitionBlobEncoder BlobEncoder;
 
     std::deque<std::pair<ui64, ui64>> GapOffsets;
     ui64 GapSize;

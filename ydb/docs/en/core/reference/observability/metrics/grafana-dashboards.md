@@ -115,19 +115,19 @@ Download the [datashard.json](https://raw.githubusercontent.com/ydb-platform/ydb
 [Hive](../../../contributor/hive.md) metrics for the selected database.
 
 The dashboard includes the following filters:
-* database – selects the database for which metrics are displayed
-* ds – selects the Grafana data source the dashboard will use
-* local-tx – determines the data displayed on the "`{{local-tx}}` avg time" widget
+* database – selects the database for which metrics are displayed;
+* ds – selects the Prometheus data source the dashboard will use;
+* Tx type – determines the transaction type for which "`{{Tx type}}` average time" panel is displayed.
 
 | Name | Description |
 |---|---|
-| hive+balancer | CPU time utilized by `HIVE_ACTOR` and `HIVE_BALANCER_ACTOR`, two of the most important actors of the Hive tablet. |
-| hive self-ping time | Time it takes Hive to respond to itself. High values indicate heavy load (and low responsiveness) of the Hive. |
-| hive local transaction times | CPU time utilized by various local transaction types in Hive. Shows the structure of Hive load based on different activities. |
-| `{{local-tx}}` avg time | Average execution time of a single local transaction for the type specified in the `local-tx` parameter selector on the dashboard. |
-| tablet count | Total number of tablets in the database. |
-| event queue size | Size of the incoming event queue in Hive. Consistently high values indicate Hive cannot process events fast enough. |
-| versions | Versions of {{ ydb-short-name }} running on cluster nodes. |
-| hive node | Node where the database Hive is running. |
+| CPU usage by HIVE_ACTOR, HIVE_BALANCER_ACTOR | CPU time utilized by `HIVE_ACTOR` and `HIVE_BALANCER_ACTOR`, two of the most important actors of the Hive tablet. |
+| Self-ping time | Time it takes Hive to respond to itself. High values indicate heavy load (and low responsiveness) of the Hive. |
+| Local transaction times | CPU time utilized by various local transaction types in Hive. Shows the structure of Hive load based on different activities. |
+| Tablet count | Total number of tablets in the database. |
+| Event queue size | Size of the incoming event queue in Hive. Consistently high values indicate Hive cannot process events fast enough. |
+| `{{Tx type}}` average time | Average execution time of a single local transaction of the type specified in the `Tx type` selector on the dashboard. |
+| Versions | Versions of {{ ydb-short-name }} running on cluster nodes. |
+| Hive node | Node where the database Hive is running. |
 
 Download the [datashard.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/database-hive-detailed.json) file with the **Database Hive** dashboard.

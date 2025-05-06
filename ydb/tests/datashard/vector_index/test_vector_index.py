@@ -1,9 +1,8 @@
 import pytest
-import random
 
 from ydb.tests.datashard.lib.vectore_base import VectoreBase
 from ydb.tests.datashard.lib.dml_operations import DMLOperations
-from ydb.tests.datashard.lib.create_table import create_table_sql_request, create_ttl_sql_request, create_vector_index_sql_request
+from ydb.tests.datashard.lib.create_table import create_vector_index_sql_request
 from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name, format_sql_value, pk_types, non_pk_types, index_first, index_second, ttl_types, \
     index_first_sync, index_second_sync, index_three_sync, index_three_sync_not_Bool, index_four_sync, index_zero_sync
 
@@ -12,98 +11,122 @@ class TestVectorIndex(VectoreBase):
     @pytest.mark.parametrize(
         "table_name, pk_types, all_types, index, ttl, unique, sync, vector_type",
         [
+            ("test_vector", {
+                "Int64": lambda i: i,
+                "Int32": lambda i: i,
+                "Int16": lambda i: i,
+                "Int8": lambda i: i,
+            }, {}, {}, "", "", "", "Float"),
             ("table_index_4_UNIQUE_SYNC_float", pk_types, {},
-             index_four_sync, "", "UNIQUE", "SYNC", "float"),
+             index_four_sync, "", "UNIQUE", "SYNC", "Float"),
             ("table_index_3_UNIQUE_SYNC_float", pk_types, {},
-             index_three_sync_not_Bool, "", "UNIQUE", "SYNC", "float"),
+             index_three_sync_not_Bool, "", "UNIQUE", "SYNC", "Float"),
             ("table_index_2_UNIQUE_SYNC_float", pk_types, {},
-             index_second_sync, "", "UNIQUE", "SYNC", "float"),
+             index_second_sync, "", "UNIQUE", "SYNC", "Float"),
             ("table_index_1_UNIQUE_SYNC_float", pk_types, {},
-             index_first_sync, "", "UNIQUE", "SYNC", "float"),
+             index_first_sync, "", "UNIQUE", "SYNC", "Float"),
             ("table_index_0_UNIQUE_SYNC_float", pk_types, {},
-             index_zero_sync, "", "UNIQUE", "SYNC", "float"),
+             index_zero_sync, "", "UNIQUE", "SYNC", "Float"),
             ("table_index_4__SYNC_float", pk_types, {},
-             index_four_sync, "", "", "SYNC", "float"),
+             index_four_sync, "", "", "SYNC", "Float"),
             ("table_index_3__SYNC_float", pk_types, {},
-             index_three_sync, "", "", "SYNC", "float"),
+             index_three_sync, "", "", "SYNC", "Float"),
             ("table_index_2__SYNC_float", pk_types, {},
-             index_second_sync, "", "", "SYNC", "float"),
+             index_second_sync, "", "", "SYNC", "Float"),
             ("table_index_1__SYNC_float", pk_types, {},
-             index_first_sync, "", "", "SYNC", "float"),
+             index_first_sync, "", "", "SYNC", "Float"),
             ("table_index_0__SYNC_float", pk_types, {},
-             index_zero_sync, "", "", "SYNC", "float"),
+             index_zero_sync, "", "", "SYNC", "Float"),
             ("table_index_1__ASYNC_float", pk_types, {},
-             index_second, "", "", "ASYNC", "float"),
+             index_second, "", "", "ASYNC", "Float"),
             ("table_index_0__ASYNC_float", pk_types, {},
-             index_first, "", "", "ASYNC", "float"),
+             index_first, "", "", "ASYNC", "Float"),
             ("table_all_types_float", pk_types, {
-             **pk_types, **non_pk_types}, {}, "", "", "", "float"),
-            ("table_ttl_DyNumber_float", pk_types, {}, {}, "DyNumber", "", "", "float"),
-            ("table_ttl_Uint32_float", pk_types, {}, {}, "Uint32", "", "", "float"),
-            ("table_ttl_Uint64_float", pk_types, {}, {}, "Uint64", "", "", "float"),
-            ("table_ttl_Datetime_float", pk_types, {}, {}, "Datetime", "", "", "float"),
+             **pk_types, **non_pk_types}, {}, "", "", "", "Float"),
+            ("table_ttl_DyNumber_float", pk_types,
+             {}, {}, "DyNumber", "", "", "Float"),
+            ("table_ttl_Uint32_float", pk_types,
+             {}, {}, "Uint32", "", "", "Float"),
+            ("table_ttl_Uint64_float", pk_types,
+             {}, {}, "Uint64", "", "", "Float"),
+            ("table_ttl_Datetime_float", pk_types,
+             {}, {}, "Datetime", "", "", "Float"),
             ("table_ttl_Timestamp_float", pk_types, {},
-             {}, "Timestamp", "", "", "float"),
-            ("table_ttl_Date_float", pk_types, {}, {}, "Date", "", "", "float"),
-            
+             {}, "Timestamp", "", "", "Float"),
+            ("table_ttl_Date_float", pk_types, {}, {}, "Date", "", "", "Float"),
+
             ("table_index_4_UNIQUE_SYNC", pk_types, {},
-             index_four_sync, "", "UNIQUE", "SYNC", "uint8"),
+             index_four_sync, "", "UNIQUE", "SYNC", "Uint8"),
             ("table_index_3_UNIQUE_SYNC", pk_types, {},
-             index_three_sync_not_Bool, "", "UNIQUE", "SYNC", "uint8"),
+             index_three_sync_not_Bool, "", "UNIQUE", "SYNC", "Uint8"),
             ("table_index_2_UNIQUE_SYNC", pk_types, {},
-             index_second_sync, "", "UNIQUE", "SYNC", "uint8"),
+             index_second_sync, "", "UNIQUE", "SYNC", "Uint8"),
             ("table_index_1_UNIQUE_SYNC", pk_types, {},
-             index_first_sync, "", "UNIQUE", "SYNC", "uint8"),
+             index_first_sync, "", "UNIQUE", "SYNC", "Uint8"),
             ("table_index_0_UNIQUE_SYNC", pk_types, {},
-             index_zero_sync, "", "UNIQUE", "SYNC", "uint8"),
+             index_zero_sync, "", "UNIQUE", "SYNC", "Uint8"),
             ("table_index_4__SYNC", pk_types, {},
-             index_four_sync, "", "", "SYNC", "uint8"),
+             index_four_sync, "", "", "SYNC", "Uint8"),
             ("table_index_3__SYNC", pk_types, {},
-             index_three_sync, "", "", "SYNC", "uint8"),
+             index_three_sync, "", "", "SYNC", "Uint8"),
             ("table_index_2__SYNC", pk_types, {},
-             index_second_sync, "", "", "SYNC", "uint8"),
+             index_second_sync, "", "", "SYNC", "Uint8"),
             ("table_index_1__SYNC", pk_types, {},
-             index_first_sync, "", "", "SYNC", "uint8"),
+             index_first_sync, "", "", "SYNC", "Uint8"),
             ("table_index_0__SYNC", pk_types, {},
-             index_zero_sync, "", "", "SYNC", "uint8"),
+             index_zero_sync, "", "", "SYNC", "Uint8"),
             ("table_index_1__ASYNC", pk_types, {},
-             index_second, "", "", "ASYNC", "uint8"),
+             index_second, "", "", "ASYNC", "Uint8"),
             ("table_index_0__ASYNC", pk_types, {},
-             index_first, "", "", "ASYNC", "uint8"),
+             index_first, "", "", "ASYNC", "Uint8"),
             ("table_all_types", pk_types, {
-             **pk_types, **non_pk_types}, {}, "", "", "", "uint8"),
-            ("table_ttl_DyNumber", pk_types, {}, {}, "DyNumber", "", "", "uint8"),
-            ("table_ttl_Uint32", pk_types, {}, {}, "Uint32", "", "", "uint8"),
-            ("table_ttl_Uint64", pk_types, {}, {}, "Uint64", "", "", "uint8"),
-            ("table_ttl_Datetime", pk_types, {}, {}, "Datetime", "", "", "uint8"),
+             **pk_types, **non_pk_types}, {}, "", "", "", "Uint8"),
+            ("table_ttl_DyNumber", pk_types, {}, {}, "DyNumber", "", "", "Uint8"),
+            ("table_ttl_Uint32", pk_types, {}, {}, "Uint32", "", "", "Uint8"),
+            ("table_ttl_Uint64", pk_types, {}, {}, "Uint64", "", "", "Uint8"),
+            ("table_ttl_Datetime", pk_types, {}, {}, "Datetime", "", "", "Uint8"),
             ("table_ttl_Timestamp", pk_types, {},
-             {}, "Timestamp", "", "", "uint8"),
-            ("table_ttl_Date", pk_types, {}, {}, "Date", "", "", "uint8"),
+             {}, "Timestamp", "", "", "Uint8"),
+            ("table_ttl_Date", pk_types, {}, {}, "Date", "", "", "Uint8"),
         ]
     )
     def test_vector_index(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str, vector_type: str):
-        self.n = 2
+        self.size_vector = 10
+        self.knn_type = {
+            "Float": "ToBinaryStringFloat",
+            "Uint8": "ToBinaryStringUint8"
+        }
+        self.distance_knn = {
+            "euclidean": "EuclideanDistance",
+            "cosine": "CosineDistance",
+            "manhattan": "ManhattanDistance"
+        }
         dml = DMLOperations(self)
         all_types["String"] = lambda i: f"String {i}"
-        dml.create_table(table_name, pk_types, all_types,
-                         index, ttl, unique, sync)
-        self.vectors = []
-        self.insert(table_name, all_types, pk_types, index, ttl, vector_type)
-        sql_create_vector_index = create_vector_index_sql_request(
-            table_name, "col_String", vector_type, self.n)
-        print(sql_create_vector_index)
-        dml.query(sql_create_vector_index)
-        self.select(table_name, "col_String", vector_type)
+        distances = ["euclidean", "cosine", "manhattan"]
+        for distance in distances:
+            table_name_distance = table_name + distance
+            dml.create_table(table_name_distance, pk_types, all_types,
+                             index, ttl, unique, sync)
+            self.vectors = []
+            self.insert(table_name_distance, all_types,
+                        pk_types, index, ttl, vector_type)
+            sql_create_vector_index = create_vector_index_sql_request(
+                table_name_distance, "col_String", distance, vector_type.lower(), self.size_vector)
+            dml.query(sql_create_vector_index)
+            self.select(table_name_distance, "col_String", vector_type,
+                        pk_types, all_types, index, ttl, distance, dml)
 
     def get_vector(self, type, size, numb):
-        if type == "float":
-            values = [float(numb) for _ in range(size)]
+        if type == "Float":
+            values = [float(i) for i in range(size-1)]
+            values.append(float(numb))
             return ",".join(f'{val}f' for val in values)
 
-        values = [numb for _ in range(size)]
+        values = [i for i in range(size-1)]
+        values.append(numb)
         return ",".join(str(val) for val in values)
-    
-    
+
     def insert(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str, vector_type: str):
         number_of_columns = len(pk_types) + len(all_types) + len(index)
 
@@ -114,14 +137,16 @@ class TestVectorIndex(VectoreBase):
                                pk_types, index, ttl, vector_type)
 
     def create_insert(self, table_name: str, value: int, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str, vector_type: str):
-        vector = self.get_vector(vector_type, self.n, value)
+        vector = self.get_vector(vector_type, self.size_vector, value)
         self.vectors.append(vector)
         statements_all_type = []
         statements_all_type_value = []
         for type_name in all_types.keys():
             if type_name != "String":
-                statements_all_type.append("col_" + cleanup_type_name(type_name))
-                statements_all_type_value.append(format_sql_value(all_types[type_name](value), type_name))
+                statements_all_type.append(
+                    "col_" + cleanup_type_name(type_name))
+                statements_all_type_value.append(format_sql_value(
+                    all_types[type_name](value), type_name))
         insert_sql = f"""
             INSERT INTO {table_name}(
                 col_String,
@@ -131,34 +156,47 @@ class TestVectorIndex(VectoreBase):
                 {f"ttl_{ttl}" if ttl != "" else ""}
             )
             VALUES(
-                {format_sql_value(vector, "String")},
+                Untag(Knn::{self.knn_type[vector_type]}([{vector}]), "{vector_type}Vector"),
                 {", ".join([format_sql_value(pk_types[type_name](value), type_name) for type_name in pk_types.keys()])}{", " if len(statements_all_type_value) != 0 else ""}
                 {", ".join(statements_all_type_value)}{", " if len(index) != 0 else ""}
                 {", ".join([format_sql_value(index[type_name](value), type_name) for type_name in index.keys()])}{", " if len(ttl) != 0 else ""}
                 {format_sql_value(ttl_types[ttl](value), ttl) if ttl != "" else ""}
             );
         """
-        print(insert_sql)
         self.query(insert_sql)
-        
-    def select(self, table_name, col_name, vector_type):
-        knn_type = {
-            "float": "ToBinaryStringFloat",
-            "uint8": "ToBinaryStringUint8"
-        }
+
+    def select(self, table_name, col_name, vector_type, pk_types, all_types, index, ttl, distance, dml: DMLOperations):
+        statements = dml.create_statements(pk_types, all_types, index, ttl)
+        statements.remove("col_String")
+        numb = 1
         for vector in self.vectors:
-            print(f"""
-                              $Target = Knn::{knn_type[vector_type]}(Cast([{vector}] AS List<{vector_type}>));
-                              select col_String
+            rows = dml.query(f"""
+                              $Target = Knn::{self.knn_type[vector_type]}(Cast([{vector}] AS List<{vector_type}>));
+                              select {", ".join(statements)}
                               from {table_name} view idx_vector_{col_name}
-                              order by Knn::CosineDistance(col_String, $Target)
-                              limit 10;
+                              order by Knn::{self.distance_knn[distance]}(col_String, $Target)
+                              limit 1;
                               """)
-            rows = self.query(f"""
-                              $Target = Knn::{knn_type[vector_type]}(Cast([{vector}] AS List<{vector_type}>));
-                              select col_String
-                              from {table_name} view idx_vector_{col_name}
-                              order by Knn::CosineDistance(col_String, $Target)
-                              limit 10;
-                              """)
-            print(rows)
+            count = 0
+            for data_type in all_types.keys():
+                if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64' and data_type != 'String':
+                    for i in range(len(rows)):
+                        dml.assert_type(all_types, data_type,
+                                        numb, rows[0][count])
+                    count += 1
+            for data_type in pk_types.keys():
+                if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':
+                    for i in range(len(rows)):
+                        dml.assert_type(pk_types, data_type,
+                                        numb, rows[0][count])
+                    count += 1
+            for data_type in index.keys():
+                if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':
+                    for i in range(len(rows)):
+                        dml.assert_type(index, data_type, numb, rows[0][count])
+                    count += 1
+            if ttl != "":
+                for i in range(len(rows)):
+                    dml.assert_type(ttl_types, ttl, numb, rows[0][count])
+                count += 1
+            numb += 1

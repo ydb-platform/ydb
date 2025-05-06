@@ -71,12 +71,6 @@ private:
     }
 
     void Handle(NSharedCache::TEvResult::TPtr& ev) {
-        auto& result = *ev->Get();
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_EXECUTOR, "Receive page collection result " << result.PageCollection->Label()
-            << " status " << result.Status
-            << " pages " << result.Pages
-            << " cookie " << result.Cookie);
-
         Results.push_back(ev);
     }
 

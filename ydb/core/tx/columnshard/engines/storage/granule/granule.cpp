@@ -271,7 +271,8 @@ bool TGranuleMeta::TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedI
     return true;
 }
 
-void TGranuleMeta::InsertPortionOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TPortionDataAccessor& portion) const {
+void TGranuleMeta::InsertPortionOnExecute(
+    NTabletFlatExecutor::TTransactionContext& txc, const TPortionDataAccessor& portion, const ui64 firstPKColumnId) const {
     auto portionImpl = portion.MutablePortionInfoPtr();
     if (portionImpl->GetPortionType() == EPortionType::Written) {
         auto writtenPortion = std::static_pointer_cast<TWrittenPortionInfo>(portionImpl);
@@ -280,7 +281,7 @@ void TGranuleMeta::InsertPortionOnExecute(NTabletFlatExecutor::TTransactionConte
         AFL_VERIFY(!InsertedPortions.contains((TInsertWriteId)0));
     }
     TDbWrapper wrapper(txc.DB, nullptr);
-    portion.SaveToDatabase(wrapper, 0, false);
+    portion.SaveToDatabase(wrapper, firstPKColumnId, false);
 }
 
 void TGranuleMeta::InsertPortionOnComplete(const TPortionDataAccessor& portion, IColumnEngine& /*engine*/) {
@@ -314,8 +315,8 @@ void TGranuleMeta::CommitPortionOnComplete(const TInsertWriteId insertWriteId, I
     }
 }
 
-void TGranuleMeta::CommitImmediateOnExecute(
-    NTabletFlatExecutor::TTransactionContext& txc, const TSnapshot& snapshot, const TPortionDataAccessor& portion) const {
+void TGranuleMeta::CommitImmediateOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TSnapshot& snapshot,
+    const TPortionDataAccessor& portion, const ui64 firstPKColumnId) const {
     auto portionImpl = portion.MutablePortionInfoPtr();
     AFL_VERIFY(portionImpl->GetPortionType() == EPortionType::Written);
     auto writtenPortion = std::static_pointer_cast<TWrittenPortionInfo>(portionImpl);
@@ -323,7 +324,7 @@ void TGranuleMeta::CommitImmediateOnExecute(
     AFL_VERIFY(!InsertedPortions.contains(writtenPortion->GetInsertWriteId()));
     writtenPortion->SetCommitSnapshot(snapshot);
     TDbWrapper wrapper(txc.DB, nullptr);
-    portion.SaveToDatabase(wrapper, 0, false);
+    portion.SaveToDatabase(wrapper, firstPKColumnId, false);
 }
 
 void TGranuleMeta::CommitImmediateOnComplete(const std::shared_ptr<TPortionInfo> /*portion*/, IColumnEngine& /*engine*/) {

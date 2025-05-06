@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     struct TTestVSlotInfo {
         std::optional<NKikimrBlobStorage::EVDiskStatus> Status;
         ui32 Generation = DEFAULT_GROUP_GENERATION;
-        NKikimrBlobStorage::TPDiskState::E PDiskState = NKikimrBlobStorage::TPDiskState::Normal;
+        std::optional<NKikimrBlobStorage::TPDiskState::E> PDiskState;
         NKikimrBlobStorage::EDriveStatus PDiskStatus = NKikimrBlobStorage::ACTIVE;
 
         TTestVSlotInfo(std::optional<NKikimrBlobStorage::EVDiskStatus> status = NKikimrBlobStorage::READY,
@@ -81,13 +81,13 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         {
         }
 
-        TTestVSlotInfo(NKikimrBlobStorage::EVDiskStatus status, NKikimrBlobStorage::TPDiskState::E pDiskState = NKikimrBlobStorage::TPDiskState::Normal)
+        TTestVSlotInfo(NKikimrBlobStorage::EVDiskStatus status, NKikimrBlobStorage::TPDiskState::E pDiskState)
             : Status(status)
             , PDiskState(pDiskState)
         {
         }
 
-        TTestVSlotInfo(NKikimrBlobStorage::EVDiskStatus status, NKikimrBlobStorage::EDriveStatus pDiskStatus)
+        TTestVSlotInfo(NKikimrBlobStorage::EVDiskStatus status, NKikimrBlobStorage::EDriveStatus pDiskStatus = NKikimrBlobStorage::ACTIVE)
             : Status(status)
             , PDiskStatus(pDiskStatus)
         {
@@ -250,7 +250,9 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             entry->mutable_key()->set_pdiskid(pdiskId);
             entry->mutable_info()->set_totalsize(totalSize);
             entry->mutable_info()->set_availablesize((1 - occupancy) * totalSize);
-            entry->mutable_info()->set_state(descriptorState->FindValueByNumber(vslot.PDiskState)->name());
+            if (vslot.PDiskState) {
+                entry->mutable_info()->set_state(descriptorState->FindValueByNumber(*vslot.PDiskState)->name());
+            }
             entry->mutable_info()->set_statusv2(descriptorStatusV2->FindValueByNumber(vslot.PDiskStatus)->name());
             ++pdiskId;
         }

@@ -2215,21 +2215,6 @@ public:
             }
             auto stateEnum = static_cast<NKikimrBlobStorage::TPDiskState::E>(state->number());
             ReportPDiskState(stateEnum, context);
-
-            ui32 statusNumber;
-            if (!TryParsePDiskStatus(pDisk.GetStatusV2(), statusNumber)) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
-                                    TStringBuilder() << "Unknown PDisk state: " << pDisk.GetStatusV2(),
-                                    ETags::PDiskState);
-                storagePDiskStatus.set_overall(context.GetOverallStatus());
-                context.OverallStatus = Ydb::Monitoring::StatusFlag::ORANGE;
-                return;
-            }
-            if (statusNumber == NKikimrBlobStorage::FAULTY) {
-                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
-                                    TStringBuilder() << "PDisk state is " << pDisk.GetStatusV2(),
-                                    ETags::PDiskState);
-            }
         } else { // for backward compatibility
             ui32 statusNumber;
             if (!TryParsePDiskStatus(pDisk.GetStatusV2(), statusNumber)) {

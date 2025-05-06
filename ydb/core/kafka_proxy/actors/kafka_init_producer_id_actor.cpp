@@ -151,7 +151,7 @@ namespace NKafka {
     }
 
     void TKafkaInitProducerIdActor::HandleQueryResponseFromKqp(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx) {
-        KAFKA_LOG_D(TStringBuilder() << "Handle kqp response for " << GetAsStr(LastSentToKqpRequest) << " request");
+        KAFKA_LOG_D("Handle kqp response for " << GetAsStr(LastSentToKqpRequest) << " request");
 
         try {
             switch (LastSentToKqpRequest) {

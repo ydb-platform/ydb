@@ -51,9 +51,9 @@ namespace NKafka {
 
         if (it == ProducersByTransactionalId.end() || it->second != deadActorProducerState) {
             // new actor was already registered, we can just ignore this event
-            KAFKA_LOG_D(TStringBuilder() << "Received TEvTransactionActorDied for transactionalId " << ev->Get()->TransactionalId << " but producer has already been reinitialized with new epoch or deleted. Ignoring this event");
+            KAFKA_LOG_D("Received TEvTransactionActorDied for transactionalId " << ev->Get()->TransactionalId << " but producer has already been reinitialized with new epoch or deleted. Ignoring this event");
         } else {
-            KAFKA_LOG_D(TStringBuilder() << "Received TEvTransactionActorDied for transactionalId " << ev->Get()->TransactionalId 
+            KAFKA_LOG_D("Received TEvTransactionActorDied for transactionalId " << ev->Get()->TransactionalId 
                 << " and producerId " << ev->Get()->ProducerState.Id 
                 << " and producerEpoch " << ev->Get()->ProducerState.Epoch
                 << ". Erasing info about this actor.");
@@ -66,7 +66,7 @@ namespace NKafka {
         KAFKA_LOG_D("Got poison pill, killing all transaction actors");
         for (auto& [transactionalId, txnActorId]: TxnActorByTransactionalId) {
             ctx.Send(txnActorId, new TEvents::TEvPoison());
-            KAFKA_LOG_D(TStringBuilder() << "Sent poison pill to transaction actor for transactionalId " << transactionalId);
+            KAFKA_LOG_D("Sent poison pill to transaction actor for transactionalId " << transactionalId);
         }
         PassAway();
     };
@@ -82,7 +82,7 @@ namespace NKafka {
     template<class ErrorResponseType, class EventType>
     void TTransactionsCoordinator::HandleTransactionalRequest(TAutoPtr<TEventHandle<EventType>>& evHandle, const TActorContext& ctx) {
         EventType* ev = evHandle->Get();
-        KAFKA_LOG_D(TStringBuilder() << "Receieved message for transactionalId " << ev->Request->TransactionalId->c_str() << " and ApiKey " << ev->Request->ApiKey());
+        KAFKA_LOG_D("Receieved message for transactionalId " << ev->Request->TransactionalId->c_str() << " and ApiKey " << ev->Request->ApiKey());
         
         // create helper struct to simplify methods interaction
         auto txnRequest = TTransactionalRequest(
@@ -115,11 +115,11 @@ namespace NKafka {
         } else {
             txnActorId = ctx.Register(new TTransactionActor(ev->Request->TransactionalId->c_str(), ev->Request->ProducerId, ev->Request->ProducerEpoch, ev->DatabasePath, NKikimr::NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ctx.SelfID));
             TxnActorByTransactionalId[ev->Request->TransactionalId->c_str()] = txnActorId;
-            KAFKA_LOG_D(TStringBuilder() << "Registered TTransactionActor with id " << txnActorId << " for transactionalId " << ev->Request->TransactionalId->c_str() << " and ApiKey " << ev->Request->ApiKey());
+            KAFKA_LOG_D("Registered TTransactionActor with id " << txnActorId << " for transactionalId " << ev->Request->TransactionalId->c_str() << " and ApiKey " << ev->Request->ApiKey());
         }
         TAutoPtr<IEventHandle> tmpPtr = evHandle.Release();
         ctx.Forward(tmpPtr, txnActorId);
-        KAFKA_LOG_D(TStringBuilder() << "Forwarded message to TTransactionActor with id " << txnActorId << " for transactionalId " << ev->Request->TransactionalId->c_str() << " and ApiKey " << ev->Request->ApiKey());
+        KAFKA_LOG_D("Forwarded message to TTransactionActor with id " << txnActorId << " for transactionalId " << ev->Request->TransactionalId->c_str() << " and ApiKey " << ev->Request->ApiKey());
     };
 
     bool TTransactionsCoordinator::NewProducerStateIsOutdated(const TEvKafka::TProducerInstanceId& currentProducerState, const TEvKafka::TProducerInstanceId& newProducerState) {

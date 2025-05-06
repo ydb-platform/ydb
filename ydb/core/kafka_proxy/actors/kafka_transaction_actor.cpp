@@ -99,7 +99,7 @@ namespace NKafka {
     }
 
     void TTransactionActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {
-        KAFKA_LOG_D(TStringBuilder() << "KQP session created");
+        KAFKA_LOG_D("KQP session created");
         if (!Kqp->HandleCreateSessionResponse(ev, ctx)) {
             SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, "Failed to create KQP session");
             Die(ctx);
@@ -110,7 +110,7 @@ namespace NKafka {
     }
 
     void TTransactionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        KAFKA_LOG_D(TStringBuilder() << "Receieved query response from KQP for " << GetAsStr(LastSentToKqpRequest) << " request");
+        KAFKA_LOG_D("Receieved query response from KQP for " << GetAsStr(LastSentToKqpRequest) << " request");
         if (auto error = GetErrorFromYdbResponse(ev)) {
             KAFKA_LOG_W(error);
             SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error->data());
@@ -132,12 +132,12 @@ namespace NKafka {
 
     void TTransactionActor::StartKqpSession(const TActorContext& ctx) {
         Kqp = std::make_unique<TKqpTxHelper>(DatabasePath);
-        KAFKA_LOG_D(TStringBuilder() << "Sending create session request to KQP for database " << DatabasePath);
+        KAFKA_LOG_D("Sending create session request to KQP for database " << DatabasePath);
         Kqp->SendCreateSessionRequest(ctx, KqpActorId);
     }
 
     void TTransactionActor::SendToKqpValidationRequests(const TActorContext& ctx) {
-        KAFKA_LOG_D(TStringBuilder() << "Sending select request to KQP for database " << DatabasePath);
+        KAFKA_LOG_D("Sending select request to KQP for database " << DatabasePath);
         Kqp->SendYqlRequest(
             GetYqlWithTablesNames(NKafkaTransactionSql::SELECT_FOR_VALIDATION), 
             BuildSelectParams(), 
@@ -174,7 +174,7 @@ namespace NKafka {
     template<class ResponseType, class EventType>
     void TTransactionActor::SendOkResponse(TAutoPtr<TEventHandle<EventType>>& evHandle) {
         auto& kafkaRequest = evHandle->Get()->Request;
-        KAFKA_LOG_D(TStringBuilder() << "Sending OK response to " << evHandle->Get()->ConnectionId << " with correlationId " << evHandle->Get()->CorrelationId << " and transactionalId " << TransactionalId);
+        KAFKA_LOG_D("Sending OK response to " << evHandle->Get()->ConnectionId << " with correlationId " << evHandle->Get()->CorrelationId << " and transactionalId " << TransactionalId);
         std::shared_ptr<ResponseType> response = NKafkaTransactions::BuildResponse<ResponseType>(kafkaRequest, EKafkaErrors::NONE_ERROR);
         Send(evHandle->Get()->ConnectionId, new TEvKafka::TEvResponse(evHandle->Get()->CorrelationId, response, EKafkaErrors::NONE_ERROR));
     }
@@ -309,7 +309,7 @@ namespace NKafka {
             return;
         }
 
-        KAFKA_LOG_D(TStringBuilder() << "Validated producer and consumers states. Everything is alright, sending commit");
+        KAFKA_LOG_D("Validated producer and consumers states. Everything is alright, sending commit");
         auto kqpTxnId = response.Record.GetResponse().GetTxMeta().id();
         // finally everything is valid and we can attempt to commit
         SendCommitTxnRequest(kqpTxnId);

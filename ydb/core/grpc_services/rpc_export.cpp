@@ -42,7 +42,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         ResolvePaths, // Resolve explicitly specified paths. Check that they are all supported in export
         ExpandDirectories, // Expand directories and subdirectories
         ResolveExpandedPaths, // Resolve expanded paths, ignore children that is not supported in export
-        AllocateTx,
+        AllocateTxId,
     };
 
     TStringBuf GetLogPrefix() const override {
@@ -184,13 +184,13 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                 }
             }
             if (paths.empty()) {
-                Stage = EStage::AllocateTx;
+                Stage = EStage::AllocateTxId;
             } else {
                 ResolvePaths(paths, NSchemeCache::TSchemeCacheNavigate::OpPath);
                 return;
             }
         }
-        if (Stage == EStage::AllocateTx) {
+        if (Stage == EStage::AllocateTxId) {
             if (ExportItems.empty()) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Nothing to export");
             }
@@ -370,7 +370,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         this->Reply(TExportConv::ToOperation(record.GetEntry()));
     }
 
-    bool InitCommonSourcePath() {
+    void InitCommonSourcePath() {
         const auto& settings = this->GetProtoRequest()->settings();
         if constexpr (IsS3Export) {
             CommonSourcePath = CanonizePath(settings.source_path()); // /Foo/Bar, but empty result for empty source_path
@@ -378,7 +378,6 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         if (CommonSourcePath.empty()) {
             CommonSourcePath = CanonizePath(this->GetDatabaseName());
         }
-        return true;
     }
 
     bool ValidateEncryptionParameters() {
@@ -404,9 +403,8 @@ public:
         }
 
         const auto& settings = request.settings();
-        if (!InitCommonSourcePath()) {
-            return;
-        }
+        InitCommonSourcePath();
+
         if constexpr (IsYtExport) {
             if (settings.items().empty()) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Items are not set");

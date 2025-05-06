@@ -38,6 +38,7 @@ struct TExecutionOptions {
 
     std::vector<TString> ScriptQueries;
     TString SchemeQuery;
+    std::unordered_map<TString, Ydb::TypedValue> Params;
     bool UseTemplates = false;
 
     ui32 LoopCount = 1;
@@ -115,7 +116,8 @@ struct TExecutionOptions {
             .UserSID = GetValue(index, UserSIDs, TString(BUILTIN_ACL_ROOT)),
             .Database = GetValue(index, Databases, TString()),
             .Timeout = GetValue(index, Timeouts, TDuration::Zero()),
-            .QueryId = queryId
+            .QueryId = queryId,
+            .Params = Params
         };
     }
 
@@ -466,6 +468,25 @@ protected:
 
                 if (!Templates.emplace(variable, value).second) {
                     ythrow yexception() << "Got duplicated template variable name '" << variable << "'";
+                }
+            });
+
+        options.AddLongOption("param", "Add query parameter from file to -p queries, use name@file (param value is protobuf Ydb::TypedValue)")
+            .RequiredArgument("name@file")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                TStringBuf name;
+                TStringBuf filePath;
+                TStringBuf(option->CurVal()).Split('@', name, filePath);
+                if (name.empty() || filePath.empty()) {
+                    ythrow yexception() << "Incorrect query parameter, expected form name@file";
+                }
+
+                Ydb::TypedValue value;
+                if (!google::protobuf::TextFormat::ParseFromString(LoadFile(TString(filePath)), &value)) {
+                    ythrow yexception() << "Failed to parse query parameter from file '" << filePath << "'";
+                }
+                if (!ExecutionOptions.Params.emplace(TStringBuilder() << "$" << name, value).second) {
+                    ythrow yexception() << "Got duplicated parameter name '" << name << "'";
                 }
             });
 

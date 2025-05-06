@@ -5,6 +5,7 @@ udfs
 
 *.attr
 *.bin
+*.conf
 *.json
 *.log
 *.old

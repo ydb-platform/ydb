@@ -85,6 +85,7 @@ struct TRequestOptions {
     TString Database;
     TDuration Timeout;
     size_t QueryId = 0;
+    std::unordered_map<TString, Ydb::TypedValue> Params;
 };
 
 }  // namespace NKqpRun

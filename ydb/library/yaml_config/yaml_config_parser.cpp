@@ -1429,6 +1429,14 @@ namespace NKikimr::NYaml {
                 ctx.DisableBuiltinAccess = securityConfig.GetDisableBuiltinAccess();
             }
         }
+        if (ephemeralConfig.StoragePoolTypesSize() > 0 && !config.HasDomainsConfig()) {
+            auto& domainsConfig = *config.MutableDomainsConfig();
+            auto& domain = *domainsConfig.AddDomain();
+            domain.SetName("Root");
+            for (const auto& storagePoolType : ephemeralConfig.GetStoragePoolTypes()) {
+                domain.AddStoragePoolTypes()->CopyFrom(storagePoolType);
+            }
+        }
     }
 
     void TransformProtoConfig(TTransformContext& ctx, NKikimrConfig::TAppConfig& config, NKikimrConfig::TEphemeralInputFields& ephemeralConfig, bool relaxed) {

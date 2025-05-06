@@ -1159,7 +1159,7 @@ class StaticConfigGenerator(object):
             'ssdencrypted': blobstorage_base3_pb2.EPDiskType.SSD,
             'rotencrypted': blobstorage_base3_pb2.EPDiskType.ROT,
         }
-        
+
         if pool_kind in diskTypeToProto:
             property.Type = diskTypeToProto[pool_kind]
 
@@ -1211,7 +1211,7 @@ class StaticConfigGenerator(object):
                     type_defined = True
 
             if not type_defined:
-                logger.warning(f"pdisk_filter.property.type missing for pool {pool.Kind}. This pool name is unknown, no default has been generated, specify type by hand") 
+                logger.warning(f"pdisk_filter.property.type missing for pool {pool.Kind}. This pool name is unknown, no default has been generated, specify type by hand")
 
         if not domain.DomainId:
             domain.DomainId = 1

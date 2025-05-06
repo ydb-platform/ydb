@@ -447,6 +447,59 @@ namespace NKikimr::NBsController {
         }
     }
 
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TResizeGroups& cmd, TStatus& /*status*/) {
+        Cerr << (TStringBuilder() << "[ PDT1 ] ExecuteStep TResizeGroups {"
+        << " BoxId# " << cmd.GetBoxId()
+        << " StoragePoolId# " << cmd.GetStoragePoolId()
+        << " Generation# " << cmd.GetStoragePoolGeneration()
+        << " SlotSizeUnits# " << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(cmd.GetSlotSizeUnits().GetValue()) 
+        << " }" << Endl); 
+        auto& storagePools = StoragePools.Unshare();
+
+        const TBoxStoragePoolId poolId(cmd.GetBoxId(), cmd.GetStoragePoolId());
+
+        auto getPool = [&](TBoxStoragePoolId poolId, ui64 poolGeneration) -> TStoragePoolInfo& {
+            if (auto it = storagePools.find(poolId); it != storagePools.end()) {
+                TStoragePoolInfo& pool = it->second;
+                const ui64 generation = pool.Generation.GetOrElse(1);
+                if (generation != poolGeneration) {
+                    throw TExError() << "StoragePoolId# " << poolId << " Generation# " << generation
+                        << " does not match expected Generation# " << poolGeneration;
+                }
+                pool.Generation = generation + 1;
+                return pool;
+            } else {
+                throw TExError() << "StoragePoolId# " << poolId << " not found";
+            }
+        };
+
+        TStoragePoolInfo& poolInfo = getPool(poolId, cmd.GetStoragePoolGeneration());
+        Y_UNUSED(poolInfo);
+        
+        auto& storagePoolGroups = StoragePoolGroups.Unshare();
+
+        // create a list of groups to be moved
+        const auto& m = cmd.GetGroupIds();
+        TVector<TGroupId> groups;
+        std::transform(m.begin(), m.end(), std::back_inserter(groups), [](ui32 id) { return TGroupId::FromValue(id); });
+        if (!groups) {
+            for (auto it = storagePoolGroups.lower_bound(poolId); it != storagePoolGroups.end() && it->first == poolId; ++it) {
+                groups.push_back(it->second);
+            }
+        }
+
+        for (TGroupId groupId : groups) {
+            // find the group
+            TGroupInfo *group = Groups.FindForUpdate(groupId);
+            if (!group || group->StoragePoolId != poolId) {
+                throw TExError() << "GroupId# " << groupId << " not found in StoragePoolId# " << poolId;
+            }
+            
+            // update the group size
+            group->SlotSizeUnits = cmd.GetSlotSizeUnits().GetValue();
+        }
+    }
+
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TReadSettings& /*cmd*/, TStatus& status) {
         Self.SerializeSettings(status.MutableSettings());
     }

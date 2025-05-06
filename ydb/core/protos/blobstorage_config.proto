@@ -318,6 +318,14 @@ message TMoveGroups {
     repeated uint32 ExplicitGroupId = 6; // if no groups are provided, then all groups of origin storage pool are moved
 }
 
+message TResizeGroups {
+    uint64 BoxId = 1;
+    uint64 StoragePoolId = 2;
+    uint64 StoragePoolGeneration = 3;
+    repeated uint32 GroupIds = 4; // if absent, then all groups in the pool are resized
+    NKikimrBlobStorage.TPDiskSlotSizeUnits SlotSizeUnits = 5;
+}
+
 message TAddMigrationPlan {
     string Name = 1;
     repeated TMoveCommand MoveCommand = 2;
@@ -549,6 +557,7 @@ message TConfigRequest {
             TQueryBaseConfig QueryBaseConfig = 16; // introspection
             TMergeBoxes MergeBoxes = 23;
             TMoveGroups MoveGroups = 24; // move groups between storage pools; no checks of SP constraints are performed
+            TResizeGroups ResizeGroups = 52; // change groups SlotSizeUnits property 
             TAddMigrationPlan AddMigrationPlan = 25;
             TDeleteMigrationPlan DeleteMigrationPlan = 26;
             TEnableSelfHeal EnableSelfHeal = 27;

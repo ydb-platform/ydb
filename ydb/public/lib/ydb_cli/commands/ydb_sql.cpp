@@ -160,7 +160,7 @@ int TCommandSql::RunCommand(TConfig& config) {
     } else {
         // Execute query
         settings.ExecMode(NQuery::EExecMode::Execute);
-        auto defaultStatsMode = ExplainAnalyzeMode ? NQuery::EStatsMode::Full : NQuery::EStatsMode::Basic;
+        auto defaultStatsMode = ExplainAnalyzeMode ? NQuery::EStatsMode::Full : NQuery::EStatsMode::None;
         auto statsMode = ParseQueryStatsModeOrThrow(CollectStatsMode, defaultStatsMode);
         settings.StatsMode(statsMode);
         if (Progress == "tty") {

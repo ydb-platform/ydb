@@ -17,7 +17,8 @@ namespace {
 
 struct IStrategy {
     virtual TPathElement::EPathType GetPathType() const = 0;
-    virtual bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc) const = 0;
+    virtual bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext& context) const = 0;
+    virtual void Proccess(NKikimrReplication::TReplicationConfig& config, const TString& owner) const = 0;
 };
 
 struct TReplicationStrategy : public IStrategy {
@@ -25,7 +26,7 @@ struct TReplicationStrategy : public IStrategy {
         return TPathElement::EPathType::EPathTypeReplication;
     };
 
-    bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc) const override {
+    bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext&) const override {
         if (desc.GetConfig().HasTransferSpecific()) {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Wrong replication configuration");
             return true;
@@ -37,6 +38,9 @@ struct TReplicationStrategy : public IStrategy {
 
         return false;
     }
+
+    void Proccess(NKikimrReplication::TReplicationConfig&, const TString&) const override {
+    }
 };
 
 struct TTransferStrategy : public IStrategy {
@@ -44,7 +48,7 @@ struct TTransferStrategy : public IStrategy {
         return TPathElement::EPathType::EPathTypeTransfer;
     };
 
-    bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc) const override {
+    bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext& context) const override {
         if (!AppData()->FeatureFlags.GetEnableTopicTransfer()) {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Topic transfer creation is disabled");
             return true;
@@ -58,7 +62,41 @@ struct TTransferStrategy : public IStrategy {
             return true;
         }
 
+        const auto& batching = desc.GetConfig().GetTransferSpecific().GetBatching();
+        if (batching.HasBatchSizeBytes() && batching.GetBatchSizeBytes() > 1_GB) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Batch size must be less than or equal to 1Gb");
+            return true;
+        }
+        if (batching.HasFlushIntervalMilliSeconds() && batching.GetFlushIntervalMilliSeconds() < TDuration::Seconds(1).MilliSeconds()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Flush interval must be greater than or equal to 1 second");
+            return true;
+        }
+        if (batching.HasFlushIntervalMilliSeconds() && batching.GetFlushIntervalMilliSeconds() > TDuration::Hours(24).MilliSeconds()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Flush interval must be less than or equal to 24 hours");
+            return true;
+        }
+
+        const auto& target = desc.GetConfig().GetTransferSpecific().GetTarget();
+        auto targetPath = TPath::Resolve(target.GetDstPath(), context.SS);
+        if (!targetPath.IsResolved() || targetPath.IsUnderDeleting() || targetPath->IsUnderMoving() || targetPath.IsDeleted()) {
+            result.SetError(NKikimrScheme::StatusNotAvailable, TStringBuilder() << "The transfer destination path '" << target.GetDstPath() << "' not found");
+            return true;
+        }
+        if (!targetPath->IsColumnTable() && !targetPath->IsTable()) {
+            result.SetError(NKikimrScheme::StatusNotAvailable, TStringBuilder() << "The transfer destination path '" << target.GetDstPath() << "' isn`t a table");
+            return true;
+        }
+
+        if (!AppData()->TransferWriterFactory) {
+            result.SetError(NKikimrScheme::StatusNotAvailable, "The transfer is only available in the Enterprise version");
+            return true;
+        }
+
         return false;
+    }
+
+    void Proccess(NKikimrReplication::TReplicationConfig& config, const TString& owner) const override {
+        config.MutableTransferSpecific()->SetRunAsUser(owner);
     }
 };
 
@@ -331,7 +369,7 @@ public:
             }
         }
 
-        if (Strategy->Validate(*result, desc)) {
+        if (Strategy->Validate(*result, desc, context)) {
             return result;
         }
 
@@ -373,10 +411,6 @@ public:
             }
         }
 
-        if (Strategy->Validate(*result.Get(), desc)) {
-            return result;
-        }
-
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
@@ -408,6 +442,8 @@ public:
         if (desc.GetConfig().GetConsistencySettings().GetLevelCase() == NKikimrReplication::TConsistencySettings::LEVEL_NOT_SET) {
             desc.MutableConfig()->MutableConsistencySettings()->MutableRow();
         }
+
+        Strategy->Proccess(*desc.MutableConfig(), owner);
 
         desc.MutableState()->MutableStandBy();
         auto replication = TReplicationInfo::Create(std::move(desc));

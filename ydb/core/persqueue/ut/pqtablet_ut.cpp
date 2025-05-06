@@ -337,8 +337,8 @@ void TPQTabletFixture::SendProposeTransactionRequest(const TProposeTransactionPa
             auto* operation = body->MutableOperations()->Add();
             operation->SetPartitionId(txOp.Partition);
             if (txOp.Begin.Defined()) {
-                operation->SetBegin(*txOp.Begin);
-                operation->SetEnd(*txOp.End);
+                operation->SetCommitOffsetsBegin(*txOp.Begin);
+                operation->SetCommitOffsetsEnd(*txOp.End);
                 operation->SetConsumer(*txOp.Consumer);
             }
             operation->SetPath(txOp.Path);

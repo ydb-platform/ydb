@@ -47,6 +47,12 @@ void TEvYdbProxy::TEndTopicPartitionResult::Out(IOutputStream& out) const {
     << " }";
 }
 
+void TEvYdbProxy::TStartTopicReadingSessionResult::Out(IOutputStream& out) const {
+    out << "{"
+        << " ReadSessionId: " << ReadSessionId
+    << " }";
+}
+
 template <typename TDerived>
 class TBaseProxyActor: public TActor<TDerived> {
     class TRequest;
@@ -185,7 +191,9 @@ private:
 
 class TTopicReader: public TBaseProxyActor<TTopicReader> {
     void Handle(TEvYdbProxy::TEvReadTopicRequest::TPtr& ev) {
-        if (AutoCommit) {
+        auto args = std::move(ev->Get()->GetArgs());
+        const auto& settings = std::get<TEvYdbProxy::TReadTopicSettings>(args);
+        if (AutoCommit && !settings.SkipCommit_) {
             DeferredCommit.Commit();
         }
         WaitEvent(ev->Sender, ev->Cookie);
@@ -211,6 +219,7 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
         if (auto* x = std::get_if<TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
             PartitionEndWatcher.Clear();
             x->Confirm();
+            Send(ev->Get()->Sender, new TEvYdbProxy::TEvStartTopicReadingSession(*x), 0, ev->Get()->Cookie);
             return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
         } else if (auto* x = std::get_if<TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
             x->Confirm();

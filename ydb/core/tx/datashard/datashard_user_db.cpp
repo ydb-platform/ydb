@@ -339,7 +339,7 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId, const
         return;
     }
 
-    if (auto lock = Self.SysLocksTable().GetRawLock(lockId, TRowVersion::Min()); lock && !VolatileCommitOrdered) {
+    if (auto lock = Self.SysLocksTable().GetRawLock(lockId); lock && !VolatileCommitOrdered) {
         lock->ForAllVolatileDependencies([this](ui64 txId) {
             auto* info = Self.GetVolatileTxManager().FindByCommitTxId(txId);
             if (info && info->State != EVolatileTxState::Aborting) {

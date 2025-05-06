@@ -15,12 +15,8 @@ from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.library.harness.util import LogLevels
 
-from ydb.tests.library.harness.param_constants import ydb_cli_path
-
 import ydb.public.api.protos.ydb_config_pb2 as config
 import ydb.public.api.protos.draft.ydb_dynamic_config_pb2 as dynconfig
-
-import yatest
 
 logger = logging.getLogger(__name__)
 

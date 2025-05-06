@@ -492,7 +492,7 @@ class KikimrConfigGenerator(object):
             self.yaml_config["fail_domain_type"] = "rack"
             self.yaml_config["erasure"] = self.yaml_config.pop("static_erasure")
 
-            for name in ['blob_storage_config', 'domains_config', 'nameservice_config', 'system_tablets', 'grpc_config',
+            for name in ['blob_storage_config', 'domains_config', 'system_tablets', 'grpc_config',
                          'channel_profile_config', 'interconnect_config']:
                 del self.yaml_config[name]
         if self.simple_config:

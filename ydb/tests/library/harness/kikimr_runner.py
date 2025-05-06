@@ -296,10 +296,10 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
     def make_config_dir(self, source_config_yaml_path, target_config_dir_path):
         if not os.path.exists(source_config_yaml_path):
-             raise FileNotFoundError(f"Source config file not found: {source_config_yaml_path}")
+            raise FileNotFoundError(f"Source config file not found: {source_config_yaml_path}")
 
         try:
-            os.makedirs(target_config_dir, exist_ok=True)
+            os.makedirs(target_config_dir_path, exist_ok=True)
         except Exception as e:
             raise RuntimeError(f"Unexpected error initializing config for node {self.node_id}.") from e
 
@@ -813,7 +813,6 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             logger.error(f"Error fetching config: {e}", exc_info=True)
             return None
 
-
     def generate_config(self):
         result = self.__call_ydb_cli(
             [
@@ -824,6 +823,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             ]
         )
         return result.std_out.decode('utf-8')
+
 
 class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeInterface):
     kikimr_binary_deploy_path = '/Berkanavt/kikimr/bin/kikimr'

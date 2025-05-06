@@ -38,7 +38,6 @@ domains_config:
   domain:
   - name: "{ydb_domain_name}"
     domain_id: 1
-    scheme_root: 72057594046678944
     storage_pool_types:
     - kind: "hdd"
       pool_config:

@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/conclusion/status.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 
@@ -25,7 +26,7 @@ public:
     TCPULimitsConfig() = default;
     TCPULimitsConfig(const double cpuGroupThreadsLimit, const TString& cpuGroupName);
 
-    bool DeserializeFromProto(const NKikimrTxDataShard::TEvKqpScan& config);
+    TConclusionStatus DeserializeFromProto(const NKikimrTxDataShard::TEvKqpScan& config);
     TString DebugString() const;
 };
 

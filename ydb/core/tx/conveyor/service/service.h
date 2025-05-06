@@ -122,9 +122,9 @@ public:
 };
 
 class TCPUGroup {
-    YDB_READONLY(TString, Name, "")
+    YDB_READONLY_DEF(TString, Name);
     YDB_ACCESSOR_DEF(double, CPUThreadsLimit);
-    ui32 ProcessesCount = 0;
+    TPositiveControlInteger ProcessesCount;
 public:
     using TPtr = std::shared_ptr<TCPUGroup>;
 
@@ -133,14 +133,20 @@ public:
         , CPUThreadsLimit(cpuThreadsLimit) {
     }
 
-    bool DecProcesses() {
-        AFL_VERIFY(ProcessesCount);
+    ~TCPUGroup() {
+        AFL_VERIFY(ProcessesCount == 0);
+    }
+
+    void DecProcesses() {
         --ProcessesCount;
-        return ProcessesCount == 0;
     }
 
     void IncProcesses() {
         ++ProcessesCount;
+    }
+
+    bool HasProcesses() const {
+        return ProcessesCount > 0;
     }
 };
 
@@ -148,7 +154,7 @@ class TProcess {
 private:
     YDB_READONLY(ui64, ProcessId, 0);
     YDB_READONLY(ui64, CPUTime, 0);
-    YDB_READONLY(TCPUGroup::TPtr, CPUGroup, nullptr);
+    YDB_READONLY_DEF(TCPUGroup::TPtr, CPUGroup);
     YDB_ACCESSOR_DEF(TDequePriorityFIFO, Tasks);
     ui32 LinksCount = 0;
 public:
@@ -170,7 +176,12 @@ public:
         : ProcessId(processId)
         , CPUGroup(std::move(cpuGroup)) {
         AFL_VERIFY(CPUGroup);
+        CPUGroup->IncProcesses();
         IncRegistration();
+    }
+
+    ~TProcess() {
+        CPUGroup->DecProcesses();
     }
 
     void AddCPUTime(const TDuration d) {
@@ -238,7 +249,7 @@ private:
     THashMap<ui64, TProcess> Processes;
     std::set<TProcessOrdered> ProcessesOrdered;
     TWorkersPool::TPtr WorkersPool;
-    std::unordered_map<TString, TCPUGroup::TPtr> CPUGroups;
+    THashMap<TString, TCPUGroup::TPtr> CPUGroups;
     TCounters Counters;
     THashMap<TString, std::shared_ptr<TTaskSignals>> Signals;
     TMonotonic LastAddProcessInstant = TMonotonic::Now();

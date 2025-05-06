@@ -55,9 +55,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     const auto dataFormat = request.GetDataFormat();
     const TDuration timeout = TDuration::MilliSeconds(request.GetTimeoutMs());
     NConveyor::TCPULimitsConfig cpuLimits;
-    if (AppDataVerified().FeatureFlags.GetEnableColumnShardCpuLimiting()) {
-        Y_ABORT_UNLESS(cpuLimits.DeserializeFromProto(request));
-    }
+    cpuLimits.DeserializeFromProto(request).Validate();
     if (scanGen > 1) {
         Self->Counters.GetTabletCounters()->IncCounter(NColumnShard::COUNTER_SCAN_RESTARTED);
     }

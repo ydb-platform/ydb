@@ -64,12 +64,12 @@ TCPULimitsConfig::TCPULimitsConfig(const double cpuGroupThreadsLimit, const TStr
     , CPUGroupName(cpuGroupName) {
 }
 
-bool TCPULimitsConfig::DeserializeFromProto(const NKikimrTxDataShard::TEvKqpScan& config) {
+TConclusionStatus TCPULimitsConfig::DeserializeFromProto(const NKikimrTxDataShard::TEvKqpScan& config) {
     if (config.HasCpuGroupThreadsLimit()) {
         CPUGroupThreadsLimit = config.GetCpuGroupThreadsLimit();
         CPUGroupName = config.GetCpuGroupName();
     }
-    return true;
+    return TConclusionStatus::Success();
 }
 
 TString TCPULimitsConfig::DebugString() const {

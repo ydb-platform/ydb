@@ -66,9 +66,10 @@ void TWorkersPool::ChangeAmountCPULimit(const double delta) {
             ActiveWorkersIdx.emplace_back(ActiveWorkersCount);
         }
         worker.GetWorker()->UpdateCPUSoftLimit(std::min<double>(numberThreads, 1));
+        numberThreads -= worker.GetWorker()->GetCPUSoftLimit();
         ++ActiveWorkersCount;
-        --numberThreads;
     }
+    AFL_VERIFY(std::abs(numberThreads) < Eps);
 }
 
 TDistributor::TDistributor(const TConfig& config, const TString& conveyorName, const bool enableProcesses, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals)
@@ -158,7 +159,7 @@ void TDistributor::HandleMain(TEvExecution::TEvUnregisterProcess::TPtr& ev) {
         }
         const auto cpuGroup = it->second.GetCPUGroup();
         Processes.erase(it);
-        if (cpuGroup->DecProcesses()) {
+        if (!cpuGroup->HasProcesses()) {
             ChangeAmountCPULimit(-cpuGroup->GetCPUThreadsLimit());
             AFL_VERIFY(CPUGroups.erase(cpuGroup->GetName()));
         }
@@ -208,7 +209,6 @@ void TDistributor::AddProcess(const ui64 processId, const TCPULimitsConfig& cpuL
         it->second->SetCPUThreadsLimit(cpuThreadsLimit);
         ChangeAmountCPULimit(cpuThreadsLimit - previousLimit);
     }
-    it->second->IncProcesses();
 
     ProcessesOrdered.clear();
     AFL_VERIFY(Processes.emplace(processId, TProcess(processId, it->second)).second);

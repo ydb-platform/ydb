@@ -33,7 +33,7 @@ struct TEvExecution {
     class TEvRegisterProcess: public NActors::TEventLocal<TEvRegisterProcess, EvRegisterProcess> {
     private:
         YDB_READONLY(ui64, ProcessId, 0);
-        YDB_READONLY(TCPULimitsConfig, CPULimits, {});
+        YDB_READONLY_DEF(TCPULimitsConfig, CPULimits);
     public:
         explicit TEvRegisterProcess(const ui64 processId, const TCPULimitsConfig& cpuLimits)
             : ProcessId(processId)

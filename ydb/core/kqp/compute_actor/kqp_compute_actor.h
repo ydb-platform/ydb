@@ -48,7 +48,7 @@ class TCPULimits {
     YDB_OPT(double, CPUGroupThreadsLimit);
     YDB_READONLY(TString, CPUGroupName, "");
 public:
-    explicit TCPULimits(const NKikimrKqp::TEvStartKqpTasksRequest& config);
+    TConclusionStatus DeserializeFromProto(const NKikimrKqp::TEvStartKqpTasksRequest& config);
 };
 
 IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NYql::NDqProto::TDqTask* task,

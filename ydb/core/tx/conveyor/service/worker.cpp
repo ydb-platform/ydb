@@ -2,13 +2,9 @@
 
 namespace NKikimr::NConveyor {
 
-TInstant TWorker::GetWakeupInstance() const {
+TDuration TWorker::GetWakeupDuration() const {
     AFL_VERIFY(!Instants.empty());
-    auto result = TInstant::FromValue(Instants.back().GetValue());
-    if (CPUSoftLimit < 1) {
-        result += (Instants.back() - Instants.front()) * (1 - CPUSoftLimit) / CPUSoftLimit;
-    }
-    return result;
+    return (Instants.back() - Instants.front()) * (1 - CPUSoftLimit) / CPUSoftLimit;
 }
 
 void TWorker::ExecuteTask(std::vector<TWorkerTask>&& workerTasks) {
@@ -27,7 +23,7 @@ void TWorker::ExecuteTask(std::vector<TWorkerTask>&& workerTasks) {
         AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "to_wait_result")("id", SelfId())("count", workerTasks.size());
         ProcessIds = std::move(processes);
         Instants = std::move(instants);
-        Schedule(WakeupInstance = GetWakeupInstance(), new NActors::TEvents::TEvWakeup(CPULimitGeneration));
+        Schedule(GetWakeupDuration(), new NActors::TEvents::TEvWakeup(CPULimitGeneration));
         WaitWakeUp = true;
     } else {
         AFL_VERIFY(!!ForwardDuration);
@@ -75,14 +71,14 @@ void TWorker::UpdateCPUSoftLimit(const double cpuSoftLimit) {
         return;
     }
 
-    const auto newWakeupInstance = GetWakeupInstance();
-    if (newWakeupInstance == WakeupInstance) {
-        return;
+    auto wakeupTime = Instants.back();
+    if (CPUSoftLimit < 1) {
+        wakeupTime += GetWakeupDuration();
     }
 
     CPULimitGeneration++;
-    if (newWakeupInstance > TInstant::Now()) {
-        Schedule(WakeupInstance = newWakeupInstance, new NActors::TEvents::TEvWakeup(CPULimitGeneration));
+    if (wakeupTime > TMonotonic::Now()) {
+        Schedule(wakeupTime, new NActors::TEvents::TEvWakeup(CPULimitGeneration));
     } else {
         OnWakeup();
     }

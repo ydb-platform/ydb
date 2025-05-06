@@ -127,14 +127,17 @@ void TShardsScanningPolicy::FillRequestScanFeatures(const NKikimrTxDataShard::TK
     }
 }
 
-TCPULimits::TCPULimits(const NKikimrKqp::TEvStartKqpTasksRequest& config) {
-    if (const auto share = config.GetPoolMaxCpuShare(); share > 0) {
-        NActors::TExecutorPoolStats poolStats;
-        TVector<NActors::TExecutorThreadStats> threadsStats;
-        TActivationContext::ActorSystem()->GetPoolStats(TActivationContext::AsActorContext().SelfID.PoolID(), poolStats, threadsStats);
-        CPUGroupThreadsLimit = Max<ui64>(poolStats.MaxThreadCount, 1) * share;
-        CPUGroupName = config.GetSchedulerGroup();
+TConclusionStatus TCPULimits::DeserializeFromProto(const NKikimrKqp::TEvStartKqpTasksRequest& config) {
+    const auto share = config.GetPoolMaxCpuShare();
+    if (share <= 0 || 1 < share) {
+        return TConclusionStatus::Fail("cpu share have to be in (0, 1] interval");
     }
+    NActors::TExecutorPoolStats poolStats;
+    TVector<NActors::TExecutorThreadStats> threadsStats;
+    TActivationContext::ActorSystem()->GetPoolStats(TActivationContext::AsActorContext().SelfID.PoolID(), poolStats, threadsStats);
+    CPUGroupThreadsLimit = Max<ui64>(poolStats.MaxThreadCount, 1) * share;
+    CPUGroupName = config.GetSchedulerGroup();
+    return TConclusionStatus::Success();
 }
 
 }

@@ -90,7 +90,7 @@ class TWorker: public NActors::TActorBootstrapped<TWorker> {
 private:
     using TBase = NActors::TActorBootstrapped<TWorker>;
     const double CPUHardLimit = 1;
-    double CPUSoftLimit = 1;
+    YDB_READONLY(double, CPUSoftLimit, 1);
     ui64 CPULimitGeneration = 0;
     bool WaitWakeUp = false;
     std::optional<TDuration> ForwardDuration;
@@ -98,10 +98,9 @@ private:
     const ui64 WorkerIdx;
     std::vector<TMonotonic> Instants;
     std::vector<ui64> ProcessIds;
-    TInstant WakeupInstance;
     const ::NMonitoring::THistogramPtr SendFwdHistogram;
     const ::NMonitoring::TDynamicCounters::TCounterPtr SendFwdDuration;
-    TInstant GetWakeupInstance() const;
+    TDuration GetWakeupDuration() const;
     void ExecuteTask(std::vector<TWorkerTask>&& workerTasks);
     void HandleMain(TEvInternal::TEvNewTask::TPtr& ev);
     void HandleMain(NActors::TEvents::TEvWakeup::TPtr& ev);

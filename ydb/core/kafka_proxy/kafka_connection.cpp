@@ -573,8 +573,6 @@ protected:
             ssize_t res = Buffer.flush();
             if (res < 0) {
                 ythrow yexception() << "Error during flush of the written to socket data. Error code: " << strerror(-res) << " (" << res << ")";
-            } else if (res == 0) {
-                ythrow yexception() << "Nothing was written during flush to the socket.";
             }
 
             KAFKA_LOG_D("Sent reply: ApiKey=" << header->RequestApiKey << ", Version=" << version << ", Correlation=" << responseHeader.CorrelationId <<  ", Size=" << size);

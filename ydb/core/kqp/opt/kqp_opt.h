@@ -18,7 +18,7 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
         , QueryCtx(queryCtx)
         , Tables(tables)
         , UserRequestContext(userRequestContext)
-    {   
+    {
         YQL_ENSURE(QueryCtx);
         YQL_ENSURE(Tables);
     }

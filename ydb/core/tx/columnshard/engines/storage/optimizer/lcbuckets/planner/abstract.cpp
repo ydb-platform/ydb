@@ -3,20 +3,20 @@
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
 NArrow::NMerger::TIntervalPositions TCompactionTaskData::GetCheckPositions(
-    const std::shared_ptr<arrow::Schema>& pkSchema, const bool withMoved) {
+    const std::shared_ptr<arrow::Schema>& /*pkSchema*/, const bool withMoved) {
     NArrow::NMerger::TIntervalPositions result;
     for (auto&& i : GetFinishPoints(withMoved)) {
-        result.AddPosition(NArrow::NMerger::TSortableBatchPosition(i.ToBatch(pkSchema), 0, pkSchema->field_names(), {}, false), false);
+        result.AddPosition(i, false);
     }
     return result;
 }
 
-std::vector<NArrow::TReplaceKey> TCompactionTaskData::GetFinishPoints(const bool withMoved) {
-    std::vector<NArrow::TReplaceKey> points;
+std::vector<NArrow::NMerger::TSortableBatchPosition> TCompactionTaskData::GetFinishPoints(const bool withMoved) {
+    std::vector<NArrow::NMerger::TSortableBatchPosition> points;
     if (MemoryUsage > ((ui64)1 << 30)) {
         for (auto&& i : Portions) {
             if (!CurrentLevelPortionIds.contains(i->GetPortionId())) {
-                points.emplace_back(i->IndexKeyStart());
+                points.emplace_back(i->IndexKeyStart().BuildSortablePosition());
             }
         }
         std::sort(points.begin(), points.end());
@@ -40,17 +40,18 @@ std::vector<NArrow::TReplaceKey> TCompactionTaskData::GetFinishPoints(const bool
         if (!endPortions.emplace(i.GetNotIncludedNextPortion()->GetPortionId()).second) {
             continue;
         }
-        points.emplace_back(i.GetNotIncludedNextPortion()->IndexKeyStart());
+        points.emplace_back(i.GetNotIncludedNextPortion()->IndexKeyStart().BuildSortablePosition());
     }
     if (withMoved) {
         for (auto&& i : GetMovePortions()) {
-            points.emplace_back(i->IndexKeyStart());
+            points.emplace_back(i->IndexKeyStart().BuildSortablePosition());
         }
     }
     if (StopSeparation) {
-        points.emplace_back(*StopSeparation);
+        points.emplace_back(StopSeparation->BuildSortablePosition());
     }
     std::sort(points.begin(), points.end());
+    points.erase(std::unique(points.begin(), points.end()), points.end());
     return points;
 }
 

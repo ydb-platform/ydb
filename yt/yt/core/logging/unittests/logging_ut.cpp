@@ -770,6 +770,48 @@ TEST_F(TLoggingTest, StructuredLoggingJsonFormat)
     EXPECT_EQ(message->GetChildOrThrow("category")->AsString()->GetValue(), Logger().GetCategory()->Name);
 }
 
+TEST_F(TLoggingTest, StructuredLoggingWithLoggerTags)
+{
+    for (auto format : {ELogFormat::Yson, ELogFormat::Json}) {
+        TTempFile logFile(GenerateLogFileName());
+        Configure(Format(R"({
+            rules = [
+                {
+                    family = structured;
+                    min_level = info;
+                    writers = [ test ];
+                };
+            ];
+            writers = {
+                test = {
+                    format = "%v";
+                    file_name = "%v";
+                    type = file;
+                };
+            };
+            structured_validation_sampling_rate = 1.0;
+        })", format, logFile.Name()));
+
+        auto logger = Logger()
+            .WithStructuredTag("key1", "value1")
+            .WithStructuredTag("key2", "value2");
+        LogStructuredEventFluently(logger, ELogLevel::Info)
+            .Item("key3").Value("value3");
+
+        TLogManager::Get()->Synchronize();
+
+        auto lines = ReadPlainTextEvents(logFile.Name());
+        EXPECT_EQ(1, std::ssize(lines));
+
+        auto message = DeserializeStructuredEvent(lines[0], format);
+        EXPECT_EQ(message->GetChildOrThrow("key1")->AsString()->GetValue(), "value1");
+        EXPECT_EQ(message->GetChildOrThrow("key2")->AsString()->GetValue(), "value2");
+        EXPECT_EQ(message->GetChildOrThrow("key3")->AsString()->GetValue(), "value3");
+        EXPECT_EQ(message->GetChildOrThrow("level")->AsString()->GetValue(), FormatEnum(ELogLevel::Info));
+        EXPECT_EQ(message->GetChildOrThrow("category")->AsString()->GetValue(), Logger().GetCategory()->Name);
+    }
+}
+
 TEST_F(TLoggingTest, StructuredLoggingWithValidator)
 {
     TTempFile logFile(GenerateLogFileName());

@@ -360,6 +360,14 @@ void TWorkloadCommandRun::Config(TConfig& config) {
 }
 
 void TWorkloadCommandRun::Parse(TConfig& config) {
+    TWorkloadCommand::Parse(config);
+    // auto timestamp_dev_passed = config.ParseResult->Has("timestamp_deviation");
+    // auto date_from_passed = config.ParseResult->Has("date-from");
+    // auto date_to_passed = config.ParseResult->Has("date-to");
+
+    // Cerr << "____timestamp_dev_passed: " << timestamp_dev_passed << Endl;
+    // Cerr << "____date_from_passed: " << date_from_passed << Endl;
+    // Cerr << "____date_to_passed: " << date_to_passed << Endl;
     Params.Parse(config);
 }
 

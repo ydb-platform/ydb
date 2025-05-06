@@ -484,8 +484,8 @@ void TLogWorkloadParams::Parse(NYdb::NConsoleClient::TClientCommand::TConfig& co
     Cerr << "date_from_passed: " << date_from_passed << Endl;
     Cerr << "date_to_passed: " << date_to_passed << Endl;
 
-    if (!timestamp_dev_passed && (!date_from_passed && !date_to_passed)) {
-        throw yexception() << "One of parameter should be provided";
+    if (!timestamp_dev_passed && (!date_from_passed || !date_to_passed)) {
+        throw yexception() << "One of parameter should be provided - timestamp_deviation or date-from and date-to";
     }
 
     if (timestamp_dev_passed && (date_from_passed || date_to_passed)) {

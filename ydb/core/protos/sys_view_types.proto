@@ -1,0 +1,7 @@
+package NKikimrSysView;
+
+option java_package = "ru.yandex.kikimr.proto";
+
+enum ESysViewType {
+    EPartitionStats = 1;
+}

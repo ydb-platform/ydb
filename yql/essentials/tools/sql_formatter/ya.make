@@ -10,6 +10,8 @@ PEERDIR(
     yql/essentials/sql/v1/lexer/antlr4_ansi
     yql/essentials/sql/v1/proto_parser/antlr4
     yql/essentials/sql/v1/proto_parser/antlr4_ansi
+    yql/essentials/public/langver
+    yql/essentials/core/langver
 )
 
 SRCS(

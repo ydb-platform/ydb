@@ -1528,7 +1528,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
 
             // find state storage setup for that domain
             for (const auto& ss : domains.GetStateStorage()) {
-                if (domain.SSIdSize() == 1 && ss.GetSSId() == domain.GetSSId(0)) {
+                if (domain.SSIdSize() == 0 || (domain.SSIdSize() == 1 && ss.GetSSId() == domain.GetSSId(0))) {
                     const bool hadStateStorageConfig = config->HasStateStorageConfig();
                     const bool hadStateStorageBoardConfig = config->HasStateStorageBoardConfig();
                     const bool hadSchemeBoardConfig = config->HasSchemeBoardConfig();
@@ -1540,6 +1540,15 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
                     break;
                 }
             }
+
+#define UPDATE_EXPLICIT_CONFIG(NAME) \
+            if (domains.HasExplicit##NAME##Config()) { \
+                config->Mutable##NAME##Config()->CopyFrom(domains.GetExplicit##NAME##Config()); \
+            }
+
+            UPDATE_EXPLICIT_CONFIG(StateStorage)
+            UPDATE_EXPLICIT_CONFIG(StateStorageBoard)
+            UPDATE_EXPLICIT_CONFIG(SchemeBoard)
         }
     }
 

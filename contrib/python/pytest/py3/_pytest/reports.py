@@ -1,13 +1,15 @@
 import dataclasses
-import os
 from io import StringIO
+import os
 from pprint import pprint
 from typing import Any
 from typing import cast
 from typing import Dict
+from typing import final
 from typing import Iterable
 from typing import Iterator
 from typing import List
+from typing import Literal
 from typing import Mapping
 from typing import NoReturn
 from typing import Optional
@@ -29,15 +31,13 @@ from _pytest._code.code import ReprLocals
 from _pytest._code.code import ReprTraceback
 from _pytest._code.code import TerminalRepr
 from _pytest._io import TerminalWriter
-from _pytest.compat import final
 from _pytest.config import Config
 from _pytest.nodes import Collector
 from _pytest.nodes import Item
 from _pytest.outcomes import skip
 
-if TYPE_CHECKING:
-    from typing_extensions import Literal
 
+if TYPE_CHECKING:
     from _pytest.runner import CallInfo
 
 
@@ -46,7 +46,7 @@ def getworkerinfoline(node):
         return node._workerinfocache
     except AttributeError:
         d = node.workerinfo
-        ver = "%s.%s.%s" % d["version_info"][:3]
+        ver = "{}.{}.{}".format(*d["version_info"][:3])
         node._workerinfocache = s = "[{}] {} -- Python {} {}".format(
             d["id"], d["sysplatform"], ver, d["executable"]
         )
@@ -64,7 +64,7 @@ class BaseReport:
     ]
     sections: List[Tuple[str, str]]
     nodeid: str
-    outcome: "Literal['passed', 'failed', 'skipped']"
+    outcome: Literal["passed", "failed", "skipped"]
 
     def __init__(self, **kw: Any) -> None:
         self.__dict__.update(kw)
@@ -249,17 +249,20 @@ class TestReport(BaseReport):
     """
 
     __test__ = False
+    # Defined by skipping plugin.
+    # xfail reason if xfailed, otherwise not defined. Use hasattr to distinguish.
+    wasxfail: str
 
     def __init__(
         self,
         nodeid: str,
         location: Tuple[str, Optional[int], str],
         keywords: Mapping[str, Any],
-        outcome: "Literal['passed', 'failed', 'skipped']",
+        outcome: Literal["passed", "failed", "skipped"],
         longrepr: Union[
             None, ExceptionInfo[BaseException], Tuple[str, int, str], str, TerminalRepr
         ],
-        when: "Literal['setup', 'call', 'teardown']",
+        when: Literal["setup", "call", "teardown"],
         sections: Iterable[Tuple[str, str]] = (),
         duration: float = 0,
         start: float = 0,
@@ -311,9 +314,7 @@ class TestReport(BaseReport):
         self.__dict__.update(extra)
 
     def __repr__(self) -> str:
-        return "<{} {!r} when={!r} outcome={!r}>".format(
-            self.__class__.__name__, self.nodeid, self.when, self.outcome
-        )
+        return f"<{self.__class__.__name__} {self.nodeid!r} when={self.when!r} outcome={self.outcome!r}>"
 
     @classmethod
     def from_item_and_call(cls, item: Item, call: "CallInfo[None]") -> "TestReport":
@@ -428,9 +429,7 @@ class CollectReport(BaseReport):
         return (self.fspath, None, self.fspath)
 
     def __repr__(self) -> str:
-        return "<CollectReport {!r} lenresult={} outcome={!r}>".format(
-            self.nodeid, len(self.result), self.outcome
-        )
+        return f"<CollectReport {self.nodeid!r} lenresult={len(self.result)} outcome={self.outcome!r}>"
 
 
 class CollectErrorRepr(TerminalRepr):
@@ -442,7 +441,7 @@ class CollectErrorRepr(TerminalRepr):
 
 
 def pytest_report_to_serializable(
-    report: Union[CollectReport, TestReport]
+    report: Union[CollectReport, TestReport],
 ) -> Optional[Dict[str, Any]]:
     if isinstance(report, (TestReport, CollectReport)):
         data = report._to_json()
@@ -474,7 +473,7 @@ def _report_to_json(report: BaseReport) -> Dict[str, Any]:
     """
 
     def serialize_repr_entry(
-        entry: Union[ReprEntry, ReprEntryNative]
+        entry: Union[ReprEntry, ReprEntryNative],
     ) -> Dict[str, Any]:
         data = dataclasses.asdict(entry)
         for key, value in data.items():

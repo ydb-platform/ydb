@@ -31,7 +31,7 @@ void TConsole::OnActivateExecutor(const TActorContext &ctx)
 
     TValidatorsRegistry::Instance()->LockValidators();
 
-    ConfigsManager = new TConfigsManager(*this);
+    ConfigsManager = new TConfigsManager(*this, Counters);
     ctx.RegisterWithSameMailbox(ConfigsManager);
 
     TenantsManager = new TTenantsManager(*this, domains->Domain,

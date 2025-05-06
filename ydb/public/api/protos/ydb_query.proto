@@ -8,6 +8,7 @@ option java_outer_classname = "QueryProtos";
 import "google/protobuf/duration.proto";
 
 import "ydb/public/api/protos/annotations/validation.proto";
+import "ydb/public/api/protos/ydb_common.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_query_stats.proto";
@@ -218,6 +219,8 @@ message ExecuteQueryResponsePart {
 
     TransactionMeta tx_meta = 6;
 
+    VirtualTimestamp snapshot_timestamp = 7;
+    
     // Settings for the arrow result set type with the result part in result_data
     optional Ydb.Formats.ArrowBatchSettings arrow_batch_settings = 8;
 }

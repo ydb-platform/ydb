@@ -44,7 +44,8 @@ TWorkerGraph::TWorkerGraph(
     const TString& LLVMSettings,
     NKikimr::NUdf::ICountersProvider* countersProvider,
     ui64 nativeYtTypeFlags,
-    TMaybe<ui64> deterministicTimeProviderSeed
+    TMaybe<ui64> deterministicTimeProviderSeed,
+    TLangVersion langver
 )
     : ScopedAlloc_(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators())
     , Env_(ScopedAlloc_)
@@ -77,7 +78,7 @@ TWorkerGraph::TWorkerGraph(
 
     // Setup struct types
 
-    NKikimr::NMiniKQL::TProgramBuilder pgmBuilder(Env_, FuncRegistry_);
+    NKikimr::NMiniKQL::TProgramBuilder pgmBuilder(Env_, FuncRegistry_, false, langver);
     for (ui32 i = 0; i < inputsCount; ++i) {
         const auto* type = static_cast<NKikimr::NMiniKQL::TStructType*>(NCommon::BuildType(TPositionHandle(), *inputTypes[i], pgmBuilder, typeMemoization));
         const auto* originalType = type;
@@ -157,7 +158,10 @@ TWorkerGraph::TWorkerGraph(
         LLVMSettings,
         NKikimr::NMiniKQL::EGraphPerProcess::Multi,
         nullptr,
-        countersProvider);
+        countersProvider,
+        nullptr,
+        nullptr,
+        langver);
 
     ComputationPattern_ = NKikimr::NMiniKQL::MakeComputationPattern(
         explorer,
@@ -196,12 +200,13 @@ TWorker<TBase>::TWorker(
     const TString& LLVMSettings,
     NKikimr::NUdf::ICountersProvider* countersProvider,
     ui64 nativeYtTypeFlags,
-    TMaybe<ui64> deterministicTimeProviderSeed
+    TMaybe<ui64> deterministicTimeProviderSeed,
+    TLangVersion langver
 )
     : WorkerFactory_(std::move(factory))
     , Graph_(exprRoot, exprCtx, serializedProgram, funcRegistry, userData,
          inputTypes, originalInputTypes, rawInputTypes, outputType, rawOutputType,
-         LLVMSettings, countersProvider, nativeYtTypeFlags, deterministicTimeProviderSeed)
+         LLVMSettings, countersProvider, nativeYtTypeFlags, deterministicTimeProviderSeed, langver)
 {
 }
 

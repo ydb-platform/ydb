@@ -541,6 +541,7 @@ namespace Tests {
             appData.SharedCacheConfig.MergeFrom(Settings->AppConfig->GetSharedCacheConfig());
             appData.TransferWriterFactory = Settings->TransferWriterFactory;
             appData.WorkloadManagerConfig.MergeFrom(Settings->AppConfig->GetWorkloadManagerConfig());
+            appData.QueryServiceConfig.MergeFrom(Settings->AppConfig->GetQueryServiceConfig());
 
             appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
             auto dnConfig = appData.DynamicNameserviceConfig;

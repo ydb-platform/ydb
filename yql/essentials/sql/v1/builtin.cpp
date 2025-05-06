@@ -3076,6 +3076,7 @@ struct TBuiltinFuncData {
             {"currentoperationid", {"CurrentOperationId", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CurrentOperationId", 0, 0)}},
             {"currentoperationsharedid", {"CurrentOperationSharedId", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CurrentOperationSharedId", 0, 0)}},
             {"currentauthenticateduser", {"CurrentAuthenticatedUser", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CurrentAuthenticatedUser", 0, 0)}},
+            {"currentlanguageversion", {"CurrentLanguageVersion", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CurrentLanguageVersion", 0, 0)}},
             {"addtimezone", {"AddTimezone", "Normal", BuildSimpleBuiltinFactoryCallback<TYqlAddTimezone>()}},
             {"removetimezone", {"RemoveTimezone", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("RemoveTimezone", 1, 1)}},
             {"pickle", {"Pickle", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Pickle", 1, 1)}},

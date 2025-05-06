@@ -1,14 +1,10 @@
 name: Notify documentation review assignees on new commits
 
 on:
-  pull_request:
+  pull_request_target:
     # Fires on new commits and on label changes, so the job
     # starts as soon as the label is added, then on every push.
     types: [synchronize, labeled]
-
-permissions:
-  issues: write
-  pull-requests: read
 
 concurrency:
   group: pr-${{ github.event.pull_request.number }}-doc-notify
@@ -17,7 +13,12 @@ concurrency:
 jobs:
   ping:
     if: contains(github.event.pull_request.labels.*.name, 'documentation')
-    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: read
+    runs-on: [self-hosted, auto-provisioned, build-preset-analytic-node]
+    env:
+      GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
     steps:
       - uses: actions/github-script@v7
         with:
@@ -52,5 +53,5 @@ jobs:
               owner: context.repo.owner,
               repo:  context.repo.repo,
               issue_number: pr.number,
-              body: `🔄 New commits pushed — ${assignees} please take another look.`
+              body: `🔄 New commits pushed — ${assignees} please take a look.`
             });

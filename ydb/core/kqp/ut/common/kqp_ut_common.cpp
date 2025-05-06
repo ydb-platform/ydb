@@ -1514,6 +1514,36 @@ void WaitForZeroReadIterators(Tests::TServer& server, const TString& path) {
     UNIT_ASSERT_C(iterators == 0, "Unable to wait for proper read iterator count, it looks like cancelation doesn`t work (" << iterators << ")");
 }
 
+int GetCumulativeCounterValue(Tests::TServer& server, const TString& path, const TString& counterName) {
+    int result = 0;
+
+    TTestActorRuntime* runtime = server.GetRuntime();
+    auto sender = runtime->AllocateEdgeActor();
+    auto shards = GetTableShards(&server, sender, path);
+    UNIT_ASSERT_C(shards.size() > 0, "Table: " << path << " has no shards");
+
+    for (auto x : shards) {
+        runtime->SendToPipe(
+            x,
+            sender,
+            new TEvTablet::TEvGetCounters,
+            0,
+            GetPipeConfigWithRetries());
+
+        auto ev = runtime->GrabEdgeEvent<TEvTablet::TEvGetCountersResponse>(sender);
+        UNIT_ASSERT(ev);
+
+        const NKikimrTabletBase::TEvGetCountersResponse& resp = ev->Get()->Record;
+        for (const auto& counter : resp.GetTabletCounters().GetAppCounters().GetCumulativeCounters()) {
+            if (counter.GetName() == counterName) {
+                result += counter.GetValue();
+            }
+        }
+    }
+
+    return result;
+}
+
 TTableId ResolveTableId(Tests::TServer* server, TActorId sender, const TString& path) {
     auto response = Navigate(*server->GetRuntime(), sender, path, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
     return response->ResultSet.at(0).TableId;
@@ -1543,6 +1573,10 @@ void WaitForCompaction(Tests::TServer* server, const TString& path, bool compact
 }
 
 NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& params) {
+    Cout << opt.GetStringRobust() << Endl;
+    if (!opt.IsMap()) {
+        return {};
+    }
     const auto& [_, nodeType] = *opt.GetMapSafe().find("Node Type");
     bool isShuffle = nodeType.GetStringSafe().find("HashShuffle") != TString::npos;
 
@@ -1574,8 +1608,12 @@ NJson::TJsonValue SimplifyPlan(NJson::TJsonValue& opt, const TGetPlanParams& par
         }
     }
 
-    auto firstPlan = opt.GetMapSafe().at("Plans").GetArraySafe()[0];
-    return SimplifyPlan(firstPlan, params);
+    if (opt.IsMap() && opt.GetMapSafe().contains("Plans")) {
+        auto firstPlan = opt.GetMapSafe().at("Plans").GetArraySafe()[0];
+        return SimplifyPlan(firstPlan, params);
+    }
+
+    return {};
 }
 
 bool JoinOrderAndAlgosMatch(const NJson::TJsonValue& opt, const NJson::TJsonValue& ref) {
@@ -1653,6 +1691,10 @@ NJson::TJsonValue GetDetailedJoinOrder(const TString& deserializedPlan, const TG
 }
 
 NJson::TJsonValue GetJoinOrderImpl(const NJson::TJsonValue& opt) {
+    if (!opt.IsMap()) {
+        return {};
+    }
+
     if (!opt.GetMapSafe().contains("Plans")) {
         auto op = opt.GetMapSafe().at("Operators").GetArraySafe()[0];
         return op.GetMapSafe().at("Table").GetStringSafe();
@@ -1676,6 +1718,10 @@ NJson::TJsonValue GetJoinOrder(const TString& deserializedPlan) {
 }
 
 NJson::TJsonValue GetJoinOrderFromDetailedJoinOrderImpl(const NJson::TJsonValue& opt) {
+    if (!opt.IsMap()) {
+        return {};
+    }
+    
     if (!opt.GetMapSafe().contains("table")) {
         NJson::TJsonValue res;
         auto args = opt.GetMapSafe().at("args").GetArraySafe();

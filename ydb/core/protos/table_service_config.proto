@@ -66,7 +66,7 @@ message TTableServiceConfig {
 
             message TIoThreadPoolConfig {
                 optional uint32 WorkersCount = 1 [default = 2];
-                optional uint32 QueueSize = 2 [default = 1000];
+                optional uint32 QueueSize = 2 [default = 10000];
             };
             optional TIoThreadPoolConfig IoThreadPool = 6;
         }
@@ -368,7 +368,7 @@ message TTableServiceConfig {
     optional bool EnableStreamWrite = 77 [default = false];
     optional bool EnableBatchUpdates = 78 [default = false];
 
-    optional bool AllowMultiBroadcasts = 79 [default = false];
+    optional bool AllowMultiBroadcasts = 79 [default = true];
 
     optional bool DefaultEnableShuffleElimination = 80 [default = true];
 
@@ -381,4 +381,8 @@ message TTableServiceConfig {
     }
 
     optional TBatchOperationSettings BatchOperationSettings = 81;
+
+    optional bool EnableFoldUdfs = 82 [ default = true ];
+
+    optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = true ];
 };

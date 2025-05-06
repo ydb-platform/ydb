@@ -37,7 +37,7 @@ namespace {
     void Run(TTestBasicRuntime& runtime, TTestEnv& env, const std::variant<TVector<TString>, TTablesWithAttrs>& tablesVar, const TString& request,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
             const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "", const TString& peerName = "",
-            const TVector<TString>& cdcStreams = {}) {
+            const TVector<TString>& cdcStreams = {}, bool checkAutoDropping = false) {
 
         TTablesWithAttrs tables;
 
@@ -149,6 +149,40 @@ namespace {
 
         const ui64 exportId = txId;
         TestGetExport(runtime, schemeshardId, exportId, dbName, expectedStatus);
+
+        if (!runtime.GetAppData().FeatureFlags.GetEnableExportAutoDropping() && checkAutoDropping) {
+          auto desc = DescribePath(runtime, "/MyRoot");
+          Cerr << "desc: " << desc.GetPathDescription().ChildrenSize()<< Endl;
+          UNIT_ASSERT(desc.GetPathDescription().ChildrenSize() > 1);
+
+          bool foundExportDir = false;
+          bool foundOriginalTable = false;
+
+          for (size_t i = 0; i < desc.GetPathDescription().ChildrenSize(); ++i) {
+              const auto& child = desc.GetPathDescription().GetChildren(i);
+              const auto& name = child.GetName();
+
+              if (name.StartsWith("Table")) {
+                  foundOriginalTable = true;
+              } else if (name.StartsWith("export-")) {
+                  foundExportDir = true;
+                  auto exportDirDesc = DescribePath(runtime, "/MyRoot/" + name);
+                  UNIT_ASSERT(exportDirDesc.GetPathDescription().ChildrenSize() >= 1);
+                  UNIT_ASSERT_EQUAL(exportDirDesc.GetPathDescription().GetChildren(0).GetName(), "0");
+              }
+          } 
+
+          UNIT_ASSERT(foundExportDir);
+          UNIT_ASSERT(foundOriginalTable);
+        } else if (checkAutoDropping) {
+          auto desc = DescribePath(runtime, "/MyRoot");
+          Cerr << "desc: " << desc.GetPathDescription().ChildrenSize()<< Endl;
+          for (size_t i = 0; i < desc.GetPathDescription().ChildrenSize(); ++i) {
+              const auto& child = desc.GetPathDescription().GetChildren(i);
+              const auto& name = child.GetName();
+              UNIT_ASSERT(!name.StartsWith("export-"));
+          }
+        }
 
         TestForgetExport(runtime, schemeshardId, ++txId, dbName, exportId);
         env.TestWaitNotification(runtime, exportId, schemeshardId);
@@ -521,6 +555,7 @@ namespace {
                             backupTxId = record.GetTxId();
                             // hijack
                             schemeTx.MutableBackup()->MutableScanSettings()->SetRowsBatchSize(1);
+                            schemeTx.MutableBackup()->MutableS3Settings()->MutableLimits()->SetMinWriteBatchSize(1);
                             record.SetTxBody(schemeTx.SerializeAsString());
                         }
 
@@ -1200,6 +1235,7 @@ partitioning_settings {
         ui64 txId = 100;
 
         THashSet<ui64> statsCollected;
+        Runtime().GetAppData().FeatureFlags.SetEnableExportAutoDropping(true);
         Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvPeriodicTableStats) {
                 statsCollected.insert(ev->Get<TEvDataShard::TEvPeriodicTableStats>()->Record.GetDatashardId());
@@ -1285,7 +1321,7 @@ partitioning_settings {
     Y_UNIT_TEST(CheckItemProgress) {
         Env(); // Init test env
         ui64 txId = 100;
-
+        Runtime().GetAppData().FeatureFlags.SetEnableExportAutoDropping(true);
         TBlockEvents<NKikimr::NWrappers::NExternalStorage::TEvPutObjectRequest> blockPartition01(Runtime(), [](auto&& ev) {
             return ev->Get()->Request.GetKey() == "/data_01.csv";
         });
@@ -1665,6 +1701,7 @@ partitioning_settings {
 
                     if (schemeTx.HasBackup()) {
                         schemeTx.MutableBackup()->MutableScanSettings()->SetRowsBatchSize(1);
+                        schemeTx.MutableBackup()->MutableS3Settings()->MutableLimits()->SetMinWriteBatchSize(1);
                         record.SetTxBody(schemeTx.SerializeAsString());
                     }
 
@@ -2771,6 +2808,9 @@ attributes {
             }
         )", S3Port());
 
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableExportAutoDropping(true);
+
         Run(Runtime(), Env(), TVector<TString>{
             R"(
                 Name: "Table"
@@ -2778,10 +2818,31 @@ attributes {
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             )",
-        }, request, Ydb::StatusIds::SUCCESS, "/MyRoot");
+        }, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, "", "", {}, true);
+    }
 
-        auto desc = DescribePath(Runtime(), "/MyRoot");
-        UNIT_ASSERT_EQUAL(desc.GetPathDescription().ChildrenSize(), 1);
-        UNIT_ASSERT_EQUAL(desc.GetPathDescription().GetChildren(0).GetName(), "Table");
+    Y_UNIT_TEST(DisableAutoDropping) {
+        auto request = Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port());
+        
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableExportAutoDropping(false);
+
+        Run(Runtime(), Env(), TVector<TString>{
+            R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+        }, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, "", "", {}, true);
     }
 }

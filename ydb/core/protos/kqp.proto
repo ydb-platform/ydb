@@ -99,7 +99,26 @@ message TTopicOperationsRequest {
     }
 }
 
+message TKafkaApiOperationsRequest {
+    optional string TransactionalId = 1;
+    optional int64 ProducerId = 2;
+    optional int32 ProducerEpoch = 3;
+    repeated TKafkaApiOperationsRequest.KafkaApiPartitionInTxn PartitionsInTxn = 4;
+    repeated TKafkaApiOperationsRequest.KafkaApiOffsetInTxn OffsetsInTxn = 5;
 
+    message KafkaApiPartitionInTxn {
+        optional string TopicPath = 1;
+        optional uint32 PartitionId = 2;
+    }
+
+    message KafkaApiOffsetInTxn {
+        optional string TopicPath = 1;
+        optional uint32 PartitionId = 2;
+        optional string ConsumerName = 3;
+        optional int64 ConsumerGeneration = 4;
+        optional int64 Offset = 5;
+    }
+}
 
 message TTopicOperationsResponse {
     message TWriteId {
@@ -148,6 +167,7 @@ message TQueryRequest {
     optional uint64 OutputChunkMaxSize = 34;
     optional string PoolId = 35;
     optional string DatabaseId = 36;
+    optional TKafkaApiOperationsRequest KafkaApiOperations = 37;
 }
 
 message TKqpPathIdProto {
@@ -492,6 +512,7 @@ message TEvExecuterStreamData {
     optional uint32 QueryResultIndex = 3;
     optional uint32 ChannelId = 4;
     optional NActorsProto.TActorId ChannelActorId = 5;
+    optional TKqpSnapshot VirtualTimestamp = 6;
 };
 
 message TEvExecuterStreamDataAck {

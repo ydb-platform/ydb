@@ -1,20 +1,15 @@
 import atexit
 import contextlib
-import fnmatch
-import importlib.util
-import itertools
-import os
-import shutil
-import sys
-import types
-import uuid
-import warnings
 from enum import Enum
 from errno import EBADF
 from errno import ELOOP
 from errno import ENOENT
 from errno import ENOTDIR
+import fnmatch
 from functools import partial
+import importlib.util
+import itertools
+import os
 from os.path import expanduser
 from os.path import expandvars
 from os.path import isabs
@@ -22,6 +17,9 @@ from os.path import sep
 from pathlib import Path
 from pathlib import PurePath
 from posixpath import sep as posix_sep
+import shutil
+import sys
+import types
 from types import ModuleType
 from typing import Callable
 from typing import Dict
@@ -34,10 +32,13 @@ from typing import Tuple
 from typing import Type
 from typing import TypeVar
 from typing import Union
+import uuid
+import warnings
 
 from _pytest.compat import assert_never
 from _pytest.outcomes import skip
 from _pytest.warning_types import PytestWarning
+
 
 LOCK_TIMEOUT = 60 * 60 * 24 * 3
 
@@ -101,9 +102,7 @@ def on_rm_rf_error(
         if func not in (os.open,):
             warnings.warn(
                 PytestWarning(
-                    "(rm_rf) unknown function {} when removing {}:\n{}: {}".format(
-                        func, path, type(exc), exc
-                    )
+                    f"(rm_rf) unknown function {func} when removing {path}:\n{type(exc)}: {exc}"
                 )
             )
         return False
@@ -242,7 +241,7 @@ def make_numbered_dir(root: Path, prefix: str, mode: int = 0o700) -> Path:
     else:
         raise OSError(
             "could not create numbered dir with prefix "
-            "{prefix} in {root} after 10 tries".format(prefix=prefix, root=root)
+            f"{prefix} in {root} after 10 tries"
         )
 
 
@@ -681,7 +680,7 @@ def resolve_package_path(path: Path) -> Optional[Path]:
     result = None
     for parent in itertools.chain((path,), path.parents):
         if parent.is_dir():
-            if not parent.joinpath("__init__.py").is_file():
+            if not (parent / "__init__.py").is_file():
                 break
             if not parent.name.isidentifier():
                 break
@@ -689,10 +688,14 @@ def resolve_package_path(path: Path) -> Optional[Path]:
     return result
 
 
-def scandir(path: Union[str, "os.PathLike[str]"]) -> List["os.DirEntry[str]"]:
+def scandir(
+    path: Union[str, "os.PathLike[str]"],
+    sort_key: Callable[["os.DirEntry[str]"], object] = lambda entry: entry.name,
+) -> List["os.DirEntry[str]"]:
     """Scan a directory recursively, in breadth-first order.
 
-    The returned entries are sorted.
+    The returned entries are sorted according to the given key.
+    The default is to sort by name.
     """
     entries = []
     with os.scandir(path) as s:
@@ -706,7 +709,7 @@ def scandir(path: Union[str, "os.PathLike[str]"]) -> List["os.DirEntry[str]"]:
                     continue
                 raise
             entries.append(entry)
-    entries.sort(key=lambda entry: entry.name)
+    entries.sort(key=sort_key)  # type: ignore[arg-type]
     return entries
 
 
@@ -774,24 +777,6 @@ def bestrelpath(directory: Path, dest: Path) -> str:
         # Forward from base to dest.
         *reldest.parts,
     )
-
-
-# Originates from py. path.local.copy(), with siginficant trims and adjustments.
-# TODO(py38): Replace with shutil.copytree(..., symlinks=True, dirs_exist_ok=True)
-def copytree(source: Path, target: Path) -> None:
-    """Recursively copy a source directory to target."""
-    assert source.is_dir()
-    for entry in visit(source, recurse=lambda entry: not entry.is_symlink()):
-        x = Path(entry)
-        relpath = x.relative_to(source)
-        newx = target / relpath
-        newx.parent.mkdir(exist_ok=True)
-        if x.is_symlink():
-            newx.symlink_to(os.readlink(x))
-        elif x.is_file():
-            shutil.copyfile(x, newx)
-        elif x.is_dir():
-            newx.mkdir(exist_ok=True)
 
 
 def safe_exists(p: Path) -> bool:

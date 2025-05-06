@@ -278,6 +278,11 @@ message TDomainsConfig {
     repeated TNamedCompactionPolicy NamedCompactionPolicy = 5;
     optional TSecurityConfig SecurityConfig = 6;
     optional bool ForbidImplicitStoragePools = 7 [default = true];
+
+    // then these configs are set, they override the default StateStorage config for each kind of entity
+    optional TStateStorage ExplicitStateStorageConfig = 8;
+    optional TStateStorage ExplicitStateStorageBoardConfig = 9;
+    optional TStateStorage ExplicitSchemeBoardConfig = 10;
 }
 
 message TBlobStorageConfig {
@@ -343,6 +348,10 @@ message TSelfManagementConfig {
     // some extra settings
     optional bool AutomaticBoxManagement = 21 [default = true]; // invoke BSC DefineHostConfig/DefineBox automatically
     optional bool AutomaticBootstrap = 22; // whether bootstrap should be performed automatically; PROHIBITED for production
+    optional bool AutomaticStaticGroupManagement = 23; // whether distconf/SelfHeal can change static group on its behalf
+    optional bool AutomaticStateStorageManagement = 24; // the same for state storage
+    optional bool AutomaticStateStorageBoardManagement = 25; // the same for state storage board
+    optional bool AutomaticSchemeBoardManagement = 26; // the same for scheme board
 }
 
 message TBlobStorageFormatConfig {
@@ -421,6 +430,11 @@ message TInterconnectConfig {
         REQUIRED = 2;
     };
 
+    enum ESocketSendOptimization {
+        IC_SO_DISABLED = 0;
+        IC_SO_MSG_ZEROCOPY = 1;
+    };
+
     repeated TChannel Channel = 1;
     optional bool FirstTryBeforePoll = 2; // DEPRECATED
     optional bool StartTcp = 3 [default = false];
@@ -454,6 +468,7 @@ message TInterconnectConfig {
     optional bool EnableExternalDataChannel = 42 [default = true];
     optional bool ValidateIncomingPeerViaDirectLookup = 44;
     optional uint32 SocketBacklogSize = 45; // SOMAXCONN if not set or zero
+    optional ESocketSendOptimization SocketSendOptimization = 51 [default = IC_SO_DISABLED];
 
     // ballast is added to IC handshake frames to ensure correctness of jumbo frames transmission over network
     optional uint32 HandshakeBallastSize = 14;
@@ -1544,7 +1559,7 @@ message TImmediateControlsConfig {
             Description: "Maximum number of slow disks, which DSProxy can skip with Accelerations, option for HDD",
             MinValue: 1,
             MaxValue: 2,
-            DefaultValue: 2 }];
+            DefaultValue: 1 }];
 
         optional uint64 SlowDiskThresholdSSD = 9 [(ControlOptions) = {
             Description: "The minimum ratio of slowest and second slowest disks, required to accelerate, promille, option for SSD",
@@ -1908,6 +1923,7 @@ message TColumnShardConfig {
     optional uint64 MemoryLimitMergeOnCompactionRawData = 38 [default = 512000000];
     optional bool AlterObjectEnabled = 39 [default = false];
     optional EJsonDoubleOutOfRangeHandlingPolicy DoubleOutOfRangeHandling = 40 [default = REJECT];
+    optional bool PortionMetaV0Usage = 41 [default = true];
 }
 
 message TSchemeShardConfig {

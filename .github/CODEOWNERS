@@ -1,3 +1,4 @@
+/CHANGELOG.md @ydb-platform/changelog-reviewers
 /*.md @ydb-platform/docs
 
 /build @ydb-platform/ci
@@ -16,6 +17,7 @@
 /ydb/core/kqp/ @ydb-platform/qp
 /ydb/core/kqp/ut/federated_query @ydb-platform/fq
 /ydb/core/kqp/ut/olap/ @ydb-platform/cs
+/ydb/core/kqp/ut/indexes/*vector*
 /ydb/core/public_http/ @ydb-platform/fq
 
 /ydb/docs/ @ydb-platform/docs

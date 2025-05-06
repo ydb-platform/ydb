@@ -31,7 +31,8 @@ enum class ETaskType {
     Unknown,
     Download,
     Upload,
-    Merge
+    Merge,
+    Map
 };
 
 enum class EFmrComponent {
@@ -183,9 +184,21 @@ struct TMergeTaskParams {
     TFmrTableOutputRef Output;
 };
 
-using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams>;
+struct TMapOperationParams {
+    std::vector<TOperationTableRef> Input;
+    std::vector<TFmrTableRef> Output;
+    TString Executable;
+};
 
-using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams>;
+struct TMapTaskParams {
+    std::vector<TTaskTableRef> Input;
+    std::vector<TFmrTableOutputRef> Output;
+    TString Executable;
+};
+
+using TOperationParams = std::variant<TUploadOperationParams, TDownloadOperationParams, TMergeOperationParams, TMapOperationParams>;
+
+using TTaskParams = std::variant<TUploadTaskParams, TDownloadTaskParams, TMergeTaskParams, TMapTaskParams>;
 
 struct TClusterConnection {
     TString TransactionId;

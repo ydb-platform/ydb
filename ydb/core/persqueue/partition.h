@@ -1013,6 +1013,11 @@ private:
     void DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request);
 
     TBlobKeyTokenPtr MakeBlobKeyToken(const TString& key);
+
+    void OnReadComplete(TReadInfo& info,
+                        TUserInfo* userInfo,
+                        const TEvPQ::TEvBlobResponse* blobResponse,
+                        const TActorContext& ctx);
 };
 
 } // namespace NKikimr::NPQ

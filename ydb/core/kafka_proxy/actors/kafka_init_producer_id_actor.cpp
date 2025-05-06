@@ -284,8 +284,10 @@ namespace NKafka {
 
         Send(NKafka::MakeKafkaTransactionsServiceID(), new TEvKafka::TEvSaveTxnProducerRequest(
             producerState.TransactionalId,
-            producerState.ProducerId,
-            producerState.ProducerEpoch
+            {
+                producerState.ProducerId, 
+                producerState.ProducerEpoch
+            }
         ));
     }
 

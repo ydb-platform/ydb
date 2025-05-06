@@ -3,6 +3,7 @@
 #include "factories.h"
 #include "streams.h"
 #include "printout.h"
+#include "subprocess.h"
 
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
@@ -22,79 +23,19 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-template<typename K>
-void UpdateMapFromBlocks(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, std::unordered_map<K, ui64>& result);
-
-template<>
-void UpdateMapFromBlocks(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, std::unordered_map<ui64, ui64>& result)
-{
-    auto datumKey = TArrowBlock::From(key).GetDatum();
-    auto datumValue = TArrowBlock::From(value).GetDatum();
-    UNIT_ASSERT(datumKey.is_array());
-    UNIT_ASSERT(datumValue.is_array());
-
-    const auto ui64keys = datumKey.template array_as<arrow::UInt64Array>();
-    const auto ui64values = datumValue.template array_as<arrow::UInt64Array>();
-    UNIT_ASSERT(!!ui64keys);
-    UNIT_ASSERT(!!ui64values);
-    UNIT_ASSERT_VALUES_EQUAL(ui64keys->length(), ui64values->length());
-
-    const size_t length = ui64keys->length();
-    for (size_t i = 0; i < length; ++i) {
-        result[ui64keys->Value(i)] += ui64values->Value(i);
-    }
-}
-
-template<>
-void UpdateMapFromBlocks(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, std::unordered_map<std::string, ui64>& result)
-{
-    auto datumKey = TArrowBlock::From(key).GetDatum();
-    auto datumValue = TArrowBlock::From(value).GetDatum();
-    UNIT_ASSERT(datumKey.is_arraylike());
-    UNIT_ASSERT(datumValue.is_array());
-
-    const auto ui64values = datumValue.template array_as<arrow::UInt64Array>();
-    UNIT_ASSERT(!!ui64values);
-
-    int64_t valueOffset = 0;
-
-    for (const auto& chunk : datumKey.chunks()) {
-        auto* barray = dynamic_cast<arrow::BinaryArray*>(chunk.get());
-        UNIT_ASSERT(barray != nullptr);
-        for (int64_t i = 0; i < barray->length(); ++i) {
-            auto key = barray->GetString(i);
-            auto val = ui64values->Value(valueOffset);
-            result[key] += val;
-            ++valueOffset;
-        }
-    }
-}
-
-
-template<typename TStream, typename TMap>
-void CalcRefResult(TStream& refStream, TMap& refResult)
-{
-    NUdf::TUnboxedValue columns[3];
-
-    while (refStream->WideFetch(columns, 3) == NUdf::EFetchStatus::Ok) {
-        UpdateMapFromBlocks(columns[0], columns[1], refResult);
-    }
-}
-
+namespace {
 
 template<bool LLVM, bool Spilling>
-void RunTestBlockCombineHashedSimple(const TRunParams& params, TTestResultCollector& printout)
+TRunResult RunTestOverGraph(const TRunParams& params, const bool measureReferenceMemory)
 {
     TSetup<LLVM, Spilling> setup(GetPerfTestFactory());
 
-    printout.SubmitTestNameAndParams(params, __func__, LLVM, Spilling);
-
-    auto samples = MakeKeyedString64Samples(params.RowsPerRun, params.MaxKey, false);
+    auto sampler = CreateBlockSamplerFromParams(params);
 
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    auto keyBaseType = pb.NewDataType(NUdf::TDataType<char*>::Id);
-    auto valueBaseType = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    auto keyBaseType = sampler->BuildKeyType(*setup.Env);
+    auto valueBaseType = sampler->BuildValueType(*setup.Env);
     auto keyBlockType = pb.NewBlockType(keyBaseType, TBlockType::EShape::Many);
     auto valueBlockType = pb.NewBlockType(valueBaseType, TBlockType::EShape::Many);
     auto blockSizeType = pb.NewDataType(NUdf::TDataType<ui64>::Id);
@@ -105,6 +46,7 @@ void RunTestBlockCombineHashedSimple(const TRunParams& params, TTestResultCollec
     const auto streamResultType = pb.NewStreamType(streamResultItemType);
     const auto streamCallable = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", streamType).Build();
 
+    // TODO: This should be generated in the sampler
     ui32 keys[] = {0};
     TAggInfo aggs[] = {
         TAggInfo{
@@ -112,6 +54,7 @@ void RunTestBlockCombineHashedSimple(const TRunParams& params, TTestResultCollec
             .ArgsColumns = {1u},
         }
     };
+
     auto pgmReturn = pb.Collect(pb.NarrowMap(pb.ToFlow(
         pb.BlockCombineHashed(
             TRuntimeNode(streamCallable, false),
@@ -122,81 +65,122 @@ void RunTestBlockCombineHashedSimple(const TRunParams& params, TTestResultCollec
         )),
         [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); } // NarrowMap handler
     ));
-    const auto graph = setup.BuildGraph(pgmReturn, {streamCallable});
 
-    auto streamMaker = [&]() -> auto {
-        return std::unique_ptr<TBlockKVStream<std::string, ui64>>(new TBlockKVStream<std::string, ui64>(
-            graph->GetContext(),
-            samples,
-            params.NumRuns,
-            params.BlockSize,
-            {keyBaseType, valueBaseType}
-        ));
+    auto measureGraphTime = [&](auto& computeGraphPtr, NUdf::TUnboxedValue& resultList) {
+        // Compute graph implementation
+        auto stream = NUdf::TUnboxedValuePod(sampler->MakeStream(computeGraphPtr->GetContext()).Release());
+        computeGraphPtr->GetEntryPoint(0, true)->SetValue(computeGraphPtr->GetContext(), std::move(stream));
+        const auto graphStart = GetThreadCPUTime();
+        resultList = computeGraphPtr->GetValue();
+        return GetThreadCPUTimeDelta(graphStart);
     };
 
-    // Compute results directly from raw samples to test the input stream implementation
-    std::unordered_map<std::string, ui64> rawResult;
-    for (const auto& tuple : samples) {
-        rawResult[tuple.first] += (tuple.second * params.NumRuns);
+    auto measureRefTime = [&](auto& computeGraphPtr) {
+        // Reference implementation (sum via an std::unordered_map)
+        const auto cppStart = GetThreadCPUTime();
+        sampler->ComputeReferenceResult(computeGraphPtr->GetContext());
+        return GetThreadCPUTimeDelta(cppStart);
+    };
+
+    auto measureGeneratorTime = [&](auto& computeGraphPtr) {
+        // Generator-only loop
+        const auto devnullStreamPtr = sampler->MakeStream(computeGraphPtr->GetContext());
+        auto& devnullStream = *devnullStreamPtr;
+        size_t numBlocks = 0;
+        const auto timeStart = GetThreadCPUTime();
+        {
+            NUdf::TUnboxedValue columns[3];
+            while (devnullStream.WideFetch(columns, 3) == NUdf::EFetchStatus::Ok) {
+                ++numBlocks;
+            }
+        }
+        auto duration = GetThreadCPUTimeDelta(timeStart);
+        Cerr << "Blocks generated: " << numBlocks << Endl;
+        return duration;
+    };
+
+    const auto graph = setup.BuildGraph(pgmReturn, {streamCallable});
+
+    TRunResult result;
+
+    if (measureReferenceMemory || params.TestMode == ETestMode::RefOnly) {
+        long maxRssBefore = GetMaxRSS();
+        result.ReferenceTime = measureRefTime(graph);
+        result.ReferenceMaxRSSDelta = GetMaxRSSDelta(maxRssBefore);
+        return result;
     }
 
-    // Measure the input stream run time
-    const auto devnullStream = streamMaker();
-    const auto devnullStart = TInstant::Now();
-    {
-        NUdf::TUnboxedValue columns[3];
-        while (devnullStream->WideFetch(columns, 3) == NUdf::EFetchStatus::Ok) {
+    NUdf::TUnboxedValue resultList;
+
+    if (params.TestMode == ETestMode::GraphOnly || params.TestMode == ETestMode::Full) {
+        long maxRssBefore = GetMaxRSS();
+        result.ResultTime = measureGraphTime(graph, resultList);
+        result.MaxRSSDelta = GetMaxRSSDelta(maxRssBefore);
+        if (params.TestMode == ETestMode::GraphOnly) {
+            return result;
         }
     }
-    const auto devnullTime = TInstant::Now() - devnullStart;
 
-    // Reference implementation (sum via an std::unordered_map)
-    std::unordered_map<std::string, ui64> refResult;
-    const auto refStream = streamMaker();
-    const auto cppStart = TInstant::Now();
-    CalcRefResult(refStream, refResult);
-    const auto cppTime = TInstant::Now() - cppStart;
-
-    // Verify the reference stream implementation against the raw samples
-    UNIT_ASSERT_VALUES_EQUAL(refResult.size(), rawResult.size());
-    for (const auto& tuple : rawResult) {
-        auto otherIt = refResult.find(tuple.first);
-        UNIT_ASSERT(otherIt != refResult.end());
-        UNIT_ASSERT_VALUES_EQUAL(tuple.second, otherIt->second);
+    // Measure the input stream own run time
+    if (params.TestMode == ETestMode::GeneratorOnly || params.TestMode == ETestMode::Full) {
+        result.GeneratorTime = measureGeneratorTime(graph);
+        if (params.TestMode == ETestMode::GeneratorOnly) {
+            return result;
+        }
     }
 
-    // Compute graph implementation
-    auto stream = NUdf::TUnboxedValuePod(streamMaker().release());
-    graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(stream));
-    const auto graphStart = TInstant::Now();
-    const auto& resultList = graph->GetValue();
-    const auto graphTime = TInstant::Now() - graphStart;
+    result.ReferenceTime = measureRefTime(graph);
 
-    size_t numResultItems = resultList.GetListLength();
-    Cerr << "Result block count: " << numResultItems << Endl;
+    // Compute results directly from raw samples
+    sampler->ComputeRawResult();
 
-    // Verification
-    std::unordered_map<std::string, ui64> graphResult;
+    // Verify the reference result against the raw samples to test the input stream implementation
+    sampler->VerifyReferenceResultAgainstRaw();
 
-    const auto ptr = resultList.GetElements();
-    for (size_t i = 0ULL; i < numResultItems; ++i) {
-        UNIT_ASSERT(ptr[i].GetListLength() >= 2);
+    // Verify the compute graph result value against the reference implementation
+    sampler->VerifyGraphResultAgainstReference(resultList);
 
-        const auto elements = ptr[i].GetElements();
+    return result;
+}
 
-        UpdateMapFromBlocks(elements[0], elements[1], graphResult);
+}
+
+
+template<bool LLVM, bool Spilling>
+void RunTestBlockCombineHashedSimple(const TRunParams& params, TTestResultCollector& printout)
+{
+    std::optional<TRunResult> finalResult;
+
+    Cerr << "======== " << __func__ << ", keys: " << params.NumKeys << ", block size: " << params.BlockSize << ", llvm: " << LLVM << Endl;
+
+    if (params.NumAttempts <= 1 && !params.MeasureReferenceMemory && !params.AlwaysSubprocess) {
+        finalResult = RunTestOverGraph<LLVM, Spilling>(params, false);
+    } else {
+        for (int i = 1; i <= params.NumAttempts; ++i) {
+            Cerr << "------ : run " << i << " of " << params.NumAttempts << Endl;
+
+            TRunResult runResult = RunForked([&]() {
+                return RunTestOverGraph<LLVM, Spilling>(params, false);
+            });
+
+            if (finalResult.has_value()) {
+                MergeRunResults(runResult, *finalResult);
+            } else {
+                finalResult.emplace(runResult);
+            }
+        }
     }
 
-    UNIT_ASSERT_VALUES_EQUAL(refResult.size(), graphResult.size());
-    for (const auto& tuple : refResult) {
-        auto graphIt = graphResult.find(tuple.first);
-        UNIT_ASSERT(graphIt != graphResult.end());
-        UNIT_ASSERT_VALUES_EQUAL(tuple.second, graphIt->second);
+    if (params.MeasureReferenceMemory) {
+        Cerr << "------ Reference memory measurement run" << Endl;
+        TRunResult runResult = RunForked([&]() {
+            return RunTestOverGraph<LLVM, Spilling>(params, true);
+        });
+        Y_ENSURE(finalResult.has_value());
+        finalResult->ReferenceMaxRSSDelta = runResult.ReferenceMaxRSSDelta;
     }
 
-    Cerr << "Graph time raw: " << graphTime << Endl;
-    Cerr << "CPP time raw: " << cppTime << Endl;
-    printout.SubmitTimings(graphTime, cppTime, devnullTime);
+    printout.SubmitMetrics(params, *finalResult, "BlockCombineHashed", LLVM, Spilling);
 }
 
 template void RunTestBlockCombineHashedSimple<false, false>(const TRunParams& params, TTestResultCollector& printout);

@@ -9,8 +9,11 @@
 ))))
 
 (let world (Apply test world (Apply (bind core_module 'TestBit) (String '"\x05\x04") (Uint64 '0))))
+(let world (Apply test world (Apply (bind core_module 'TestBit) (String '"\x05\x04") (Uint64 '2))))
+(let world (Apply test world (Apply (bind core_module 'TestBit) (String '"\x05\x04") (Uint64 '7))))
+(let world (Apply test world (Apply (bind core_module 'TestBit) (String '"\x05\x04") (Uint64 '8))))
 (let world (Apply test world (Apply (bind core_module 'TestBit) (String '"\x05\x04") (Uint64 '10))))
-(let world (Apply test world (Apply (bind core_module 'TestBit) (String '"\x05\x04") (Uint64 '11))))
+(let world (Apply test world (Apply (bind core_module 'TestBit) (String '"\x05\x04") (Uint64 '15))))
 (let world (Apply test world (Apply (bind core_module 'TestBit) (String '"\x05\x04") (Uint64 '23))))
 (let world (Apply test world (Apply (bind core_module 'TestBit) (Just (String '"\x05\x04")) (Uint64 '0))))
 (let world (Apply test world (Apply (bind core_module 'TestBit) (Just (Utf8 '"\x05\x04")) (Uint64 '0))))

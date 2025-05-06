@@ -13,7 +13,7 @@ items:
     mode: link
     path: ../yql/reference/recipes/toc_i.yaml
 - name: Для аналитиков
-  href: olap/index.md
+  href: ../olap/index.md
   include:
     mode: link
-    path: olap/toc_p.yaml
+    path: ../olap/toc_p.yaml

@@ -18,7 +18,7 @@
 
 - Embedded UI
 
-  Подробнее про [Embedded UI](../../../reference/embedded-ui/ydb-monitoring).
+  Подробнее про [Embedded UI](../../reference/embedded-ui/ydb-monitoring).
 
   ```sql
   CREATE TABLE `evals` (

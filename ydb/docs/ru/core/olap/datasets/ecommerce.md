@@ -24,7 +24,7 @@ awk 'NR==1 {print "row_id," $0; next} {print NR-1 "," $0}' 2019-Nov.csv > temp.c
 
 - Embedded UI
 
-  Подробнее про [Embedded UI](../../../reference/embedded-ui/ydb-monitoring).
+  Подробнее про [Embedded UI](../../reference/embedded-ui/ydb-monitoring).
 
   ```sql
   CREATE TABLE `ecommerce_table` (
@@ -115,7 +115,7 @@ ydb import file csv --header --null-value "" --path ecommerce_table 2019-Nov.csv
 
 {% endlist %}
 
-Пример результата:
+Результат:
 
 ```
 ┌────────────────────────────────────┬────────────┐

@@ -18,7 +18,7 @@
 
 - Embedded UI
 
-  Подробнее про [Embedded UI](../../../reference/embedded-ui/ydb-monitoring).
+  Подробнее про [Embedded UI](../../reference/embedded-ui/ydb-monitoring).
 
   ```sql
   CREATE TABLE `vgsales` (
@@ -104,7 +104,7 @@ ydb import file csv --header --null-value "" --path vgsales vgsales.csv
 
 {% endlist %}
 
-Пример результата:
+Результат:
 
 ```
 ┌───────────┬──────────────────┐

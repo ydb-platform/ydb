@@ -105,6 +105,9 @@
     ],
     "test_transform.TestYamlConfigTransformations.test_simplified[dump]": [
         {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_/storage-pool-types.yaml.result.json"
+        },
+        {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_/single-node-with-file.yaml.result.json"
         },
         {
@@ -139,6 +142,9 @@
         }
     ],
     "test_transform.TestYamlConfigTransformations.test_simplified[dump_ds_init]": [
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_ds_init_/storage-pool-types.yaml.result.json"
+        },
         {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_ds_init_/single-node-with-file.yaml.result.json"
         },

@@ -437,6 +437,17 @@ TStatus AnnotateReadTableRanges(const TExprNode::TPtr& node, TExprContext& ctx, 
             return IGraphTransformer::TStatus::Error;
         }
 
+        if (node->ChildrenSize() > TKqpReadOlapTableRangesBase::idx_ProcessOriginalForm) {
+            auto& processLambdaOriginalForm = node->ChildRef(TKqpReadOlapTableRangesBase::idx_ProcessOriginalForm);
+            if (!UpdateLambdaAllArgumentsTypes(processLambdaOriginalForm, {rowType}, ctx)) {
+                 return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!processLambdaOriginalForm->GetTypeAnn()) {
+                return IGraphTransformer::TStatus::Repeat;
+            }
+        }
+
         if (TKqpReadOlapTableRanges::Match(node.Get())) {
             node->SetTypeAnn(ctx.MakeType<TFlowExprType>(processRowType));
         } else if (TKqpWideReadOlapTableRanges::Match(node.Get())) {

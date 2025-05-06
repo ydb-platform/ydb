@@ -1090,12 +1090,13 @@ private:
                     if (auto maybeFilter = TMaybeNode<TKqpOlapFilter>(n)) { return true; } return false;
                 };
 
+
                 if (auto maybeKqpOlapFilter = FindNode(olapTable.Process().Body().Ptr(), pred)) {
                     auto kqpOlapFilter = TExprBase(maybeKqpOlapFilter).Cast<TKqpOlapFilter>();
 
                     TOperator op;
                     op.Properties["Name"] = "Filter";
-                    op.Properties["Predicate"] = OlapFilterStr(kqpOlapFilter);
+                    op.Properties["Predicate"] = olapTable.ProcessOriginalForm() ? NPlanUtils::ExtractPredicate(olapTable.ProcessOriginalForm().Cast()).Body : OlapFilterStr(kqpOlapFilter);
                     op.Properties["Pushdown"] = "True";
 
                     AddOptimizerEstimates(op, kqpOlapFilter);

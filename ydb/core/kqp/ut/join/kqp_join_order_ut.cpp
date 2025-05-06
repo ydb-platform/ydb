@@ -477,9 +477,9 @@ Y_UNIT_TEST_SUITE(OlapEstimationRowsCorrectness) {
     }
 
     // FIXME: Cardinality estimation is broken because of new type of OLAP pushdown
-    // Y_UNIT_TEST(TPCH3) {
-    //    TestOlapEstimationRowsCorrectness("queries/tpch3.sql", "stats/tpch1000s.json");
-    // }
+    Y_UNIT_TEST(TPCH3) {
+        TestOlapEstimationRowsCorrectness("queries/tpch3.sql", "stats/tpch1000s.json");
+    }
 
     Y_UNIT_TEST(TPCH5) {
         TestOlapEstimationRowsCorrectness("queries/tpch5.sql", "stats/tpch1000s.json");

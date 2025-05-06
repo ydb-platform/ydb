@@ -192,6 +192,7 @@ TExprBase KqpApplyExtractMembersToReadOlapTable(TExprBase node, TExprContext& ct
             .Settings(read.Settings())
             .ExplainPrompt(read.ExplainPrompt())
             .Process(newProcessLambda)
+            .ProcessOriginalForm(read.ProcessOriginalForm())
             .Done();
     } else {
         return Build<TKqpReadOlapTableRangesBase>(ctx, read.Pos())
@@ -202,6 +203,7 @@ TExprBase KqpApplyExtractMembersToReadOlapTable(TExprBase node, TExprContext& ct
             .Settings(read.Settings())
             .ExplainPrompt(read.ExplainPrompt())
             .Process(read.Process())
+            .ProcessOriginalForm(read.ProcessOriginalForm())
             .Done();
     }
 }

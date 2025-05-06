@@ -69,6 +69,7 @@ TExprBase KqpBuildWideReadTable(const TExprBase& node, TExprContext& ctx, TTypeA
                             .Settings(read.Settings())
                             .ExplainPrompt(read.ExplainPrompt())
                             .Process(read.Process())
+                            .ProcessOriginalForm(read.ProcessOriginalForm())
                             .Build()
                         .Build()
                     .Build()
@@ -81,6 +82,7 @@ TExprBase KqpBuildWideReadTable(const TExprBase& node, TExprContext& ctx, TTypeA
                 .Settings(read.Settings())
                 .ExplainPrompt(read.ExplainPrompt())
                 .Process(read.Process())
+                .ProcessOriginalForm(read.ProcessOriginalForm())
                 .Done();
         }
     } else {

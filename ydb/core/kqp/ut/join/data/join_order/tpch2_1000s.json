@@ -7,7 +7,50 @@
         "args":
           [
             {
-<<<<<<< HEAD
+              "op_name":"TableFullScan",
+              "table":"part"
+            },
+            {
+              "op_name":"InnerJoin (Grace)",
+              "args":
+                [
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"partsupp"
+                  },
+                  {
+                    "op_name":"InnerJoin (MapJoin)",
+                    "args":
+                      [
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"supplier"
+                        },
+                        {
+                          "op_name":"InnerJoin (MapJoin)",
+                          "args":
+                            [
+                              {
+                                "op_name":"TableLookup",
+                                "table":"region"
+                              },
+                              {
+                                "op_name":"TableFullScan",
+                                "table":"nation"
+                              }
+                            ]
+                        }
+                      ]
+                  }
+                ]
+            }
+          ]
+      },
+      {
+        "op_name":"InnerJoin (Grace)",
+        "args":
+          [
+            {
               "op_name":"TableFullScan",
               "table":"partsupp"
             },
@@ -30,157 +73,10 @@
                         {
                           "op_name":"TableFullScan",
                           "table":"nation"
-=======
-              "op_name":"InnerJoin (Grace)",
-              "args":
-                [
-                  {
-                    "op_name":"HashShuffle",
-                    "args":
-                      [
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"part"
-                        }
-                      ]
-                  },
-                  {
-                    "op_name":"HashShuffle",
-                    "args":
-                      [
-                        {
-                          "op_name":"HashShuffle",
-                          "args":
-                            [
-                              {
-                                "op_name":"InnerJoin (Grace)",
-                                "args":
-                                  [
-                                    {
-                                      "op_name":"HashShuffle",
-                                      "args":
-                                        [
-                                          {
-                                            "op_name":"TableFullScan",
-                                            "table":"partsupp"
-                                          }
-                                        ]
-                                    },
-                                    {
-                                      "op_name":"HashShuffle",
-                                      "args":
-                                        [
-                                          {
-                                            "op_name":"InnerJoin (MapJoin)",
-                                            "args":
-                                              [
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"supplier"
-                                                },
-                                                {
-                                                  "op_name":"InnerJoin (MapJoin)",
-                                                  "args":
-                                                    [
-                                                      {
-                                                        "op_name":"TableLookup",
-                                                        "table":"region"
-                                                      },
-                                                      {
-                                                        "op_name":"TableFullScan",
-                                                        "table":"nation"
-                                                      }
-                                                    ]
-                                                }
-                                              ]
-                                          }
-                                        ]
-                                    }
-                                  ]
-                              }
-                            ]
->>>>>>> 48ddc8cc3eb ([KQP / CBO] Shuffle Elimination turn on by default. (#15823))
                         }
                       ]
                   }
                 ]
-            }
-          ]
-      },
-      {
-        "op_name":"InnerJoin (Grace)",
-        "args":
-          [
-            {
-              "op_name":"InnerJoin (Grace)",
-              "args":
-                [
-                  {
-<<<<<<< HEAD
-                    "op_name":"TableFullScan",
-                    "table":"partsupp"
-=======
-                    "op_name":"HashShuffle",
-                    "args":
-                      [
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"partsupp"
-                        }
-                      ]
->>>>>>> 48ddc8cc3eb ([KQP / CBO] Shuffle Elimination turn on by default. (#15823))
-                  },
-                  {
-                    "op_name":"InnerJoin (MapJoin)",
-                    "args":
-                      [
-                        {
-<<<<<<< HEAD
-                          "op_name":"TableFullScan",
-                          "table":"supplier"
-                        },
-                        {
-=======
->>>>>>> 48ddc8cc3eb ([KQP / CBO] Shuffle Elimination turn on by default. (#15823))
-                          "op_name":"InnerJoin (MapJoin)",
-                          "args":
-                            [
-                              {
-<<<<<<< HEAD
-                                "op_name":"TableLookup",
-                                "table":"region"
-                              },
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"nation"
-=======
-                                "op_name":"TableFullScan",
-                                "table":"supplier"
-                              },
-                              {
-                                "op_name":"InnerJoin (MapJoin)",
-                                "args":
-                                  [
-                                    {
-                                      "op_name":"TableLookup",
-                                      "table":"region"
-                                    },
-                                    {
-                                      "op_name":"TableFullScan",
-                                      "table":"nation"
-                                    }
-                                  ]
->>>>>>> 48ddc8cc3eb ([KQP / CBO] Shuffle Elimination turn on by default. (#15823))
-                              }
-                            ]
-                        }
-                      ]
-                  }
-                ]
-            },
-            {
-              "op_name":"TableFullScan",
-              "table":"part"
             }
           ]
       }

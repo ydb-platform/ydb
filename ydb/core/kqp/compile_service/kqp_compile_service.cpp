@@ -347,7 +347,7 @@ private:
             TableServiceConfig.GetEnablePgConstsToParams() != enablePgConstsToParams ||
             TableServiceConfig.GetEnablePerStatementQueryExecution() != enablePerStatementQueryExecution ||
             TableServiceConfig.GetEnableSnapshotIsolationRW() != enableSnapshotIsolationRW ||
-            TableServiceConfig.GetAllowMultiBroadcasts() != allowMultiBroadcasts ||
+            TableServiceConfig.GetEnableQueryServiceSpilling() != enableSpilling ||
             TableServiceConfig.GetDefaultEnableShuffleElimination() != defaultEnableShuffleElimination
         ) {
 

@@ -145,7 +145,7 @@ private:
     void InitLockPartition(const NActors::TActorContext& ctx);
     void InitStartReading(const NActors::TActorContext& ctx);
     void RestartDirectReadSession();
-    void OnDirectReadsRestored();
+    void    OnDirectReadsRestored();
     [[nodiscard]] bool SendNextRestorePrepareOrForget();
     [[nodiscard]] bool SendNextRestorePublishRequest();
     void ResendRecentRequests();
@@ -246,6 +246,7 @@ private:
 
     std::map<ui64, NKikimrClient::TPersQueuePartitionResponse::TCmdPrepareDirectReadResult> DirectReadsToRestore;
     std::set<ui64> DirectReadsToPublish;
+    std::set<ui64> UnpublishedDirectReads;
     std::set<ui64> DirectReadsToForget;
 
     enum class EDirectReadRestoreStage {

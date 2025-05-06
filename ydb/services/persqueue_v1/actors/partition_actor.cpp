@@ -690,6 +690,16 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         }
         return;
     }
+
+    if (!(
+            result.HasCmdReadResult() || result.HasCmdPrepareReadResult() || result.HasCmdPublishReadResult()
+            || result.HasCmdForgetReadResult() || result.HasCmdRestoreDirectReadResult()
+    )) {
+        // this is commit response
+        CommitDone(result.GetCookie(), ctx);
+        return;
+    }
+
     switch (DirectReadRestoreStage) {
         case EDirectReadRestoreStage::None:
             break;
@@ -702,14 +712,19 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
             return;
         case EDirectReadRestoreStage::Prepare:
             Y_ABORT_UNLESS(RestoredDirectReadId != 0);
-
+            if (!result.HasCmdPrepareReadResult()) {
+                LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Invalid response on direct read restore for " << Partition << ": expect PrepareReadResult");
+            }
             Y_ABORT_UNLESS(result.HasCmdPrepareReadResult());
             Y_ABORT_UNLESS(DirectReadsToRestore.begin()->first == result.GetCmdPrepareReadResult().GetDirectReadId());
             DirectReadsToRestore.erase(DirectReadsToRestore.begin());
             {
                 auto sent = SendNextRestorePublishRequest();
-                if (!sent) // Nothing to publish
+                if (!sent) {
+                    // Read was not published previously and thus no response sent to session. Need to keep it
+                    UnpublishedDirectReads.insert(result.GetCmdPrepareReadResult().GetDirectReadId());
                     sent = SendNextRestorePrepareOrForget();
+                }
                 if (!sent)
                     OnDirectReadsRestored();
             }
@@ -733,11 +748,6 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
                 OnDirectReadsRestored();
             }
             return;
-    }
-
-    if (!(result.HasCmdReadResult() || result.HasCmdPrepareReadResult() || result.HasCmdPublishReadResult() || result.HasCmdForgetReadResult())) { // this is commit response
-        CommitDone(result.GetCookie(), ctx);
-        return;
     }
 
     if (result.HasCmdForgetReadResult()) {
@@ -1218,7 +1228,11 @@ void TPartitionActor::OnDirectReadsRestored() {
     if (InitDone) {
         ctx.Send(ParentId, new TEvPQProxy::TEvUpdateSession(Partition, NodeId, TabletGeneration));
     }
-    ResendRecentRequests();
+
+    for (auto id: UnpublishedDirectReads) {
+        SendPublishDirectRead(id, ActorContext());
+    }
+    UnpublishedDirectReads.clear();    ResendRecentRequests();
 }
 
 void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {

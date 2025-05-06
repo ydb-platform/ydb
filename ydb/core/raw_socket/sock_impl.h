@@ -211,7 +211,20 @@ private:
     TSocketDescriptor* Socket;
     TBuffer Buffer;
 
-    ssize_t Send(const char* data, size_t length) {
+ssize_t Send(const char* data, size_t length) {
+        ui32 retryAttemtpts = MAX_RETRY_ATTEMPTS;
+        while (true) {
+            ssize_t res = Socket->Send(data, length);
+            // retry 
+            if ((-res == EAGAIN || -res == EWOULDBLOCK || -res == EINTR) && retryAttemtpts--) {
+                continue;
+            }
+            
+              return res;
+        }
+
+       Y_UNREACHABLE();
+    }
         ui32 retryAttemtpts = MAX_RETRY_ATTEMPTS;
         while (retryAttemtpts > 0) {
             ssize_t res = Socket->Send(data, length);

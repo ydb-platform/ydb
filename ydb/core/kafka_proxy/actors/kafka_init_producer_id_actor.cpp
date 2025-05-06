@@ -282,7 +282,7 @@ namespace NKafka {
     void TKafkaInitProducerIdActor::SendSaveTxnProducerStateRequest(const TProducerState& producerState) {
         KAFKA_LOG_D("Sending save txn producer state request");
 
-        Send(NKafka::MakeKafkaTransactionsServiceID(), new TEvKafka::TEvSaveTxnProducerRequest(
+        Send(NKafka::MakeTransactionsServiceID(), new TEvKafka::TEvSaveTxnProducerRequest(
             producerState.TransactionalId,
             {
                 producerState.ProducerId, 

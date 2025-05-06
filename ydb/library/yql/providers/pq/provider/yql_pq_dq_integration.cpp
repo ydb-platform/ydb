@@ -162,10 +162,9 @@ public:
                 srcDesc.SetClusterType(ToClusterType(clusterDesc->ClusterType));
                 auto topicPath = topic.Path().Value();
                 auto topicDatabase = topic.Database().Value();
-                if (clusterDesc->ClusterType == NYql::TPqClusterConfig::CT_PERS_QUEUE) {
+                if (clusterDesc->ClusterType == NYql::TPqClusterConfig::CT_PERS_QUEUE && topicDatabase == "/Root") {
                     auto pos = topicPath.find('/');
                     Y_ENSURE(pos != TStringBuf::npos);
-                    Y_ENSURE(topicDatabase == "/Root");
                     srcDesc.SetTopicPath(TString(topicPath.substr(pos + 1)));
                     srcDesc.SetDatabase("/logbroker-federation/" + TString(topicPath.substr(0, pos)));
                 } else {
@@ -285,10 +284,9 @@ public:
                 sinkDesc.SetClusterType(ToClusterType(clusterDesc->ClusterType));
                 auto topicPath = topic.Path().Value();
                 auto topicDatabase = topic.Database().Value();
-                if (clusterDesc->ClusterType == NYql::TPqClusterConfig::CT_PERS_QUEUE) {
+                if (clusterDesc->ClusterType == NYql::TPqClusterConfig::CT_PERS_QUEUE && topicDatabase == "/Root") {
                     auto pos = topicPath.find('/');
                     Y_ENSURE(pos != TStringBuf::npos);
-                    Y_ENSURE(topicDatabase == "/Root");
                     sinkDesc.SetTopicPath(TString(topicPath.substr(pos + 1)));
                     sinkDesc.SetDatabase("/logbroker-federation/" + TString(topicPath.substr(0, pos)));
                 } else {

@@ -91,8 +91,7 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
 
     TString database = requestedDatabase;
     TString path = requestedPath;
-    if (config->GetClusterType() == TPqClusterConfig::CT_PERS_QUEUE) {
-        Y_ENSURE(requestedDatabase == "/Root", requestedDatabase);
+    if (config->GetClusterType() == TPqClusterConfig::CT_PERS_QUEUE && requestedDatabase == "/Root") {
         auto pos = requestedPath.find('/');
         Y_ENSURE(pos != TString::npos, "topic name is expected in format <account>/<path>");
         database = "/logbroker-federation/" + requestedPath.substr(0, pos);

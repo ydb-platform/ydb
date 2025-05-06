@@ -720,13 +720,14 @@ protected:
         NActors::TActorSystem* actorSystem,
         const TAsyncStatus& status,
         TActorId self,
-        const RequestEventPtr& ev,
+        RequestEventPtr&& ev,
         const TInstant& startTime,
         const TRequestCounters& requestCounters,
         const std::function<typename TPrepareResponseResultType<ResponseEvent, Result>::Type()>& prepare,
         TDebugInfoPtr debugInfo)
     {
-        return status.Apply([prepare, debugInfo, startTime, actorSystem, self, name, ev, requestCounters=requestCounters](const auto& future) mutable {
+        using TRequestEventSharedPtr = std::shared_ptr<typename std::decay_t<RequestEventPtr>::TValueType>; // TEv*::TPtr is TAutoPtr
+        return status.Apply([prepare, debugInfo, startTime, actorSystem, self, name, ev=TRequestEventSharedPtr(ev.Release()), requestCounters=requestCounters](const auto& future) mutable {
             NYql::TIssues internalIssues;
             NYql::TIssues issues;
             Result result;

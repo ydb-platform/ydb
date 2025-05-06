@@ -618,8 +618,6 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     ui32 RingGroupPassAwayCounter;
     bool WaitAllReplies;
 
-    TAutoPtr<TEvStateStorage::TEvInfo> Response;
-
     ui64 TabletID;
     ui64 Cookie;
     TActorId CurrentLeader;
@@ -679,7 +677,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     }
 
     void ProcessEvInfo(ui32 ringGroupIdx, TEvStateStorage::TEvInfo *msg) {
-        if (Replies <= 1 && !Info->RingGroups[ringGroupIdx].writeOnly) {
+        if (Replies <= 1 || !Info->RingGroups[ringGroupIdx].writeOnly) {
             TabletID = msg->TabletID;
             Cookie = msg->Cookie;
             CurrentLeader = msg->CurrentLeader;
@@ -1064,10 +1062,10 @@ public:
             hFunc(TEvStateStorage::TEvRingGroupPassAway, Handle);
             fFunc(TEvents::TSystem::Unsubscribe, HandleUnsubscribe);
         default:
-            // if (Info->RingGroups.size() > 1)
+            if (Info->RingGroups.size() > 1)
                 TActivationContext::Forward(ev, RegisterWithSameMailbox(new TStateStorageRingGroupProxyRequest(Info)));
-            // else
-            //     TActivationContext::Forward(ev, RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, 0)));
+            else
+                TActivationContext::Forward(ev, RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, 0)));
             break;
         }
     }

@@ -262,13 +262,6 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
         startReplicas(std::move(schemeBoardInfo), CreateSchemeBoardReplica, "SchemeBoard", &SchemeBoardInfo);
     }
 
-    // terminate unused replicas
-    for (const auto& replicaId : localActorIds) {
-        STLOG(PRI_INFO, BS_NODE, NW43, "terminating useless state storage replica", (ReplicaId, replicaId));
-        const TActorId actorId = as->RegisterLocalService(replicaId, TActorId());
-        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
-    }
-
     // reconfigure proxy
     STLOG(PRI_INFO, BS_NODE, NW50, "updating state storage proxy configuration");
     if (StateStorageProxyConfigured) {
@@ -280,6 +273,13 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
         const TActorId stubInstance = as->RegisterLocalService(MakeStateStorageProxyID(), newInstance);
         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, stubInstance, newInstance, nullptr, 0));
         StateStorageProxyConfigured = true;
+    }
+
+    // terminate unused replicas
+    for (const auto& replicaId : localActorIds) {
+        STLOG(PRI_INFO, BS_NODE, NW43, "terminating useless state storage replica", (ReplicaId, replicaId));
+        const TActorId actorId = as->RegisterLocalService(replicaId, TActorId());
+        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
     }
 }
 

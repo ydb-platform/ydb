@@ -282,7 +282,6 @@ static void CopyStateStorageRingInfo(
         }
         // reset for next ring group
         serviceId[depth] = char();
-
         return;
     }
 
@@ -313,28 +312,23 @@ TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActor
     
     info->CompatibleVersions.reserve(config.CompatibleVersionsSize());
     for (ui32 version : config.GetCompatibleVersions()) {
-            info->CompatibleVersions.push_back(version);
+        info->CompatibleVersions.push_back(version);
     }
     
-
-
+    const size_t offset = FindIndex(namePrefix, char()) + sizeof(ui32);
+    Y_ABORT_UNLESS(offset != NPOS && (offset) < TActorId::MaxServiceIDLength);
+    const ui32 stateStorageGroup = 1;
+    memcpy(namePrefix + offset - sizeof(ui32), reinterpret_cast<const char *>(&stateStorageGroup), sizeof(ui32));
     for (size_t i = 0; i < config.RingGroupsSize(); i++) {
-        const size_t offset = FindIndex(namePrefix, char());
-        Y_ABORT_UNLESS(offset != NPOS && (offset + sizeof(ui32)) < TActorId::MaxServiceIDLength);
+        memset(namePrefix + offset, 0, TActorId::MaxServiceIDLength - offset);
         auto& ringGroup = config.GetRingGroups(i);
-        const ui32 stateStorageGroup = 1;
-        memcpy(namePrefix + offset, reinterpret_cast<const char *>(&stateStorageGroup), sizeof(ui32));
         info.Get()->RingGroups.push_back({ringGroup.GetWriteOnly(), ringGroup.GetRing().GetNToSelect(), {}});
-        CopyStateStorageRingInfo(ringGroup.GetRing(), info.Get()->RingGroups.back(), namePrefix, offset + sizeof(ui32));
+        CopyStateStorageRingInfo(ringGroup.GetRing(), info.Get()->RingGroups.back(), namePrefix, offset);
     }
     if (config.HasRing() && config.RingGroupsSize() == 0) {
-        const size_t offset = FindIndex(namePrefix, char());
-        Y_ABORT_UNLESS(offset != NPOS && (offset + sizeof(ui32)) < TActorId::MaxServiceIDLength);
         auto& ring = config.GetRing();
-        const ui32 stateStorageGroup = 1;
-        memcpy(namePrefix + offset, reinterpret_cast<const char *>(&stateStorageGroup), sizeof(ui32));
         info.Get()->RingGroups.push_back({false, ring.GetNToSelect(), {}});
-        CopyStateStorageRingInfo(ring, info.Get()->RingGroups.back(), namePrefix, offset + sizeof(ui32));
+        CopyStateStorageRingInfo(ring, info.Get()->RingGroups.back(), namePrefix, offset);
     }
     return info;
 }

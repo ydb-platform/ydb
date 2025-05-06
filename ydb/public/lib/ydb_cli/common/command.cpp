@@ -269,11 +269,11 @@ void TClientCommand::Prepare(TConfig& config) {
     SetCustomUsage(config);
     SaveParseResult(config);
     config.ParseResult = ParseResult.get();
-    try {
-        Parse(config);
-    } catch (const std::exception& e) {
-        Cerr << "Error occured during Parse() stage: " << e.what();
-    }
+    // try {
+    Parse(config);
+    // } catch (const std::exception& e) {
+        // Cerr << "Error occured during Parse() stage: " << e.what();
+    // }
 }
 
 void TClientCommand::ExtractParams(TConfig& config) {

@@ -477,7 +477,7 @@ bool TOptionsParseResult::Has(const TString& name, bool includeDefault) const {
         result = nullptr;
     }
     if (result == nullptr) {
-        return ClientOptions->GetOpts().FindLongOption(name) != nullptr;
+        return ParseFromCommandLineResult.FindLongOptParseResult(name);
     }
     return result != nullptr;
 }
@@ -488,7 +488,7 @@ bool TOptionsParseResult::Has(char name, bool includeDefault) const {
         result = nullptr;
     }
     if (result == nullptr) {
-        return ClientOptions->GetOpts().FindCharOption(name) != nullptr;
+        return ParseFromCommandLineResult.FindCharOptParseResult(name);
     }
     return result != nullptr;
 }
@@ -496,6 +496,9 @@ bool TOptionsParseResult::Has(char name, bool includeDefault) const {
 const TString& TOptionsParseResult::Get(const TString& name, bool includeDefault) const {
     if (const TOptionParseResult* result = FindResult(name); result && (includeDefault || result->ValueSource != EOptionValueSource::DefaultValue)) {
         return result->Values().back();
+    }
+    if (auto Opt = ParseFromCommandLineResult.Get(name)) {
+        
     }
     throw yexception() << "No \"" << name << "\" option";
 }

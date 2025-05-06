@@ -35,7 +35,7 @@ from ydb.tools.cfg.templates import (
     kikimr_cfg_for_static_node_new_style,
 )
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 
 
 class StaticConfigGenerator(object):
@@ -1159,8 +1159,9 @@ class StaticConfigGenerator(object):
             'ssdencrypted': blobstorage_base3_pb2.EPDiskType.SSD,
             'rotencrypted': blobstorage_base3_pb2.EPDiskType.ROT,
         }
-
-        property.Type = diskTypeToProto[pool_kind]
+        
+        if pool_kind in diskTypeToProto:
+            property.Type = diskTypeToProto[pool_kind]
 
         if pool_kind in ['ssdencrypted', 'rotencrypted']:
             pool_config.EncryptionMode = 1
@@ -1199,8 +1200,18 @@ class StaticConfigGenerator(object):
                 pool.CopyFrom(defaultPool)
 
         for pool in domain.StoragePoolTypes:
-            if 'encrypted' in pool.Kind and pool.EncryptionMode != 1:
+            # Empirical check: if a pool has 'encrypted' in its name it probably should be encrypted
+            if 'encrypted' in pool.Kind and pool.PoolConfig.EncryptionMode != 1:
                 raise RuntimeError(f"You named a storage pool '{pool.Kind}', but did not explicitly enable `pool_config.encryption_mode: 1`.")
+
+            # Check disk type is specified for every pool
+            type_defined = False
+            for filterElement in pool.PoolConfig.PDiskFilter:
+                if filterElement.Property and filterElement.Property[0].Type:
+                    type_defined = True
+
+            if not type_defined:
+                logger.warning(f"pdisk_filter.property.type missing for pool {pool.Kind}. This pool name is unknown, no default has been generated, specify type by hand") 
 
         if not domain.DomainId:
             domain.DomainId = 1

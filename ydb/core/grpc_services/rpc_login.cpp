@@ -105,10 +105,15 @@ public:
         }
     }
 
+    void HandleDestroyed(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
+        ReplyErrorAndPassAway(Ydb::StatusIds::UNAVAILABLE, "SchemeShard is unavailable");
+    }
+
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvents::TEvUndelivered, HandleUndelivered);
             hFunc(TEvTabletPipe::TEvClientConnected, HandleConnect);
+            hFunc(TEvTabletPipe::TEvClientDestroyed, HandleDestroyed);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigate);
             hFunc(TEvSchemeShard::TEvLoginResult, HandleResult);
             hFunc(TEvLdapAuthProvider::TEvAuthenticateResponse, Handle);

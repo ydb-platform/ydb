@@ -62,7 +62,7 @@ public:
 
         return *ScalarBuilder_;
     }
-    
+
     const IValueBuilder& GetValueBuilder() {
         Y_ENSURE(ValueBuilder_);
         return *ValueBuilder_;
@@ -348,7 +348,7 @@ TScalarBuilderImpl* CastToScalarBuilderImpl(IScalarBuilder& builder) {
 template<typename TReader>
 TReader* CastToBlockReaderImpl(IBlockReader& reader) {
     static_assert(std::is_base_of_v<IBlockReader, TReader>);
-    
+
     auto* readerImpl = dynamic_cast<TReader*>(&reader);
     Y_ENSURE(readerImpl, TStringBuilder() << "Got " << typeid(reader).name() << " as BlockReader");
     return readerImpl;
@@ -444,7 +444,7 @@ struct TBinaryKernelExec {
 
             *res = MakeArray(outputArrays);
         } else if (arg1.is_array() && arg2.is_scalar()) {
-            auto& array1 = *arg1.array();            
+            auto& array1 = *arg1.array();
             auto item2 = reader2Impl->GetScalarItem(*arg2.scalar());
             auto& builder = state.GetArrayBuilder();
             auto* builderImpl = CastToArrayBuilderImpl<TArrayBuilderImpl>(builder);
@@ -644,7 +644,7 @@ struct TUnaryUnsafeFixedSizeFilterKernel {
         }
         auto validMask = nullBuilder.Finish();
         validMask = MakeDenseBitmap(validMask->data(), length, GetYqlMemoryPool());
-        
+
         auto inMask = inArray->buffers[0];
         if (inMask) {
             outArray->buffers[0] = AllocateBitmapWithReserve(length, GetYqlMemoryPool());
@@ -702,6 +702,10 @@ public:
 #define BEGIN_SIMPLE_STRICT_ARROW_UDF(udfName, signatureFunc) \
     BEGIN_ARROW_UDF_IMPL(udfName##_BlocksImpl, signatureFunc, 0, true) \
     UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks().IsStrict();, ;, ;, "", "", udfName##_BlocksImpl)
+
+#define BEGIN_SIMPLE_STRICT_ARROW_UDF_OPTIONS(udfName, signatureFunc, options) \
+    BEGIN_ARROW_UDF_IMPL(udfName##_BlocksImpl, signatureFunc, 0, true)     \
+    UDF_IMPL(udfName, builder.SimpleSignature<signatureFunc>().SupportsBlocks().IsStrict(); options;, ;, ;, "", "", udfName##_BlocksImpl)
 
 #define BEGIN_SIMPLE_ARROW_UDF_WITH_OPTIONAL_ARGS(udfName, signatureFunc, optArgc) \
     BEGIN_ARROW_UDF_IMPL(udfName##_BlocksImpl, signatureFunc, optArgc, false) \

@@ -78,6 +78,7 @@ public:
         const TChecker& IsCdcStream(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsLikeDirectory(EStatus status = EStatus::StatusPathIsNotDirectory) const;
         const TChecker& IsDirectory(EStatus status = EStatus::StatusPathIsNotDirectory) const;
+        const TChecker& IsSysViewDirectory(EStatus status = EStatus::StatusPathIsNotDirectory) const;
         const TChecker& IsRtmrVolume(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsTheSameDomain(const TPath& another, EStatus status = EStatus::StatusInvalidParameter) const;
         const TChecker& FailOnWrongType(const TSet<TPathElement::EPathType>& expectedTypes) const;
@@ -106,6 +107,7 @@ public:
         const TChecker& IsResourcePool(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsBackupCollection(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsSupportedInExports(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& IsSysView(EStatus status = EStatus::StatusNameConflict) const;
     };
 
 public:

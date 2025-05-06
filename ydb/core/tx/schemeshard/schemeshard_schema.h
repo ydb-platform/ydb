@@ -2021,6 +2021,15 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    struct SysView : Table<119> {
+        struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct SysViewType : Column<3, NScheme::NTypeIds::Uint32> {};
+
+        using TKey = TableKey<PathId>;
+        using TColumns = TableColumns<PathId, AlterVersion, SysViewType>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2137,7 +2146,8 @@ struct Schema : NIceDb::Schema {
         DataErasureGenerations,
         WaitingDataErasureTenants,
         TenantDataErasureGenerations,
-        WaitingDataErasureShards
+        WaitingDataErasureShards,
+        SysView
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

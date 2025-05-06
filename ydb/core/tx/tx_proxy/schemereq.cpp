@@ -166,6 +166,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropExternalDataSource:
         case NKikimrSchemeOp::ESchemeOpDropView:
         case NKikimrSchemeOp::ESchemeOpDropResourcePool:
+        case NKikimrSchemeOp::ESchemeOpDropSysView:
             return *modifyScheme.MutableDrop()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterTable:
@@ -404,6 +405,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         case NKikimrSchemeOp::ESchemeOpRestoreBackupCollection:
             return *modifyScheme.MutableRestoreBackupCollection()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpCreateSysView:
+            return *modifyScheme.MutableCreateSysView()->MutableName();
         }
     }
 
@@ -432,6 +436,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateView:
         case NKikimrSchemeOp::ESchemeOpCreateResourcePool:
         case NKikimrSchemeOp::ESchemeOpCreateBackupCollection:
+        case NKikimrSchemeOp::ESchemeOpCreateSysView:
             return true;
         default:
             return false;
@@ -966,6 +971,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterExtSubDomainCreateHive:
         case NKikimrSchemeOp::ESchemeOpAlterView:
         case NKikimrSchemeOp::ESchemeOpRestoreIncrementalBackupAtTable:
+        case NKikimrSchemeOp::ESchemeOpCreateSysView:
+        case NKikimrSchemeOp::ESchemeOpDropSysView:
             return false;
         }
         return true;

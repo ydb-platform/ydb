@@ -24,14 +24,31 @@ void AuditLogReplaceDatabaseConfigTransaction(
     bool success);
 
 void AuditLogBeginConfigureDatabase(
+    const TString& peer,
     const TString& userSID,
     const TString& sanitizedToken,
     const TString& database);
 
 void AuditLogEndConfigureDatabase(
+    const TString& peer,
     const TString& userSID,
     const TString& sanitizedToken,
     const TString& database,
     const TString& reason,
     bool success);
+
+void AuditLogBeginRemoveDatabase(
+    const TString& peer,
+    const TString& userSID,
+    const TString& sanitizedToken,
+    const TString& database);
+
+void AuditLogEndRemoveDatabase(
+    const TString& peer,
+    const TString& userSID,
+    const TString& sanitizedToken,
+    const TString& database,
+    const TString& reason,
+    bool success);
+
 } // namespace NKikimr::NConsole

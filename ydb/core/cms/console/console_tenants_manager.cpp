@@ -620,6 +620,7 @@ public:
                     << request->ToString());
 
         AuditLogBeginConfigureDatabase(
+            Tenant->PeerName,
             Tenant->UserToken.GetUserSID(),
             Tenant->UserToken.GetSanitizedToken(),
             Tenant->Path
@@ -869,6 +870,7 @@ public:
                         " while resolving subdomain " << Tenant->Path);
 
             AuditLogEndConfigureDatabase(
+                Tenant->PeerName,
                 Tenant->UserToken.GetUserSID(),
                 Tenant->UserToken.GetSanitizedToken(),
                 Tenant->Path,
@@ -890,6 +892,7 @@ public:
                         << " but expected " << NKikimrSchemeOp::EPathType_Name(expectedPathType));
 
             AuditLogEndConfigureDatabase(
+                Tenant->PeerName,
                 Tenant->UserToken.GetUserSID(),
                 Tenant->UserToken.GetSanitizedToken(),
                 Tenant->Path,
@@ -906,6 +909,7 @@ public:
         PathId = key.GetPathId();
 
         AuditLogEndConfigureDatabase(
+            Tenant->PeerName,
             Tenant->UserToken.GetUserSID(),
             Tenant->UserToken.GetSanitizedToken(),
             Tenant->Path,
@@ -1447,7 +1451,9 @@ void TTenantsManager::TTenantsConfig::ParseComputationalUnits(const TUnitsCount 
 
 TTenantsManager::TTenant::TTenant(const TString &path,
                                   EState state,
-                                  const TString &token)
+                                  const TString &token,
+                                  const TString &peerName
+                                )
     : Path(path)
     , State(state)
     , Coordinators(3)
@@ -1460,6 +1466,7 @@ TTenantsManager::TTenant::TTenant(const TString &path,
     , ErrorCode(Ydb::StatusIds::STATUS_CODE_UNSPECIFIED)
     , TxId(0)
     , UserToken(token)
+    , PeerName(peerName)
     , SubdomainVersion(1)
     , ConfirmedSubdomain(0)
     , Generation(0)
@@ -2288,6 +2295,7 @@ void TTenantsManager::DeleteTenantSubDomain(TTenant::TPtr tenant, const TActorCo
 
 void TTenantsManager::ProcessTenantActions(TTenant::TPtr tenant, const TActorContext &ctx)
 {
+    // ev->Get()->Record.GetPeerName()
     if (tenant->State == TTenant::CREATING_POOLS) {
         AllocateTenantPools(tenant, ctx);
     } else if (tenant->State == TTenant::CREATING_SUBDOMAIN) {
@@ -2572,6 +2580,7 @@ void TTenantsManager::DbAddTenant(TTenant::TPtr tenant,
                 NIceDb::TUpdate<Schema::Tenants::Issue>(tenant->Issue),
                 NIceDb::TUpdate<Schema::Tenants::TxId>(tenant->TxId),
                 NIceDb::TUpdate<Schema::Tenants::UserToken>(tenant->UserToken.SerializeAsString()),
+                NIceDb::TUpdate<Schema::Tenants::PeerName>(tenant->PeerName),
                 NIceDb::TUpdate<Schema::Tenants::SubdomainVersion>(tenant->SubdomainVersion),
                 NIceDb::TUpdate<Schema::Tenants::ConfirmedSubdomain>(tenant->ConfirmedSubdomain),
                 NIceDb::TUpdate<Schema::Tenants::Attributes>(tenant->Attributes),
@@ -2680,6 +2689,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         ui32 timeCastBucketsPerMediator = tenantRowset.GetValue<Schema::Tenants::TimeCastBucketsPerMediator>();
         ui64 txId = tenantRowset.GetValue<Schema::Tenants::TxId>();
         TString userToken = tenantRowset.GetValue<Schema::Tenants::UserToken>();
+        TString peerName = tenantRowset.GetValue<Schema::Tenants::PeerName>();
         ui64 subdomainVersion = tenantRowset.GetValueOrDefault<Schema::Tenants::SubdomainVersion>(1);
         ui64 confirmedSubdomain = tenantRowset.GetValueOrDefault<Schema::Tenants::ConfirmedSubdomain>(0);
         NKikimrSchemeOp::TAlterUserAttributes attrs = tenantRowset.GetValueOrDefault<Schema::Tenants::Attributes>({});
@@ -2695,7 +2705,7 @@ bool TTenantsManager::DbLoadState(TTransactionContext &txc, const TActorContext 
         bool isExternalStatisticsAggregator = tenantRowset.GetValueOrDefault<Schema::Tenants::IsExternalStatisticsAggregator>(false);
         const bool areResourcesShared = tenantRowset.GetValueOrDefault<Schema::Tenants::AreResourcesShared>(false);
 
-        TTenant::TPtr tenant = new TTenant(path, state, userToken);
+        TTenant::TPtr tenant = new TTenant(path, state, userToken, peerName);
         tenant->Coordinators = coordinators;
         tenant->Mediators = mediators;
         tenant->PlanResolution = planResolution;

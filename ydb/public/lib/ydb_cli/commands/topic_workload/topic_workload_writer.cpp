@@ -219,7 +219,7 @@ void TTopicWorkloadWriterWorker::RetryableWriterLoop(const TTopicWorkloadWriterP
 }
 
 void TTopicWorkloadWriterWorker::WriterLoop(const TTopicWorkloadWriterParams& params, TInstant endTime) {
-    TTopicWorkloadWriterWorker writer(std::move(params));
+    TTopicWorkloadWriterWorker writer(params);
 
     if (params.UseTransactions) {
         writer.TxSupport.emplace(params.Driver, "", "");

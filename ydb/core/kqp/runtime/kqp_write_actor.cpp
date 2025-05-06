@@ -814,17 +814,17 @@ public:
                 return builder;
             }());
 
-        if (Mode == EMode::WRITE) {
-            for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
-                if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock)) {
-                    YQL_ENSURE(TxManager->BrokenLocks());
-                    NYql::TIssues issues;
-                    issues.AddIssue(*TxManager->GetLockIssue());
-                    RuntimeError(
-                        NYql::NDqProto::StatusIds::ABORTED,
-                        std::move(issues));
-                    return;
-                }
+        AFL_ENSURE(Mode == EMode::WRITE || ev->Get()->Record.GetTxLocks().empty());
+
+        for (const auto& lock : ev->Get()->Record.GetTxLocks()) {
+            if (!TxManager->AddLock(ev->Get()->Record.GetOrigin(), lock)) {
+                YQL_ENSURE(TxManager->BrokenLocks());
+                NYql::TIssues issues;
+                issues.AddIssue(*TxManager->GetLockIssue());
+                RuntimeError(
+                    NYql::NDqProto::StatusIds::ABORTED,
+                    std::move(issues));
+                return;
             }
         }
 

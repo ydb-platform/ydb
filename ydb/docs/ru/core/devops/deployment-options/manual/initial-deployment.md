@@ -509,11 +509,7 @@ ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <node.ydb.tech:
         yql -s 'ALTER USER root PASSWORD "passw0rd"'
     ```
 
-<<<<<<< HEAD:ydb/docs/ru/core/devops/manual/initial-deployment.md
-    Вместо значения `passw0rd` подставьте необходимый пароль.
-=======
     Вместо значения `passw0rd` подставьте необходимый пароль. Сохраните пароль в отдельный файл. Последующие команды от имени пользователя `root` будут выполняться с использованием пароля, передаваемого с помощью ключа `--password-file <path_to_user_password>`. Также пароль можно сохранить в профиле подключения, как описано в [документации {{ ydb-short-name }} CLI](../../../reference/ydb-cli/profile/index.md).
->>>>>>> bb54688b369 ([docs] configuration v2 release candidate (#17647)):ydb/docs/ru/core/devops/deployment-options/manual/initial-deployment.md
 
 1. Создайте дополнительные учетные записи:
 

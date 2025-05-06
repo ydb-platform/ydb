@@ -38,12 +38,6 @@ To visualize data, use any system that supports Prometheus, such as [Zabbix](htt
 
 To set up monitoring for a local single-node {{ ydb-short-name }} cluster using [Prometheus](https://prometheus.io/) and [Grafana](https://grafana.com/):
 
-<<<<<<< HEAD
-1. [Install and run](https://prometheus.io/docs/prometheus/latest/getting_started/#downloading-and-running-prometheus) Prometheus via a [configuration file](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_ydb_prometheus.yml).
-1. [Install and start](https://grafana.com/docs/grafana/latest/getting-started/getting-started/) the Grafana.
-1. [Create](https://prometheus.io/docs/visualization/grafana/#creating-a-prometheus-data-source) a data source of the `prometheus` type in Grafana and attach it to a running Prometheus instance.
-1. Upload [{{ ydb-short-name }} dashboards](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/) to Grafana.
-=======
 1. [Install](https://prometheus.io/docs/prometheus/latest/getting_started) Prometheus.
 
 1. Edit the Prometheus [configuration file](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_ydb_prometheus.yml):
@@ -86,7 +80,6 @@ To set up monitoring for a local single-node {{ ydb-short-name }} cluster using 
 4. [Create](https://prometheus.io/docs/visualization/grafana/#creating-a-prometheus-data-source) a data source of the `prometheus` type in Grafana, and attach it to the running Prometheus instance.
 
 5. Upload [{{ ydb-short-name }} dashboards](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/helm/ydb-prometheus/dashboards) to Grafana.
->>>>>>> bb54688b369 ([docs] configuration v2 release candidate (#17647))
 
 To upload dashboards, use the Grafana UI [Import](https://grafana.com/docs/grafana/latest/dashboards/export-import/#import-dashboard) tool or run a [script](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_upload_dashboards.sh). Please note that the script uses [basic authentication](https://grafana.com/docs/grafana/latest/http_api/create-api-tokens-for-org/#authentication) in Grafana. For other cases, modify the script.
 

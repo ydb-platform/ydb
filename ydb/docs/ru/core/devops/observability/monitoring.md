@@ -36,9 +36,6 @@ http://localhost:31002/counters/counters=<servicename>/prometheus
 
 ## Настройка мониторинга с помощью Prometheus и Grafana {#prometheus-grafana}
 
-<<<<<<< HEAD:ydb/docs/ru/core/devops/manual/monitoring.md
-Чтобы настроить мониторинг локального однонодового кластера {{ ydb-short-name }} с помощью [Prometheus](https://prometheus.io/) и [Grafana](https://grafana.com/):
-=======
 Чтобы настроить мониторинг кластера {{ ydb-short-name }} с помощью [Prometheus](https://prometheus.io/) и [Grafana](https://grafana.com/):
 
 1. [Установите](https://prometheus.io/docs/prometheus/latest/getting_started) Prometheus.
@@ -78,7 +75,6 @@ http://localhost:31002/counters/counters=<servicename>/prometheus
        ```
 
 1. [Запустите](https://prometheus.io/docs/prometheus/latest/getting_started/#starting-prometheus) Prometheus, используя отредактированный файл конфигурации.
->>>>>>> bb54688b369 ([docs] configuration v2 release candidate (#17647)):ydb/docs/ru/core/devops/observability/monitoring.md
 
 1. [Установите и запустите](https://prometheus.io/docs/prometheus/latest/getting_started/#downloading-and-running-prometheus) Prometheus, используя [файл конфигурации](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_ydb_prometheus.yml).
 1. [Установите и запустите](https://grafana.com/docs/grafana/latest/getting-started/getting-started/) Grafana.

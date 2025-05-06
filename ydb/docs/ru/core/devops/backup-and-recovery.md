@@ -10,11 +10,8 @@
 
 ### Файлы {#files}
 
-Для выполнения резервного копирования в файлы применяется команда `{{ ydb-cli }} tools dump`. Перейдите [по ссылке](../../reference/ydb-cli/export-import/tools-dump.md) в справочник по {{ ydb-short-name }} CLI для получения информации о данной команде.
+Для выполнения резервного копирования в файлы применяется команда `{{ ydb-cli }} tools dump`. Перейдите [по ссылке](../reference/ydb-cli/export-import/tools-dump.md) в справочник по {{ ydb-short-name }} CLI для получения информации о данной команде.
 
-<<<<<<< HEAD:ydb/docs/ru/core/devops/manual/backup-and-recovery.md
-Для выполнения восстановления из файловой резервной копии применяется команда `{{ ydb-cli }} tools restore`. Перейдите [по ссылке](../../reference/ydb-cli/export-import/tools-restore.md) в справочник по {{ ydb-short-name }} CLI для получения информации о данной команде.
-=======
 - `{{ ydb-cli }} admin cluster dump` — для резервного копирования метаданных кластера
 - `{{ ydb-cli }} admin database dump` — для резервного копирования базы данных
 - `{{ ydb-cli }} tools dump` — для резервного копирования отдельных схемных объектов или директорий
@@ -28,7 +25,6 @@
 - `{{ ydb-cli }} tools restore` — для восстановления отдельных схемных объектов или директорий из резервной копии
 
 Узнать больше об этих командах можно в [{#T}](../reference/ydb-cli/export-import/tools-restore.md).
->>>>>>> bb54688b369 ([docs] configuration v2 release candidate (#17647)):ydb/docs/ru/core/devops/backup-and-recovery.md
 
 ### S3-совместимое хранилище {#s3}
 

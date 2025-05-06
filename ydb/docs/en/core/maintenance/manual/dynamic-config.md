@@ -13,9 +13,6 @@ This configuration is uploaded to the cluster, where it is reliably stored and d
 * Change actor system settings on individual nodes or groups of nodes;
 * And more.
 
-<<<<<<< HEAD
-### Configuration examples {#example}
-=======
 ## Preparing to use the dynamic configuration {#preparation}
 
 The following tasks should be performed before using the dynamic configuration in the cluster:
@@ -53,7 +50,6 @@ The legacy configuration management via CMS will become unavailable after enabli
 {% endnote %}
 
 ## Configuration examples {#example}
->>>>>>> bb54688b369 ([docs] configuration v2 release candidate (#17647))
 
 Example of a minimal dynamic configuration for a single-datacenter cluster:
 

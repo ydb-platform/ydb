@@ -262,6 +262,13 @@ void TSchemeShard::Handle(TEvImport::TEvListImportsRequest::TPtr& ev, const TAct
     Execute(CreateTxListImports(ev), ctx);
 }
 
+void TSchemeShard::Handle(TEvImport::TEvListObjectsInS3ExportRequest::TPtr& ev, const TActorContext&) {
+    auto result = MakeHolder<TEvImport::TEvListObjectsInS3ExportResponse>();
+    result->Record.set_status(Ydb::StatusIds::UNSUPPORTED);
+    result->Record.add_issues()->set_message("UNSUPPORTED");
+    Send(ev->Sender, std::move(result));
+}
+
 void TSchemeShard::Handle(TEvPrivate::TEvImportSchemeReady::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxProgressImport(ev), ctx);
 }

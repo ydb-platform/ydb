@@ -3,7 +3,7 @@
 
 namespace NKikimr::NPQ {
 
-TPartitionWriter::TPartitionWriter(const TPartitionId& partition)
+TPartitionBlobEncoder::TPartitionBlobEncoder(const TPartitionId& partition)
     : StartOffset(0)
     , EndOffset(0)
     , PartitionedBlob(partition, 0, "", 0, 0, 0, Head, NewHead, true, false, 8_MB)
@@ -13,9 +13,9 @@ TPartitionWriter::TPartitionWriter(const TPartitionId& partition)
 {
 }
 
-void TPartitionWriter::CheckHeadConsistency(const TVector<ui32>& compactLevelBorder,
-                                              const ui32 totalLevels,
-                                              const ui32 totalMaxCount) const
+void TPartitionBlobEncoder::CheckHeadConsistency(const TVector<ui32>& compactLevelBorder,
+                                                 const ui32 totalLevels,
+                                                 const ui32 totalMaxCount) const
 {
     ui32 p = 0;
     for (ui32 j = 0; j < DataKeysHead.size(); ++j) {
@@ -44,12 +44,12 @@ void TPartitionWriter::CheckHeadConsistency(const TVector<ui32>& compactLevelBor
     }
 }
 
-ui64 TPartitionWriter::GetSize() const
+ui64 TPartitionBlobEncoder::GetSize() const
 {
     return BodySize + Head.PackedSize;
 }
 
-ui64 TPartitionWriter::GetBodySizeBefore(TInstant expirationTimestamp) const
+ui64 TPartitionBlobEncoder::GetBodySizeBefore(TInstant expirationTimestamp) const
 {
     ui64 size = 0;
     for (size_t i = 1; i < DataKeysBody.size() && DataKeysBody[i].Timestamp < expirationTimestamp; ++i) {
@@ -58,14 +58,14 @@ ui64 TPartitionWriter::GetBodySizeBefore(TInstant expirationTimestamp) const
     return size;
 }
 
-TVector<TRequestedBlob> TPartitionWriter::GetBlobsFromBody(const ui64 startOffset,
-                                                             const ui16 partNo,
-                                                             const ui32 maxCount,
-                                                             const ui32 maxSize,
-                                                             ui32& count,
-                                                             ui32& size,
-                                                             ui64 lastOffset,
-                                                             TBlobKeyTokens* blobKeyTokens) const
+TVector<TRequestedBlob> TPartitionBlobEncoder::GetBlobsFromBody(const ui64 startOffset,
+                                                                const ui16 partNo,
+                                                                const ui32 maxCount,
+                                                                const ui32 maxSize,
+                                                                ui32& count,
+                                                                ui32& size,
+                                                                ui64 lastOffset,
+                                                                TBlobKeyTokens* blobKeyTokens) const
 {
     TVector<TRequestedBlob> blobs;
     if (!DataKeysBody.empty() && PositionInBody(startOffset, partNo)) { //will read smth from body
@@ -112,15 +112,15 @@ TVector<TRequestedBlob> TPartitionWriter::GetBlobsFromBody(const ui64 startOffse
     return blobs;
 }
 
-TVector<TClientBlob> TPartitionWriter::GetBlobsFromHead(const ui64 startOffset,
-                                                          const ui16 partNo,
-                                                          const ui32 maxCount,
-                                                          const ui32 maxSize,
-                                                          const ui64 readTimestampMs,
-                                                          ui32& count,
-                                                          ui32& size,
-                                                          ui64& insideHeadOffset,
-                                                          ui64 lastOffset) const
+TVector<TClientBlob> TPartitionBlobEncoder::GetBlobsFromHead(const ui64 startOffset,
+                                                             const ui16 partNo,
+                                                             const ui32 maxCount,
+                                                             const ui32 maxSize,
+                                                             const ui64 readTimestampMs,
+                                                             ui32& count,
+                                                             ui32& size,
+                                                             ui64& insideHeadOffset,
+                                                             ui64 lastOffset) const
 {
     TVector<TClientBlob> res;
     std::optional<ui64> firstAddedBlobOffset{};
@@ -188,12 +188,12 @@ TVector<TClientBlob> TPartitionWriter::GetBlobsFromHead(const ui64 startOffset,
     return res;
 }
 
-ui64 TPartitionWriter::GetHeadGapSize() const
+ui64 TPartitionBlobEncoder::GetHeadGapSize() const
 {
     return DataKeysBody.empty() ? 0 : (Head.Offset - (DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount()));
 }
 
-ui64 TPartitionWriter::GetSizeLag(i64 offset) const
+ui64 TPartitionBlobEncoder::GetSizeLag(i64 offset) const
 {
     ui64 sizeLag = 0;
     if (!DataKeysBody.empty() && PositionInBody(offset, 0)) { // there will be something in body
@@ -212,22 +212,22 @@ ui64 TPartitionWriter::GetSizeLag(i64 offset) const
     return sizeLag;
 }
 
-bool TPartitionWriter::PositionInBody(ui64 offset, ui32 partNo) const
+bool TPartitionBlobEncoder::PositionInBody(ui64 offset, ui32 partNo) const
 {
     return offset < Head.Offset || ((Head.Offset == offset) && (partNo < Head.PartNo));
 }
 
-bool TPartitionWriter::PositionInHead(ui64 offset, ui32 partNo) const
+bool TPartitionBlobEncoder::PositionInHead(ui64 offset, ui32 partNo) const
 {
     return Head.Offset < offset || ((Head.Offset == offset) && (Head.PartNo < partNo));
 }
 
-bool TPartitionWriter::IsEmpty() const
+bool TPartitionBlobEncoder::IsEmpty() const
 {
     return DataKeysBody.empty() && HeadKeys.empty();
 }
 
-const TDataKey* TPartitionWriter::GetLastKey() const
+const TDataKey* TPartitionBlobEncoder::GetLastKey() const
 {
     const TDataKey* lastKey = nullptr;
     if (!HeadKeys.empty()) {
@@ -238,14 +238,14 @@ const TDataKey* TPartitionWriter::GetLastKey() const
     return lastKey;
 }
 
-bool TPartitionWriter::IsNothingWritten() const
+bool TPartitionBlobEncoder::IsNothingWritten() const
 {
     return CompactedKeys.empty() && (NewHead.PackedSize == 0);
 }
 
-TString TPartitionWriter::SerializeForKey(const TKey& key, ui32 size,
-                                            ui64 endOffset,
-                                            TInstant& writeTimestamp) const
+TString TPartitionBlobEncoder::SerializeForKey(const TKey& key, ui32 size,
+                                               ui64 endOffset,
+                                               TInstant& writeTimestamp) const
 {
     TString valueD;
     valueD.reserve(size);
@@ -300,7 +300,9 @@ TString TPartitionWriter::SerializeForKey(const TKey& key, ui32 size,
     return valueD;
 }
 
-TKey TPartitionWriter::KeyFor(TKeyPrefix::EType type, const TPartitionId& partitionId, bool needCompaction) const
+TKey TPartitionBlobEncoder::KeyFor(TKeyPrefix::EType type,
+                                   const TPartitionId& partitionId,
+                                   bool needCompaction) const
 {
     if (needCompaction) {
         return TKey::ForBody(type, partitionId, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount());
@@ -308,16 +310,16 @@ TKey TPartitionWriter::KeyFor(TKeyPrefix::EType type, const TPartitionId& partit
     return TKey::ForHead(type, partitionId, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount());
 }
 
-void TPartitionWriter::NewPartitionedBlob(const TPartitionId& partitionId,
-                                            const ui64 offset,
-                                            const TString& sourceId,
-                                            const ui64 seqNo,
-                                            const ui16 totalParts,
-                                            const ui32 totalSize,
-                                            bool headCleared,
-                                            bool needCompactHead,
-                                            const ui32 maxBlobSize,
-                                            ui16 nextPartNo)
+void TPartitionBlobEncoder::NewPartitionedBlob(const TPartitionId& partitionId,
+                                               const ui64 offset,
+                                               const TString& sourceId,
+                                               const ui64 seqNo,
+                                               const ui16 totalParts,
+                                               const ui32 totalSize,
+                                               bool headCleared,
+                                               bool needCompactHead,
+                                               const ui32 maxBlobSize,
+                                               ui16 nextPartNo)
 {
     PartitionedBlob = TPartitionedBlob(partitionId,
                                        offset,
@@ -333,7 +335,7 @@ void TPartitionWriter::NewPartitionedBlob(const TPartitionId& partitionId,
                                        nextPartNo);
 }
 
-void TPartitionWriter::ClearPartitionedBlob(const TPartitionId& partitionId, ui32 maxBlobSize)
+void TPartitionBlobEncoder::ClearPartitionedBlob(const TPartitionId& partitionId, ui32 maxBlobSize)
 {
     PartitionedBlob = TPartitionedBlob(partitionId,
                                        0,
@@ -348,14 +350,14 @@ void TPartitionWriter::ClearPartitionedBlob(const TPartitionId& partitionId, ui3
                                        maxBlobSize);
 }
 
-void TPartitionWriter::SyncHeadKeys()
+void TPartitionBlobEncoder::SyncHeadKeys()
 {
     if (!CompactedKeys.empty()) {
         HeadKeys.clear();
     }
 }
 
-void TPartitionWriter::SyncNewHeadKey()
+void TPartitionBlobEncoder::SyncNewHeadKey()
 {
     if (NewHeadKey.Size <= 0) {
         return;
@@ -381,11 +383,11 @@ void TPartitionWriter::SyncNewHeadKey()
     NewHeadKey = TDataKey{TKey{}, 0, TInstant::Zero(), 0};
 }
 
-void TPartitionWriter::SyncDataKeysBody(TInstant now,
-                                          TBlobKeyTokenCreator makeBlobKeyToken,
-                                          ui64& startOffset,
-                                          std::deque<std::pair<ui64, ui64>>& gapOffsets,
-                                          ui64& gapSize)
+void TPartitionBlobEncoder::SyncDataKeysBody(TInstant now,
+                                             TBlobKeyTokenCreator makeBlobKeyToken,
+                                             ui64& startOffset,
+                                             std::deque<std::pair<ui64, ui64>>& gapOffsets,
+                                             ui64& gapSize)
 {
     auto getNextOffset = [](const TKey& k) {
         return k.GetOffset() + k.GetCount();
@@ -420,7 +422,7 @@ void TPartitionWriter::SyncDataKeysBody(TInstant now,
     } // head cleared, all data moved to body
 }
 
-void TPartitionWriter::SyncHeadFromNewHead()
+void TPartitionBlobEncoder::SyncHeadFromNewHead()
 {
     Head.PackedSize = 0;
     Head.Offset = NewHead.Offset;
@@ -428,7 +430,7 @@ void TPartitionWriter::SyncHeadFromNewHead()
     Head.ClearBatches();
 }
 
-void TPartitionWriter::SyncHead(ui64& startOffset, ui64& endOffset)
+void TPartitionBlobEncoder::SyncHead(ui64& startOffset, ui64& endOffset)
 {
     //append Head with newHead
     while (!NewHead.GetBatches().empty()) {
@@ -443,18 +445,18 @@ void TPartitionWriter::SyncHead(ui64& startOffset, ui64& endOffset)
     endOffset = Head.GetNextOffset();
 }
 
-void TPartitionWriter::ResetNewHead(ui64 endOffset)
+void TPartitionBlobEncoder::ResetNewHead(ui64 endOffset)
 {
     NewHead.Clear();
     NewHead.Offset = endOffset;
 }
 
-bool TPartitionWriter::IsLastBatchPacked() const
+bool TPartitionBlobEncoder::IsLastBatchPacked() const
 {
     return NewHead.GetBatches().empty() || NewHead.GetLastBatch().Packed;
 }
 
-void TPartitionWriter::PackLastBatch()
+void TPartitionBlobEncoder::PackLastBatch()
 {
     NewHead.MutableLastBatch().Pack();
     NewHead.PackedSize += NewHead.GetLastBatch().GetPackedSize(); //add real packed size for this blob
@@ -463,7 +465,7 @@ void TPartitionWriter::PackLastBatch()
     NewHead.PackedSize -= NewHead.GetLastBatch().GetUnpackedSize();
 }
 
-std::pair<TKey, ui32> TPartitionWriter::Compact(const TKey& key, bool headCleared)
+std::pair<TKey, ui32> TPartitionBlobEncoder::Compact(const TKey& key, bool headCleared)
 {
     const ui32 size = NewHead.PackedSize;
     std::pair<TKey, ui32> res(key, size);

@@ -697,7 +697,7 @@ private:
     std::deque<TString> DeletedKeys;
     std::deque<TBlobKeyTokenPtr> DefferedKeysForDeletion;
 
-    TPartitionWriter Writer;
+    TPartitionBlobEncoder Writer;
 
     std::deque<std::pair<ui64, ui64>> GapOffsets;
     ui64 GapSize;

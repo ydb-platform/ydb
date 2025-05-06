@@ -8,8 +8,8 @@ namespace NKikimr::NPQ {
 
 class TKeyLevel;
 
-struct TPartitionWriter {
-    explicit TPartitionWriter(const TPartitionId& partition);
+struct TPartitionBlobEncoder {
+    explicit TPartitionBlobEncoder(const TPartitionId& partition);
 
     void CheckHeadConsistency(const TVector<ui32>& compactLevelBorder,
                               const ui32 totalLevels,

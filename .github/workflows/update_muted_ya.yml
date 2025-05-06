@@ -97,9 +97,7 @@ jobs:
             echo "Reset branch ${PR_BRANCH} to origin/${{ env.BASE_BRANCH }}"
             git reset --hard origin/${{ env.BASE_BRANCH }}
           fi
-          
-          git push origin ${PR_BRANCH} --force
-        
+                  
       - name: Run create_new_muted_ya.py
         run: |
           .github/scripts/tests/create_new_muted_ya.py update_muted_ya --branch=${{ env.BASE_BRANCH }}

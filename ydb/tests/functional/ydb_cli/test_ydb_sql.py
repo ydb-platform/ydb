@@ -105,7 +105,7 @@ class TestExecuteSqlWithParams(BaseTestSqlWithDatabase):
 
     def test_uint32(self):
         script = "DECLARE $par1 AS Uint32; SELECT * FROM `{}` WHERE key = $par1;".format(self.table_path)
-        output = self.execute_ydb_cli_command_with_db(["sql", "-s", script, "--progress=none", "--stats=none", "--param", "$par1=1"])
+        output = self.execute_ydb_cli_command_with_db(["sql", "-s", script, "--stats=none", "--param", "$par1=1"])
         return self.canonical_result(output, self.tmp_path)
 
     def test_uint64_and_string(self):
@@ -113,14 +113,14 @@ class TestExecuteSqlWithParams(BaseTestSqlWithDatabase):
                  "DECLARE $value AS String; "\
                  "SELECT * FROM `{}` WHERE id = $id OR value = $value;".format(self.table_path)
         output = self.execute_ydb_cli_command_with_db(
-            ["sql", "-s", script, "--progress=none", "--stats=none", "--param", "$id=2222",
+            ["sql", "-s", script, "--stats=none", "--param", "$id=2222",
              "--param", "$value=\"seven\""]
         )
         return self.canonical_result(output, self.tmp_path)
 
     def test_list(self):
         script = "DECLARE $values AS List<Uint64?>; SELECT $values AS values;"
-        output = self.execute_ydb_cli_command_with_db(["sql", "-s", script, "--progress=none", "--stats=none", "--param", "$values=[1,2,3]"])
+        output = self.execute_ydb_cli_command_with_db(["sql", "-s", script, "--stats=none", "--param", "$values=[1,2,3]"])
         return self.canonical_result(output, self.tmp_path)
 
     def test_struct(self):
@@ -130,7 +130,7 @@ class TestExecuteSqlWithParams(BaseTestSqlWithDatabase):
                  "Table.value AS value "\
                  "FROM (SELECT $values AS lst) FLATTEN BY lst AS Table;"
         output = self.execute_ydb_cli_command_with_db(
-            ["sql", "-s", script, "--progress=none", "--stats=none", "--param",
+            ["sql", "-s", script, "--stats=none", "--param",
              "$values=[{\"key\":1,\"value\":\"one\"},{\"key\":2,\"value\":\"two\"}]"]
         )
         return self.canonical_result(output, self.tmp_path)
@@ -152,7 +152,7 @@ class TestExecuteSqlWithFormats(BaseTestSqlWithDatabase):
         script = "SELECT * FROM `{path}` WHERE key < 4;" \
             "SELECT id FROM `{path}` WHERE key = 4;" \
             "SELECT value FROM `{path}` WHERE key > 5".format(path=self.table_path)
-        output = self.execute_ydb_cli_command_with_db(["sql", "-s", script, "--progress=none", "--stats=none", "--format", format])
+        output = self.execute_ydb_cli_command_with_db(["sql", "-s", script, "--stats=none", "--format", format])
         return self.canonical_result(output, self.tmp_path)
 
     def execute_sql_pretty(self):
@@ -193,7 +193,7 @@ class TestExecuteSqlWithParamsFromJson(BaseTestSqlWithDatabase):
                  "SELECT $a AS a; "
         self.write_data(script, str(self.tmp_path / "script.yql"))
         output = self.execute_ydb_cli_command_with_db(
-            ["sql", "-f", str(self.tmp_path / "script.yql"), "--progress=none", "--stats=none", "--param", "$a=3"]
+            ["sql", "-f", str(self.tmp_path / "script.yql"), "--stats=none", "--param", "$a=3"]
         )
         return self.canonical_result(output, self.tmp_path)
 
@@ -246,7 +246,7 @@ class TestExecuteSqlWithParamsFromStdin(BaseTestSqlWithDatabase):
                  "DECLARE $val AS Uint64; " \
                  "SELECT $s AS s, $val AS val; "
         self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
-        output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--progress=none", "--stats=none"], self.get_stdin())
+        output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--stats=none"], self.get_stdin())
         self.close_stdin()
         return self.canonical_result(output, self.tmp_path)
 
@@ -258,7 +258,7 @@ class TestExecuteSqlWithParamsFromStdin(BaseTestSqlWithDatabase):
                  "DECLARE $val AS Uint64; " \
                  "SELECT $s AS s, $val AS val; "
         self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
-        output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--progress=none", "--stats=none", "--input-format", format], self.get_stdin())
+        output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--stats=none", "--input-format", format], self.get_stdin())
         self.close_stdin()
         return self.canonical_result(output, self.tmp_path)
 
@@ -269,7 +269,7 @@ class TestExecuteSqlWithParamsFromStdin(BaseTestSqlWithDatabase):
         script = "DECLARE $s AS Utf8; " \
                  "SELECT $s AS s; "
         self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
-        output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--progress=none", "--stats=none", "--input-format", "raw", "--input-param-name", "s"], self.get_stdin())
+        output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--stats=none", "--input-format", "raw", "--input-param-name", "s"], self.get_stdin())
         self.close_stdin()
         return self.canonical_result(output, self.tmp_path)
 
@@ -278,7 +278,7 @@ class TestExecuteSqlWithParamsFromStdin(BaseTestSqlWithDatabase):
         script = "DECLARE $arr AS List<Uint64>; " \
                  "SELECT $arr AS arr; "
         self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
-        output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--progress=none", "--stats=none", "--input-param-name", "arr"], self.get_stdin())
+        output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--stats=none", "--input-param-name", "arr"], self.get_stdin())
         self.close_stdin()
         return self.canonical_result(output, self.tmp_path)
 
@@ -289,7 +289,7 @@ class TestExecuteSqlWithParamsFromStdin(BaseTestSqlWithDatabase):
         script = "DECLARE $s AS Struct<id:UInt64,value:Utf8>; " \
                  "SELECT $s AS s; "
         self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
-        output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--progress=none", "--stats=none", "--input-format", format, "--input-param-name", "s"], self.get_stdin())
+        output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--stats=none", "--input-format", format, "--input-param-name", "s"], self.get_stdin())
         self.close_stdin()
         return self.canonical_result(output, self.tmp_path)
 
@@ -301,7 +301,7 @@ class TestExecuteSqlWithParamsFromStdin(BaseTestSqlWithDatabase):
                  "DECLARE $num AS Uint64; " \
                  "SELECT $s AS s, $num AS num; "
         self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
-        output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--progress=none", "--stats=none", "--input-framing", "newline-delimited"], self.get_stdin())
+        output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--stats=none", "--input-framing", "newline-delimited"], self.get_stdin())
         self.close_stdin()
         return self.canonical_result(output, self.tmp_path)
 
@@ -315,7 +315,7 @@ class TestExecuteSqlWithParamsFromStdin(BaseTestSqlWithDatabase):
                  "DECLARE $num AS Uint64; " \
                  "SELECT $s AS s, $num AS num; "
         self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
-        output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--progress=none", "--stats=none", "--input-format", format, "--input-framing", "newline-delimited"],
+        output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--stats=none", "--input-format", format, "--input-framing", "newline-delimited"],
                                                       self.get_stdin())
         self.close_stdin()
         return self.canonical_result(output, self.tmp_path)
@@ -328,7 +328,7 @@ class TestExecuteSqlWithParamsFromStdin(BaseTestSqlWithDatabase):
                  "SELECT $s AS s; "
         self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(
-            command + ["-s", script, "--progress=none", "--stats=none", "--input-format", "raw", "--input-param-name", "s", "--input-framing", "newline-delimited"],
+            command + ["-s", script, "--stats=none", "--input-format", "raw", "--input-param-name", "s", "--input-framing", "newline-delimited"],
             self.get_stdin()
         )
         self.close_stdin()
@@ -342,7 +342,7 @@ class TestExecuteSqlWithParamsFromStdin(BaseTestSqlWithDatabase):
                  "SELECT $s AS s; "
         self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(
-            command + ["-s", script, "--progress=none", "--stats=none", "--input-format", "raw", "--input-param-name", "s", "--input-framing", "newline-delimited", "--input-batch", "full"],
+            command + ["-s", script, "--stats=none", "--input-format", "raw", "--input-param-name", "s", "--input-framing", "newline-delimited", "--input-batch", "full"],
             self.get_stdin()
         )
         self.close_stdin()
@@ -362,7 +362,7 @@ class TestExecuteSqlWithParamsFromStdin(BaseTestSqlWithDatabase):
                  "SELECT $arr as arr; "
         self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(
-            command + ["-s", script, "--progress=none", "--stats=none", "--input-param-name", "arr", "--input-framing", "newline-delimited", "--input-batch", "full"],
+            command + ["-s", script, "--stats=none", "--input-param-name", "arr", "--input-framing", "newline-delimited", "--input-batch", "full"],
             self.get_stdin()
         )
         self.close_stdin()
@@ -384,7 +384,7 @@ class TestExecuteSqlWithParamsFromStdin(BaseTestSqlWithDatabase):
                  "SELECT $arr as arr; "
         self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(
-            command + ["-s", script, "--progress=none", "--stats=none", "--input-format", format, "--input-param-name", "arr", "--input-framing", "newline-delimited", "--input-batch", "full"],
+            command + ["-s", script, "--stats=none", "--input-format", format, "--input-param-name", "arr", "--input-framing", "newline-delimited", "--input-batch", "full"],
             self.get_stdin()
         )
         self.close_stdin()
@@ -404,7 +404,7 @@ class TestExecuteSqlWithParamsFromStdin(BaseTestSqlWithDatabase):
                  "SELECT $s AS s; "
         self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(
-            command + ["-s", script, "--progress=none", "--stats=none", "--input-format", "raw", "--input-param-name", "s", "--input-framing",
+            command + ["-s", script, "--stats=none", "--input-format", "raw", "--input-param-name", "s", "--input-framing",
                        "newline-delimited", "--input-batch", "adaptive", "--input-batch-max-delay", "0",
                        "--input-batch-max-rows", "3"],
             self.get_stdin()
@@ -426,7 +426,7 @@ class TestExecuteSqlWithParamsFromStdin(BaseTestSqlWithDatabase):
                  "SELECT $arr as arr; "
         self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(
-            command + ["-s", script, "--progress=none", "--stats=none", "--input-param-name", "arr", "--input-framing", "newline-delimited",
+            command + ["-s", script, "--stats=none", "--input-param-name", "arr", "--input-framing", "newline-delimited",
                        "--input-batch", "adaptive", "--input-batch-max-delay", "0", "--input-batch-max-rows", "3"],
             self.get_stdin()
         )
@@ -449,7 +449,7 @@ class TestExecuteSqlWithParamsFromStdin(BaseTestSqlWithDatabase):
                  "SELECT $arr as arr; "
         self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(
-            command + ["-s", script, "--progress=none", "--stats=none", "--input-format", format, "--input-param-name", "arr", "--input-framing", "newline-delimited",
+            command + ["-s", script, "--stats=none", "--input-format", format, "--input-param-name", "arr", "--input-framing", "newline-delimited",
                                      "--input-batch", "adaptive", "--input-batch-max-delay", "0", "--input-batch-max-rows", "3"],
             self.get_stdin()
         )
@@ -464,7 +464,7 @@ class TestExecuteSqlWithParamsFromStdin(BaseTestSqlWithDatabase):
         script = "DECLARE $a AS Uint64; " \
                  "SELECT $a AS a; "
         self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
-        output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--progress=none", "--stats=none"], self.get_stdin())
+        output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--stats=none"], self.get_stdin())
         self.close_stdin()
         return self.canonical_result(output, self.tmp_path)
 
@@ -476,7 +476,7 @@ class TestExecuteSqlWithParamsFromStdin(BaseTestSqlWithDatabase):
         script = "DECLARE $a AS Uint64; " \
                  "SELECT $a AS a; "
         self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
-        output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--progress=none", "--stats=none", "--input-format", format], self.get_stdin())
+        output = self.execute_ydb_cli_command_with_db(command + ["-s", script, "--stats=none", "--input-format", format], self.get_stdin())
         self.close_stdin()
         return self.canonical_result(output, self.tmp_path)
 
@@ -491,7 +491,7 @@ class TestExecuteSqlWithParamsFromStdin(BaseTestSqlWithDatabase):
                  "SELECT $a AS a, $b AS b; "
         self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(
-            command + ["-s", script, "--progress=none", "--stats=none", "--input-format", format, "--input-framing", "newline-delimited",
+            command + ["-s", script, "--stats=none", "--input-format", format, "--input-framing", "newline-delimited",
                        "--input-columns", "a{0}b".format(self.get_delim(format)), "--input-skip-rows", "1"],
             self.get_stdin()
         )
@@ -508,7 +508,7 @@ class TestExecuteSqlWithParamsFromStdin(BaseTestSqlWithDatabase):
                  "SELECT $a AS a, $b AS b; "
         self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(
-            command + ["-s", script, "--progress=none", "--stats=none", "--input-format", format, "--input-framing", "newline-delimited",
+            command + ["-s", script, "--stats=none", "--input-format", format, "--input-framing", "newline-delimited",
                        "--input-columns", "a{0}b".format(self.get_delim(format))],
             self.get_stdin()
         )
@@ -529,7 +529,7 @@ class TestExecuteSqlWithParamsFromStdin(BaseTestSqlWithDatabase):
                  "SELECT $a AS a, $b AS b; "
         self.write_data(param_data, str(self.tmp_path / "stdin.txt"))
         output = self.execute_ydb_cli_command_with_db(
-            command + ["-s", script, "--progress=none", "--stats=none", "--input-format", format, "--input-framing", "newline-delimited", "--input-skip-rows", "3"], self.get_stdin()
+            command + ["-s", script, "--stats=none", "--input-format", format, "--input-framing", "newline-delimited", "--input-skip-rows", "3"], self.get_stdin()
         )
         self.close_stdin()
         return self.canonical_result(output, self.tmp_path)
@@ -662,7 +662,7 @@ class TestExecuteSqlFromStdinWithWideOutput(BaseTestSqlWithDatabase):
 
     def test_wide_table(self):
         script = "SELECT * FROM `{}`;".format(self.table_path)
-        output = self.execute_ydb_cli_command_with_db(["sql", "-s", script, "--progress=none", "--stats=none"])
+        output = self.execute_ydb_cli_command_with_db(["sql", "-s", script, "--stats=none"])
         return self.canonical_result(output, self.tmp_path)
 
 

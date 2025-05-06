@@ -1140,7 +1140,7 @@ class StaticConfigGenerator(object):
         if domains_config is None:
             self.__generate_domains_from_old_domains_key()
         else:
-            self.__generate_domains_from_proto(domains_config)
+            self.__generate_domains_from_proto(domains_config, self.__cluster_details.domains_config_as_dict)
 
     def __generate_default_pool_with_kind(self, pool_kind):
         pool = config_pb2.TDomainsConfig.TStoragePoolType()
@@ -1175,7 +1175,33 @@ class StaticConfigGenerator(object):
             [self.__tablet_types.TX_ALLOCATOR.tablet_id_for(i) for i in range(int(allocators))]
         )
 
-    def __generate_domains_from_proto(self, domains_config):
+    def __check_pool_configs(self, domain, domains_config_dict):
+        for pool in domain.StoragePoolTypes:
+            # Empirical check: if a pool has 'encrypted' in its name it probably should be encrypted
+            if 'encrypted' in pool.Kind and pool.PoolConfig.EncryptionMode != 1:
+                # Special case for migration purposes: if `encryption_mode: 0` is present in pool config,
+                # we should still allow it even if the naming contains `encrypted`. We have to rely on yaml config
+                # because there is no way in proto message to distinguish between missing and undefined keys
+                encryption_mode_0 = False
+                for storage_pool_type in domains_config_dict['domain'][0]['storage_pool_types']:
+                    if storage_pool_type['kind'] == pool.Kind and 'encryption_mode' in storage_pool_type['pool_config']:
+                        encryption_mode_0 = True
+                        break
+
+                if not encryption_mode_0:
+                    raise RuntimeError(f"You named a storage pool '{pool.Kind}', but did not explicitly enable `pool_config.encryption_mode: 1`.")
+
+            # Check disk type is specified for every pool
+            type_defined = False
+            for filterElement in pool.PoolConfig.PDiskFilter:
+                if filterElement.Property and filterElement.Property[0].Type:
+                    type_defined = True
+
+            if not type_defined:
+                logger.warning(f"pdisk_filter.property.type missing for pool {pool.Kind}. This pool name is unknown, no default has been generated, specify type by hand")
+
+
+    def __generate_domains_from_proto(self, domains_config, domains_config_dict):
         domains = domains_config.Domain
         if len(domains) > 1:
             raise ValueError('Multiple domains specified: len(domains_config.domain) > 1. This is unsupported')
@@ -1196,19 +1222,7 @@ class StaticConfigGenerator(object):
                 defaultPool.MergeFrom(pool)
                 pool.CopyFrom(defaultPool)
 
-        for pool in domain.StoragePoolTypes:
-            # Empirical check: if a pool has 'encrypted' in its name it probably should be encrypted
-            if 'encrypted' in pool.Kind and not pool.PoolConfig.EncryptionMode:
-                raise RuntimeError(f"You named a storage pool '{pool.Kind}', but did not explicitly enable `pool_config.encryption_mode: 1`.")
-
-            # Check disk type is specified for every pool
-            type_defined = False
-            for filterElement in pool.PoolConfig.PDiskFilter:
-                if filterElement.Property and filterElement.Property[0].Type:
-                    type_defined = True
-
-            if not type_defined:
-                logger.warning(f"pdisk_filter.property.type missing for pool {pool.Kind}. This pool name is unknown, no default has been generated, specify type by hand")
+        self.__check_pool_configs(domain, domains_config_dict)
 
         if not domain.DomainId:
             domain.DomainId = 1

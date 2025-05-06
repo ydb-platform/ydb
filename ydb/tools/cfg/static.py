@@ -1198,6 +1198,10 @@ class StaticConfigGenerator(object):
                 defaultPool.MergeFrom(pool)
                 pool.CopyFrom(defaultPool)
 
+        for pool in domain.StoragePoolTypes:
+            if 'encrypted' in pool.Kind and pool.EncryptionMode != 1:
+                raise RuntimeError(f"You named a storage pool '{pool.Kind}', but did not explicitly enable `pool_config.encryption_mode: 1`.")
+
         if not domain.DomainId:
             domain.DomainId = 1
         if not domain.PlanResolution:

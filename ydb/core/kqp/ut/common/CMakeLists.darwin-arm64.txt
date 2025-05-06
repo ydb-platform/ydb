@@ -28,6 +28,8 @@ target_link_libraries(kqp-ut-common PUBLIC
   providers-s3-actors_factory
   essentials-public-udf
   string_udf
+  math_udf
+  unicode_udf
   essentials-utils-backtrace
   public-lib-yson_value
   tx-columnshard-test_helper
@@ -46,6 +48,8 @@ target_sources(kqp-ut-common PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/common/string_udf.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/common/columnshard.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/common/datetime2_udf.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/common/math_udf.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/common/unicode_udf.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/common/kqp_ut_common.h
 )
 

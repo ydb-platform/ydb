@@ -18,6 +18,7 @@ class TllDeleteBase(TllTieringTestBase):
     def get_row_count_by_date(self, table_path: str, past_days: int) -> int:
         return self.ydb_client.query(f"SELECT count(*) as Rows from `{table_path}` WHERE ts < CurrentUtcTimestamp() - DateTime::IntervalFromDays({past_days})")[0].rows[0]["Rows"]
 
+
 class TestDeleteS3Ttl(TllDeleteBase):
 
     @classmethod

@@ -52,23 +52,27 @@ inline const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& GetEntriesFor
 
     auto makeEntries = [rootAttributes]() -> TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> {
         const TString& accessServiceType = AppData()->AuthConfig.GetAccessServiceType();
-        TVector<TString> permissions;
         if (accessServiceType == "Yandex_v2") {
-            permissions = {"ydb.developerApi.get", "ydb.developerApi.update"};
+            TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {
+                    {NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"ydb.developerApi.get", "ydb.developerApi.update"}), {{"gizmo_id", "gizmo"}}}
+            };
+            return entries;
         } else if (accessServiceType == "Nebius_v1") {
-            permissions = {"ydb.clusters.get", "ydb.clusters.monitor", "ydb.clusters.manage"};
+            TVector<TString> permissions = {"ydb.clusters.get", "ydb.clusters.monitor", "ydb.clusters.manage"};
+            auto it = std::find_if(rootAttributes.begin(), rootAttributes.end(),
+            [](const std::pair<TString, TString>& p) {
+                return p.first == "container_id";
+            });
+            if (it == rootAttributes.end()) {
+                return {};
+            }
+            TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {
+                    {NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions(permissions), {{"gizmo_id", it->second}}}
+            };
+            return entries;
         } else {
             return {};
         }
-        auto it = std::find_if(rootAttributes.begin(), rootAttributes.end(),
-        [](const std::pair<TString, TString>& p) {
-            return p.first == "container_id";
-        });
-        const TString& accessResourceId = it != rootAttributes.end() ? it->second : "gizmo";
-        TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {
-                {NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions(permissions), {{"gizmo_id", accessResourceId}}}
-        };
-        return entries;
     };
 
     static TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = makeEntries();

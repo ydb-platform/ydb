@@ -46,7 +46,7 @@ public:
 
 class TCPULimits {
     YDB_OPT(double, CPUGroupThreadsLimit);
-    YDB_READONLY(TString, CPUGroupName, "");
+    YDB_READONLY_DEF(TString, CPUGroupName);
 public:
     TConclusionStatus DeserializeFromProto(const NKikimrKqp::TEvStartKqpTasksRequest& config);
 };

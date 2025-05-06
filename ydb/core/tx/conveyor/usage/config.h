@@ -21,7 +21,7 @@ public:
 
 class TCPULimitsConfig {
     YDB_OPT(double, CPUGroupThreadsLimit);
-    YDB_READONLY(TString, CPUGroupName, "");
+    YDB_READONLY_DEF(TString, CPUGroupName);
 public:
     TCPULimitsConfig() = default;
     TCPULimitsConfig(const double cpuGroupThreadsLimit, const TString& cpuGroupName);

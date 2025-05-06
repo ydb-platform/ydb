@@ -1341,6 +1341,9 @@ bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme& scheme, TS
                         case NKikimrSchemeOp::EPathType::EPathTypeView:
                             actualVersion = pathVersion.GetViewVersion();
                             break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeSysView:
+                            Y_ABORT("UNIMPLEMENTED");
+                            break;
                         default:
                             actualVersion = pathVersion.GetGeneralVersion();
                             break;
@@ -4470,6 +4473,7 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 break;
             }
 
+            case NKikimrSchemeOp::EPathType::EPathTypeSysView:
             case NKikimrSchemeOp::EPathType::EPathTypeInvalid: {
                 Y_UNREACHABLE();
             }
@@ -5336,6 +5340,7 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
     case TPathElement::EPathType::EPathTypeBackupCollection:
         TabletCounters->Simple()[COUNTER_BACKUP_COLLECTION_COUNT].Sub(1);
         break;
+    case TPathElement::EPathType::EPathTypeSysView:
     case TPathElement::EPathType::EPathTypeInvalid:
         Y_ABORT("impossible path type");
     }

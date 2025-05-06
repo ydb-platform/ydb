@@ -215,7 +215,6 @@ public:
         const bool inconsistentTx,
         const bool isOlap,
         TVector<NScheme::TTypeInfo> keyColumnTypes,
-        const bool enableStreamWrite,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot,
         const NKikimrDataEvents::ELockMode lockMode,
@@ -233,7 +232,6 @@ public:
         , InconsistentTx(inconsistentTx)
         , IsOlap(isOlap)
         , KeyColumnTypes(std::move(keyColumnTypes))
-        , EnableStreamWrite(enableStreamWrite)
         , Callbacks(callbacks)
         , TxManager(txManager ? txManager : CreateKqpTransactionManager(/* collectOnly= */ true))
         , Counters(counters)
@@ -988,9 +986,7 @@ public:
             << ", Attempts=" << metadata->SendAttempts << ", Mode=" << static_cast<int>(Mode)
             << ", BufferMemory=" << GetMemory());
 
-        if (Mode == EMode::PREPARE || Mode == EMode::IMMEDIATE_COMMIT) {
-            AFL_ENSURE(EnableStreamWrite || metadata->IsFinal);
-        }
+        AFL_ENSURE(Mode == EMode::WRITE || metadata->IsFinal);
 
         Send(
             PipeCacheId,
@@ -1289,7 +1285,6 @@ public:
     const bool InconsistentTx;
     const bool IsOlap;
     const TVector<NScheme::TTypeInfo> KeyColumnTypes;
-    const bool EnableStreamWrite;
 
     IKqpTableWriterCallbacks* Callbacks;
 
@@ -1372,7 +1367,6 @@ public:
                 Settings.GetInconsistentTx(),
                 Settings.GetIsOlap(),
                 std::move(keyColumnTypes),
-                Settings.GetEnableStreamWrite(),
                 Alloc,
                 Settings.GetMvccSnapshot(),
                 Settings.GetLockMode(),
@@ -1780,8 +1774,6 @@ public:
                 InconsistentTx = settings.TransactionSettings.InconsistentTx;
             }
 
-            EnableStreamWrite &= settings.EnableStreamWrite;
-
             auto& writeInfo = WriteInfos[settings.TableId];
             if (!writeInfo.WriteTableActor) {
                 TVector<NScheme::TTypeInfo> keyColumnTypes;
@@ -1800,7 +1792,6 @@ public:
                     InconsistentTx,
                     settings.IsOlap,
                     std::move(keyColumnTypes),
-                    EnableStreamWrite,
                     Alloc,
                     settings.TransactionSettings.MvccSnapshot,
                     settings.TransactionSettings.LockMode,
@@ -1811,6 +1802,8 @@ public:
                 writeInfo.WriteTableActorId = RegisterWithSameMailbox(writeInfo.WriteTableActor);
                 CA_LOG_D("Create new TableWriteActor for table `" << settings.TablePath << "` (" << settings.TableId << "). lockId=" << LockTxId << " " << writeInfo.WriteTableActorId);
             }
+
+            EnableStreamWrite &= settings.EnableStreamWrite;
 
             auto cookie = writeInfo.WriteTableActor->Open(
                 settings.OperationType,

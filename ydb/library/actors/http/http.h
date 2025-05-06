@@ -128,6 +128,7 @@ struct THeadersBuilder : THeaders {
     THeadersBuilder();
     THeadersBuilder(TStringBuf headers);
     THeadersBuilder(const THeadersBuilder& builder);
+    THeadersBuilder(std::initializer_list<std::pair<TString, TString>> headers);
     void Set(TStringBuf name, TStringBuf data);
     void Erase(TStringBuf name);
 };

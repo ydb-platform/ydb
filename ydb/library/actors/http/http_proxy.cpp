@@ -16,8 +16,8 @@ public:
         return listeningSocket;
     }
 
-    IActor* AddOutgoingConnection(bool secure) {
-        IActor* connectionSocket = CreateOutgoingConnectionActor(SelfId(), secure);
+    IActor* AddOutgoingConnection(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event) {
+        IActor* connectionSocket = CreateOutgoingConnectionActor(SelfId(), event);
         TActorId connectionId = Register(connectionSocket);
         ALOG_DEBUG(HttpLog, "Connection created " << connectionId);
         Connections.emplace(connectionId);
@@ -96,6 +96,12 @@ protected:
         ALOG_ERROR(HttpLog, "Event TEvHttpOutgoingResponse shouldn't be in proxy, it should go to the http connection directly");
     }
 
+    template<typename TEventType>
+    TAutoPtr<NActors::IEventHandle> Forward(const TActorId& dest, TAutoPtr<NActors::TEventHandle<TEventType>>&& event) {
+        auto self(SelfId());
+        return new IEventHandle(dest, event->Sender, event->Release().Release(), event->Flags, event->Cookie, &self, std::move(event->TraceId));
+    }
+
     void Handle(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event) {
         if (event->Get()->AllowConnectionReuse) {
             auto destination = event->Get()->Request->GetDestination();
@@ -104,15 +110,13 @@ protected:
                 TActorId availableConnection = itAvailableConnection->second;
                 ALOG_DEBUG(HttpLog, "Reusing connection " << availableConnection << " for destination " << destination);
                 AvailableConnections.erase(itAvailableConnection);
-                Send(event->Forward(availableConnection));
+                Send(Forward(availableConnection, std::move(event)));
                 return;
             } else {
                 ALOG_DEBUG(HttpLog, "Creating a new connection for destination " << destination);
             }
         }
-        bool secure(event->Get()->Request->Secure);
-        NActors::IActor* actor = AddOutgoingConnection(secure);
-        Send(event->Forward(actor->SelfId()));
+        AddOutgoingConnection(event);
     }
 
     void Handle(TEvHttpProxy::TEvAddListeningPort::TPtr& event) {

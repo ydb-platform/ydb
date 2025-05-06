@@ -10,6 +10,8 @@
 #include <util/system/info.h>
 #include <util/thread/lfstack.h>
 
+#include <yql/essentials/minikql/asan_utils.h>
+
 #if defined(_win_)
 #   include <util/system/winint.h>
 #elif defined(_unix_)
@@ -76,6 +78,7 @@ public:
         void *page = nullptr;
         if (Pages.Dequeue(&page)) {
             --Count;
+            SanitizerMarkInvalid(page, PageSize);
             return page;
         }
 
@@ -101,13 +104,14 @@ private:
             FreePage(addr);
             return GetPageSize();
         }
-
+        SanitizerMarkInvalid(addr, PageSize);
         ++Count;
         Pages.Enqueue(addr);
         return 0;
     }
 
     void FreePage(void* addr) {
+        SanitizerMarkInvalid(addr, PageSize);
         auto res = T::Munmap(addr, PageSize);
         Y_DEBUG_ABORT_UNLESS(0 == res, "Madvise failed: %s", LastSystemErrorText());
     }
@@ -142,6 +146,7 @@ public:
         Y_DEBUG_ABORT_UNLESS(!TAlignedPagePoolImpl<T>::IsDefaultAllocatorUsed(), "No memory maps allowed while using default allocator");
 
         void* res = T::Mmap(size);
+        SanitizerMarkInvalid(res, size);
         TotalMmappedBytes += size;
         return res;
     }
@@ -289,38 +294,15 @@ inline int TSystemMmap::Munmap(void* addr, size_t size)
 }
 #endif
 
-std::function<void(size_t size)> TFakeAlignedMmap::OnMmap = {};
-std::function<void(void* addr, size_t size)> TFakeAlignedMmap::OnMunmap = {};
+std::function<void*(size_t size)> TFakeMmap::OnMmap = {};
+std::function<void(void* addr, size_t size)> TFakeMmap::OnMunmap = {};
 
-void* TFakeAlignedMmap::Mmap(size_t size)
-{
-    if (OnMmap) {
-        OnMmap(size);
-    }
-    return reinterpret_cast<void*>(TAlignedPagePool::POOL_PAGE_SIZE);
+void* TFakeMmap::Mmap(size_t size) {
+    Y_DEBUG_ABORT_UNLESS(OnMmap, "mmap function must be provided");
+    return OnMmap(size);
 }
 
-int TFakeAlignedMmap::Munmap(void* addr, size_t size)
-{
-    if (OnMunmap) {
-        OnMunmap(addr, size);
-    }
-    return 0;
-}
-
-std::function<void(size_t size)> TFakeUnalignedMmap::OnMmap = {};
-std::function<void(void* addr, size_t size)> TFakeUnalignedMmap::OnMunmap = {};
-
-void* TFakeUnalignedMmap::Mmap(size_t size)
-{
-    if (OnMmap) {
-        OnMmap(size);
-    }
-    return reinterpret_cast<void*>(TAlignedPagePool::POOL_PAGE_SIZE+1);
-}
-
-int TFakeUnalignedMmap::Munmap(void* addr, size_t size)
-{
+int TFakeMmap::Munmap(void* addr, size_t size) {
     if (OnMunmap) {
         OnMunmap(addr, size);
     }
@@ -436,7 +418,7 @@ void TAlignedPagePoolImpl<T>::OffloadFree(ui64 size) noexcept {
 }
 
 template<typename T>
-void* TAlignedPagePoolImpl<T>::GetPage() {
+void* TAlignedPagePoolImpl<T>::GetPageImpl() {
     ++PageAllocCount;
     if (!FreePages.empty()) {
         ++PageHitCount;
@@ -479,6 +461,13 @@ void* TAlignedPagePoolImpl<T>::GetPage() {
     return res;
 }
 
+template <typename T>
+void* TAlignedPagePoolImpl<T>::GetPage() {
+    auto* page = GetPageImpl();
+    SanitizerMarkInvalid(page, POOL_PAGE_SIZE);
+    return page;
+};
+
 template<typename T>
 void TAlignedPagePoolImpl<T>::ReturnPage(void* addr) noexcept {
     if (Y_UNLIKELY(IsDefaultAllocatorUsed())) {
@@ -487,6 +476,7 @@ void TAlignedPagePoolImpl<T>::ReturnPage(void* addr) noexcept {
         return;
     }
 
+    SanitizerMarkInvalid(addr, POOL_PAGE_SIZE);
     Y_DEBUG_ABORT_UNLESS(AllPages.find(addr) != AllPages.end());
     FreePages.emplace(addr);
 }
@@ -504,14 +494,9 @@ void* TAlignedPagePoolImpl<T>::GetBlock(size_t size) {
 
         return ret;
     }
-
-    if (size == POOL_PAGE_SIZE) {
-        return GetPage();
-    } else {
-        const auto ptr = Alloc(size);
-        Y_DEBUG_ABORT_UNLESS(ActiveBlocks.emplace(ptr, size).second);
-        return ptr;
-    }
+    auto* block = GetBlockImpl(size);
+    SanitizerMarkInvalid(block, size);
+    return block;
 }
 
 template<typename T>
@@ -681,6 +666,17 @@ bool TAlignedPagePoolImpl<T>::TryIncreaseLimit(ui64 required) {
     return Limit >= required;
 }
 
+template <typename T>
+void* TAlignedPagePoolImpl<T>::GetBlockImpl(size_t size) {
+    if (size == POOL_PAGE_SIZE) {
+        return GetPage();
+    } else {
+        const auto ptr = Alloc(size);
+        Y_DEBUG_ABORT_UNLESS(ActiveBlocks.emplace(ptr, size).second);
+        return ptr;
+    }
+}
+
 template<typename T>
 ui64 TAlignedPagePoolImpl<T>::GetGlobalPagePoolSize() {
     ui64 size = 0;
@@ -713,8 +709,7 @@ bool TAlignedPagePoolImpl<T>::IsDefaultAllocatorUsed() {
 #endif
 
 template class TAlignedPagePoolImpl<>;
-template class TAlignedPagePoolImpl<TFakeAlignedMmap>;
-template class TAlignedPagePoolImpl<TFakeUnalignedMmap>;
+template class TAlignedPagePoolImpl<TFakeMmap>;
 
 template<typename TMmap>
 void* GetAlignedPage(ui64 size) {
@@ -809,7 +804,6 @@ void ReleaseAlignedPage(void* mem, ui64 size) {
         TGlobalPools<TMmap, true>::Instance().PushPage(level, mem);
         return;
     }
-
     TGlobalPools<TMmap, true>::Instance().DoMunmap(mem, size);
 }
 
@@ -829,28 +823,22 @@ i64 GetTotalFreeListBytes() {
 }
 
 template i64 GetTotalMmapedBytes<>();
-template i64 GetTotalMmapedBytes<TFakeAlignedMmap>();
-template i64 GetTotalMmapedBytes<TFakeUnalignedMmap>();
+template i64 GetTotalMmapedBytes<TFakeMmap>();
 
 template i64 GetTotalFreeListBytes<>();
-template i64 GetTotalFreeListBytes<TFakeAlignedMmap>();
-template i64 GetTotalFreeListBytes<TFakeUnalignedMmap>();
+template i64 GetTotalFreeListBytes<TFakeMmap>();
 
 template void* GetAlignedPage<>(ui64);
-template void* GetAlignedPage<TFakeAlignedMmap>(ui64);
-template void* GetAlignedPage<TFakeUnalignedMmap>(ui64);
+template void* GetAlignedPage<TFakeMmap>(ui64);
 
 template void* GetAlignedPage<>();
-template void* GetAlignedPage<TFakeAlignedMmap>();
-template void* GetAlignedPage<TFakeUnalignedMmap>();
+template void* GetAlignedPage<TFakeMmap>();
 
 template void ReleaseAlignedPage<>(void*,ui64);
-template void ReleaseAlignedPage<TFakeAlignedMmap>(void*,ui64);
-template void ReleaseAlignedPage<TFakeUnalignedMmap>(void*,ui64);
+template void ReleaseAlignedPage<TFakeMmap>(void*,ui64);
 
 template void ReleaseAlignedPage<>(void*);
-template void ReleaseAlignedPage<TFakeAlignedMmap>(void*);
-template void ReleaseAlignedPage<TFakeUnalignedMmap>(void*);
+template void ReleaseAlignedPage<TFakeMmap>(void*);
 
 size_t GetMemoryMapsCount() {
     size_t lineCount = 0;

@@ -34,6 +34,13 @@ class TResultSet {
     friend class TResultSetParser;
     friend class NYdb::TProtoAccessor;
 public:
+    enum class EType {
+        Unspecified = 0,
+        Message = 10,
+        Arrow = 20,
+    };
+
+public:
     TResultSet(const Ydb::ResultSet& proto);
     TResultSet(Ydb::ResultSet&& proto);
 
@@ -49,7 +56,7 @@ public:
     //! Returns meta information (name, type) for columns
     const std::vector<TColumn>& GetColumnsMeta() const;
 
-    EResultSetType GetResultSetType() const;
+    TResultSet::EType GetType() const;
 
     const TString& GetArrowBatch() const;
     const TString& GetArrowSchema() const;
@@ -111,5 +118,7 @@ private:
 };
 
 using TResultSets = std::vector<TResultSet>;
+
+IOutputStream& operator<<(IOutputStream& out, const TResultSet::EType& type);
 
 } // namespace NYdb

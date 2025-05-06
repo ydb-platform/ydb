@@ -84,8 +84,8 @@ const std::vector<TColumn>& TResultSet::GetColumnsMeta() const {
     return Impl_->ColumnsMeta_;
 }
 
-EResultSetType TResultSet::GetResultSetType() const {
-    return EResultSetType(Impl_->ProtoResultSet_.result_set_type());
+TResultSet::EType TResultSet::GetType() const {
+    return TResultSet::EType(Impl_->ProtoResultSet_.type());
 }
 
 const TString& TResultSet::GetArrowBatch() const {
@@ -98,6 +98,23 @@ const TString& TResultSet::GetArrowSchema() const {
 
 const Ydb::ResultSet& TResultSet::GetProto() const {
     return Impl_->ProtoResultSet_;
+}
+
+IOutputStream& operator<<(IOutputStream& out, const TResultSet::EType& type) {
+    out << "TResultSet::EType::";
+    switch (type) {
+        case TResultSet::EType::Unspecified:
+            out << "Unspecified";
+            break;
+        case TResultSet::EType::Message:
+            out << "Message";
+            break;
+        case TResultSet::EType::Arrow:
+            out << "Arrow";
+            break;
+    }
+
+    return out;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

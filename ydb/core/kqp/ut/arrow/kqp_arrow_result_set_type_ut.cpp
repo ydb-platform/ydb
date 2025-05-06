@@ -18,7 +18,7 @@ TKikimrRunner CreateOlapKikimrRunner() {
 }
 
 std::shared_ptr<arrow::RecordBatch> DeserializeArrowResultSet(const TResultSet& resultSet) {
-    UNIT_ASSERT_VALUES_EQUAL(resultSet.GetResultSetType(), NYdb::EResultSetType::Arrow);
+    UNIT_ASSERT_VALUES_EQUAL(resultSet.GetType(), NYdb::TResultSet::EType::Arrow);
 
     const TString& serializedSchema = resultSet.GetArrowSchema();
     const TString& serializedBatch = resultSet.GetArrowBatch();
@@ -112,13 +112,13 @@ Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
         auto messageResponse = client.ExecuteQuery(R"(
             --!syntax_v1
             SELECT * FROM `/Root/OltpTable`;
-        )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ResultSetType(EResultSetType::Message)).GetValueSync();
+        )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ResultSetType(TResultSet::EType::Message)).GetValueSync();
         UNIT_ASSERT_C(messageResponse.IsSuccess(), messageResponse.GetIssues().ToString());
 
         auto arrowResponse = client.ExecuteQuery(R"(
             --!syntax_v1
             SELECT * FROM `/Root/OltpTable`;
-        )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ResultSetType(EResultSetType::Arrow)).GetValueSync();
+        )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ResultSetType(TResultSet::EType::Arrow)).GetValueSync();
         UNIT_ASSERT_C(arrowResponse.IsSuccess(), arrowResponse.GetIssues().ToString());
 
         const auto& messageResultSet = messageResponse.GetResultSet(0);
@@ -139,13 +139,13 @@ Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
         auto messageResponse = client.ExecuteQuery(R"(
             --!syntax_v1
             SELECT * FROM `/Root/OlapTable`;
-        )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ResultSetType(EResultSetType::Message)).GetValueSync();
+        )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ResultSetType(TResultSet::EType::Message)).GetValueSync();
         UNIT_ASSERT_C(messageResponse.IsSuccess(), messageResponse.GetIssues().ToString());
 
         auto arrowResponse = client.ExecuteQuery(R"(
             --!syntax_v1
             SELECT * FROM `/Root/OlapTable`;
-        )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ResultSetType(EResultSetType::Arrow)).GetValueSync();
+        )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ResultSetType(TResultSet::EType::Arrow)).GetValueSync();
         UNIT_ASSERT_C(arrowResponse.IsSuccess(), arrowResponse.GetIssues().ToString());
 
         const auto& messageResultSet = messageResponse.GetResultSet(0);

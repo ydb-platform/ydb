@@ -1,14 +1,13 @@
 #include "kqp_query_data.h"
-#include "yql/essentials/core/yql_type_annotation.h"
 
 #include <ydb/core/protos/kqp_physical.pb.h>
-#include <ydb/core/engine/mkql_keys.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/kqp/common/kqp_row_builder.h>
 #include <ydb/core/kqp/common/kqp_types.h>
 
 #include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/yql/dq/runtime/dq_transport.h>
+#include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 #include <yql/essentials/utils/yql_panic.h>
@@ -76,7 +75,7 @@ void TKqpExecuterTxResult::FillMkql(NKikimrMiniKQL::TResult* mkqlResult) {
     }
 }
 
-Ydb::ResultSet* TKqpExecuterTxResult::GetYdb(google::protobuf::Arena* arena, Ydb::ResultSetType resultSetType, TMaybe<ui64> rowsLimitPerWrite) {
+Ydb::ResultSet* TKqpExecuterTxResult::GetYdb(google::protobuf::Arena* arena, Ydb::ResultSet::Type resultSetType, TMaybe<ui64> rowsLimitPerWrite) {
     Ydb::ResultSet* ydbResult = google::protobuf::Arena::CreateMessage<Ydb::ResultSet>(arena);
     FillYdb(ydbResult, resultSetType, rowsLimitPerWrite);
     return ydbResult;
@@ -86,12 +85,12 @@ bool TKqpExecuterTxResult::HasTrailingResults() {
     return HasTrailingResult;
 }
 
-void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, Ydb::ResultSetType resultSetType, TMaybe<ui64> rowsLimitPerWrite) {
+void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, Ydb::ResultSet::Type resultSetType, TMaybe<ui64> rowsLimitPerWrite) {
     YQL_ENSURE(ydbResult);
     YQL_ENSURE(!Rows.IsWide());
     YQL_ENSURE(MkqlItemType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Struct);
 
-    ydbResult->set_result_set_type(resultSetType);
+    ydbResult->set_type(resultSetType);
 
     const auto* mkqlSrcRowStructType = static_cast<const TStructType*>(MkqlItemType);
 
@@ -108,7 +107,7 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, Ydb::ResultSetType
         column->set_name(columnName);
         ExportTypeToProto(columnType, *column->mutable_type());
 
-        if (resultSetType == Ydb::ResultSetType::ARROW) {
+        if (resultSetType == Ydb::ResultSet::ARROW) {
             if (columnType->GetKind() != TType::EKind::Pg && !columnType->IsOptional()) {
                 arrowNotNullColumns.insert(columnName);
             }
@@ -119,9 +118,9 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, Ydb::ResultSetType
     }
 
     switch (resultSetType) {
-        case Ydb::ResultSetType::UNSPECIFIED:
-            ydbResult->set_result_set_type(Ydb::ResultSetType::MESSAGE);
-        case Ydb::ResultSetType::MESSAGE:{
+        case Ydb::ResultSet::UNSPECIFIED:
+            ydbResult->set_type(Ydb::ResultSet::MESSAGE);
+        case Ydb::ResultSet::MESSAGE:{
             Rows.ForEachRow([&](const NUdf::TUnboxedValue& value) -> bool {
                 if (rowsLimitPerWrite) {
                     if (*rowsLimitPerWrite == 0) {
@@ -135,7 +134,7 @@ void TKqpExecuterTxResult::FillYdb(Ydb::ResultSet* ydbResult, Ydb::ResultSetType
             });
             break;
         }
-        case Ydb::ResultSetType::ARROW:{
+        case Ydb::ResultSet::ARROW:{
             NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, arrowNotNullColumns);
             YQL_ENSURE(batchBuilder.Start(arrowSchema).ok());
 
@@ -304,7 +303,7 @@ bool TQueryData::HasTrailingTxResult(const NKqpProto::TKqpPhyResultBinding& rb) 
 
 
 Ydb::ResultSet* TQueryData::GetYdbTxResult(const NKqpProto::TKqpPhyResultBinding& rb, google::protobuf::Arena* arena,
-    Ydb::ResultSetType resultSetType, TMaybe<ui64> rowsLimitPerWrite)
+    Ydb::ResultSet::Type resultSetType, TMaybe<ui64> rowsLimitPerWrite)
 {
     auto txIndex = rb.GetTxResultBinding().GetTxIndex();
     auto resultIndex = rb.GetTxResultBinding().GetResultIndex();

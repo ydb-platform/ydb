@@ -140,7 +140,7 @@ public:
         ui32 statementResultIndex,
         ui64 spanVerbosity = 0, TString spanName = "KqpExecuterBase",
         bool streamResult = false, const TActorId bufferActorId = {}, const IKqpTransactionManagerPtr& txManager = nullptr,
-        Ydb::ResultSetType resultSetType = Ydb::ResultSetType::UNSPECIFIED,
+        Ydb::ResultSet::Type resultSetType = Ydb::ResultSet::UNSPECIFIED,
         TMaybe<TBatchOperationSettings> batchOperationSettings = Nothing())
         : NActors::TActor<TDerived>(&TDerived::ReadyState)
         , Request(std::move(request))
@@ -164,8 +164,8 @@ public:
         , ResultSetType(resultSetType)
         , BatchOperationSettings(std::move(batchOperationSettings))
     {
-        if (ResultSetType == Ydb::ResultSetType::UNSPECIFIED) {
-            ResultSetType = Ydb::ResultSetType::MESSAGE;
+        if (ResultSetType == Ydb::ResultSet::UNSPECIFIED) {
+            ResultSetType = Ydb::ResultSet::MESSAGE;
         }
 
         if (tableServiceConfig.HasArrayBufferMinFillPercentage()) {
@@ -2281,7 +2281,7 @@ protected:
     ui64 StatCollectInflightBytes = 0;
     ui64 StatFinishInflightBytes = 0;
 
-    Ydb::ResultSetType ResultSetType;
+    Ydb::ResultSet::Type ResultSetType;
 
     TMaybe<TBatchOperationSettings> BatchOperationSettings;
 private:
@@ -2297,7 +2297,7 @@ IActor* CreateKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
     const TShardIdToTableInfoPtr& shardIdToTableInfo, const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
-    Ydb::ResultSetType resultSetType, TMaybe<TBatchOperationSettings> batchOperationSettings);
+    Ydb::ResultSet::Type resultSetType, TMaybe<TBatchOperationSettings> batchOperationSettings);
 
 IActor* CreateKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
     const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpRequestCounters::TPtr counters,

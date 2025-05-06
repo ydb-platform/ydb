@@ -1502,7 +1502,7 @@ public:
             QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup,
             (QueryState && QueryState->RequestEv->GetSyntax() == Ydb::Query::Syntax::SYNTAX_PG)
                 ? GUCSettings : nullptr, txCtx->ShardIdToTableInfo, txCtx->TxManager, txCtx->BufferActorId,
-            (QueryState) ? QueryState->GetResultSetType() : Ydb::ResultSetType::UNSPECIFIED, Nothing());
+            (QueryState) ? QueryState->GetResultSetType() : Ydb::ResultSet::UNSPECIFIED, Nothing());
 
         auto exId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP executer: " << exId << " isRollback: " << isRollback);
@@ -2089,13 +2089,12 @@ public:
             for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
                 if (QueryState->IsStreamResult()) {
                     if (QueryState->QueryData->HasTrailingTxResult(phyQuery.GetResultBindings(i))) {
-                        ++trailingResultsCount;
-                        YQL_ENSURE(trailingResultsCount <= 1);
-
-                        auto* ydbResult = QueryState->QueryData->GetYdbTxResult(
+                        auto ydbResult = QueryState->QueryData->GetYdbTxResult(
                             phyQuery.GetResultBindings(i), response->GetArena(), QueryState->GetResultSetType(), {});
 
                         YQL_ENSURE(ydbResult);
+                        ++trailingResultsCount;
+                        YQL_ENSURE(trailingResultsCount <= 1);
                         response->AddYdbResults()->Swap(ydbResult);
                     }
 
@@ -2107,10 +2106,8 @@ public:
                     effectiveRowsLimit = QueryState->PreparedQuery->GetResults(i).GetRowsLimit();
                 }
 
-                auto* ydbResult = QueryState->QueryData->GetYdbTxResult(
-                    phyQuery.GetResultBindings(i), response->GetArena(), QueryState->GetResultSetType(), effectiveRowsLimit);
-
-                YQL_ENSURE(ydbResult);
+                auto* ydbResult = QueryState->QueryData->GetYdbTxResult(phyQuery.GetResultBindings(i),
+                    response->GetArena(), QueryState->GetResultSetType(), effectiveRowsLimit);
                 response->AddYdbResults()->Swap(ydbResult);
             }
         }

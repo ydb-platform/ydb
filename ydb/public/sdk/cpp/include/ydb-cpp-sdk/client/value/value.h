@@ -538,12 +538,6 @@ public:
     TValue Build();
 };
 
-enum class EResultSetType {
-    Unspecified = 0,
-    Message = 1,
-    Arrow = 2,
-};
-
 } // namespace NYdb
 
 template<>

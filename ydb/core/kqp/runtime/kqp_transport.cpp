@@ -2,7 +2,6 @@
 #include <ydb/library/yql/dq/proto/dq_transport.pb.h>
 
 #include <ydb/core/engine/mkql_proto.h>
-#include <ydb/core/engine/mkql_keys.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/kqp/common/kqp_row_builder.h>
 #include <ydb/core/kqp/common/kqp_types.h>
@@ -54,14 +53,14 @@ void TKqpProtoBuilder::BuildYdbResultSet(
     Ydb::ResultSet& resultSet,
     TVector<NYql::NDq::TDqSerializedBatch>&& data,
     NKikimr::NMiniKQL::TType* mkqlSrcRowType,
-    Ydb::ResultSetType resultSetType,
+    Ydb::ResultSet::Type resultSetType,
     const TVector<ui32>* columnOrder,
     const TVector<TString>* columnHints)
 {
     YQL_ENSURE(mkqlSrcRowType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Struct);
     const auto* mkqlSrcRowStructType = static_cast<const TStructType*>(mkqlSrcRowType);
 
-    resultSet.set_result_set_type(resultSetType);
+    resultSet.set_type(resultSetType);
 
     std::vector<std::pair<TString, NScheme::TTypeInfo>> arrowSchema;
     std::set<std::string> arrowNotNullColumns;
@@ -77,7 +76,7 @@ void TKqpProtoBuilder::BuildYdbResultSet(
         column->set_name(columnName);
         ExportTypeToProto(columnType, *column->mutable_type());
 
-        if (resultSetType == Ydb::ResultSetType::ARROW) {
+        if (resultSetType == Ydb::ResultSet::ARROW) {
             if (columnType->GetKind() != TType::EKind::Pg && !columnType->IsOptional()) {
                 arrowNotNullColumns.insert(columnName);
             }
@@ -109,15 +108,15 @@ void TKqpProtoBuilder::BuildYdbResultSet(
             dataSerializer.Deserialize(std::move(part), mkqlSrcRowType, rows);
 
             switch (resultSetType) {
-                case Ydb::ResultSetType::UNSPECIFIED:
-                    resultSet.set_result_set_type(Ydb::ResultSetType::MESSAGE);
-                case Ydb::ResultSetType::MESSAGE:{
+                case Ydb::ResultSet::UNSPECIFIED:
+                    resultSet.set_type(Ydb::ResultSet::MESSAGE);
+                case Ydb::ResultSet::MESSAGE:{
                     rows.ForEachRow([&](const NUdf::TUnboxedValue& value) {
                         ExportValueToProto(mkqlSrcRowType, value, *resultSet.add_rows(), columnOrder);
                     });
                     break;
                 }
-                case Ydb::ResultSetType::ARROW:{
+                case Ydb::ResultSet::ARROW:{
                     rows.ForEachRow([&](const NUdf::TUnboxedValue& value) {
                         for (size_t i = 0; i < arrowSchema.size(); ++i) {
                             const auto& [name, type] = arrowSchema[i];

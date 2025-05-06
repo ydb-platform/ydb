@@ -18,7 +18,7 @@
 
 - Embedded UI
 
-  Подробнее про [Embedded UI](../../../reference/embedded-ui/ydb-monitoring).
+  Подробнее про [Embedded UI](../../reference/embedded-ui/ydb-monitoring).
 
   ```sql
   CREATE TABLE `netflix` (
@@ -112,7 +112,7 @@ ydb import file csv --header --null-value "" --path netflix netflix_titles.csv
 
 {% endlist %}
 
-Пример результата:
+Результат:
 
 ```
 ┌─────────────────┬───────┐

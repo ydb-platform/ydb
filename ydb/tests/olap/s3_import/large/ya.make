@@ -9,6 +9,7 @@ TEST_SRCS (
 )
 
 PEERDIR (
+    contrib/python/boto3
     ydb/public/sdk/python
     ydb/tests/olap/lib
 )

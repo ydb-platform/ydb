@@ -1,8 +1,10 @@
-UNION()
+RECURSE(binaries)
 
-RUN_PROGRAM(
-    ydb/tests/library/compatibility/downloader stable-25-1/release/ydbd ydbd-last-stable
-    OUT_NOAUTO ydbd-last-stable
+PY23_LIBRARY()
+
+
+PY_SRCS(
+    fixtures.py
 )
 
 RUN_PROGRAM(
@@ -11,5 +13,3 @@ RUN_PROGRAM(
 )
 
 END()
-
-RECURSE(downloader)

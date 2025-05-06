@@ -206,8 +206,8 @@ public:
     }
 
 private:
-    const ui32 MAX_RETRY_ATTEMPTS = 3;
-    const size_t MAX_SOCKET_BATCH_SIZE = 1 * 1024 * 1024; // 1 mb
+    static constexpr ui32 MAX_RETRY_ATTEMPTS = 3;
+    static constexpr size_t MAX_SOCKET_BATCH_SIZE = 1_MB;
     TSocketDescriptor* Socket;
     TBuffer Buffer;
 

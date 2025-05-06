@@ -58,10 +58,6 @@ namespace {
         return true;
     }
 
-    void ConvertAction(const NKikimrCms::TAction& cmsAction, Ydb::Maintenance::LockAction& action) {
-        *action.mutable_duration() = TimeUtil::MicrosecondsToDuration(cmsAction.GetDuration());
-    }
-
     template <typename TApiAction>
     void ConvertAction(const NKikimrCms::TAction& cmsAction, TApiAction& action) {
         if constexpr (std::is_same_v<TApiAction, Ydb::Maintenance::LockAction>) {
@@ -232,7 +228,7 @@ protected:
     }
 
     void Close(const TActorId& self) {
-        NTabletPipe::CloseAndForgetClient(self, HivePipeActor);
+        NTabletPipe::CloseAndForgetClient(TActorIdentity(self), HivePipeActor);
     }
 
     ui64 NewCookie() {
@@ -452,7 +448,7 @@ class TCreateMaintenanceTask
     static std::vector<EScopeCase> SupportedScopes();
 
     template <>
-    static std::vector<EScopeCase> SupportedScopes<EActionCase::kLockAction>() {
+    std::vector<EScopeCase> SupportedScopes<EActionCase::kLockAction>() {
         return {
             EScopeCase::kNodeId,
             EScopeCase::kHost,
@@ -461,7 +457,7 @@ class TCreateMaintenanceTask
     }
 
     template <>
-    static std::vector<EScopeCase> SupportedScopes<EActionCase::kDrainAction>() {
+    std::vector<EScopeCase> SupportedScopes<EActionCase::kDrainAction>() {
         return {
             EScopeCase::kNodeId,
         };
@@ -505,12 +501,12 @@ class TCreateMaintenanceTask
             if (group.actions().size() < 1) {
                 Reply(Ydb::StatusIds::BAD_REQUEST, "Empty actions");
                 return false;
-            } 
-            
+            }
+
             if (!GetCmsState()->EnableSingleCompositeActionGroup && group.actions().size() > 1) {
                 Reply(Ydb::StatusIds::UNSUPPORTED, "Feature flag EnableSingleCompositeActionGroup is off");
                 return false;
-            } 
+            }
 
             if (request.action_groups().size() > 1 && group.actions().size() > 1) {
                 Reply(Ydb::StatusIds::UNSUPPORTED, TStringBuilder()
@@ -652,7 +648,11 @@ private:
     std::unordered_set<int> PendingDrainActions;
 
 public:
-    using TBase::TBase;
+    TCreateMaintenanceTask(TEvCms::TEvCreateMaintenanceTaskRequest::TPtr& ev, const TActorId& cmsActorId, TCmsStatePtr cmsState = nullptr)
+        : TBase(ev, cmsActorId, cmsState)
+        , THiveInteractor(this)
+    {
+    }
 
     void Bootstrap() {
         const auto& user = Request->Get()->Record.GetUserSID();
@@ -765,7 +765,11 @@ class TGetMaintenanceTask
     , public THiveInteractor
 {
 public:
-    using TBase::TBase;
+    TGetMaintenanceTask(TEvCms::TEvGetMaintenanceTaskRequest::TPtr& ev, const TActorId& cmsActorId, TCmsStatePtr cmsState = nullptr)
+        : TBase(ev, cmsActorId, cmsState)
+        , THiveInteractor(this)
+    {
+    }
 
     void Bootstrap() {
         const auto& taskUid = GetTaskUid();
@@ -817,7 +821,7 @@ public:
                 PendingDrainActions[cookie] = actionIdx;
                 ui32 nodeId = FromString(permission.Action.GetHost());
 
-                Send(HivePipe(TActivationContext::AsActorContext()), new TEvHive::TEvRequestDrainInfo(nodeId), 0, cookie);
+                Send(HivePipe(SelfId()), new TEvHive::TEvRequestDrainInfo(nodeId), 0, cookie);
             }
         }
     }

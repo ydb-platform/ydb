@@ -403,14 +403,39 @@ bool FillIndexTablePartitioning(
 ) {
     auto fillIndexPartitioning = [&](const Ydb::Table::GlobalIndexSettings& settings, std::vector<NKikimrSchemeOp::TTableDescription>& indexImplTableDescriptions) {
         auto& indexImplTableDescription = indexImplTableDescriptions.emplace_back();
+        auto& partitionConfig = *indexImplTableDescription.MutablePartitionConfig();
 
         if (settings.has_partitioning_settings()) {
-            if (!FillPartitioningPolicy(*indexImplTableDescription.MutablePartitionConfig(), settings, code, error)) {
+            if (!FillPartitioningPolicy(partitionConfig, settings, code, error)) {
                 return false;
             }
         }
         if (settings.partitions_case() != Ydb::Table::GlobalIndexSettings::PARTITIONS_NOT_SET) {
             if (!FillPartitions(indexImplTableDescription, settings, code, error)) {
+                return false;
+            }
+        }
+        if (settings.has_read_replicas_settings()) {
+            const auto& readReplicasSettings = settings.read_replicas_settings();
+            switch (readReplicasSettings.settings_case()) {
+            case Ydb::Table::ReadReplicasSettings::kPerAzReadReplicasCount:
+            {
+                auto& followerGroup = *partitionConfig.AddFollowerGroups();
+                followerGroup.SetFollowerCount(readReplicasSettings.per_az_read_replicas_count());
+                followerGroup.SetRequireAllDataCenters(true);
+                followerGroup.SetFollowerCountPerDataCenter(true);
+                break;
+            }
+            case Ydb::Table::ReadReplicasSettings::kAnyAzReadReplicasCount:
+            {
+                auto& followerGroup = *partitionConfig.AddFollowerGroups();
+                followerGroup.SetFollowerCount(readReplicasSettings.any_az_read_replicas_count());
+                followerGroup.SetRequireAllDataCenters(false);
+                break;
+            }
+            default:
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Unknown read_replicas_settings type";
                 return false;
             }
         }

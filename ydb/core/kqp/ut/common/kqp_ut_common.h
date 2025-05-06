@@ -384,6 +384,7 @@ TVector<ui64> GetColumnTableShards(Tests::TServer* server, TActorId sender, cons
 
 void WaitForZeroSessions(const NKqp::TKqpCounters& counters);
 void WaitForZeroReadIterators(Tests::TServer& server, const TString& path);
+int GetCumulativeCounterValue(Tests::TServer& server, const TString& path, const TString& counterName);
 
 bool JoinOrderAndAlgosMatch(const TString& optimized, const TString& reference);
 

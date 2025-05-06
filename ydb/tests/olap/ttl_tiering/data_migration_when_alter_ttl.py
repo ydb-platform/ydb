@@ -133,15 +133,7 @@ class TestDataMigrationWhenAlterTtl(TllTieringTestBase):
         if not self.wait_for(lambda: len(table.get_portion_stat_by_tier()) != 0, plain_or_under_sanitizer(60, 120)):
             raise Exception("portion count equal zero after insert data")
 
-        def portions_actualized_in_sys():
-            portions = table.get_portion_stat_by_tier()
-            logger.info(f"portions: {portions}, blobs: {table.get_blob_stat_by_tier()}")
-            if len(portions) != 1 or "__DEFAULT" not in portions:
-                raise Exception("Data not in __DEFAULT teir")
-            return self.row_count <= portions["__DEFAULT"]["Rows"]
-
-        if not self.wait_for(lambda: portions_actualized_in_sys(), plain_or_under_sanitizer(120, 240)):
-            raise Exception(".sys reports incorrect data portions")
+        assert self.portions_actualized_in_sys(table)
 
         # Step 4
         t0 = time.time()

@@ -138,7 +138,6 @@ public:
         size_t left = length;
         size_t offset = 0;
         ssize_t totalWritten = 0;
-        ui32 retryAttemtpts = MAX_RETRY_ATTEMPTS;
         do {
             if (Buffer.Avail() < left) { // time to flush
                 // flush the remains from buffer, than write straight to socket if we have a lot data
@@ -147,24 +146,20 @@ public:
                     if (flushRes < 0) {
                         // less than zero means error
                         return flushRes;
-                    } else if (flushRes == 0) {
-                        retryAttemtpts--;
-                        continue;
                     } else {
                         totalWritten += flushRes;
                     }
                 }
                 // if we have a lot data, skip copying it to buffer, just send ot straight to socket
                 if (left > Buffer.Capacity()) {
-                    // we send only buffer capacity, cause we know for sure that it will be written to socket without error
-                    // there was a bug when we wrote to socket in one big batch and OS closed the connection if message was bigger than 6mb and SSL was enabled
-                    ssize_t sendRes = Socket->Send(src + offset, Buffer.Capacity());
-                    if (sendRes < 0) {
+                    // we send only small batch to socket, cause we know for sure that it will be written to socket without error
+                    // there was a bug when we wrote to socket one big batch and OS closed the connection in case message was bigger than 6mb and SSL was enabled
+                    size_t bytesToSend = std::min(left, MAX_SOCKET_BATCH_SIZE);
+                    ssize_t sendRes = Send(src + offset, bytesToSend);
+                    if (sendRes <= 0) {
                         // less than zero means error
+                        // exactly zero is also interpreted as error
                         return sendRes;
-                    } else if (sendRes == 0) {
-                        retryAttemtpts--;
-                        continue;
                     } else {
                         left -= sendRes;
                         offset += sendRes;
@@ -178,7 +173,7 @@ public:
                 Buffer.Append(src + offset, left);
                 left = 0;
             }
-        } while (left > 0 && retryAttemtpts > 0);
+        } while (left > 0);
 
         return totalWritten;
     }
@@ -187,21 +182,11 @@ public:
         if (Empty()) {
             return 0;
         }
-        ui32 retryAttemtpts = MAX_RETRY_ATTEMPTS;
-        while (retryAttemtpts > 0) {
-            ssize_t res = Socket->Send(std::move(Data()), Size());
-            if (res < 0) {
-                return res;
-            } else if (res == 0) {
-                retryAttemtpts--;
-                continue;
-            } else {
-                Buffer.Clear();
-                return res;
-            }
+        ssize_t res = Send(Data(), Size());
+        if (res > 0) {
+            Buffer.Clear();
         }
-
-        return 0;
+        return res;
     }
 
     const char* Data() {
@@ -222,8 +207,25 @@ public:
 
 private:
     const ui32 MAX_RETRY_ATTEMPTS = 3;
+    const size_t MAX_SOCKET_BATCH_SIZE = 1 * 1024 * 1024; // 1 mb
     TSocketDescriptor* Socket;
     TBuffer Buffer;
+
+    ssize_t Send(const char* data, size_t length) {
+        ui32 retryAttemtpts = MAX_RETRY_ATTEMPTS;
+        while (retryAttemtpts > 0) {
+            ssize_t res = Socket->Send(data, length);
+            // retry 
+            if ( -res == EAGAIN || -res == EWOULDBLOCK || -res == EINTR) {
+                retryAttemtpts--;
+                continue;
+            } else {
+                return res;
+            }
+        }
+
+        return 0;
+    }
 };
 
 } // namespace NKikimr::NRawSocket

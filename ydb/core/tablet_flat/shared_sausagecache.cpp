@@ -697,6 +697,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     it = queue.Requests.erase(it);
                 }
                 else {
+                    // FIXME(kungasc): this is really strange, I think we should just handle requests in their original order one by one
                     ++it;
                 }
             } else {

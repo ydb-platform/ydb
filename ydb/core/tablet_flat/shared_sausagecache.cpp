@@ -1051,8 +1051,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         StatBioReqs += 1;
 
         request->MarkResponded();
-
-        Y_ENSURE(request->RefCount() == 1, "Should not be in queues");
     }
 
     void SendError(TRequest &request, NKikimrProto::EReplyStatus error) {

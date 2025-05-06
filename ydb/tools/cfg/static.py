@@ -1198,7 +1198,7 @@ class StaticConfigGenerator(object):
 
         for pool in domain.StoragePoolTypes:
             # Empirical check: if a pool has 'encrypted' in its name it probably should be encrypted
-            if 'encrypted' in pool.Kind and pool.PoolConfig.EncryptionMode != 1:
+            if 'encrypted' in pool.Kind and not pool.PoolConfig.EncryptionMode:
                 raise RuntimeError(f"You named a storage pool '{pool.Kind}', but did not explicitly enable `pool_config.encryption_mode: 1`.")
 
             # Check disk type is specified for every pool

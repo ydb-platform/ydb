@@ -1837,6 +1837,7 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     ownerData.ShredState = TOwnerData::VDISK_SHRED_STATE_NOT_REQUESTED;
     ownerData.SlotSizeUnits = evYardInit.SlotSizeUnits;
 
+    Keeper.SetOwnerWeight(owner, Cfg->GetOwnerWeight(evYardInit.SlotSizeUnits));
     AddCbsSet(owner);
 
     P_LOG(PRI_NOTICE, BPD30, "Registered known VDisk",

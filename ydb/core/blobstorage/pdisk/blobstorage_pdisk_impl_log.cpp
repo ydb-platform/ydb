@@ -214,9 +214,6 @@ void TPDisk::ReadSysLog(const TActorId &pDiskActor) {
 }
 
 bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TString& errorReason) {
-    Cerr << (TStringBuilder() << "[ PD22 ] ProcessChunk0"
-        << ", PDiskId# " << PCtx->PDiskId
-        << Endl);
     TGuard<TMutex> guard(StateMutex);
     ui64 writePosition = 0;
     ui64 lastLsn = 0;
@@ -688,9 +685,6 @@ void TPDisk::ProcessLogReadQueue() {
 // SysLog writing
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NWilson::TTraceId *traceId) {
-    Cerr << (TStringBuilder() << "[ PD21 ] WriteSysLogRestorePoint"
-        << ", PDiskId# " << PCtx->PDiskId
-        << Endl); 
     TGuard<TMutex> guard(StateMutex);
     LoggedNonces = SysLogRecord.Nonces;
     ui32 chunkCount = (ui32)(Format.DiskSize / (ui64)Format.ChunkSize);

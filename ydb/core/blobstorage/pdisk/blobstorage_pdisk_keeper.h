@@ -71,6 +71,14 @@ public:
         ChunkTracker.AddOwner(owner, vdiskId, weight);
     }
 
+    void SetOwnerWeight(TOwner owner, ui32 weight) {
+        Cerr << (TStringBuilder() << "[ PD12 ] TKeeper::SetOwnerWeight"
+            << ", Owner# " << owner
+            << ", Weight# " << weight
+            << Endl);
+        ChunkTracker.SetOwnerWeight(owner, weight);
+    }
+
     void RemoveOwner(TOwner owner) {
         ChunkTracker.RemoveOwner(owner);
     }

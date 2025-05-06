@@ -89,6 +89,15 @@ public:
         RedistributeQuotas();
     }
 
+    void SetOwnerWeight(TOwner id, ui32 weight) {
+        auto it = std::find(ActiveOwnerIds.begin(), ActiveOwnerIds.end(), id);
+        Y_VERIFY(it != ActiveOwnerIds.end());
+
+        TQuotaRecord &record = QuotaForOwner[id];
+        record.SetWeight(weight);
+        RedistributeQuotas();
+    }
+
     void RemoveOwner(TOwner id) {
         bool isFound = false;
         for (ui64 idx = 0; idx < ActiveOwnerIds.size(); ++idx) {
@@ -358,6 +367,11 @@ public:
     void AddOwner(TOwner owner, TVDiskID vdiskId, ui32 weight = 1) {
         Y_VERIFY(IsOwnerUser(owner));
         OwnerQuota->AddOwner(owner, vdiskId, weight);
+    }
+
+    void SetOwnerWeight(TOwner owner, ui32 weight) {
+        Y_VERIFY(IsOwnerUser(owner));
+        OwnerQuota->SetOwnerWeight(owner, weight);
     }
 
     void RemoveOwner(TOwner owner) {

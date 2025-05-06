@@ -133,7 +133,7 @@ class TestDataMigrationWhenAlterTtl(TllTieringTestBase):
         if not self.wait_for(lambda: len(table.get_portion_stat_by_tier()) != 0, plain_or_under_sanitizer(60, 120)):
             raise Exception("portion count equal zero after insert data")
 
-        assert self.portions_actualized_in_sys(table)
+        assert ColumnTableHelper.portions_actualized_in_sys(table)
 
         # Step 4
         t0 = time.time()

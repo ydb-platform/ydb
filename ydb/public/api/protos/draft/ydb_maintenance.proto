@@ -137,9 +137,7 @@ message Action {
     oneof action {
         LockAction lock_action = 1;
         DrainAction drain_action = 2;
-        DownAction down_action = 3; // a. k. a. Крест в Хайве
-        // EvictAction evict_action = 4;
-        // ...
+        DownAction down_action = 3;
     }
 }
 

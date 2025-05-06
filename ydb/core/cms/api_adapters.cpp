@@ -116,11 +116,9 @@ namespace {
     void ConvertAction(const NKikimrCms::TAction& cmsAction, Ydb::Maintenance::ActionState& actionState) {
         switch (cmsAction.GetType()) {
         default:
-            ConvertAction(cmsAction, *actionState.mutable_action()->mutable_lock_action());
-            break;
+            return ConvertAction(cmsAction, *actionState.mutable_action()->mutable_lock_action());
         case NKikimrCms::TAction::DRAIN_NODE:
-            ConvertAction(cmsAction, *actionState.mutable_action()->mutable_drain_action());
-            break;
+            return ConvertAction(cmsAction, *actionState.mutable_action()->mutable_drain_action());
         }
 
         // FIXME: specify action_uid
@@ -141,11 +139,9 @@ namespace {
     {
         switch (permission.GetAction().GetType()) {
         default:
-            ConvertAction(permission.GetAction(), *actionState.mutable_action()->mutable_lock_action());
-            break;
+            return ConvertAction(permission.GetAction(), *actionState.mutable_action()->mutable_lock_action());
         case NKikimrCms::TAction::DRAIN_NODE:
-            ConvertAction(permission.GetAction(), *actionState.mutable_action()->mutable_drain_action());
-            break;
+            return ConvertAction(permission.GetAction(), *actionState.mutable_action()->mutable_drain_action());
         }
         ConvertActionUid(taskUid, permission.GetId(), *actionState.mutable_action_uid());
 
@@ -219,23 +215,24 @@ private:
 }; // TAdapterActor
 
 class THiveInteractor {
+public:
+    explicit THiveInteractor(IActorOps* actorOps)
+        : ActorOps(actorOps)
+    {}
+
 protected:
-    TActorId HivePipe(const TActorContext& ctx) {
-        if (HivePipeActor == TActorId()) {
-            auto hiveId = AppData()->DomainsInfo->GetHive();
+    TActorId HivePipe(const TActorId& self) {
+        if (!HivePipeActor) {
+            const auto hiveId = AppData()->DomainsInfo->GetHive();
             NTabletPipe::TClientConfig config;
             config.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-            auto* client = NTabletPipe::CreateClient(ctx.SelfID, hiveId, config);
-            HivePipeActor = ctx.Register(client);
+            HivePipeActor = ActorOps->Register(NTabletPipe::CreateClient(self, hiveId, config));
         }
         return HivePipeActor;
     }
 
-    void Close(const TActorContext& ctx) {
-        if (HivePipeActor) {
-            NTabletPipe::CloseClient(ctx, HivePipeActor);
-            HivePipeActor = TActorId();
-        }
+    void Close(const TActorId& self) {
+        NTabletPipe::CloseAndForgetClient(self, HivePipeActor);
     }
 
     ui64 NewCookie() {
@@ -243,6 +240,7 @@ protected:
     }
 
 private:
+    IActorOps* const ActorOps;
     TActorId HivePipeActor;
     ui64 Cookie = 0;
 };
@@ -336,13 +334,13 @@ protected:
     template <typename TResult>
     TActionIdx GetLastIdx(const TResult& result) const {
         Y_ABORT_UNLESS(!result.action_group_states().empty());
-        int groupIdx = result.action_group_states_size() - 1;
-        int actionIdx = result.action_group_states(groupIdx).action_states_size() - 1;
+        const int groupIdx = result.action_group_states_size() - 1;
+        const int actionIdx = result.action_group_states(groupIdx).action_states_size() - 1;
         return {groupIdx, actionIdx};
     }
 
     template <typename TResult>
-    Ydb::Maintenance::ActionState* GetActionState(TResult& result, TActionIdx idx) const {
+    static Ydb::Maintenance::ActionState* GetActionState(TResult& result, TActionIdx idx) {
         return result.mutable_action_group_states(idx.first)->mutable_action_states(idx.second);
     }
 
@@ -441,25 +439,32 @@ public:
 
 }; // TPermissionResponseProcessor
 
-class TCreateMaintenanceTask: public TPermissionResponseProcessor<
+class TCreateMaintenanceTask
+    : public TPermissionResponseProcessor<
         TCreateMaintenanceTask,
         TEvCms::TEvCreateMaintenanceTaskRequest>
-        , public THiveInteractor
+    , public THiveInteractor
 {
     using EActionCase = Ydb::Maintenance::Action::ActionCase;
     using EScopeCase = Ydb::Maintenance::ActionScope::ScopeCase;
 
-    template<EActionCase>
+    template <EActionCase>
     static std::vector<EScopeCase> SupportedScopes();
 
-    template<>
-    std::vector<EScopeCase> SupportedScopes<EActionCase::kLockAction>() {
-        return {EScopeCase::kNodeId, EScopeCase::kHost, EScopeCase::kPdisk};
+    template <>
+    static std::vector<EScopeCase> SupportedScopes<EActionCase::kLockAction>() {
+        return {
+            EScopeCase::kNodeId,
+            EScopeCase::kHost,
+            EScopeCase::kPdisk,
+        };
     }
 
-    template<>
-    std::vector<EScopeCase> SupportedScopes<EActionCase::kDrainAction>() {
-        return {EScopeCase::kNodeId};
+    template <>
+    static std::vector<EScopeCase> SupportedScopes<EActionCase::kDrainAction>() {
+        return {
+            EScopeCase::kNodeId,
+        };
     }
 
     template <EActionCase Action>
@@ -595,10 +600,10 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
                 if (action.has_lock_action()) {
                     ConvertAction(action.lock_action(), *cmsRequest.AddActions());
                 } else if (action.has_drain_action()) {
-                    int actionNo = cmsRequest.ActionsSize();
+                    const int actionNo = cmsRequest.ActionsSize();
                     ConvertAction(action.drain_action(), *cmsRequest.AddActions());
-                    ui32 nodeId = action.drain_action().scope().node_id();
-                    Send(HivePipe(TActivationContext::AsActorContext()), new TEvHive::TEvDrainNode(nodeId), 0, actionNo);
+                    const auto nodeId = action.drain_action().scope().node_id();
+                    Send(HivePipe(SelfId()), new TEvHive::TEvDrainNode(nodeId), 0, actionNo);
                     PendingDrainActions.insert(actionNo);
                 } else {
                     Y_ABORT("unreachable");
@@ -632,14 +637,13 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
-        THiveInteractor::Close(TActivationContext::AsActorContext());
+        THiveInteractor::Close(SelfId());
     }
 
-    void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev)
-    {
-        TEvTabletPipe::TEvClientConnected *msg = ev->Get();
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev) {
+        TEvTabletPipe::TEvClientConnected* msg = ev->Get();
         if (msg->Status != NKikimrProto::OK) {
-            THiveInteractor::Close(TActivationContext::AsActorContext());
+            THiveInteractor::Close(SelfId());
         }
     }
 
@@ -669,9 +673,9 @@ public:
         return Request->Get()->Record.GetRequest().task_options().task_uid();
     }
 
-    void Die(const TActorContext& ctx) override {
-        THiveInteractor::Close(ctx);
-        return TBase::Die(ctx);
+    void PassAway() override {
+        THiveInteractor::Close(SelfId());
+        TBase::PassAway();
     }
 
     STFUNC(StateWaitHive) {
@@ -909,20 +913,19 @@ public:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
-        THiveInteractor::Close(TActivationContext::AsActorContext());
+        THiveInteractor::Close(SelfId());
     }
 
-    void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev)
-    {
-        TEvTabletPipe::TEvClientConnected *msg = ev->Get();
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev) {
+        TEvTabletPipe::TEvClientConnected* msg = ev->Get();
         if (msg->Status != NKikimrProto::OK) {
-            THiveInteractor::Close(TActivationContext::AsActorContext());
+            THiveInteractor::Close(SelfId());
         }
     }
 
-    void Die(const TActorContext& ctx) override {
-        THiveInteractor::Close(ctx);
-        return TBase::Die(ctx);
+    void PassAway() override {
+        THiveInteractor::Close(SelfId());
+        TBase::PassAway();
     }
 
     THolder<TEvCms::TEvGetMaintenanceTaskResponse> Response = MakeHolder<TEvCms::TEvGetMaintenanceTaskResponse>();

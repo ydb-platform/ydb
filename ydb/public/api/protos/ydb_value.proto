@@ -3,6 +3,8 @@ option cc_enable_arenas = true;
 
 import "google/protobuf/struct.proto";
 
+import "ydb/public/api/protos/ydb_formats.proto";
+
 package Ydb;
 option java_package = "com.yandex.ydb";
 option java_outer_classname = "ValueProtos";

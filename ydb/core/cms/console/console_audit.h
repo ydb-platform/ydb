@@ -23,4 +23,15 @@ void AuditLogReplaceDatabaseConfigTransaction(
     const TString& reason,
     bool success);
 
+void AuditLogBeginConfigureDatabase(
+    const TString& userSID,
+    const TString& sanitizedToken,
+    const TString& database);
+
+void AuditLogEndConfigureDatabase(
+    const TString& userSID,
+    const TString& sanitizedToken,
+    const TString& database,
+    const TString& reason,
+    bool success);
 } // namespace NKikimr::NConsole

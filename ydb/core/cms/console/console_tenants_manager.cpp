@@ -1,5 +1,6 @@
 #include "console_tenants_manager.h"
 #include "console_impl.h"
+#include "console_audit.h"
 #include "http.h"
 #include "util.h"
 
@@ -618,6 +619,11 @@ public:
         BLOG_TRACE("TSubdomainManip(" << Tenant->Path << ") send subdomain creation cmd: "
                     << request->ToString());
 
+        AuditLogBeginConfigureDatabase(
+            Tenant->UserToken.GetUserSID(),
+            Tenant->UserToken.GetSanitizedToken(),
+            Tenant->Path
+        );
         ctx.Send(MakeTxProxyID(), request.Release());
     }
 
@@ -862,6 +868,14 @@ public:
                         " reason is <" << rec.GetReason() << ">" <<
                         " while resolving subdomain " << Tenant->Path);
 
+            AuditLogEndConfigureDatabase(
+                Tenant->UserToken.GetUserSID(),
+                Tenant->UserToken.GetSanitizedToken(),
+                Tenant->Path,
+                "Resolve subdomain fail",
+                true
+            );
+
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvSubdomainFailed(Tenant, rec.GetReason()), ctx);
             return;
         }
@@ -874,6 +888,15 @@ public:
                         << Tenant->Path << " has invalid path type "
                         << NKikimrSchemeOp::EPathType_Name(pathType)
                         << " but expected " << NKikimrSchemeOp::EPathType_Name(expectedPathType));
+
+            AuditLogEndConfigureDatabase(
+                Tenant->UserToken.GetUserSID(),
+                Tenant->UserToken.GetSanitizedToken(),
+                Tenant->Path,
+                "Resolve subdomain fail",
+                true
+            );
+
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvSubdomainFailed(Tenant, "bad path type"), ctx);
             return;
         }
@@ -881,6 +904,14 @@ public:
         const auto &key = rec.GetPathDescription().GetDomainDescription().GetDomainKey();
         SchemeshardId = key.GetSchemeShard();
         PathId = key.GetPathId();
+
+        AuditLogEndConfigureDatabase(
+            Tenant->UserToken.GetUserSID(),
+            Tenant->UserToken.GetSanitizedToken(),
+            Tenant->Path,
+            "",
+            true
+        );
 
         ReplyAndDie(ctx);
     }

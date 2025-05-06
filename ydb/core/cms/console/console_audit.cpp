@@ -58,4 +58,36 @@ void AuditLogReplaceDatabaseConfigTransaction(
     );
 }
 
+void AuditLogBeginConfigureDatabase(
+    const TString& userSID,
+    const TString& sanitizedToken,
+    const TString& database)
+{
+    AUDIT_LOG(
+        AUDIT_PART("component", COMPONENT_NAME)
+        AUDIT_PART("subject", (!userSID.empty() ? userSID : EMPTY_VALUE))
+        AUDIT_PART("sanitized_token", (!sanitizedToken.empty() ? sanitizedToken : EMPTY_VALUE))
+        AUDIT_PART("database", (!database.empty() ? database : EMPTY_VALUE))
+        AUDIT_PART("status", TString("SUCCESS"))
+        AUDIT_PART("operation", TString("BEGIN INIT DATABASE CONFIG"))
+    );
+}
+
+void AuditLogEndConfigureDatabase(
+    const TString& userSID,
+    const TString& sanitizedToken,
+    const TString& database,
+    const TString& reason,
+    bool success)
+{
+    AUDIT_LOG(
+        AUDIT_PART("component", COMPONENT_NAME)
+        AUDIT_PART("subject", (!userSID.empty() ? userSID : EMPTY_VALUE))
+        AUDIT_PART("sanitized_token", (!sanitizedToken.empty() ? sanitizedToken : EMPTY_VALUE))
+        AUDIT_PART("database", (!database.empty() ? database : EMPTY_VALUE))
+        AUDIT_PART("status", TString(success ? "SUCCESS" : "ERROR"))
+        AUDIT_PART("reason", reason, !reason.empty())
+        AUDIT_PART("operation", TString("END INIT DATABASE CONFIG"))
+    );
+}
 } // namespace NKikimr::NConsole

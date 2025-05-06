@@ -99,22 +99,4 @@ struct TPartitionWriter {
     std::deque<TDataKey> HeadKeys;
 };
 
-inline
-ui64 TPartitionWriter::GetSize() const
-{
-    return BodySize + Head.PackedSize;
-}
-
-inline
-ui64 TPartitionWriter::GetHeadGapSize() const
-{
-    return DataKeysBody.empty() ? 0 : (Head.Offset - (DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount()));
-}
-
-inline
-bool TPartitionWriter::IsNothingWritten() const
-{
-    return CompactedKeys.empty() && (NewHead.PackedSize == 0);
-}
-
 }

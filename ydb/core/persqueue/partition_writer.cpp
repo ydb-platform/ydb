@@ -44,6 +44,11 @@ void TPartitionWriter::CheckHeadConsistency(const TVector<ui32>& compactLevelBor
     }
 }
 
+ui64 TPartitionWriter::GetSize() const
+{
+    return BodySize + Head.PackedSize;
+}
+
 ui64 TPartitionWriter::GetBodySizeBefore(TInstant expirationTimestamp) const
 {
     ui64 size = 0;
@@ -183,6 +188,11 @@ TVector<TClientBlob> TPartitionWriter::GetBlobsFromHead(const ui64 startOffset,
     return res;
 }
 
+ui64 TPartitionWriter::GetHeadGapSize() const
+{
+    return DataKeysBody.empty() ? 0 : (Head.Offset - (DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount()));
+}
+
 ui64 TPartitionWriter::GetSizeLag(i64 offset) const
 {
     ui64 sizeLag = 0;
@@ -226,6 +236,11 @@ const TDataKey* TPartitionWriter::GetLastKey() const
         lastKey = &DataKeysBody.back();
     }
     return lastKey;
+}
+
+bool TPartitionWriter::IsNothingWritten() const
+{
+    return CompactedKeys.empty() && (NewHead.PackedSize == 0);
 }
 
 TString TPartitionWriter::SerializeForKey(const TKey& key, ui32 size,

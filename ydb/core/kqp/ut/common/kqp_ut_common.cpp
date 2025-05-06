@@ -1514,6 +1514,36 @@ void WaitForZeroReadIterators(Tests::TServer& server, const TString& path) {
     UNIT_ASSERT_C(iterators == 0, "Unable to wait for proper read iterator count, it looks like cancelation doesn`t work (" << iterators << ")");
 }
 
+int GetCumulativeCounterValue(Tests::TServer& server, const TString& path, const TString& counterName) {
+    int result = 0;
+
+    TTestActorRuntime* runtime = server.GetRuntime();
+    auto sender = runtime->AllocateEdgeActor();
+    auto shards = GetTableShards(&server, sender, path);
+    UNIT_ASSERT_C(shards.size() > 0, "Table: " << path << " has no shards");
+
+    for (auto x : shards) {
+        runtime->SendToPipe(
+            x,
+            sender,
+            new TEvTablet::TEvGetCounters,
+            0,
+            GetPipeConfigWithRetries());
+
+        auto ev = runtime->GrabEdgeEvent<TEvTablet::TEvGetCountersResponse>(sender);
+        UNIT_ASSERT(ev);
+
+        const NKikimrTabletBase::TEvGetCountersResponse& resp = ev->Get()->Record;
+        for (const auto& counter : resp.GetTabletCounters().GetAppCounters().GetCumulativeCounters()) {
+            if (counter.GetName() == counterName) {
+                result += counter.GetValue();
+            }
+        }
+    }
+
+    return result;
+}
+
 TTableId ResolveTableId(Tests::TServer* server, TActorId sender, const TString& path) {
     auto response = Navigate(*server->GetRuntime(), sender, path, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
     return response->ResultSet.at(0).TableId;

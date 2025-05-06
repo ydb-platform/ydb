@@ -23,7 +23,7 @@ namespace NSQLComplete {
             TVector<TGenericName>& names,
             const TNameConstraints& constraints,
             size_t limit) const override {
-            limit = std::min(limit, names.size());
+            limit = Min(limit, names.size());
 
             TVector<TRow> rows;
             rows.reserve(names.size());
@@ -91,6 +91,15 @@ namespace NSQLComplete {
                     }
                 }
 
+                if constexpr (std::is_same_v<T, TFolderName> ||
+                              std::is_same_v<T, TTableName>) {
+                    return std::numeric_limits<size_t>::max();
+                }
+
+                if constexpr (std::is_same_v<T, TClusterName>) {
+                    return std::numeric_limits<size_t>::max() - 8;
+                }
+
                 return 0;
             }, name);
         }
@@ -107,6 +116,9 @@ namespace NSQLComplete {
                 }
                 if constexpr (std::is_base_of_v<TIndentifier, T>) {
                     return name.Indentifier;
+                }
+                if constexpr (std::is_base_of_v<TUnkownName, T>) {
+                    return name.Content;
                 }
             }, name);
         }

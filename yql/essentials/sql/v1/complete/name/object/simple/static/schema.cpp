@@ -1,16 +1,12 @@
-#include "schema_gateway.h"
-
-#include <yql/essentials/sql/v1/complete/name/object/simple/schema_gateway.h>
-
-#include <util/charset/utf8.h>
+#include "schema.h"
 
 namespace NSQLComplete {
 
     namespace {
 
-        class TSimpleSchemaGateway: public ISimpleSchemaGateway {
+        class TSimpleSchema: public ISimpleSchema {
         public:
-            explicit TSimpleSchemaGateway(THashMap<TString, TVector<TFolderEntry>> data)
+            explicit TSimpleSchema(THashMap<TString, TVector<TFolderEntry>> data)
                 : Data_(std::move(data))
             {
                 for (const auto& [k, _] : Data_) {
@@ -44,10 +40,8 @@ namespace NSQLComplete {
 
     } // namespace
 
-    ISchemaGateway::TPtr MakeStaticSchemaGateway(THashMap<TString, TVector<TFolderEntry>> fs) {
-        return MakeSimpleSchemaGateway(
-            ISimpleSchemaGateway::TPtr(
-                new TSimpleSchemaGateway(std::move(fs))));
+    ISimpleSchema::TPtr MakeStaticSimpleSchema(THashMap<TString, TVector<TFolderEntry>> fs) {
+        return new TSimpleSchema(std::move(fs));
     }
 
 } // namespace NSQLComplete

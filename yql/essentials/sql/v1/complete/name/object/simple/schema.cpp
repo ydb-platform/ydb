@@ -1,4 +1,4 @@
-#include "schema_gateway.h"
+#include "schema.h"
 
 #include <util/charset/utf8.h>
 
@@ -6,7 +6,7 @@ namespace NSQLComplete {
 
     namespace {
 
-        class TSimpleSchemaGateway: public ISchemaGateway {
+        class TSimpleSchema: public ISchema {
         private:
             static auto FilterByName(TString name) {
                 return [name = std::move(name)](auto f) {
@@ -47,14 +47,20 @@ namespace NSQLComplete {
             }
 
         public:
-            explicit TSimpleSchemaGateway(ISimpleSchemaGateway::TPtr simple)
+            explicit TSimpleSchema(ISimpleSchema::TPtr simple)
                 : Simple_(std::move(simple))
             {
             }
 
             NThreading::TFuture<TListResponse> List(const TListRequest& request) const override {
                 auto [path, name] = Simple_->Split(request.Path);
-                return Simple_->List(TString(path))
+
+                TString pathStr(path);
+                if (!pathStr.StartsWith('/')) {
+                    pathStr.prepend('/');
+                }
+
+                return Simple_->List(std::move(pathStr))
                     .Apply(FilterByName(TString(name)))
                     .Apply(FilterByTypes(std::move(request.Filter.Types)))
                     .Apply(Crop(request.Limit))
@@ -62,13 +68,13 @@ namespace NSQLComplete {
             }
 
         private:
-            ISimpleSchemaGateway::TPtr Simple_;
+            ISimpleSchema::TPtr Simple_;
         };
 
     } // namespace
 
-    ISchemaGateway::TPtr MakeSimpleSchemaGateway(ISimpleSchemaGateway::TPtr simple) {
-        return ISchemaGateway::TPtr(new TSimpleSchemaGateway(std::move(simple)));
+    ISchema::TPtr MakeSimpleSchema(ISimpleSchema::TPtr simple) {
+        return ISchema::TPtr(new TSimpleSchema(std::move(simple)));
     }
 
 } // namespace NSQLComplete

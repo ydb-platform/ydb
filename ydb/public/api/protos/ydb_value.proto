@@ -175,24 +175,26 @@ message Column {
     Type type = 2;
 }
 
-enum ResultSetType {
-    RESULT_SET_TYPE_UNSPECIFIED = 0;
-    RESULT_SET_TYPE_MESSAGE = 1;
-    RESULT_SET_TYPE_ARROW = 2;
-}
-
 // Represents table-like structure with ordered set of rows and columns
 message ResultSet {
+    enum Type {
+        UNSPECIFIED = 0;
+        MESSAGE = 10;
+        ARROW = 20;
+    }
+
     // Metadata of columns
     repeated Column columns = 1;
     // Rows of table
     repeated Value rows = 2;
     // Flag indicates the result was truncated
     bool truncated = 3;
+    // Type of result set data
+    Type type = 4;
 
-    ResultSetType result_set_type = 4;
-
+    // Settings for an arrow type of result
     optional Ydb.Formats.ArrowBatchSettings arrow_batch_settings = 5;
 
+    // Data for byte formats of result data
     bytes data = 1000;
 }

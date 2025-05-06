@@ -199,14 +199,13 @@ message ExecuteQueryResponsePart {
 
     // Index of current result set
     int64 result_set_index = 3 [(Ydb.value) = ">= 0"];
-
+    // Result set part
     Ydb.ResultSet result_set = 4;
 
     // Execution statistics (last part only)
     Ydb.TableStats.QueryStats exec_stats = 5;
 
     TransactionMeta tx_meta = 6;
-
     VirtualTimestamp snapshot_timestamp = 7;
 }
 

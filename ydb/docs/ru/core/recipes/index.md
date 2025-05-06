@@ -1,10 +1,8 @@
 # Рецепты по работе с {{ ydb-short-name }}
 
-В этом разделе собраны рецепты по работе с {{ ydb-short-name }}.
+Этот раздел документации {{ ydb-short-name }} содержит готовые рецепты для различных аспектов взаимодействия с {{ ydb-short-name }}. Они сгруппированы по следующим категориям:
 
-## Содержание
-
-* [YDB SDK](ydb-sdk/index.md) - примеры работы с YDB SDK
-* [YDB CLI](ydb-cli/index.md) - примеры работы с YDB CLI
-* [YQL](../yql/reference/recipes/index.md) - примеры YQL-запросов
-* [Для аналитиков](olap/index.md) - примеры работы с аналитическими таблицами
+* [{#T}](ydb-sdk/index.md)
+* [{#T}](ydb-cli/index.md)
+* [{#T}](../yql/reference/recipes/index.md)
+* [{#T}](olap/index.md)

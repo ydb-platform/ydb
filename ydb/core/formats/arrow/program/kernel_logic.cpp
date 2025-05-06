@@ -94,8 +94,11 @@ bool TSimpleKernelLogic::IsBoolInResult() const {
                 return false;
 
             case NYql::TKernelRequestBuilder::EBinaryOp::StartsWith:
+            case NYql::TKernelRequestBuilder::EBinaryOp::StartsWithIgnoreCase:
             case NYql::TKernelRequestBuilder::EBinaryOp::EndsWith:
+            case NYql::TKernelRequestBuilder::EBinaryOp::EndsWithIgnoreCase:
             case NYql::TKernelRequestBuilder::EBinaryOp::StringContains:
+            case NYql::TKernelRequestBuilder::EBinaryOp::StringContainsIgnoreCase:
 
             case NYql::TKernelRequestBuilder::EBinaryOp::Equals:
             case NYql::TKernelRequestBuilder::EBinaryOp::NotEquals:

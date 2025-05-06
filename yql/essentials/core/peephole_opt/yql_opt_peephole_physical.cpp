@@ -5931,7 +5931,7 @@ struct TBlockRules {
         {">",  { "Greater" } },
         {">=", { "GreaterOrEqual" } },
 
-        // string kernels
+        // string kernels //
         {"Size", { "Size" } },
         {"StartsWith", { "StartsWith" } },
         {"EndsWith", { "EndsWith" } },

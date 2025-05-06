@@ -121,57 +121,82 @@ class TBufferedWriter {
 public:
     TBufferedWriter(TSocketDescriptor* socket, size_t size)
         : Socket(socket)
-        , Buffer(size)
-        , BufferSize(size) {
+        , Buffer(size) {
     }
 
-    void write(const char* src, size_t length) {
-        size_t possible = std::min(length, Buffer.Avail());
-        if (possible > 0) {
-            Buffer.Append(src, possible);
-        }
-        if (0 == Buffer.Avail() && Socket) {
-            flush();
-        }
-        size_t left = length - possible;
-        if (left >= BufferSize) {
-            if (Chunks.empty()) {
-                // optimization for reduce memory copy
-                ssize_t res = Socket->Send(src + possible, left);
-                if (res > 0) {
-                    left -= res;
-                    possible += res;
+    /**
+    * Writes data to the socket buffer.
+    *
+    * This method writes the specified number of bytes from the source buffer to the internal buffer.
+    * If the internal buffer becomes full, it flushes the buffer to the socket. The process repeats until all data is written.
+    *
+    * @param src A pointer to the source buffer containing the data to be written.
+    * @param length The number of bytes to write from the source buffer.
+    * @return The total number of bytes written to the socket. If an error occurs during writing, a negative value is returned.
+    */
+    [[nodiscard]] ssize_t write(const char* src, size_t length) {
+        size_t left = length;
+        size_t offset = 0;
+        ssize_t totalWritten = 0;
+        ui32 retryAttemtpts = MAX_RETRY_ATTEMPTS;
+        do {
+            if (Buffer.Avail() < left) { // time to flush
+                // flush the remains from buffer, than write straight to socket if we have a lot data
+                if (!Empty()) {
+                    ssize_t flushRes = flush();
+                    if (flushRes < 0) {
+                        // less than zero means error
+                        return flushRes;
+                    } else if (flushRes == 0) {
+                        retryAttemtpts--;
+                        continue;
+                    } else {
+                        totalWritten += flushRes;
+                    }
                 }
-            }
-            if (left > 0) {
-                Buffer.Reserve(left);
-                Buffer.Append(src + possible, left);
-                flush();
-            }
-        } else if (left > 0) {
-            Buffer.Append(src + possible, left);
-        }
-    }
-
-    ssize_t flush() {
-        if (!Buffer.Empty()) {
-            Chunks.emplace_back(std::move(Buffer));
-            Buffer.Reserve(BufferSize);
-        }
-        while(!Chunks.empty()) {
-            auto& chunk = Chunks.front();
-            ssize_t res = Socket->Send(chunk.Data(), chunk.Size());
-            if (res > 0) {
-                if (static_cast<size_t>(res) == chunk.Size()) {
-                    Chunks.pop_front();
+                // if we have a lot data, skip copying it to buffer, just send ot straight to socket
+                if (left > Buffer.Capacity()) {
+                    // we send only buffer capacity, cause we know for sure that it will be written to socket without error
+                    // there was a bug when we wrote to socket in one big batch and OS closed the connection if message was bigger than 6mb and SSL was enabled
+                    ssize_t sendRes = Socket->Send(src + offset, Buffer.Capacity());
+                    if (sendRes < 0) {
+                        // less than zero means error
+                        return sendRes;
+                    } else if (sendRes == 0) {
+                        retryAttemtpts--;
+                        continue;
+                    } else {
+                        left -= sendRes;
+                        offset += sendRes;
+                        totalWritten += sendRes;
+                    }
                 } else {
-                    chunk.Shift(res);
+                    Buffer.Append(src + offset, left);
+                    left = 0;   
                 }
-            } else if (-res == EINTR) {
-                continue;
-            } else if (-res == EAGAIN || -res == EWOULDBLOCK) {
-                return 0;
             } else {
+                Buffer.Append(src + offset, left);
+                left = 0;
+            }
+        } while (left > 0 && retryAttemtpts > 0);
+
+        return totalWritten;
+    }
+
+    [[nodiscard]] ssize_t flush() {
+        if (Empty()) {
+            return 0;
+        }
+        ui32 retryAttemtpts = MAX_RETRY_ATTEMPTS;
+        while (retryAttemtpts > 0) {
+            ssize_t res = Socket->Send(std::move(Data()), Size());
+            if (res < 0) {
+                return res;
+            } else if (res == 0) {
+                retryAttemtpts--;
+                continue;
+            } else {
+                Buffer.Clear();
                 return res;
             }
         }
@@ -192,29 +217,14 @@ public:
     }
 
     bool Empty() {
-        return Buffer.Empty() && Chunks.empty();
+        return Buffer.Empty();
     }
 
 private:
+    const ui32 MAX_RETRY_ATTEMPTS = 3;
     TSocketDescriptor* Socket;
     TBuffer Buffer;
-    size_t BufferSize;
-
-    struct Chunk {
-        Chunk(TBuffer&& buffer)
-            : Buffer(std::move(buffer))
-            , Position(0) {
-        }
-
-        TBuffer Buffer;
-        size_t Position;
-
-        const char* Data() { return Buffer.Data() + Position; }
-        size_t Size() { return Buffer.Size() - Position; }
-        void Shift(size_t size) { Position += size; }
-    };
-    std::deque<Chunk> Chunks;
-
 };
 
 } // namespace NKikimr::NRawSocket
+

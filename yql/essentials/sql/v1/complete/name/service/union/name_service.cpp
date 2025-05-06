@@ -21,6 +21,7 @@ namespace NSQLComplete {
                 for (const auto& c : Children_) {
                     fs.emplace_back(c->Lookup(request));
                 }
+
                 return NThreading::WaitAll(fs)
                     .Apply([fs, this, request = std::move(request)](auto) {
                         return Union(fs, request.Constraints, request.Limit);
@@ -35,9 +36,17 @@ namespace NSQLComplete {
                 TNameResponse united;
                 for (auto f : fs) {
                     TNameResponse response = f.ExtractValue();
+
                     std::ranges::move(
                         response.RankedNames,
                         std::back_inserter(united.RankedNames));
+
+                    if (!response.IsEmpty() && response.NameHintLength) {
+                        Y_ENSURE(
+                            united.NameHintLength.Empty() ||
+                            united.NameHintLength == response.NameHintLength);
+                        united.NameHintLength = response.NameHintLength;
+                    }
                 }
                 Ranking_->CropToSortedPrefix(united.RankedNames, constraints, limit);
                 return united;

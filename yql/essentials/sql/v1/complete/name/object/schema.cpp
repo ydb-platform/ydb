@@ -1,4 +1,4 @@
-#include "schema_gateway.h"
+#include "schema.h"
 
 template <>
 void Out<NSQLComplete::TFolderEntry>(IOutputStream& out, const NSQLComplete::TFolderEntry& entry) {

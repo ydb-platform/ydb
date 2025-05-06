@@ -41,11 +41,11 @@ namespace NSQLComplete {
         TVector<TFolderEntry> Entries;
     };
 
-    class ISchemaGateway: public TThrRefBase {
+    class ISchema: public TThrRefBase {
     public:
-        using TPtr = TIntrusivePtr<ISchemaGateway>;
+        using TPtr = TIntrusivePtr<ISchema>;
 
-        virtual ~ISchemaGateway() = default;
+        virtual ~ISchema() = default;
         virtual NThreading::TFuture<TListResponse> List(const TListRequest& request) const = 0;
     };
 

@@ -1,19 +1,12 @@
 LIBRARY()
 
 SRCS(
-    schema.cpp
+    name_service.cpp
 )
 
 PEERDIR(
     yql/essentials/sql/v1/complete/name/object
+    yql/essentials/sql/v1/complete/name/service
 )
 
 END()
-
-RECURSE(
-    static
-)
-
-RECURSE_FOR_TESTS(
-    ut
-)

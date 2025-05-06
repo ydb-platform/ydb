@@ -1,6 +1,6 @@
 #pragma once
 
-#include <yql/essentials/sql/v1/complete/name/object/schema_gateway.h>
+#include <yql/essentials/sql/v1/complete/name/object/schema.h>
 
 namespace NSQLComplete {
 
@@ -9,15 +9,15 @@ namespace NSQLComplete {
         TStringBuf NameHint;
     };
 
-    class ISimpleSchemaGateway: public TThrRefBase {
+    class ISimpleSchema: public TThrRefBase {
     public:
-        using TPtr = TIntrusivePtr<ISimpleSchemaGateway>;
+        using TPtr = TIntrusivePtr<ISimpleSchema>;
 
-        virtual ~ISimpleSchemaGateway() = default;
+        virtual ~ISimpleSchema() = default;
         virtual TSplittedPath Split(TStringBuf path) const = 0;
         virtual NThreading::TFuture<TVector<TFolderEntry>> List(TString folder) const = 0;
     };
 
-    ISchemaGateway::TPtr MakeSimpleSchemaGateway(ISimpleSchemaGateway::TPtr simple);
+    ISchema::TPtr MakeSimpleSchema(ISimpleSchema::TPtr simple);
 
 } // namespace NSQLComplete

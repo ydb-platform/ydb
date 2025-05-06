@@ -12,7 +12,8 @@ namespace NKikimr::NSharedCache {
 using namespace NActors;
 using namespace NTabletFlatExecutor;
 
-static const ui64 ASYNC_QUEUE_COOKIE = 1;
+static const ui64 NO_QUEUE_COOKIE = 1;
+static const ui64 ASYNC_QUEUE_COOKIE = 2;
 
 struct TPageCollectionMock : public NPageCollection::IPageCollection {
     TPageCollectionMock(ui64 id)
@@ -118,7 +119,7 @@ struct TSharedPageCacheMock {
         return *this;
     }
 
-    TSharedPageCacheMock& Provide(TIntrusiveConstPtr<TPageCollectionMock> collection, TVector<TPageId> pages, ui64 eventCookie = 0) { // event cookie -> queue type
+    TSharedPageCacheMock& Provide(TIntrusiveConstPtr<TPageCollectionMock> collection, TVector<TPageId> pages, ui64 eventCookie = NO_QUEUE_COOKIE) { // event cookie -> queue type
         auto fetch = new NPageCollection::TFetch(pages.size() * 10, collection, pages); // fetch cookie -> requested size
         auto data = new NBlockIO::TEvData(fetch, NKikimrProto::OK);
         for (auto pageId : pages) {
@@ -306,7 +307,7 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
 
         auto fetch = new NPageCollection::TFetch(30, sharedCache.Collection1, {1, 2, 3});
         auto data = new NBlockIO::TEvData(fetch, NKikimrProto::ERROR);
-        sharedCache.Send(sharedCache.BlockIoSender, data, 0);
+        sharedCache.Send(sharedCache.BlockIoSender, data, NO_QUEUE_COOKIE);
         sharedCache.CheckResults({
             NPageCollection::TFetch{1, sharedCache.Collection1, {}},
             NPageCollection::TFetch{3, sharedCache.Collection1, {}}

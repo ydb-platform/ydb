@@ -122,9 +122,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     using ELnLev = NUtil::ELnLev;
 
     static const ui64 DO_GC_TAG = 1;
-    static const ui64 NO_QUEUE_COOKIE = 0;
-    static const ui64 ASYNC_QUEUE_COOKIE = 1;
-    static const ui64 SCAN_QUEUE_COOKIE = 2;
+
+    static const ui64 NO_QUEUE_COOKIE = 1;
+    static const ui64 ASYNC_QUEUE_COOKIE = 2;
+    static const ui64 SCAN_QUEUE_COOKIE = 3;
 
     struct TCacheCachePageTraits {
         static ui64 GetWeight(const TPage* page) {
@@ -718,7 +719,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void DropPendingRequest(TIntrusivePtr<TRequest>& request) {
-        // Note: pending requests that have been responded during Unregister and Detach
+        // Note: pending requests that were responded during Unregister and Detach
         // should be removed from PendingRequests manually
         Y_ASSERT(request->IsResponded());
         if (request.RefCount() == 1) {

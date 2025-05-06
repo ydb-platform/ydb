@@ -1060,6 +1060,8 @@ private:
             return {CurrentArgContext.AddArg(node.Get())};
         } else if (auto maybeCrossJoin = TMaybeNode<TDqPhyCrossJoin>(node)) {
             operatorId = Visit(maybeCrossJoin.Cast(), planNode);
+        } else if (auto maybeCombineByKey = TMaybeNode<TCoCombineByKey>(node)) {
+            operatorId = Visit(maybeCombineByKey.Cast(), planNode);
         }
 
         TVector<std::variant<ui32, TArgContext>> inputIds;
@@ -1374,6 +1376,28 @@ private:
             op.Properties["ToFlow"] = *planNode.CteRefName;
         } else {
             auto inputs = Visit(toflow.Input().Ptr(), planNode);
+            if (inputs.size() == 1) {
+                return inputs[0];
+            } else {
+                return TMaybe<std::variant<ui32, TArgContext>> ();
+            }
+        }
+
+        return AddOperator(planNode, "ConstantExpr", std::move(op));
+    }
+
+    TMaybe<std::variant<ui32, TArgContext>> Visit(const TCoCombineByKey& combineByKey, TQueryPlanNode& planNode) {
+        const auto combineByKeyValue = NPlanUtils::PrettyExprStr(combineByKey.Input());
+
+        TOperator op;
+        op.Properties["Name"] = "CombineByKey";
+
+        if (auto maybeResultBinding = ContainResultBinding(combineByKeyValue)) {
+            auto [txId, resId] = *maybeResultBinding;
+            planNode.CteRefName = TStringBuilder() << "precompute_" << txId << "_" << resId;
+            op.Properties["CombineByKey"] = *planNode.CteRefName;
+        } else {
+            auto inputs = Visit(combineByKey.Input().Ptr(), planNode);
             if (inputs.size() == 1) {
                 return inputs[0];
             } else {
@@ -2335,11 +2359,14 @@ struct TQueryPlanReconstructor {
             op.GetMapSafe().erase("Inputs");
         }
 
-        if (op.GetMapSafe().contains("Input")
+        if (
+            op.GetMapSafe().contains("Input")
             || op.GetMapSafe().contains("ToFlow")
             || op.GetMapSafe().contains("Member")
             || op.GetMapSafe().contains("AssumeSorted")
-            || op.GetMapSafe().contains("Iterator")) {
+            || op.GetMapSafe().contains("Iterator")
+            || op.GetMapSafe().contains("CombineByKey")
+        ) {
 
             TString maybePrecompute = "";
             if (op.GetMapSafe().contains("Input")) {
@@ -2352,6 +2379,8 @@ struct TQueryPlanReconstructor {
                 maybePrecompute = op.GetMapSafe().at("AssumeSorted").GetStringSafe();
             } else if (op.GetMapSafe().contains("Iterator")) {
                 maybePrecompute = op.GetMapSafe().at("Iterator").GetStringSafe();
+            } else if (op.GetMapSafe().contains("CombineByKey")) {
+                maybePrecompute = op.GetMapSafe().at("CombineByKey").GetStringSafe();
             }
 
             if (Precomputes.contains(maybePrecompute) && planInputs.empty()) {
@@ -2545,7 +2574,8 @@ NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
         "PartitionByKey",
         "ToFlow",
         "Member",
-        "AssumeSorted"
+        "AssumeSorted",
+        "CombineByKey"
     };
 
     THashMap<int, NJson::TJsonValue> planIndex;

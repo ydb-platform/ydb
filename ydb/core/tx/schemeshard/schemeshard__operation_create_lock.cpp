@@ -95,6 +95,9 @@ public:
     THolder<TProposeResponse> Propose(const TString&, TOperationContext& context) override {
         const auto& workingDir = Transaction.GetWorkingDir();
         const auto& op = Transaction.GetLockConfig();
+        const TTxId lockTxId = op.HasLockTxId()
+            ? TTxId(op.GetLockTxId())
+            : OperationId.GetTxId();
 
         LOG_N("TCreateLock Propose"
             << ": opId# " << OperationId
@@ -158,13 +161,12 @@ public:
         const auto pathId = tablePath.Base()->PathId;
         result->SetPathId(pathId.LocalPathId);
 
-        if (tablePath.LockedBy() == OperationId.GetTxId()) {
+        if (tablePath.LockedBy() == lockTxId) {
             result->SetError(NKikimrScheme::StatusAlreadyExists, TStringBuilder() << "path checks failed"
                 << ", path already locked by this operation"
                 << ", path: " << tablePath.PathString());
             return result;
         }
-
         TString errStr;
         if (!context.SS->CheckLocks(pathId, Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
@@ -177,7 +179,7 @@ public:
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 
         context.DbChanges.PersistPath(pathId);
-        context.DbChanges.PersistLongLock(pathId, OperationId.GetTxId());
+        context.DbChanges.PersistLongLock(pathId, lockTxId);
         context.DbChanges.PersistTxState(OperationId);
 
         Y_ABORT_UNLESS(!context.SS->FindTx(OperationId));
@@ -194,7 +196,7 @@ public:
             context.OnComplete.Dependence(splitOpId.GetTxId(), OperationId.GetTxId());
         }
 
-        context.SS->LockedPaths[pathId] = OperationId.GetTxId();
+        context.SS->LockedPaths[pathId] = lockTxId;
         context.SS->TabletCounters->Simple()[COUNTER_LOCKS_COUNT].Add(1);
 
         context.OnComplete.ActivateTx(OperationId);

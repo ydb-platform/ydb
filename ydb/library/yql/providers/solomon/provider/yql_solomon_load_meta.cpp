@@ -1,6 +1,7 @@
 #include "yql_solomon_provider_impl.h"
 
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/solomon/common/util.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/solomon_accessor/client/solomon_accessor_client.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
@@ -20,17 +21,6 @@ TMaybe<TString> ExtractSetting(const TExprNode& settings, const TString& setting
     }
 
     return {};
-}
-
-NSo::NProto::ESolomonClusterType MapClusterType(TSolomonClusterConfig::ESolomonClusterType clusterType) {
-    switch (clusterType) {
-        case TSolomonClusterConfig::SCT_SOLOMON:
-            return NSo::NProto::ESolomonClusterType::CT_SOLOMON;
-        case TSolomonClusterConfig::SCT_MONITORING:
-            return NSo::NProto::ESolomonClusterType::CT_MONITORING;
-        default:
-            YQL_ENSURE(false, "Invalid cluster type " << ToString<ui32>(clusterType));
-    }
 }
 
 } // namespace
@@ -69,20 +59,25 @@ public:
             auto& settings = soReadObject.Object().Settings().Ref();
 
             if (auto maybeSelectors = ExtractSetting(settings, "selectors")) {
-                NSo::NProto::TDqSolomonSource source;
-                source.SetEndpoint(clusterDesc->GetCluster());
-                source.SetProject(soReadObject.Object().Project().StringValue());
-                source.SetClusterType(MapClusterType(clusterDesc->GetClusterType()));
-                source.SetUseSsl(clusterDesc->GetUseSsl());
+                NSo::NProto::TDqSolomonSource source = NSo::FillSolomonSource(clusterDesc, soReadObject.Object().Project().StringValue());
+                
+                auto selectors = NSo::ExtractSelectorValues(*maybeSelectors);
+                if (source.GetClusterType() == NSo::NProto::CT_MONITORING) {
+                    selectors["cluster"] = source.GetCluster();
+                    selectors["service"] = soReadObject.Object().Project().StringValue();
+                } else {
+                    selectors["project"] = source.GetProject();
+                }
 
-                auto defaultReplica = State_->Configuration->SolomonClientDefaultReplica.Get().OrElse("sas");
-                source.MutableSettings()->insert({ "solomonClientDefaultReplica", ToString(defaultReplica) });
+                auto defaultReplica = (source.GetClusterType() == NSo::NProto::CT_SOLOMON ? "sas" : "cloud-prod-a");
+                auto solomonClientDefaultReplica = State_->Configuration->SolomonClientDefaultReplica.Get().OrElse(defaultReplica);
+                source.MutableSettings()->insert({ "solomonClientDefaultReplica", ToString(solomonClientDefaultReplica) });
 
                 auto providerFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, State_->Configuration->Tokens.at(clusterName));
                 auto credentialsProvider = providerFactory->CreateProvider();
 
                 SolomonClient_ = NSo::ISolomonAccessorClient::Make(std::move(source), credentialsProvider);
-                auto future = SolomonClient_->GetLabelNames(*maybeSelectors);
+                auto future = SolomonClient_->GetLabelNames(selectors);
 
                 LabelNamesRequests_[soReadObject.Raw()] = future;
                 futures.push_back(future);

@@ -736,6 +736,117 @@ void CheckLeaseExtension(TTestActorRuntime &runtime,
     CheckAsyncLeaseExtension(runtime, nodeId, code, epoch, fixed);
 }
 
+struct TUpdate {
+    enum class EType : ui8 {
+        Unknown,
+        Updated,
+        Removed,
+        Expired,
+    };
+
+    TUpdate(ui32 nodeId, EType type = EType::Updated)
+        : NodeId(nodeId)
+        , Type(type)
+    {}
+
+    TUpdate(const NKikimrNodeBroker::TUpdateNode &proto) {
+        switch (proto.GetUpdateTypeCase()) {
+            case TUpdateNode::kNode:
+                Type = EType::Updated;
+                NodeId = proto.GetNode().GetNodeId();
+                break;
+            case TUpdateNode::kExpiredNode:
+                Type = EType::Expired;
+                NodeId = proto.GetExpiredNode();
+                break;
+            case TUpdateNode::kRemovedNode:
+                Type = EType::Removed;
+                NodeId = proto.GetRemovedNode();
+                break;
+            case TUpdateNode::UPDATETYPE_NOT_SET:
+                break;
+        }
+    }
+
+    bool operator==(const TUpdate& other) const = default;
+
+    ui32 NodeId = 0;
+    EType Type = EType::Unknown;
+};
+
+TUpdate E(ui32 nodeId) {
+    return TUpdate(nodeId, TUpdate::EType::Expired);
+}
+
+TUpdate R(ui32 nodeId) {
+    return TUpdate(nodeId, TUpdate::EType::Removed);
+}
+
+void CheckNodesUpdate(TTestActorRuntime &runtime,
+                     const TVector<TUpdate> &updates,
+                     ui64 seqNo,
+                     const NKikimrNodeBroker::TEpoch &epoch)
+{
+    TAutoPtr<IEventHandle> handle;
+    auto reply = runtime.GrabEdgeEventRethrow<TEvNodeBroker::TEvUpdateNodes>(handle);
+    UNIT_ASSERT(reply);
+    const auto &rec = reply->GetRecord();
+    UNIT_ASSERT_VALUES_EQUAL(rec.GetSeqNo(), seqNo);
+    UNIT_ASSERT_VALUES_EQUAL(rec.GetEpoch().DebugString(), epoch.DebugString());
+    UNIT_ASSERT_VALUES_EQUAL_C(rec.UpdatesSize(), updates.size(), TStringBuilder()
+        << "expected: [" << JoinSeq(", ", updates) << "]"
+        << ", actual: [" << JoinSeq(", ", rec.GetUpdates()) << "]");
+    for (size_t i = 0; i < updates.size(); ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(updates[i], rec.GetUpdates(i));
+    }
+}
+
+void CheckSyncNodes(TTestActorRuntime &runtime,
+                    TActorId sender,
+                    const TVector<TUpdate> &updates,
+                    ui64 seqNo,
+                    TActorId pipe,
+                    const NKikimrNodeBroker::TEpoch &epoch)
+{
+    TAutoPtr<TEvNodeBroker::TEvSyncNodesRequest> event = new TEvNodeBroker::TEvSyncNodesRequest;
+    event->Record.SetSeqNo(seqNo);
+    runtime.SendToPipe(MakeNodeBrokerID(), sender, event.Release(), 0, {}, pipe);
+
+    TBlockEvents<TEvNodeBroker::TEvUpdateNodes> block(runtime);
+    if (!updates.empty()) {
+        block.Stop();
+        block.Unblock();
+        CheckNodesUpdate(runtime, updates, seqNo, epoch);
+    }
+
+    TAutoPtr<IEventHandle> handle;
+    auto reply = runtime.GrabEdgeEventRethrow<TEvNodeBroker::TEvSyncNodesResponse>(handle);
+    UNIT_ASSERT(reply);
+    UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetSeqNo(), seqNo);
+    UNIT_ASSERT(block.empty());
+}
+
+void SubscribeToNodesUpdates(TTestActorRuntime &runtime, TActorId sender, TActorId pipe, ui64 version, ui64 seqNo)
+{
+    TAutoPtr<TEvNodeBroker::TEvSubscribeNodesRequest> event = new TEvNodeBroker::TEvSubscribeNodesRequest;
+    event->Record.SetCachedVersion(version);
+    event->Record.SetSeqNo(seqNo);
+    runtime.SendToPipe(MakeNodeBrokerID(), sender, event.Release(), 0, {}, pipe);
+}
+
+void CheckUpdateNodesLog(TTestActorRuntime &runtime,
+                         TActorId sender,
+                         const TVector<TUpdate> &updates,
+                         ui64 version,
+                         const NKikimrNodeBroker::TEpoch &epoch)
+{
+    static ui32 seqNo = 1;
+    TActorId pipe = runtime.ConnectToPipe(MakeNodeBrokerID(), sender, 0, GetPipeConfigWithRetries());
+    SubscribeToNodesUpdates(runtime, sender, pipe, version, ++seqNo);
+    CheckNodesUpdate(runtime, updates, seqNo, epoch);
+    runtime.ClosePipe(pipe, sender, 0);
+}
+
 void AsyncResolveNode(TTestActorRuntime &runtime,
                       TActorId sender,
                       ui32 nodeId,
@@ -2337,6 +2448,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion(), epochAfterRestart.GetVersion());
         CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, epoch.GetVersion());
+        CheckUpdateNodesLog(runtime, sender, {}, epoch.GetVersion(), epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
                       0, 0, 0, 0, epoch.GetNextEnd());
 
@@ -2357,6 +2469,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion(), epochAfterRestart.GetVersion());
         CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, epoch.GetVersion());
+        CheckUpdateNodesLog(runtime, sender, {}, epoch.GetVersion(), epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
                         1, 2, 3, 4, epoch.GetNextEnd());
 
@@ -2374,6 +2487,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion(), epochAfterRestart.GetVersion());
         CheckNodesList(runtime, sender, {}, {NODE1}, epoch.GetId());
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, epoch.GetVersion());
+        CheckUpdateNodesLog(runtime, sender, {}, epoch.GetVersion(), epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
 
         // Move epoch to remove NODE1
@@ -2389,6 +2503,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion(), epochAfterRestart.GetVersion());
         CheckNodesList(runtime, sender, {}, {}, epoch.GetId());
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, epoch.GetVersion());
+        CheckUpdateNodesLog(runtime, sender, {}, epoch.GetVersion(), epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
 
         // Reuse NodeID by different node
@@ -2408,6 +2523,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion(), epochAfterRestart.GetVersion());
         CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, epoch.GetVersion());
+        CheckUpdateNodesLog(runtime, sender, {}, epoch.GetVersion(), epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, "host2", 1001, "host2.yandex.net", "1.2.3.5",
                       1, 2, 3, 5, epoch.GetNextEnd());
     }
@@ -2449,6 +2565,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion() + 1, epochAfterRestart.GetVersion());
         CheckNodesList(runtime, sender, {NODE1, NODE2}, {}, epochAfterRestart.GetId());
         CheckFilteredNodesList(runtime, sender, {NODE1, NODE2}, {}, 0, epoch.GetVersion());
+        CheckUpdateNodesLog(runtime, sender, {NODE1, NODE2}, epoch.GetVersion(), epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
                       1, 2, 3, 4, extendedExpire);
         CheckNodeInfo(runtime, sender, NODE2, "host2", 1001, "host2.yandex.net", "1.2.3.4",
@@ -2483,6 +2600,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion() + 1, epochAfterRestart.GetVersion());
         CheckNodesList(runtime, sender, {NODE1}, {}, epochAfterRestart.GetId());
         CheckFilteredNodesList(runtime, sender, {NODE1}, {}, 0, epoch.GetVersion());
+        CheckUpdateNodesLog(runtime, sender, {NODE1}, epoch.GetVersion(), epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
                       1, 2, 3, 4, epoch.GetNextEnd());
     }
@@ -2514,6 +2632,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion(), epochAfterRestart.GetVersion());
         CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, epoch.GetVersion());
+        CheckUpdateNodesLog(runtime, sender, {}, epoch.GetVersion(), epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1", "",
                       0, 0, 0, 0, epoch.GetNextEnd());
         CheckRegistration(runtime, sender, "host1", 1001, DOMAIN_NAME,
@@ -2549,6 +2668,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetId(), epochAfterRestart.GetId());
         CheckNodesList(runtime, sender, {}, {NODE1}, epochAfterRestart.GetId());
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, newEpoch.GetVersion());
+        CheckUpdateNodesLog(runtime, sender, {}, newEpoch.GetVersion(), epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
     }
 
@@ -2602,6 +2722,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetId(), epochAfterRestart.GetId());
         CheckNodesList(runtime, sender, {}, {NODE1}, epochAfterRestart.GetId());
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, newEpoch.GetVersion());
+        CheckUpdateNodesLog(runtime, sender, {}, newEpoch.GetVersion(), epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
     }
 
@@ -2658,6 +2779,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetId(), epochAfterRestart.GetId());
         CheckNodesList(runtime, sender, {}, {NODE1}, epochAfterRestart.GetId());
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, newEpoch.GetVersion());
+        CheckUpdateNodesLog(runtime, sender, {}, newEpoch.GetVersion(), epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
     }
 
@@ -2689,6 +2811,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetId(), epochAfterRestart.GetId());
         CheckNodesList(runtime, sender, {}, {}, epochAfterRestart.GetId());
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, newEpoch.GetVersion());
+        CheckUpdateNodesLog(runtime, sender, {}, newEpoch.GetVersion(), epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
     }
 
@@ -2726,6 +2849,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetId(), epochAfterRestart.GetId());
         CheckNodesList(runtime, sender, {}, {}, epochAfterRestart.GetId());
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, newEpoch.GetVersion());
+        CheckUpdateNodesLog(runtime, sender, {}, newEpoch.GetVersion(), epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
     }
 
@@ -2780,6 +2904,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetId(), epochAfterRestart.GetId());
         CheckNodesList(runtime, sender, {}, {}, epochAfterRestart.GetId());
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, newEpoch.GetVersion());
+        CheckUpdateNodesLog(runtime, sender, {}, newEpoch.GetVersion(), epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
     }
 
@@ -2827,6 +2952,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetId(), epochAfterRestart.GetId());
         CheckNodesList(runtime, sender, {NODE1}, {}, epochAfterRestart.GetId());
         CheckFilteredNodesList(runtime, sender, {NODE1}, {}, 0, newEpoch.GetVersion());
+        CheckUpdateNodesLog(runtime, sender, {NODE1}, newEpoch.GetVersion(), epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, "host2", 1001, "host2.yandex.net", "1.2.3.4",
                       1, 2, 3, 4, newEpoch.GetNextEnd());
     }
@@ -2881,6 +3007,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetId(), epochAfterRestart.GetId());
         CheckNodesList(runtime, sender, {NODE1}, {}, epochAfterRestart.GetId());
         CheckFilteredNodesList(runtime, sender, {NODE1}, {}, 0, newEpoch.GetVersion());
+        CheckUpdateNodesLog(runtime, sender, {NODE1}, newEpoch.GetVersion(), epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, "host2", 1001, "host2.yandex.net", "1.2.3.4",
                       1, 2, 3, 4, newEpoch.GetNextEnd());
     }
@@ -2931,6 +3058,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(epoch.GetId(), epochAfterRestart.GetId());
         CheckNodesList(runtime, sender, {NODE1}, {}, epochAfterRestart.GetId());
         CheckFilteredNodesList(runtime, sender, {NODE1}, {}, 0, epoch.GetVersion());
+        CheckUpdateNodesLog(runtime, sender, {NODE1}, epoch.GetVersion(), epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, "host2", 1001, "host2.yandex.net", "1.2.3.4",
                       1, 2, 3, 4, epoch.GetNextEnd());
     }
@@ -2970,6 +3098,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetId(), epochAfterRestart.GetId());
         CheckNodesList(runtime, sender, {}, {NODE1}, epochAfterRestart.GetId());
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, newEpoch.GetVersion());
+        CheckUpdateNodesLog(runtime, sender, {}, newEpoch.GetVersion(), epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
     }
 
@@ -3009,6 +3138,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetId(), epochAfterRestart.GetId());
         CheckNodesList(runtime, sender, {}, {}, epochAfterRestart.GetId());
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, newEpoch.GetVersion());
+        CheckUpdateNodesLog(runtime, sender, {}, newEpoch.GetVersion(), epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
     }
 
@@ -3063,6 +3193,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetId(), epochAfterRestart.GetId());
         CheckNodesList(runtime, sender, {NODE1}, {}, epochAfterRestart.GetId());
         CheckFilteredNodesList(runtime, sender, {NODE1}, {}, 0, newEpoch.GetVersion());
+        CheckUpdateNodesLog(runtime, sender, {NODE1}, newEpoch.GetVersion(), epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, "host2", 1001, "host2.yandex.net", "1.2.3.4",
                       1, 2, 3, 4, extendedExpire);
     }
@@ -3101,6 +3232,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(epoch.GetId(), epochAfterRestart.GetId());
         CheckNodesList(runtime, sender, {NODE1}, {}, epochAfterRestart.GetId());
         CheckFilteredNodesList(runtime, sender, {NODE1}, {}, 0, epoch.GetVersion());
+        CheckUpdateNodesLog(runtime, sender, {NODE1}, epoch.GetVersion(), epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
                       1, 2, 3, 4, epoch.GetNextEnd());
     }
@@ -3143,6 +3275,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(newEpoch.GetId(), epochAfterRestart.GetId());
         CheckNodesList(runtime, sender, {}, {NODE1}, epochAfterRestart.GetId());
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, newEpoch.GetVersion());
+        CheckUpdateNodesLog(runtime, sender, {}, newEpoch.GetVersion(), epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
     }
 
@@ -3190,6 +3323,11 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, epochAfterRestart.GetVersion() - 2);
         CheckFilteredNodesList(runtime, sender, {NODE2}, {}, 0, epochAfterRestart.GetVersion() - 3);
         CheckFilteredNodesList(runtime, sender, {NODE1, NODE2}, {}, 0, epochAfterRestart.GetVersion() - 4);
+        CheckUpdateNodesLog(runtime, sender, {}, epochAfterRestart.GetVersion(), epochAfterRestart);
+        CheckUpdateNodesLog(runtime, sender, {R(NODE3)}, epochAfterRestart.GetVersion() - 1, epochAfterRestart);
+        CheckUpdateNodesLog(runtime, sender, {R(NODE3)}, epochAfterRestart.GetVersion() - 2, epochAfterRestart);
+        CheckUpdateNodesLog(runtime, sender, {NODE2, R(NODE3)}, epochAfterRestart.GetVersion() - 3, epochAfterRestart);
+        CheckUpdateNodesLog(runtime, sender, {NODE1, NODE2, R(NODE3)}, epochAfterRestart.GetVersion() - 4, epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
                       1, 2, 3, 4, epoch.GetNextEnd());
         CheckNodeInfo(runtime, sender, NODE2, "host2", 1001, "host2.yandex.net", "1.2.3.4",
@@ -3247,6 +3385,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, epochAfterRestart.GetVersion() - 1);
         CheckFilteredNodesList(runtime, sender, {NODE2}, {}, 0, epochAfterRestart.GetVersion() - 2);
         CheckFilteredNodesList(runtime, sender, {NODE1, NODE2}, {}, 0, epochAfterRestart.GetVersion() - 3);
+        CheckUpdateNodesLog(runtime, sender, {}, epochAfterRestart.GetVersion(), epochAfterRestart);
+        CheckUpdateNodesLog(runtime, sender, {R(NODE3)}, epochAfterRestart.GetVersion() - 1, epochAfterRestart);
+        CheckUpdateNodesLog(runtime, sender, {NODE2, R(NODE3)}, epochAfterRestart.GetVersion() - 2, epochAfterRestart);
+        CheckUpdateNodesLog(runtime, sender, {NODE1, NODE2, R(NODE3)}, epochAfterRestart.GetVersion() - 3, epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
                       1, 2, 3, 4, epoch.GetNextEnd());
         CheckNodeInfo(runtime, sender, NODE2, "host2", 1001, "host2.yandex.net", "1.2.3.4",
@@ -3328,6 +3470,11 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, epochAfterRestart.GetVersion() - 2);
         CheckFilteredNodesList(runtime, sender, {NODE2}, {}, 0, epochAfterRestart.GetVersion() - 3);
         CheckFilteredNodesList(runtime, sender, {NODE1, NODE2}, {}, 0, epochAfterRestart.GetVersion() - 4);
+        CheckUpdateNodesLog(runtime, sender, {}, epochAfterRestart.GetVersion(), epochAfterRestart);
+        CheckUpdateNodesLog(runtime, sender, {R(NODE3)}, epochAfterRestart.GetVersion() - 1, epochAfterRestart);
+        CheckUpdateNodesLog(runtime, sender, {R(NODE3)}, epochAfterRestart.GetVersion() - 2, epochAfterRestart);
+        CheckUpdateNodesLog(runtime, sender, {NODE2, R(NODE3)}, epochAfterRestart.GetVersion() - 3, epochAfterRestart);
+        CheckUpdateNodesLog(runtime, sender, {NODE1, NODE2, R(NODE3)}, epochAfterRestart.GetVersion() - 4, epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
                       1, 2, 3, 4, epoch.GetNextEnd());
         CheckNodeInfo(runtime, sender, NODE2, "host2", 1001, "host2.yandex.net", "1.2.3.4",
@@ -3392,6 +3539,11 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, epochAfterRestart.GetVersion() - 2);
         CheckFilteredNodesList(runtime, sender, {NODE2}, {}, 0, epochAfterRestart.GetVersion() - 3);
         CheckFilteredNodesList(runtime, sender, {NODE1, NODE2}, {}, 0, epochAfterRestart.GetVersion() - 4);
+        CheckUpdateNodesLog(runtime, sender, {}, epochAfterRestart.GetVersion(), epochAfterRestart);
+        CheckUpdateNodesLog(runtime, sender, {R(NODE3)}, epochAfterRestart.GetVersion() - 1, epochAfterRestart);
+        CheckUpdateNodesLog(runtime, sender, {R(NODE3)}, epochAfterRestart.GetVersion() - 2, epochAfterRestart);
+        CheckUpdateNodesLog(runtime, sender, {NODE2, R(NODE3)}, epochAfterRestart.GetVersion() - 3, epochAfterRestart);
+        CheckUpdateNodesLog(runtime, sender, {NODE1, NODE2, R(NODE3)}, epochAfterRestart.GetVersion() - 4, epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
                       1, 2, 3, 4, epoch.GetNextEnd());
         CheckNodeInfo(runtime, sender, NODE2, "host2", 1001, "host2.yandex.net", "1.2.3.4",
@@ -3423,6 +3575,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         auto epochAfterExtendLease = GetEpoch(runtime, sender);
         UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion() + 1, epochAfterExtendLease.GetVersion());
         CheckFilteredNodesList(runtime, sender, {NODE1}, {}, 0, epoch.GetVersion());
+        CheckUpdateNodesLog(runtime, sender, {NODE1}, epoch.GetVersion(), epochAfterExtendLease);
 
         // Extend lease one more time without moving epoch
         epoch = epochAfterExtendLease;
@@ -3432,6 +3585,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         epochAfterExtendLease = GetEpoch(runtime, sender);
         UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion(), epochAfterExtendLease.GetVersion());
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, epoch.GetVersion());
+        CheckUpdateNodesLog(runtime, sender, {}, epoch.GetVersion(), epochAfterExtendLease);
     }
 
     Y_UNIT_TEST(ListNodesEpochDeltasPersistance)
@@ -3459,6 +3613,11 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckFilteredNodesList(runtime, sender, {NODE3, NODE1}, {}, 0, epoch.GetVersion() - 2);
         CheckFilteredNodesList(runtime, sender, {NODE2, NODE3, NODE1}, {}, 0, epoch.GetVersion() - 3);
         CheckFilteredNodesList(runtime, sender, {NODE1, NODE2, NODE3, NODE1}, {}, 0, epoch.GetVersion() - 4);
+        CheckUpdateNodesLog(runtime, sender, {}, epoch.GetVersion(), epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE1}, epoch.GetVersion() - 1, epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE3, NODE1}, epoch.GetVersion() - 2, epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE2, NODE3, NODE1}, epoch.GetVersion() - 3, epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE1, NODE2, NODE3, NODE1}, epoch.GetVersion() - 4, epoch);
 
         // Restart NodeBroker
         RestartNodeBroker(runtime);
@@ -3469,16 +3628,29 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckFilteredNodesList(runtime, sender, {NODE3, NODE1}, {}, 0, epoch.GetVersion() - 2);
         CheckFilteredNodesList(runtime, sender, {NODE2, NODE3, NODE1}, {}, 0, epoch.GetVersion() - 3);
         CheckFilteredNodesList(runtime, sender, {NODE2, NODE3, NODE1}, {}, 0, epoch.GetVersion() - 4);
+        CheckUpdateNodesLog(runtime, sender, {}, epoch.GetVersion(), epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE1}, epoch.GetVersion() - 1, epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE3, NODE1}, epoch.GetVersion() - 2, epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE2, NODE3, NODE1}, epoch.GetVersion() - 3, epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE2, NODE3, NODE1}, epoch.GetVersion() - 4, epoch);
 
         // Move epoch
         epoch = WaitForEpochUpdate(runtime, sender);
 
-        // Deltas live only until the epoch end
+        // Old deltas live only until the epoch end
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, epoch.GetVersion());
         CheckFilteredNodesList(runtime, sender, {NODE1, NODE2, NODE3}, {}, 0, epoch.GetVersion() - 1);
         CheckFilteredNodesList(runtime, sender, {NODE1, NODE2, NODE3}, {}, 0, epoch.GetVersion() - 2);
         CheckFilteredNodesList(runtime, sender, {NODE1, NODE2, NODE3}, {}, 0, epoch.GetVersion() - 3);
         CheckFilteredNodesList(runtime, sender, {NODE1, NODE2, NODE3}, {}, 0, epoch.GetVersion() - 4);
+
+        // New deltas are preserved after epoch end, but compacted
+        CheckUpdateNodesLog(runtime, sender, {}, epoch.GetVersion(), epoch);
+        CheckUpdateNodesLog(runtime, sender, {}, epoch.GetVersion() - 1, epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE1}, epoch.GetVersion() - 2, epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE3, NODE1}, epoch.GetVersion() - 3, epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE2, NODE3, NODE1}, epoch.GetVersion() - 4, epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE2, NODE3, NODE1}, epoch.GetVersion() - 5, epoch);
 
         // Extend lease
         CheckLeaseExtension(runtime, sender, NODE3, TStatus::OK, epoch);
@@ -3492,6 +3664,15 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckFilteredNodesList(runtime, sender, {NODE2, NODE1}, {}, 0, epoch.GetVersion() - 2);
         CheckFilteredNodesList(runtime, sender, {NODE3, NODE2, NODE1}, {}, 0, epoch.GetVersion() - 3);
         CheckFilteredNodesList(runtime, sender, {NODE1, NODE2, NODE3, NODE3, NODE2, NODE1}, {}, 0, epoch.GetVersion() - 4);
+        CheckUpdateNodesLog(runtime, sender, {}, epoch.GetVersion(), epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE1}, epoch.GetVersion() - 1, epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE2, NODE1}, epoch.GetVersion() - 2, epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE3, NODE2, NODE1}, epoch.GetVersion() - 3, epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE3, NODE2, NODE1}, epoch.GetVersion() - 4, epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE1, NODE3, NODE2, NODE1}, epoch.GetVersion() - 5, epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE3, NODE1, NODE3, NODE2, NODE1}, epoch.GetVersion() - 6, epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE2, NODE3, NODE1, NODE3, NODE2, NODE1}, epoch.GetVersion() - 7, epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE2, NODE3, NODE1, NODE3, NODE2, NODE1}, epoch.GetVersion() - 8, epoch);
 
         // Simulate epoch update while NodeBroker is running on the old version
         auto newEpoch = NextEpochObject(epoch);
@@ -3500,13 +3681,25 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         // Restart NodeBroker
         RestartNodeBroker(runtime);
 
-        // Deltas live only until the epoch end
+        // Old deltas live only until the epoch end
         epoch = GetEpoch(runtime, sender);
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, epoch.GetVersion());
         CheckFilteredNodesList(runtime, sender, {NODE1, NODE2, NODE3}, {}, 0, epoch.GetVersion() - 1);
         CheckFilteredNodesList(runtime, sender, {NODE1, NODE2, NODE3}, {}, 0, epoch.GetVersion() - 2);
         CheckFilteredNodesList(runtime, sender, {NODE1, NODE2, NODE3}, {}, 0, epoch.GetVersion() - 3);
         CheckFilteredNodesList(runtime, sender, {NODE1, NODE2, NODE3}, {}, 0, epoch.GetVersion() - 4);
+
+        // New deltas are preserved after epoch end, but compacted
+        CheckUpdateNodesLog(runtime, sender, {}, epoch.GetVersion(), epoch);
+        CheckUpdateNodesLog(runtime, sender, {}, epoch.GetVersion() - 1, epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE1}, epoch.GetVersion() - 2, epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE2, NODE1}, epoch.GetVersion() - 3, epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE3, NODE2, NODE1}, epoch.GetVersion() - 4, epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE3, NODE2, NODE1}, epoch.GetVersion() - 5, epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE3, NODE2, NODE1}, epoch.GetVersion() - 6, epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE3, NODE2, NODE1}, epoch.GetVersion() - 7, epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE3, NODE2, NODE1}, epoch.GetVersion() - 8, epoch);
+        CheckUpdateNodesLog(runtime, sender, {NODE3, NODE2, NODE1}, epoch.GetVersion() - 9, epoch);
     }
 
     Y_UNIT_TEST(ExtendLeaseSetLocationInOneRegistration)
@@ -3535,9 +3728,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
                       1, 2, 3, 4, epoch.GetNextEnd());
 
         // Check that both updates happen with one version bump
-        auto epocAfterRegistration = GetEpoch(runtime, sender);
-        UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion() + 1, epocAfterRegistration.GetVersion());
+        auto epochAfterRegistration = GetEpoch(runtime, sender);
+        UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion() + 1, epochAfterRegistration.GetVersion());
         CheckFilteredNodesList(runtime, sender, {NODE1}, {}, 0, epoch.GetVersion());
+        CheckUpdateNodesLog(runtime, sender, {NODE1}, epoch.GetVersion(), epochAfterRegistration);
     }
 
     Y_UNIT_TEST(EpochCacheUpdate)
@@ -3635,6 +3829,9 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, epoch.GetVersion());
         CheckFilteredNodesList(runtime, sender, {NODE1}, {}, 0, epoch.GetVersion() - 1);
         CheckFilteredNodesList(runtime, sender, {NODE1}, {NODE2}, 0, epoch.GetVersion() - 2);
+        CheckUpdateNodesLog(runtime, sender, {}, epoch.GetVersion(), epochAfterRestart);
+        CheckUpdateNodesLog(runtime, sender, {NODE1}, epoch.GetVersion() - 1, epochAfterRestart);
+        CheckUpdateNodesLog(runtime, sender, {E(NODE2), R(NODE3), NODE1}, epoch.GetVersion() - 2, epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
                       1, 2, 3, 4, epoch.GetNextEnd());
         CheckNodeInfo(runtime, sender, NODE2, TStatus::WRONG_REQUEST);
@@ -3651,6 +3848,9 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, epoch.GetVersion());
         CheckFilteredNodesList(runtime, sender, {NODE1}, {}, 0, epoch.GetVersion() - 1);
         CheckFilteredNodesList(runtime, sender, {NODE1}, {NODE2}, 0, epoch.GetVersion() - 2);
+        CheckUpdateNodesLog(runtime, sender, {}, epoch.GetVersion(), epochAfterRestart);
+        CheckUpdateNodesLog(runtime, sender, {NODE1}, epoch.GetVersion() - 1, epochAfterRestart);
+        CheckUpdateNodesLog(runtime, sender, {E(NODE2), R(NODE3), NODE1}, epoch.GetVersion() - 2, epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
                         1, 2, 3, 4, epoch.GetNextEnd());
         CheckNodeInfo(runtime, sender, NODE2, TStatus::WRONG_REQUEST);
@@ -3713,6 +3913,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, epochAfterRestart.GetVersion() - 1);
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, epochAfterRestart.GetVersion() - 2);
         CheckFilteredNodesList(runtime, sender, {NODE1}, {}, 0, epochAfterRestart.GetVersion() - 3);
+        CheckUpdateNodesLog(runtime, sender, {}, epochAfterRestart.GetVersion(), epochAfterRestart);
+        CheckUpdateNodesLog(runtime, sender, {R(NODE2)}, epochAfterRestart.GetVersion() - 1, epochAfterRestart);
+        CheckUpdateNodesLog(runtime, sender, {R(NODE2)}, epochAfterRestart.GetVersion() - 2, epochAfterRestart);
+        CheckUpdateNodesLog(runtime, sender, {NODE1, R(NODE2)}, epochAfterRestart.GetVersion() - 3, epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
                       1, 2, 3, 4, epoch.GetNextEnd());
         CheckNodeInfo(runtime, sender, NODE2, TStatus::WRONG_REQUEST);
@@ -3730,6 +3934,10 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, epochAfterRestart.GetVersion() - 1);
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, epochAfterRestart.GetVersion() - 2);
         CheckFilteredNodesList(runtime, sender, {NODE1}, {}, 0, epochAfterRestart.GetVersion() - 3);
+        CheckUpdateNodesLog(runtime, sender, {}, epochAfterRestart.GetVersion(), epochAfterRestart);
+        CheckUpdateNodesLog(runtime, sender, {R(NODE2)}, epochAfterRestart.GetVersion() - 1, epochAfterRestart);
+        CheckUpdateNodesLog(runtime, sender, {R(NODE2)}, epochAfterRestart.GetVersion() - 2, epochAfterRestart);
+        CheckUpdateNodesLog(runtime, sender, {NODE1, R(NODE2)}, epochAfterRestart.GetVersion() - 3, epochAfterRestart);
         CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
                       1, 2, 3, 4, epoch.GetNextEnd());
         CheckNodeInfo(runtime, sender, NODE2, TStatus::WRONG_REQUEST);
@@ -3922,6 +4130,335 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         UNIT_ASSERT_VALUES_EQUAL(epoch.GetId(), epochAfterRestart.GetId());
         CheckNodesList(runtime, sender, activeNodeIds, {}, epochAfterRestart.GetId());
         CheckFilteredNodesList(runtime, sender, {}, {}, 0, epoch.GetVersion());
+    }
+
+    Y_UNIT_TEST(UpdateNodesLog)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 3);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1);
+        CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE2);
+        CheckRegistration(runtime, sender, "host3", 1001, "host3.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE3);
+
+        auto epoch = GetEpoch(runtime, sender);
+        CheckNodesList(runtime, sender, {NODE1, NODE2, NODE3}, {}, epoch.GetId());
+
+        // Move epoch in a such way that NODE2 is expired and NODE3 is removed
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckLeaseExtension(runtime, sender, NODE1, TStatus::OK, epoch);
+        CheckLeaseExtension(runtime, sender, NODE2, TStatus::OK, epoch);
+
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckLeaseExtension(runtime, sender, NODE1, TStatus::OK, epoch);
+
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesList(runtime, sender, {NODE1}, {NODE2}, epoch.GetId());
+
+        // Check sync nodes
+        CheckUpdateNodesLog(runtime, sender, {}, epoch.GetVersion(), epoch);
+        CheckUpdateNodesLog(runtime, sender, { E(NODE2), R(NODE3) }, epoch.GetVersion() - 1, epoch);
+        CheckUpdateNodesLog(runtime, sender, { NODE1, E(NODE2), R(NODE3) }, epoch.GetVersion() - 2, epoch);
+        CheckUpdateNodesLog(runtime, sender, { NODE1, E(NODE2), R(NODE3) }, 0, epoch);
+
+        RestartNodeBrokerEnsureReadOnly(runtime);
+
+        // Log is stored persistently
+        CheckUpdateNodesLog(runtime, sender, {}, epoch.GetVersion(), epoch);
+        CheckUpdateNodesLog(runtime, sender, { E(NODE2), R(NODE3) }, epoch.GetVersion() - 1, epoch);
+        CheckUpdateNodesLog(runtime, sender, { NODE1, E(NODE2), R(NODE3) }, epoch.GetVersion() - 2, epoch);
+        CheckUpdateNodesLog(runtime, sender, { NODE1, E(NODE2), R(NODE3) }, 0, epoch);
+
+        // Lease extension update node
+        CheckLeaseExtension(runtime, sender, NODE1, TStatus::OK, epoch);
+        // Register node
+        CheckRegistration(runtime, sender, "host3", 1001, "host3.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE3);
+
+        epoch = GetEpoch(runtime, sender);
+        CheckNodesList(runtime, sender, {NODE1, NODE3}, {NODE2}, epoch.GetId());
+
+        // Check sync nodes
+        CheckUpdateNodesLog(runtime, sender, {}, epoch.GetVersion(), epoch);
+        CheckUpdateNodesLog(runtime, sender, { NODE3 }, epoch.GetVersion() - 1, epoch);
+        CheckUpdateNodesLog(runtime, sender, { NODE1, NODE3 }, epoch.GetVersion() - 2, epoch);
+        CheckUpdateNodesLog(runtime, sender, { E(NODE2), R(NODE3), NODE1, NODE3 }, epoch.GetVersion() - 3, epoch);
+        CheckUpdateNodesLog(runtime, sender, { NODE1, E(NODE2), R(NODE3), NODE1, NODE3 }, epoch.GetVersion() - 4, epoch);
+        CheckUpdateNodesLog(runtime, sender, { NODE1, E(NODE2), R(NODE3), NODE1, NODE3 }, 0, epoch);
+
+        // Move epoch
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesList(runtime, sender, {NODE1, NODE3}, {}, epoch.GetId());
+
+        // Check sync nodes
+        CheckUpdateNodesLog(runtime, sender, {}, epoch.GetVersion(), epoch);
+        CheckUpdateNodesLog(runtime, sender, { R(NODE2) }, epoch.GetVersion() - 1, epoch);
+        CheckUpdateNodesLog(runtime, sender, { NODE3, R(NODE2) }, epoch.GetVersion() - 2, epoch);
+        CheckUpdateNodesLog(runtime, sender, { NODE1, NODE3, R(NODE2) }, epoch.GetVersion() - 3, epoch);
+        CheckUpdateNodesLog(runtime, sender, { NODE1, NODE3, R(NODE2) }, 0, epoch);
+
+        // Shift ID range to [NODE1, NODE1]
+        auto dnConfig = runtime.GetAppData().DynamicNameserviceConfig;
+        dnConfig->MinDynamicNodeId = NODE1;
+        dnConfig->MaxDynamicNodeId = NODE1;
+
+        // Restart to trigger shift range ID
+        RestartNodeBroker(runtime);
+        epoch = GetEpoch(runtime, sender);
+
+        // Check sync nodes
+        CheckUpdateNodesLog(runtime, sender, {}, epoch.GetVersion(), epoch);
+        CheckUpdateNodesLog(runtime, sender, { R(NODE3) }, epoch.GetVersion() - 1, epoch);
+        CheckUpdateNodesLog(runtime, sender, { R(NODE2), R(NODE3) }, epoch.GetVersion() - 2, epoch);
+        CheckUpdateNodesLog(runtime, sender, { R(NODE2), R(NODE3) }, epoch.GetVersion() - 3, epoch);
+        CheckUpdateNodesLog(runtime, sender, { NODE1, R(NODE2), R(NODE3) }, epoch.GetVersion() - 4, epoch);
+        CheckUpdateNodesLog(runtime, sender, { NODE1, R(NODE2), R(NODE3) }, 0, epoch);
+    }
+
+    Y_UNIT_TEST(UpdateNodesLogEmptyEpoch)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 3);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        // Check initial epoch without nodes
+        auto epoch = GetEpoch(runtime, sender);
+        CheckUpdateNodesLog(runtime, sender, {}, epoch.GetVersion() - 1, epoch);
+        CheckUpdateNodesLog(runtime, sender, {}, 0, epoch);
+
+        // Check move epoch without nodes
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckUpdateNodesLog(runtime, sender, {}, epoch.GetVersion() - 1, epoch);
+        CheckUpdateNodesLog(runtime, sender, {}, 0, epoch);
+    }
+
+    Y_UNIT_TEST(SyncNodes)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 2);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1);
+
+        // Subscribe to node updates and check initial update
+        TActorId pipe = runtime.ConnectToPipe(MakeNodeBrokerID(), sender, 0, GetPipeConfigWithRetries());
+        ui64 cachedVersion = 0;
+        ui64 seqNo = 1;
+        SubscribeToNodesUpdates(runtime, sender, pipe, cachedVersion, seqNo);
+        CheckNodesUpdate(runtime, { NODE1 }, seqNo, GetEpoch(runtime, sender));
+
+        // Make one another update
+        CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE2);
+        // Sync this update
+        CheckSyncNodes(runtime, sender, { NODE2 }, seqNo, pipe, GetEpoch(runtime, sender));
+
+        // Sync one more time without updates
+        CheckSyncNodes(runtime, sender, {}, seqNo, pipe, GetEpoch(runtime, sender));
+    }
+
+    Y_UNIT_TEST(SubscribeToNodes)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 3);
+        TActorId sender = runtime.AllocateEdgeActor();
+        TActorId pipe1 = runtime.ConnectToPipe(MakeNodeBrokerID(), sender, 0, GetPipeConfigWithRetries());
+
+        // Subscribe to node updates and check initial update
+        ui64 cachedVersion = 0;
+        ui64 seqNo = 0;
+        SubscribeToNodesUpdates(runtime, sender, pipe1, cachedVersion, seqNo);
+        CheckNodesUpdate(runtime, {}, seqNo, GetEpoch(runtime, sender));
+
+        // Check updates after registration
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1);
+        CheckNodesUpdate(runtime, { NODE1 }, seqNo, GetEpoch(runtime, sender));
+
+        CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE2);
+        CheckNodesUpdate(runtime, { NODE2 }, seqNo, GetEpoch(runtime, sender));
+
+        CheckRegistration(runtime, sender, "host3", 1001, "host3.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE3);
+        CheckNodesUpdate(runtime, { NODE3 }, seqNo, GetEpoch(runtime, sender));
+
+        // Check update after epoch change
+        auto epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesUpdate(runtime, {}, seqNo, GetEpoch(runtime, sender));
+
+        // Check update after lease extension
+        CheckLeaseExtension(runtime, sender, NODE1, TStatus::OK, epoch);
+        CheckNodesUpdate(runtime, { NODE1 }, seqNo, GetEpoch(runtime, sender));
+
+        CheckLeaseExtension(runtime, sender, NODE2, TStatus::OK, epoch);
+        CheckNodesUpdate(runtime, { NODE2 }, seqNo, GetEpoch(runtime, sender));
+
+        // Check update after epoch change that expires NODE3
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesUpdate(runtime, { E(NODE3) }, seqNo, GetEpoch(runtime, sender));
+        CheckNodesList(runtime, sender, {NODE1, NODE2}, {NODE3}, epoch.GetId());
+
+        CheckLeaseExtension(runtime, sender, NODE1, TStatus::OK, epoch);
+        CheckNodesUpdate(runtime, { NODE1 }, seqNo, GetEpoch(runtime, sender));
+
+        // Connect new client and check initial update
+        ui64 cachedVersion2 = 0;
+        ui64 seqNo2 = 0;
+        TActorId sender2 = runtime.AllocateEdgeActor();
+        auto pipe2 = runtime.ConnectToPipe(MakeNodeBrokerID(), sender2, 0, GetPipeConfigWithRetries());
+        SubscribeToNodesUpdates(runtime, sender2, pipe2, cachedVersion2, seqNo2);
+        CheckNodesUpdate(runtime, { NODE1, NODE2, E(NODE3), NODE1 }, seqNo2, GetEpoch(runtime, sender2));
+
+        // Check update after epoch change that expires NODE2 and removes NODE3
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesUpdate(runtime, { E(NODE2), R(NODE3) }, seqNo, GetEpoch(runtime, sender));
+        CheckNodesUpdate(runtime, { E(NODE2), R(NODE3) }, seqNo2, GetEpoch(runtime, sender));
+        CheckNodesList(runtime, sender, {NODE1}, {NODE2}, epoch.GetId());
+        cachedVersion = epoch.GetVersion();
+        cachedVersion2 = epoch.GetVersion();
+
+        // Shift ID range
+        auto dnConfig = runtime.GetAppData().DynamicNameserviceConfig;
+        dnConfig->MinDynamicNodeId = NODE1;
+        dnConfig->MaxDynamicNodeId = NODE1;
+
+        // Restart to trigger shift range ID
+        RestartNodeBroker(runtime);
+
+        // Reconnect and check update after shift range ID
+        pipe1 = runtime.ConnectToPipe(MakeNodeBrokerID(), sender, 0, GetPipeConfigWithRetries());
+        ++seqNo;
+        SubscribeToNodesUpdates(runtime, sender, pipe1, cachedVersion, seqNo);
+        CheckNodesUpdate(runtime, { R(NODE2) }, seqNo, GetEpoch(runtime, sender));
+
+        // Connect new client and check initial update
+        ui64 cachedVersion3 = 0;
+        ui64 seqNo3 = 0;
+        TActorId sender3 = runtime.AllocateEdgeActor();
+        auto pipe3 = runtime.ConnectToPipe(MakeNodeBrokerID(), sender3, 0, GetPipeConfigWithRetries());
+        SubscribeToNodesUpdates(runtime, sender3, pipe3, cachedVersion3, seqNo3);
+        CheckNodesUpdate(runtime, { NODE1, R(NODE3), R(NODE2) }, seqNo3, GetEpoch(runtime, sender2));
+    }
+
+    Y_UNIT_TEST(NodesSubscriberDisconnect)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1);
+
+        // Subscribe to node updates and check initial update
+        TActorId pipe = runtime.ConnectToPipe(MakeNodeBrokerID(), sender, 0, GetPipeConfigWithRetries());
+        ui64 cachedVersion = 0;
+        ui64 seqNo = 1;
+        SubscribeToNodesUpdates(runtime, sender, pipe, cachedVersion, seqNo);
+        CheckNodesUpdate(runtime, { NODE1 }, seqNo, GetEpoch(runtime, sender));
+
+        // Check updates after registration
+        CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE2);
+        CheckNodesUpdate(runtime, { NODE2 }, seqNo, GetEpoch(runtime, sender));
+
+        // Check empty sync nodes
+        CheckSyncNodes(runtime, sender, {}, seqNo, pipe, GetEpoch(runtime, sender));
+
+        // Update cached version
+        cachedVersion = GetEpoch(runtime, sender).GetVersion();
+
+        // Close pipe
+        runtime.ClosePipe(pipe, sender, 0);
+
+        // Check no updates were sent
+        TBlockEvents<TEvNodeBroker::TEvUpdateNodes> block(runtime);
+        CheckRegistration(runtime, sender, "host3", 1001, "host3.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE3);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_C(block.empty(), "updates were sent");
+
+        // Resubcribe and check updates
+        block.Stop();
+        pipe = runtime.ConnectToPipe(MakeNodeBrokerID(), sender, 0, GetPipeConfigWithRetries());
+        ++seqNo;
+        SubscribeToNodesUpdates(runtime, sender, pipe, cachedVersion, seqNo);
+        CheckNodesUpdate(runtime, { NODE3 }, seqNo, GetEpoch(runtime, sender));
+
+        CheckRegistration(runtime, sender, "host4", 1001, "host4.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE4);
+        CheckNodesUpdate(runtime, { NODE4 }, seqNo, GetEpoch(runtime, sender));
+
+        // Check empty sync nodes
+        CheckSyncNodes(runtime, sender, {}, seqNo, pipe, GetEpoch(runtime, sender));
+    }
+
+    Y_UNIT_TEST(SeveralNodesSubscribersPerPipe)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1);
+
+        // Subscribe to node updates and check initial update
+        TActorId pipe = runtime.ConnectToPipe(MakeNodeBrokerID(), sender, 0, GetPipeConfigWithRetries());
+        ui64 cachedVersion = 0;
+        ui64 seqNo = 1;
+        SubscribeToNodesUpdates(runtime, sender, pipe, cachedVersion, seqNo);
+        CheckNodesUpdate(runtime, { NODE1 }, seqNo, GetEpoch(runtime, sender));
+
+        // Subscribe another client to node updates using the same pipe and check initial update
+        TActorId sender2 = runtime.AllocateEdgeActor();
+        ui64 cachedVersion2 = 0;
+        ui64 seqNo2 = 1;
+        SubscribeToNodesUpdates(runtime, sender2, pipe, cachedVersion2, seqNo2);
+        CheckNodesUpdate(runtime, { NODE1 }, seqNo2, GetEpoch(runtime, sender));
+
+        // Check empty sync nodes
+        CheckSyncNodes(runtime, sender, {}, seqNo, pipe, GetEpoch(runtime, sender));
+        CheckSyncNodes(runtime, sender2, {}, seqNo2, pipe, GetEpoch(runtime, sender));
+
+        // Delay updates
+        {
+            TBlockEvents<TEvNodeBroker::TEvUpdateNodes> block(runtime);
+            CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.4",
+                              1, 2, 3, 4, TStatus::OK, NODE2);
+            runtime.WaitFor("updates are sent", [&]{ return block.size() >= 2; });
+            block.Unblock();
+        }
+
+        // Check sync nodes
+        CheckSyncNodes(runtime, sender, { NODE2 }, seqNo, pipe, GetEpoch(runtime, sender));
+        CheckSyncNodes(runtime, sender2, { NODE2 }, seqNo2, pipe, GetEpoch(runtime, sender));
+
+        // Update cached version
+        cachedVersion = GetEpoch(runtime, sender).GetVersion();
+        cachedVersion2 = GetEpoch(runtime, sender).GetVersion();
+
+        // Close pipe
+        runtime.ClosePipe(pipe, sender, 0);
+
+        // Check no updates were sent
+        {
+            TBlockEvents<TEvNodeBroker::TEvUpdateNodes> block(runtime);
+            CheckRegistration(runtime, sender, "host3", 1001, "host3.yandex.net", "1.2.3.4",
+                              1, 2, 3, 4, TStatus::OK, NODE3);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            UNIT_ASSERT_C(block.empty(), "updates were sent");
+        }
+
+        // Resubcribe only one client and check updates
+        pipe = runtime.ConnectToPipe(MakeNodeBrokerID(), sender, 0, GetPipeConfigWithRetries());
+        ++seqNo;
+        SubscribeToNodesUpdates(runtime, sender, pipe, cachedVersion, seqNo);
+        CheckNodesUpdate(runtime, { NODE3 }, seqNo, GetEpoch(runtime, sender));
     }
 }
 
@@ -4434,3 +4971,21 @@ Y_UNIT_TEST_SUITE(GracefulShutdown) {
 }
 
 } // NKikimr
+
+Y_DECLARE_OUT_SPEC(, NKikimr::TUpdate, out, value) {
+    switch (value.Type) {
+        case NKikimr::TUpdate::EType::Updated:
+            out << value.NodeId;
+            return;
+        case NKikimr::TUpdate::EType::Removed:
+            out << "R(" << value.NodeId << ")";
+            return;
+        case NKikimr::TUpdate::EType::Expired:
+            out << "E(" << value.NodeId << ")";
+            return;
+        case NKikimr::TUpdate::EType::Unknown:
+            out << "Unknown";
+            return;
+    }
+    out << "Unknown";
+}

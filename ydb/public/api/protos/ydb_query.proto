@@ -8,6 +8,7 @@ option java_outer_classname = "QueryProtos";
 import "google/protobuf/duration.proto";
 
 import "ydb/public/api/protos/annotations/validation.proto";
+import "ydb/public/api/protos/ydb_common.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_query_stats.proto";
@@ -184,7 +185,7 @@ message ExecuteQueryRequest {
 
     // Type of query result set parts.
     // It's for get default ResultSet or some result_data with a different type in response stream.
-    Ydb.ResultSetType result_set_type = 12;
+    Ydb.ResultSet.Type result_set_type = 12;
 }
 
 message ResultSetMeta {
@@ -197,13 +198,14 @@ message ExecuteQueryResponsePart {
 
     // Index of current result set
     int64 result_set_index = 3 [(Ydb.value) = ">= 0"];
-
+    // Result set part
     Ydb.ResultSet result_set = 4;
 
     // Execution statistics (last part only)
     Ydb.TableStats.QueryStats exec_stats = 5;
 
     TransactionMeta tx_meta = 6;
+    VirtualTimestamp snapshot_timestamp = 7;
 }
 
 message ExecuteScriptRequest {

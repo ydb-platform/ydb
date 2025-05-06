@@ -574,6 +574,7 @@ void TDqPqRdReadActor::InitChild() {
             NextOffsetFromRD[partitionKey.PartitionId] = offset;
         }
     }
+    StartingMessageTimestamp = Parent->StartingMessageTimestamp;
     SRC_LOG_I("Send TEvCoordinatorChangesSubscribe to local RD (" << LocalRowDispatcherActorId << ")");
     Send(LocalRowDispatcherActorId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
     Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());

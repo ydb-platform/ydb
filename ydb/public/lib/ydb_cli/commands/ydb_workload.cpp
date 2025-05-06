@@ -268,7 +268,7 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
 
 int TWorkloadCommand::RunWorkload(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, const int type) {
     if (!Quiet) {
-        std::cout << "Window\tTxs\tTxs/Sec\tRetries\tErrors\tp50(ms)\tp95(ms)\tp99(ms)\tpMax(ms)";
+        std::cout << "Window\t" << std::setw(7) << "Txs" << "\tTxs/Sec\tRetries\tErrors\tp50(ms)\tp95(ms)\tp99(ms)\tpMax(ms)";
         if (PrintTimestamp) {
             std::cout << "\tTimestamp";
         }
@@ -303,8 +303,9 @@ int TWorkloadCommand::RunWorkload(NYdbWorkload::IWorkloadQueryGenerator& workloa
     PrintWindowStats(windowIt++);
 
     auto stats = GetWorkloadStats(TotalHist);
-    std::cout << std::endl << "Txs\tTxs/Sec\tRetries\tErrors\tp50(ms)\tp95(ms)\tp99(ms)\tpMax(ms)" << std::endl
-        << stats.OpsCount << "\t" << std::setw(7) << stats.OpsCount / (TotalSec * 1.0) << "\t" << TotalRetries.load() << "\t"
+    std::cout << std::endl << "Total\t" << std::setw(7) << "Txs" << "\tTxs/Sec\tRetries\tErrors\tp50(ms)\tp95(ms)\tp99(ms)\tpMax(ms)" << std::endl 
+        << windowIt - 1 << "\t"
+        << std::setw(7) << stats.OpsCount << "\t" << stats.OpsCount / (TotalSec * 1.0) << "\t" << TotalRetries.load() << "\t"
         << TotalErrors.load() << "\t" << stats.Percentile50 << "\t" << stats.Percentile95 << "\t"
         << stats.Percentile99 << "\t" << stats.Percentile100 << std::endl;
 

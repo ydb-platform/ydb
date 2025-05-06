@@ -323,6 +323,10 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& r
     }
 
     const size_t numberQueries = executionOptions.ScriptQueries.size();
+    if (!numberQueries) {
+        return;
+    }
+
     const size_t numberLoops = executionOptions.LoopCount;
     for (size_t queryId = 0; queryId < numberQueries * numberLoops || numberLoops == 0; ++queryId) {
         size_t id = queryId % numberQueries;

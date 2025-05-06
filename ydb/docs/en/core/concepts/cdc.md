@@ -247,6 +247,29 @@ Currently, the ability to explicitly specify the number of topic partitions is a
 
 You can add a changefeed to an existing table or erase it using the [ADD CHANGEFEED and DROP CHANGEFEED](../yql/reference/syntax/alter_table/changefeed.md) directives of the YQL `ALTER TABLE` statement. When erasing a table, the changefeed added to it is also deleted.
 
+## Getting and Updating Topic Settings {#topic-settings}
+
+You can get the settings using an [SDK](../reference/ydb-sdk/topic.md#describe-topic) or the [{{ ydb-short-name }} CLI](../reference/ydb-cli/commands/scheme-describe.md) by passing the path to the changefeed in the arguments, which has the following format:
+
+```txt
+path/to/table/changefeed_name
+```
+
+For example, if a table named `table` contains a changefeed named `updates_feed` in the `my` directory, its path looks as follows:
+
+```text
+my/table/updates_feed
+```
+
+The topic settings can be updated using the expression [ALTER TOPIC](../yql/reference/syntax/alter-topic.md). Supported actions:
+
+* [updating settings](../yql/reference/syntax/alter-topic.md#updating-topic-settings):
+
+  * `retention_period`;
+  * `retention_storage_mb`;
+
+* [updating consumers](../yql/reference/syntax/alter-topic.md#updating-a-set-of-consumers).
+
 ## CDC Purpose and Use {#best_practices}
 
 For information about using CDC when developing apps, see [best practices](../dev/cdc.md).

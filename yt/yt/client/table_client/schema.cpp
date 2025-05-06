@@ -333,14 +333,9 @@ std::string TColumnSchema::GetDiagnosticNameString() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TDeletedColumn::TDeletedColumn()
-{
-}
-
 TDeletedColumn::TDeletedColumn(TColumnStableName stableName)
     : StableName_(stableName)
-{
-}
+{ }
 
 TDeletedColumn& TDeletedColumn::SetStableName(TColumnStableName value)
 {
@@ -967,8 +962,8 @@ TTableSchemaPtr TTableSchema::ToQuery() const
     if (!ColumnInfo_) {
         return New<TTableSchema>(
             std::vector<TColumnSchema>(),
-            true,  /*strict*/
-            false,  /*uniqueKeys*/
+            /*strict*/ true,
+            /*uniqueKeys*/ false,
             ETableSchemaModification::None,
             std::vector<TDeletedColumn>());
     }
@@ -1168,7 +1163,7 @@ TTableSchemaPtr TTableSchema::ToUniqueKeys() const
         return New<TTableSchema>(
             std::vector<TColumnSchema>(),
             Strict_,
-            true,  /*uniqueKeys*/
+            /*uniqueKeys*/ true,
             ETableSchemaModification::None,
             std::vector<TDeletedColumn>());
     }
@@ -1187,7 +1182,7 @@ TTableSchemaPtr TTableSchema::ToStrippedColumnAttributes() const
         return New<TTableSchema>(
             std::vector<TColumnSchema>(),
             Strict_,
-            false,  /*uniqueKeys*/
+            /*uniqueKeys*/ false,
             ETableSchemaModification::None,
             std::vector<TDeletedColumn>());
     }
@@ -1211,7 +1206,7 @@ TTableSchemaPtr TTableSchema::ToSortedStrippedColumnAttributes() const
         return New<TTableSchema>(
             std::vector<TColumnSchema>(),
             Strict_,
-            UniqueKeys_,  /*uniqueKeys*/
+            UniqueKeys_,
             ETableSchemaModification::None,
             std::vector<TDeletedColumn>());
     }
@@ -1235,7 +1230,7 @@ TTableSchemaPtr TTableSchema::ToCanonical() const
         return New<TTableSchema>(
             std::vector<TColumnSchema>(),
             Strict_,
-            UniqueKeys_,  /*uniqueKeys*/
+            UniqueKeys_,
             ETableSchemaModification::None,
             std::vector<TDeletedColumn>());
     }

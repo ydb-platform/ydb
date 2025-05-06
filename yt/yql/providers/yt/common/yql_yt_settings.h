@@ -123,6 +123,7 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, false> ForceTmpSecurity;
     NCommon::TConfSetting<ERuntimeClusterSelectionMode, false> RuntimeClusterSelection;
     NCommon::TConfSetting<TString, false> DefaultRuntimeCluster;
+    NCommon::TConfSetting<bool, false> _ForbidSensitiveDataInOperationSpec;
 
     // Job runtime
     NCommon::TConfSetting<TString, true> Pool;
@@ -318,6 +319,7 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, false> ReportEquiJoinStats;
     NCommon::TConfSetting<bool, false> UseColumnGroupsFromInputTables;
     NCommon::TConfSetting<bool, false> UseNativeDynamicTableRead;
+    NCommon::TConfSetting<bool, false> DontForceTransformForInputTables;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

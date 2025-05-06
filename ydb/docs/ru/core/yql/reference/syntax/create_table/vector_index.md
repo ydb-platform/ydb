@@ -4,13 +4,15 @@
 
 {% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
 
+{% include [limitations](../../../../_includes/vector_index_limitations.md) %}
+
 {% endif %}
 
 {% note warning %}
 
 Создание пустой таблицы с векторным индексом в настоящее время не имеет практического смысла, так как модификация данных в таблицах с векторными индексами пока не поддерживается.
 
-Следует использовать `ALTER TABLE ... ADD INDEX`  для добавления векторного индекса в существующую таблицу.
+Следует использовать [команду](../alter_table/indexes.md) `ALTER TABLE ... ADD INDEX`  для добавления векторного индекса в существующую таблицу.
 
 {% endnote %}
 

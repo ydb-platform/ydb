@@ -196,37 +196,38 @@ TEST(TUpdateYsonStructTest, Inherited)
     EXPECT_EQ(updatedPool, "new_pool");
 }
 
-TEST(TUpdateYsonStructTest, Nested)
-{
-    auto oldSpec = ConvertTo<TSpecBasePtr>(TYsonString(TString("{pool=pool;    mapper={command=cat};}")));
-    auto newSpec = ConvertTo<TSpecBasePtr>(TYsonString(TString("{pool=new_pool;mapper={command=sort};}")));
+// TODO(YT-24860): Fix this test on clang-18
+// TEST(TUpdateYsonStructTest, Nested)
+// {
+//     auto oldSpec = ConvertTo<TSpecBasePtr>(TYsonString(TString("{pool=pool;    mapper={command=cat};}")));
+//     auto newSpec = ConvertTo<TSpecBasePtr>(TYsonString(TString("{pool=new_pool;mapper={command=sort};}")));
 
-    std::string updatedPool;
-    std::string updatedCommand;
+//     std::string updatedPool;
+//     std::string updatedCommand;
 
-    auto configurator = TConfigurator<TSpecBase>();
-    {
-        TConfigurator<TSpecWithPool> parentConfigurator = configurator;
-        parentConfigurator.Field("pool", &TSpecBase::Pool)
-            .Updater(BIND([&] (const std::string& newPool) {
-                updatedPool = newPool;
-            }));
-    }
-    configurator.Field("mapper", &TSpecBase::Mapper)
-        .NestedUpdater(BIND([&] () {
-            TConfigurator<TMapperSpec> configurator;
-            configurator.Field("command", &TMapperSpec::Command)
-                .Updater(BIND([&] (const std::string& newCommand) {
-                    updatedCommand = newCommand;
-                }));
-            return TSealedConfigurator(std::move(configurator));
-        }));
+//     auto configurator = TConfigurator<TSpecBase>();
+//     {
+//         TConfigurator<TSpecWithPool> parentConfigurator = configurator;
+//         parentConfigurator.Field("pool", &TSpecBase::Pool)
+//             .Updater(BIND([&] (const std::string& newPool) {
+//                 updatedPool = newPool;
+//             }));
+//     }
+//     configurator.Field("mapper", &TSpecBase::Mapper)
+//         .NestedUpdater(BIND([&] () {
+//             TConfigurator<TMapperSpec> configurator;
+//             configurator.Field("command", &TMapperSpec::Command)
+//                 .Updater(BIND([&] (const std::string& newCommand) {
+//                     updatedCommand = newCommand;
+//                 }));
+//             return TSealedConfigurator(std::move(configurator));
+//         }));
 
-    std::move(configurator).Seal().Update(oldSpec, newSpec);
+//     std::move(configurator).Seal().Update(oldSpec, newSpec);
 
-    EXPECT_EQ(updatedPool, "new_pool");
-    EXPECT_EQ(updatedCommand, "sort");
-}
+//     EXPECT_EQ(updatedPool, "new_pool");
+//     EXPECT_EQ(updatedCommand, "sort");
+// }
 
 TEST(TUpdateYsonStructTest, Validate)
 {

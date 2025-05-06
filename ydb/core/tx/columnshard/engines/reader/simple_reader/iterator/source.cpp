@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/blobs_reader/events.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
+#include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/default_fetching.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
@@ -352,10 +353,11 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
     auto blobSchema = GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*Portion);
 
     std::optional<TSnapshot> ss;
-    if (Portion->HasInsertWriteId()) {
-        if (Portion->HasCommitSnapshot()) {
-            ss = Portion->GetCommitSnapshotVerified();
-        } else if (GetContext()->GetReadMetadata()->IsMyUncommitted(Portion->GetInsertWriteIdVerified())) {
+    if (Portion->GetPortionType() == EPortionType::Written) {
+        const auto* portion = static_cast<const TWrittenPortionInfo*>(Portion.get());
+        if (portion->HasCommitSnapshot()) {
+            ss = portion->GetCommitSnapshotVerified();
+        } else if (GetContext()->GetReadMetadata()->IsMyUncommitted(portion->GetInsertWriteId())) {
             ss = GetContext()->GetReadMetadata()->GetRequestSnapshot();
         }
     }
@@ -472,6 +474,20 @@ TConclusion<bool> TPortionDataSource::DoStartReserveMemory(const NArrow::NSSA::T
     NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(GetContext()->GetProcessMemoryControlId(),
         GetContext()->GetCommonContext()->GetScanId(), GetMemoryGroupId(), { allocation }, (ui32)policy->GetStage());
     return true;
+}
+
+bool TPortionDataSource::DoAddTxConflict() {
+    if (Portion->IsCommitted()) {
+        GetContext()->GetReadMetadata()->SetBrokenWithCommitted();
+        return true;
+    } else {
+        const auto* wPortion = static_cast<const TWrittenPortionInfo*>(Portion.get());
+        if (!GetContext()->GetReadMetadata()->IsMyUncommitted(wPortion->GetInsertWriteId())) {
+            GetContext()->GetReadMetadata()->SetConflictedWriteId(wPortion->GetInsertWriteId());
+            return true;
+        }
+    }
+    return false;
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

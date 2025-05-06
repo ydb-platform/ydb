@@ -120,7 +120,7 @@ void TDqPqReadActorBase::LoadState(const TSourceState& state) {
         ingressBytes += stateProto.GetIngressBytes();
     }
     TStringStream str;
-    str << "SessionId: " << GetSessionId() << " Restoring offset: ";
+    str << "SessionId: " << GetSessionId() << " StartingMessageTs " << minStartingMessageTs << " Restoring offset: ";
     for (const auto& [key, value] : PartitionToOffset) {
         str << "{" << key << "," << value << "},";
     }

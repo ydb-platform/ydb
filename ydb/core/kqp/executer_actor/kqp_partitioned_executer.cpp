@@ -361,13 +361,14 @@ private:
         YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
 
         switch (settings.GetType()) {
-            case NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE:
+            case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT:
                 OperationType = TKeyDesc::ERowOperation::Update;
                 break;
             case NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE:
                 OperationType = TKeyDesc::ERowOperation::Erase;
                 break;
             default:
+                YQL_ENSURE(false);
                 break;
         }
 

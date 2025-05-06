@@ -43,12 +43,13 @@ void TFakeBSController::Handle(NKikimr::TEvBlobStorage::TEvControllerShredReques
     ctx.Send(ev->Sender, new NKikimr::TEvBlobStorage::TEvControllerShredResponse(Generation, Completed, Progress));
 }
 
-ui64 CreateTestSubdomain(NActors::TTestActorRuntime& runtime, TTestEnv& env, ui64* txId, const TString& name, bool addTable) {
+ui64 CreateTestExtSubdomain(NActors::TTestActorRuntime& runtime, TTestEnv& env, ui64* txId, const TString& name, const TSchemeObject& createSchemeObject) {
     TestCreateExtSubDomain(runtime, ++(*txId), "/MyRoot", Sprintf(R"(
         Name: "%s"
     )", name.c_str()));
     env.TestWaitNotification(runtime, *txId);
 
+    // pool-kind-1, pool-kind-2 are default pool kinds
     TestAlterExtSubDomain(runtime, ++(*txId), "/MyRoot", Sprintf(R"(
         PlanResolution: 50
         Coordinators: 1
@@ -59,11 +60,11 @@ ui64 CreateTestSubdomain(NActors::TTestActorRuntime& runtime, TTestEnv& env, ui6
         Name: "%s"
         StoragePools {
             Name: "name_%s_kind_hdd-1"
-            Kind: "common"
+            Kind: "pool-kind-1"
         }
         StoragePools {
             Name: "name_%s_kind_hdd-2"
-            Kind: "external"
+            Kind: "pool-kind-2"
         }
     )", name.c_str(), name.c_str(), name.c_str()));
     env.TestWaitNotification(runtime, *txId);
@@ -74,7 +75,7 @@ ui64 CreateTestSubdomain(NActors::TTestActorRuntime& runtime, TTestEnv& env, ui6
         NLs::ExtractTenantSchemeshard(&schemeshardId)
     });
 
-    if (addTable) {
+    if (createSchemeObject.Table) {
         TestCreateTable(runtime, schemeshardId, ++(*txId), TStringBuilder() << "/MyRoot/" << name,
             R"____(
                 Name: "Simple"
@@ -84,6 +85,21 @@ ui64 CreateTestSubdomain(NActors::TTestActorRuntime& runtime, TTestEnv& env, ui6
                 UniformPartitionsCount: 2
             )____");
         env.TestWaitNotification(runtime, *txId, schemeshardId);
+    }
+
+    if (createSchemeObject.Topic) {
+        TestCreatePQGroup(runtime, schemeshardId, ++(*txId), TStringBuilder() << "/MyRoot/" << name,
+            R"___(
+                Name: "Topic1"
+                TotalGroupCount: 1
+                PartitionPerTablet: 1
+                PQTabletConfig: {
+                    PartitionConfig {
+                        LifetimeSeconds : 10
+                    }
+                }
+            )___");
+        env.TestWaitNotification(runtime, *txId);
     }
 
     return schemeshardId;

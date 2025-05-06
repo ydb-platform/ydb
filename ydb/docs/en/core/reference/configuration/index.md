@@ -217,9 +217,6 @@ The [authentication mode](../../security/authentication.md) in the {{ ydb-short-
 domains_config:
   ...
   security_config:
-<<<<<<< HEAD
-    enforce_user_token_requirement: Bool
-=======
     # authentication mode settings
     enforce_user_token_requirement: false
     enforce_user_token_check_requirement: false
@@ -237,7 +234,6 @@ domains_config:
     monitoring_allowed_sids: <list of SIDs enabled for tablet administration>
     administration_allowed_sids: <list of SIDs enabled for storage administration>
     register_dynamic_node_allowed_sids: <list of SIDs enabled for database node registration>
->>>>>>> bb54688b369 ([docs] configuration v2 release candidate (#17647))
   ...
 ```
 

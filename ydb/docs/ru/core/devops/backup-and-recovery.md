@@ -10,7 +10,7 @@
 
 ### Файлы {#files}
 
-Для выполнения резервного копирования в файлы применяется команда `{{ ydb-cli }} tools dump`. Перейдите [по ссылке](../../reference/ydb-cli/export-import/tools-dump.md) в справочник по {{ ydb-short-name }} CLI для получения информации о данной команде.
+Для выполнения резервного копирования в файлы применяется команда `{{ ydb-cli }} tools dump`. Перейдите [по ссылке](../reference/ydb-cli/export-import/tools-dump.md) в справочник по {{ ydb-short-name }} CLI для получения информации о данной команде.
 
 - `{{ ydb-cli }} admin cluster dump` — для резервного копирования метаданных кластера
 - `{{ ydb-cli }} admin database dump` — для резервного копирования базы данных

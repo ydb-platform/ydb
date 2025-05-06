@@ -135,6 +135,37 @@ Y_UNIT_TEST_SUITE(TChunkTrackerTest) {
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(102), 20);
         UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(103), 50);
     }
+
+    Y_UNIT_TEST(ZeroWeight) {
+        using namespace NPDisk;
+
+        TChunkTracker chunkTracker;
+        TKeeperParams params {
+            .TotalChunks = 205 /*system*/ + 50,
+            .ExpectedOwnerCount = 0,
+        };
+
+        TString errorReason;
+        bool ok;
+
+        ok = chunkTracker.Reset(params, TColorLimits::MakeLogLimits(), errorReason);
+        UNIT_ASSERT_C(ok, errorReason);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetTotalHardLimit(), 50);
+
+        chunkTracker.AddOwner(101, TVDiskID(), 1);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetNumActiveSlots(), 1);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(101), 50);
+
+        // Weigh can't be zero (0 is treated as 1)
+        chunkTracker.SetOwnerWeight(101, 0);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetNumActiveSlots(), 1);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(101), 50);
+
+        chunkTracker.AddOwner(102, TVDiskID(), 0);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetNumActiveSlots(), 2);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(101), 25);
+        UNIT_ASSERT_EQUAL_X(chunkTracker.GetOwnerHardLimit(102), 25);
+    }
 }
 
 #undef UNIT_ASSERT_EQUAL_X

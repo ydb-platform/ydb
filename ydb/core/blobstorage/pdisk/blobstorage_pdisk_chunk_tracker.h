@@ -72,7 +72,8 @@ public:
             
             // Divide into equal parts and that's it.
             for (TOwner id : ActiveOwnerIds) {
-                ForceHardLimit(id, limit * QuotaForOwner[id].Weight);
+                auto weight = QuotaForOwner[id].Weight ?: 1;
+                ForceHardLimit(id, limit * weight);
             }
         }
     }
@@ -164,7 +165,7 @@ public:
         str << "<td>" << q.GetHardLimit() << "</td>";
         str << "<td>" << q.GetFree() << "</td>";
         str << "<td>" << q.GetUsed() << "</td>";
-        str << "<td>" << q.Weight << "</td>";
+        str << "<td>" << (q.Weight ?: 1) << "</td>";
         double occupancy;
         str << "<td>" << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(q.EstimateSpaceColor(0, &occupancy)) << "</td>";
         str << "<td>" << occupancy << "</td>";

@@ -397,4 +397,4 @@ class DMLOperations():
             assert str(values_from_rows).replace(
                 "'", "\"") == str(key[data_type](values)), f"{data_type}"
         else:
-            assert str(values_from_rows) == str(key[data_type](values)), f"{data_type}, {values_from_rows}, {key[data_type](values)}"
+            assert str(values_from_rows) == str(key[data_type](values)), f"{data_type}"

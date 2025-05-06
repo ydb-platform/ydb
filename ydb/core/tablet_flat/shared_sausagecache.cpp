@@ -69,14 +69,6 @@ struct TRequest : public TSimpleRefCount<TRequest>, public TIntrusiveListItem<TR
     {
     }
 
-    // TODO: do we need it?
-    void EnsureResponded() const {
-        Y_ENSURE(IsResponded(), "All dropping requests should be responded first but request with"
-            << " owner " << Sender
-            << " page collection " << PageCollection->Label()
-            << " has pending pages " << PagesToRequest);
-    }
-
     bool IsResponded() const {
         return !Sender;
     }
@@ -93,12 +85,12 @@ struct TRequest : public TSimpleRefCount<TRequest>, public TIntrusiveListItem<TR
     ui64 RequestCookie = 0;
     ui64 PendingBlocks = 0;
     TVector<TEvResult::TLoaded> ReadyPages;
-    TDeque<TPageId> PagesToRequest;
+    TDeque<TPageId> QueuePagesToRequest; // FIXME: store first pending page index
     NWilson::TTraceId TraceId;
 };
 
 // pending request, index in ready blocks for page
-using TPendingRequests = TDeque<std::pair<TIntrusivePtr<TRequest>, ui32>>;
+using TPendingRequests = THashMap<TIntrusivePtr<TRequest>, ui32>;
 
 struct TCollection {
     TLogoBlobID Id;
@@ -109,16 +101,7 @@ struct TCollection {
 };
 
 struct TRequestQueue {
-    struct TPagesToRequest : public TIntrusiveListItem<TPagesToRequest> {
-        TIntrusivePtr<TRequest> Request;
-    };
-
-    struct TByActorRequest {
-        TIntrusiveList<TPagesToRequest> Listed;
-        THashMap<TLogoBlobID, TDeque<TPagesToRequest>> Index;
-    };
-
-    TMap<TActorId, TByActorRequest> Requests;
+    TMap<TActorId, TDeque<TIntrusivePtr<TRequest>>> Requests;
 
     ui64 Limit = 0;
     ui64 InFly = 0;
@@ -557,30 +540,21 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 pagesToWaitTraceLog.reserve(pendingPages.size() - pagesToRequestCount);
             }
 
-            TRequestQueue::TPagesToRequest *qpages = nullptr;
-
             if (queue) {
                 // register for loading regardless of pending state, to simplify actor deregister logic
                 // would be filtered on actual request
-                auto &owner = queue->Requests[ev->Sender];
-                auto &list = owner.Index[pageCollectionId];
-
-                qpages = &list.emplace_back();
-                qpages->Request = request;
-                owner.Listed.PushBack(qpages);
+                queue->Requests[ev->Sender].push_back(request);
             }
 
-            for (auto xpair : pendingPages) {
-                const ui32 pageId = xpair.first;
-                const ui32 reqIdx = xpair.second;
-
-                collection.PendingRequests[pageId].emplace_back(request, reqIdx);
+            for (auto [pageId, reqIdx] : pendingPages) {
+                collection.PendingRequests[pageId].emplace(request, reqIdx);
                 ++request->PendingBlocks;
                 auto* page = collection.PageMap[pageId].Get();
                 Y_ENSURE(page);
 
-                if (qpages)
-                    qpages->Request->PagesToRequest.push_back(pageId);
+                if (queue) {
+                    request->QueuePagesToRequest.push_back(pageId);
+                }
 
                 switch (page->State) {
                 case PageStateNo:
@@ -639,41 +613,39 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 << " cookie " << ev->Cookie
                 << " class " << msg->Priority
                 <<  " from cache " << msg->Fetch->Pages);
-            SendResult(*request);
+            SendResult(request);
         }
 
         DoGC();
     }
 
     void RequestFromQueue(TRequestQueue &queue) {
-        if (queue.Requests.empty())
-            return;
-
-        TMap<TActorId, TRequestQueue::TByActorRequest>::iterator it;
+        auto it = queue.Requests.end();
         if (queue.NextToRequest) {
             it = queue.Requests.find(queue.NextToRequest);
-            if (it == queue.Requests.end())
+            if (it == queue.Requests.end()) {
                 it = queue.Requests.begin();
+            }
         } else {
             it = queue.Requests.begin();
         }
 
-        while (queue.InFly <= queue.Limit) { // on limit == 0 would request pages one by one
+        while (it != queue.Requests.end() && queue.InFly <= queue.Limit) { // on limit == 0 would request pages one by one
             // request whole limit from one page collection for better locality (if possible)
-            auto &owner = it->second;
-            Y_ENSURE(!owner.Listed.Empty());
+            Y_ENSURE(!it->second.empty());
 
             ui32 nthToRequest = 0;
             ui32 nthToLoad = 0;
             ui64 sizeToLoad = 0;
 
-            auto &request = *owner.Listed.Front()->Request;
+            auto& request_ = it->second.front();
+            auto& request = *request_;
 
             if (!request.IsResponded()) {
                 auto *collection = Collections.FindPtr(request.Label);
                 Y_ENSURE(collection);
 
-                for (ui32 pageId : request.PagesToRequest) {
+                for (TPageId pageId : request.QueuePagesToRequest) {
                     ++nthToRequest;
 
                     auto* page = collection->PageMap[pageId].Get();
@@ -690,7 +662,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 if (nthToLoad != 0) {
                     TVector<ui32> toLoad;
                     toLoad.reserve(nthToLoad);
-                    for (ui32 pageId : request.PagesToRequest) {
+                    for (ui32 pageId : request.QueuePagesToRequest) {
                         auto* page = collection->PageMap[pageId].Get();
                         if (!page || page->State != PageStatePending)
                             continue;
@@ -714,41 +686,60 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             }
 
             // cleanup
-            if (request.IsResponded() || nthToRequest == request.PagesToRequest.size()) {
+            if (request.IsResponded() || nthToRequest == request.QueuePagesToRequest.size()) {
                 if (request.IsResponded()) {
-                    Y_ENSURE(request.RefCount() == 1, "Should not be in PendingRequests");
+                    DropPendingRequest(request_);
                 }
 
-                {
-                    auto reqit = owner.Index.find(request.Label);
-                    Y_ENSURE(reqit != owner.Index.end());
-                    reqit->second.pop_front();
+                it->second.pop_front();
 
-                    if (reqit->second.empty())
-                        owner.Index.erase(reqit);
-                }
-
-                Y_ENSURE(bool(owner.Listed) == bool(owner.Index));
-
-                if (owner.Listed.Empty())
+                if (it->second.empty()) {
                     it = queue.Requests.erase(it);
-                else
+                }
+                else {
                     ++it;
+                }
             } else {
-                request.PagesToRequest.erase(request.PagesToRequest.begin(), request.PagesToRequest.begin() + nthToRequest);
+                request.QueuePagesToRequest.erase(request.QueuePagesToRequest.begin(), request.QueuePagesToRequest.begin() + nthToRequest);
                 ++it;
             }
 
-            if (it == queue.Requests.end())
-                it = queue.Requests.begin();
-
             if (it == queue.Requests.end()) {
-                queue.NextToRequest = TActorId();
-                break;
+                it = queue.Requests.begin();
             }
+        }
 
+        if (it == queue.Requests.end()) {
+            queue.NextToRequest = TActorId();
+        } else {
             queue.NextToRequest = it->first;
         }
+    }
+
+    void DropPendingRequest(TIntrusivePtr<TRequest>& request) {
+        // Note: pending requests that have been responded during Unregister and Detach
+        // should be removed from PendingRequests manually
+        Y_ASSERT(request->IsResponded());
+        if (request.RefCount() == 1) {
+            // already no PendingRequests
+            return;
+        }
+
+        auto *collection = Collections.FindPtr(request->Label);
+        Y_ENSURE(collection);
+
+        for (TPageId pageId : request->QueuePagesToRequest) {
+            auto pageRequestsIt = collection->PendingRequests.find(pageId);
+            if (pageRequestsIt != collection->PendingRequests.end()) {
+                if (pageRequestsIt->second.erase(request) && pageRequestsIt->second.empty()) {
+                    collection->PendingRequests.erase(pageRequestsIt);
+                }
+            }
+        }
+
+        TryDropExpiredCollection(*collection);
+
+        Y_ENSURE(request.RefCount() == 1, "Should not be in PendingRequests");
     }
 
     void Handle(NSharedCache::TEvTouch::TPtr &ev, const TActorContext& ctx) {
@@ -849,8 +840,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         Y_ENSURE(collectionIt != ownerIt->second.end());
 
         // Note: sent request will be kept in PendingRequests until their pages are loaded
-        // while queued requests will be filtered during RequestFromQueue
-        // TODO: who will drop from PendingRequests?
+        // while queued requests will be handled in RequestFromQueue
         for (auto& request : collectionIt->second) {
             SendError(request, NKikimrProto::RACE);
         }
@@ -1035,32 +1025,34 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             readyPage.Page = TSharedPageRef::MakeUsed(page, SharedCachePages->GCList);
 
             if (--request->PendingBlocks == 0)
-                SendResult(*request);
+                SendResult(request);
         }
         collection.PendingRequests.erase(pendingRequestsIt);
     }
 
-    void SendResult(TRequest &request) {
-        if (request.IsResponded()) {
+    void SendResult(const TIntrusivePtr<TRequest> &request) {
+        if (request->IsResponded()) {
             return;
         }
 
         TAutoPtr<NSharedCache::TEvResult> result =
-            new NSharedCache::TEvResult(std::move(request.PageCollection), request.RequestCookie, NKikimrProto::OK);
-        result->Pages = std::move(request.ReadyPages);
+            new NSharedCache::TEvResult(std::move(request->PageCollection), request->RequestCookie, NKikimrProto::OK);
+        result->Pages = std::move(request->ReadyPages);
 
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Send page collection result " << result->PageCollection->Label()
-            << " owner " << request.Sender
-            << " class " << request.Priority
+            << " owner " << request->Sender
+            << " class " << request->Priority
             << " pages " << result->Pages
-            << " cookie " << request.EventCookie);
+            << " cookie " << request->EventCookie);
 
-        Send(request.Sender, result.Release(), 0, request.EventCookie);
+        Send(request->Sender, result.Release(), 0, request->EventCookie);
         Counters.PendingRequests->Dec();
         Counters.SucceedRequests->Inc();
         StatBioReqs += 1;
 
-        request.MarkResponded();
+        request->MarkResponded();
+
+        Y_ENSURE(request->RefCount() == 1, "Should not be in queues");
     }
 
     void SendError(TRequest &request, NKikimrProto::EReplyStatus error) {

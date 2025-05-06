@@ -621,18 +621,20 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void RequestFromQueue(TRequestQueue &queue) {
-        auto it = queue.Requests.end();
+        if (queue.Requests.empty()) {
+            return;
+        }
+
+        auto it = queue.Requests.begin();
         if (queue.NextToRequest) {
             it = queue.Requests.find(queue.NextToRequest);
+        }
+
+        while (queue.Requests && queue.InFly <= queue.Limit) { // on limit == 0 would request pages one by one
+            // request whole limit from one page collection for better locality (if possible)
             if (it == queue.Requests.end()) {
                 it = queue.Requests.begin();
             }
-        } else {
-            it = queue.Requests.begin();
-        }
-
-        while (it != queue.Requests.end() && queue.InFly <= queue.Limit) { // on limit == 0 would request pages one by one
-            // request whole limit from one page collection for better locality (if possible)
             Y_ENSURE(!it->second.empty());
 
             ui32 nthToRequest = 0;
@@ -704,10 +706,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             } else {
                 request.QueuePagesToRequest.erase(request.QueuePagesToRequest.begin(), request.QueuePagesToRequest.begin() + nthToRequest);
                 ++it;
-            }
-
-            if (it == queue.Requests.end()) {
-                it = queue.Requests.begin();
             }
         }
 

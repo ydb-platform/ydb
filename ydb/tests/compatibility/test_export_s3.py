@@ -13,7 +13,7 @@ from ydb.tests.library.common.types import Erasure
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
-last_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/ydbd-last-stable")
+last_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-last-stable")
 current_binary_path = kikimr_driver_path()
 
 all_binary_combinations = [

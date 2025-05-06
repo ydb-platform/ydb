@@ -1015,6 +1015,7 @@ void FillGlobalIndexSettings(Ydb::Table::GlobalIndexSettings& settings,
     }
 
     FillPartitioningSettingsImpl(settings, indexImplTableDescription);
+    FillReadReplicasSettings(settings, indexImplTableDescription);
 }
 
 template <typename TYdbProto>
@@ -1630,6 +1631,11 @@ void FillReadReplicasSettings(Ydb::Table::DescribeTableResult& out,
 
 void FillReadReplicasSettings(Ydb::Table::CreateTableRequest& out,
         const NKikimrSchemeOp::TTableDescription& in) {
+    FillReadReplicasSettingsImpl(out, in);
+}
+
+void FillReadReplicasSettings(Ydb::Table::GlobalIndexSettings& out,
+    const NKikimrSchemeOp::TTableDescription& in) {
     FillReadReplicasSettingsImpl(out, in);
 }
 

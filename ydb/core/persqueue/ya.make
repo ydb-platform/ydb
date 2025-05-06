@@ -16,13 +16,13 @@ SRCS(
     mirrorer.h
     ownerinfo.cpp
     offload_actor.cpp
+    partition_blob_encoder.cpp
     partition_init.cpp
     partition_monitoring.cpp
     partition_read.cpp
     partition_scale_request.cpp
     partition_scale_manager.cpp
     partition_sourcemanager.cpp
-    partition_writer.cpp
     partition_write.cpp
     partition.cpp
     percentile_counter.cpp

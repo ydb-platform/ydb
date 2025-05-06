@@ -1,4 +1,4 @@
-#include "partition_writer.h"
+#include "partition_blob_encoder.h"
 #include "partition_util.h"
 
 namespace NKikimr::NPQ {

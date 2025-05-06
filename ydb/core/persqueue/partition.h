@@ -12,7 +12,7 @@
 #include "user_info.h"
 #include "utils.h"
 #include "read_quoter.h"
-#include "partition_writer.h"
+#include "partition_blob_encoder.h"
 
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>

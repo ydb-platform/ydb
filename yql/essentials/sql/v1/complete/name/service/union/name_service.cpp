@@ -23,16 +23,17 @@ namespace NSQLComplete {
                 }
 
                 return NThreading::WaitAll(fs)
-                    .Apply([fs, this, request = std::move(request)](auto) {
-                        return Union(fs, request.Constraints, request.Limit);
+                    .Apply([fs, ranking = Ranking_, request = std::move(request)](auto) {
+                        return Union(fs, ranking, request.Constraints, request.Limit);
                     });
             }
 
         private:
-            TNameResponse Union(
+            static TNameResponse Union(
                 TVector<NThreading::TFuture<TNameResponse>> fs,
+                IRanking::TPtr ranking,
                 const TNameConstraints& constraints,
-                size_t limit) const {
+                size_t limit) {
                 TNameResponse united;
                 for (auto f : fs) {
                     TNameResponse response = f.ExtractValue();
@@ -48,7 +49,7 @@ namespace NSQLComplete {
                         united.NameHintLength = response.NameHintLength;
                     }
                 }
-                Ranking_->CropToSortedPrefix(united.RankedNames, constraints, limit);
+                ranking->CropToSortedPrefix(united.RankedNames, constraints, limit);
                 return united;
             }
 

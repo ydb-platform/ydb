@@ -1026,7 +1026,7 @@ void NSchemeShardUT_Private::TTestEnv::BootTxAllocator(NActors::TTestActorRuntim
 NKikimrConfig::TAppConfig NSchemeShardUT_Private::TTestEnv::GetAppConfig() const {
     NKikimrConfig::TAppConfig appConfig;
     auto* queryServiceConfig = appConfig.MutableQueryServiceConfig();
-    queryServiceConfig->SetEnableAllExternalDataSources(true);
+    queryServiceConfig->SetAllExternalDataSourcesAreAvailable(true);
     return appConfig;
 }
 

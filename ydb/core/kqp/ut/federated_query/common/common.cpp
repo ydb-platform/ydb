@@ -64,7 +64,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         if (!appConfig) {
             appConfig.emplace();
         }
-        appConfig->MutableQueryServiceConfig()->SetEnableAllExternalDataSources(true);
+        appConfig->MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
 
         auto settings = TKikimrSettings();
 

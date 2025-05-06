@@ -178,6 +178,7 @@ struct TSharedPageCacheMock {
         }
         Fetches->clear();
         
+        Cerr << "Checking fetches#" << RequestId << Endl;
         CheckFetches(expected, actual);
 
         return *this;
@@ -1012,6 +1013,71 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 2);
     }
 
+    Y_UNIT_TEST(Detach_Queued) {
+        TSharedPageCacheMock sharedCache;
+
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, {1, 2, 3, 4, 5}, EPriority::Bkgr);
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, {6, 7}, EPriority::Bkgr);
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection2, {10, 11, 12}, EPriority::Bkgr);
+        sharedCache.Request(sharedCache.Sender2, sharedCache.Collection1, {1, 5, 9, 10}, EPriority::Bkgr);
+        sharedCache.CheckFetches({
+            NPageCollection::TFetch{20, sharedCache.Collection1, {1, 2}}
+        });
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LoadInFlyPages->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PendingRequests->Val(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 3);
+
+        sharedCache.Detach(sharedCache.Sender1, sharedCache.Collection1);
+        sharedCache.CheckResults({
+            NPageCollection::TFetch{1, sharedCache.Collection1, {}},
+            NPageCollection::TFetch{2, sharedCache.Collection1, {}}
+        }, NKikimrProto::RACE);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LoadInFlyPages->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PendingRequests->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->SucceedRequests->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->FailedRequests->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 2);
+
+        sharedCache.Provide(sharedCache.Collection1, {1, 2}, ASYNC_QUEUE_COOKIE);
+        sharedCache.CheckFetches({
+            NPageCollection::TFetch{20, sharedCache.Collection1, {5, 9}}
+        });
+        sharedCache.Provide(sharedCache.Collection1, {5, 9}, ASYNC_QUEUE_COOKIE);
+        sharedCache.CheckFetches({
+            NPageCollection::TFetch{10, sharedCache.Collection1, {10}},
+            NPageCollection::TFetch{10, sharedCache.Collection2, {10}},
+        });
+        sharedCache.Provide(sharedCache.Collection1, {10}, ASYNC_QUEUE_COOKIE);
+        sharedCache.CheckResults({
+            NPageCollection::TFetch{4, sharedCache.Collection1, {1, 5, 9, 10}}
+        });
+        sharedCache.CheckFetches({
+            NPageCollection::TFetch{10, sharedCache.Collection2, {11}}
+        });
+
+        sharedCache.Provide(sharedCache.Collection2, {10}, ASYNC_QUEUE_COOKIE);
+        sharedCache.CheckFetches({
+            NPageCollection::TFetch{10, sharedCache.Collection2, {12}}
+        });
+        sharedCache.Provide(sharedCache.Collection2, {11}, ASYNC_QUEUE_COOKIE);
+        sharedCache.Provide(sharedCache.Collection2, {12}, ASYNC_QUEUE_COOKIE);
+        sharedCache.CheckResults({
+            NPageCollection::TFetch{3, sharedCache.Collection2, {10, 11, 12}},
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LoadInFlyPages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PendingRequests->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->SucceedRequests->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->FailedRequests->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 2);
+    }
+
     Y_UNIT_TEST(Unregister_Basics) {
         TSharedPageCacheMock sharedCache;
         
@@ -1156,6 +1222,58 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PendingRequests->Val(), 0);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->SucceedRequests->Val(), 2);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->FailedRequests->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 1);
+    }
+
+    Y_UNIT_TEST(Unregister_Queued) {
+        TSharedPageCacheMock sharedCache;
+
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, {1, 2, 3, 4, 5}, EPriority::Bkgr);
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, {6, 7}, EPriority::Bkgr);
+        sharedCache.Request(sharedCache.Sender1, sharedCache.Collection2, {10, 11, 12}, EPriority::Bkgr);
+        sharedCache.Request(sharedCache.Sender2, sharedCache.Collection1, {1, 5, 9, 10}, EPriority::Bkgr);
+        sharedCache.CheckFetches({
+            NPageCollection::TFetch{20, sharedCache.Collection1, {1, 2}}
+        });
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LoadInFlyPages->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PendingRequests->Val(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 3);
+
+        sharedCache.Unregister(sharedCache.Sender1);
+        sharedCache.CheckResults({
+            NPageCollection::TFetch{1, sharedCache.Collection1, {}},
+            NPageCollection::TFetch{2, sharedCache.Collection1, {}},
+            NPageCollection::TFetch{3, sharedCache.Collection2, {}}
+        }, NKikimrProto::RACE);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LoadInFlyPages->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PendingRequests->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->SucceedRequests->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->FailedRequests->Val(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 1);
+
+        sharedCache.Provide(sharedCache.Collection1, {1, 2}, ASYNC_QUEUE_COOKIE);
+        sharedCache.CheckFetches({
+            NPageCollection::TFetch{20, sharedCache.Collection1, {5, 9}}
+        });
+        sharedCache.Provide(sharedCache.Collection1, {5, 9}, ASYNC_QUEUE_COOKIE);
+        sharedCache.CheckFetches({
+            NPageCollection::TFetch{10, sharedCache.Collection1, {10}},
+        });
+        sharedCache.Provide(sharedCache.Collection1, {10}, ASYNC_QUEUE_COOKIE);
+        sharedCache.CheckResults({
+            NPageCollection::TFetch{4, sharedCache.Collection1, {1, 5, 9, 10}}
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->LoadInFlyPages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PendingRequests->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->SucceedRequests->Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->FailedRequests->Val(), 3);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollections->Val(), 2);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->Owners->Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PageCollectionOwners->Val(), 1);

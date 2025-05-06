@@ -660,7 +660,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         while (queue.InFly <= queue.Limit) { // on limit == 0 would request pages one by one
             // request whole limit from one page collection for better locality (if possible)
-            // should be 'request from one logoblobid
             auto &owner = it->second;
             Y_ENSURE(!owner.Listed.Empty());
 
@@ -688,36 +687,38 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                         break;
                 }
 
-                if (nthToRequest != 0) {
-                    if (nthToLoad != 0) {
-                        TVector<ui32> toLoad;
-                        toLoad.reserve(nthToLoad);
-                        for (ui32 pageId : request.PagesToRequest) {
-                            auto* page = collection->PageMap[pageId].Get();
-                            if (!page || page->State != PageStatePending)
-                                continue;
+                if (nthToLoad != 0) {
+                    TVector<ui32> toLoad;
+                    toLoad.reserve(nthToLoad);
+                    for (ui32 pageId : request.PagesToRequest) {
+                        auto* page = collection->PageMap[pageId].Get();
+                        if (!page || page->State != PageStatePending)
+                            continue;
 
-                            toLoad.push_back(pageId);
-                            page->State = PageStateRequestedAsync;
-                            if (--nthToLoad == 0)
-                                break;
-                        }
-
-                        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Request page collection " << request.Label
-                            << (&queue == &AsyncRequests ? " async" : " scan") << " queue"
-                            << " pages " << toLoad);
-
-                        AddInFlyPages(toLoad.size(), sizeToLoad);
-                        // fetch cookie -> requested size;
-                        // event cookie -> queue type
-                        auto *fetch = new NPageCollection::TFetch(sizeToLoad, request.PageCollection, std::move(toLoad), request.TraceId.GetTraceId());
-                        NBlockIO::Start(this, request.Sender, (&queue == &AsyncRequests ? ASYNC_QUEUE_COOKIE : SCAN_QUEUE_COOKIE), request.Priority, fetch);
+                        toLoad.push_back(pageId);
+                        page->State = PageStateRequestedAsync;
+                        if (--nthToLoad == 0)
+                            break;
                     }
+
+                    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Request page collection " << request.Label
+                        << (&queue == &AsyncRequests ? " async" : " scan") << " queue"
+                        << " pages " << toLoad);
+
+                    AddInFlyPages(toLoad.size(), sizeToLoad);
+                    // fetch cookie -> requested size;
+                    // event cookie -> queue type
+                    auto *fetch = new NPageCollection::TFetch(sizeToLoad, request.PageCollection, std::move(toLoad), request.TraceId.GetTraceId());
+                    NBlockIO::Start(this, request.Sender, (&queue == &AsyncRequests ? ASYNC_QUEUE_COOKIE : SCAN_QUEUE_COOKIE), request.Priority, fetch);
                 }
             }
 
             // cleanup
             if (request.IsResponded() || nthToRequest == request.PagesToRequest.size()) {
+                if (request.IsResponded()) {
+                    Y_ENSURE(request.RefCount() == 1, "Should not be in PendingRequests");
+                }
+
                 {
                     auto reqit = owner.Index.find(request.Label);
                     Y_ENSURE(reqit != owner.Index.end());
@@ -815,7 +816,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             for (auto& request : requests) {
                 SendError(request, NKikimrProto::RACE);
             }
-            DropRequestsFromQueues(ev->Sender, collection->Id);
 
             LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Remove page collection " << collection->Id
                 << " owner " << ev->Sender);
@@ -848,10 +848,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         auto collectionIt = ownerIt->second.find(collection);
         Y_ENSURE(collectionIt != ownerIt->second.end());
 
+        // Note: sent request will be kept in PendingRequests until their pages are loaded
+        // while queued requests will be filtered during RequestFromQueue
+        // TODO: who will drop from PendingRequests?
         for (auto& request : collectionIt->second) {
             SendError(request, NKikimrProto::RACE);
         }
-        DropRequestsFromQueues(ev->Sender, pageCollectionId);
 
         LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Remove page collection " << collection->Id
             << " owner " << ev->Sender);
@@ -1137,48 +1139,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             collection.PageMap.clear();
         }
 
-        for (TActorId owner : collection.Owners) {
-            DropRequestsFromQueues(owner, collection.Id);
-        }
-
         //TODO: delete ownership of dropping page collection
 
         TryDropExpiredCollection(collection);
-    }
-
-    void DropRequestsFromQueues(TActorId owner, const TLogoBlobID &pageCollectionId) {
-        DropRequestsFromQueue(ScanRequests, owner, pageCollectionId);
-        DropRequestsFromQueue(AsyncRequests, owner, pageCollectionId);
-    }
-
-    void DropRequestsFromQueue(TRequestQueue &queue, TActorId ownerId, const TLogoBlobID &pageCollectionId) {
-        auto ownerIt = queue.Requests.find(ownerId);
-        if (ownerIt == queue.Requests.end()) {
-            return;
-        }
-
-        auto &reqsByOwner = ownerIt->second;
-        auto reqsIt = reqsByOwner.Index.find(pageCollectionId);
-        if (reqsIt == reqsByOwner.Index.end()) {
-            return;
-        }
-
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Drop requests from queue"
-            << " owner " << ownerId
-            << " page collection " << pageCollectionId);
-
-        if (reqsByOwner.Index.size() == 1) {
-            for (const auto& r : reqsByOwner.Listed) {
-                r.Request->EnsureResponded();
-            }
-            queue.Requests.erase(ownerIt);
-        } else {
-            for (auto &x : reqsIt->second) {
-                x.Request->EnsureResponded();
-                x.Unlink();
-            }
-            reqsByOwner.Index.erase(reqsIt);
-        }
     }
 
     void Evict(TIntrusiveList<TPage>&& pages) {

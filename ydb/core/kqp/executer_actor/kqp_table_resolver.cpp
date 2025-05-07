@@ -353,10 +353,6 @@ private:
 
                             stageInfo.Meta.ShardKey = ExtractKey(stageInfo.Meta.TableId, stageInfo.Meta.TableConstInfo, operation);
 
-                            if (SystemViewRewrittenResolver->IsSystemView(stageInfo.Meta.TableId.SysViewInfo)) {
-                                continue;
-                            }
-
                             if (stageInfo.Meta.TableKind == ETableKind::Olap) {
                                 if (TableRequestIds.find(stageInfo.Meta.TableId) == TableRequestIds.end()) {
                                     auto& entry = requestNavigate->ResultSet.emplace_back();

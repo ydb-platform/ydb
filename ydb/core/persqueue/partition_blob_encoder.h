@@ -52,7 +52,8 @@ struct TPartitionBlobEncoder {
                             ui64 endOffset,
                             TInstant& writeTimestamp) const;
 
-    TKey KeyFor(TKeyPrefix::EType type, const TPartitionId& partitionId, bool needCompaction) const;
+    TKey KeyForWrite(TKeyPrefix::EType type, const TPartitionId& partitionId, bool needCompaction) const;
+    TKey KeyForFastWrite(TKeyPrefix::EType type, const TPartitionId& partitionId) const;
 
     void NewPartitionedBlob(const TPartitionId& partition,
                             const ui64 offset,
@@ -75,6 +76,7 @@ struct TPartitionBlobEncoder {
                           ui64& gapSize);
     void SyncHeadFromNewHead();
     void SyncHead(ui64& startOffset, ui64& endOffset);
+    void SyncHeadFastWrite(ui64& startOffset, ui64& endOffset);
 
     void ResetNewHead(ui64 endOffset);
 

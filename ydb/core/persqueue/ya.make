@@ -17,6 +17,7 @@ SRCS(
     ownerinfo.cpp
     offload_actor.cpp
     partition_blob_encoder.cpp
+    partition_compaction.cpp
     partition_init.cpp
     partition_monitoring.cpp
     partition_read.cpp

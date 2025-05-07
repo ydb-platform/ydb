@@ -311,6 +311,7 @@ private:
         bool enableConstantFolding = TableServiceConfig.GetEnableConstantFolding();
 
         TString enableSpillingNodes = TableServiceConfig.GetEnableSpillingNodes();
+        bool enableSpilling = TableServiceConfig.GetEnableQueryServiceSpilling();
 
         bool enableSnapshotIsolationRW = TableServiceConfig.GetEnableSnapshotIsolationRW();
 
@@ -343,7 +344,8 @@ private:
             TableServiceConfig.GetEnableImplicitQueryParameterTypes() != enableImplicitQueryParameterTypes ||
             TableServiceConfig.GetEnablePgConstsToParams() != enablePgConstsToParams ||
             TableServiceConfig.GetEnablePerStatementQueryExecution() != enablePerStatementQueryExecution ||
-            TableServiceConfig.GetEnableSnapshotIsolationRW() != enableSnapshotIsolationRW) {
+            TableServiceConfig.GetEnableSnapshotIsolationRW() != enableSnapshotIsolationRW ||
+            TableServiceConfig.GetEnableQueryServiceSpilling() != enableSpilling) {
 
             QueryCache->Clear();
 

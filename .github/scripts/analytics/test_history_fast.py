@@ -19,6 +19,17 @@ def drop_table(session, table_path):
     session.execute_scheme(f"DROP TABLE IF EXISTS `{table_path}`;")
 
 
+def check_table_exists(session, table_path):
+    """Check if table exists"""
+    try:
+        session.describe_table(table_path)
+        print(f"Table '{table_path}' already exists.")
+        return True
+    except ydb.SchemeError:
+        print(f"Table '{table_path}' does not exist.")
+        return False
+
+
 def create_test_history_fast_table(session, table_path):
     print(f"> Creating table: '{table_path}'")
     session.execute_scheme(f"""
@@ -38,7 +49,7 @@ def create_test_history_fast_table(session, table_path):
             `status` Utf8,
             `status_description` Utf8,
             `owners` Utf8,
-            PRIMARY KEY (`full_name`, `run_timestamp`, `job_name`, `branch`, `build_type`, test_id)
+            PRIMARY KEY (`run_timestamp`, `full_name`, `job_name`, `branch`, `build_type`, test_id)
         )
         PARTITION BY HASH(run_timestamp)
         WITH (
@@ -74,7 +85,7 @@ def bulk_upsert(table_client, table_path, rows):
 def get_missed_data_for_upload(driver):
     results = []
     query = f"""
-        SELECT 
+       SELECT 
         build_type, 
         job_name, 
         job_id, 
@@ -96,8 +107,14 @@ def get_missed_data_for_upload(driver):
     ) as fast_data_missed
     ON all_data.run_timestamp = fast_data_missed.run_timestamp
     WHERE
-        all_data.run_timestamp >= CurrentUtcDate() - 6*Interval("P1D") AND
-        fast_data_missed.run_timestamp is NULL
+        all_data.run_timestamp >= CurrentUtcDate() - 6*Interval("P1D")
+        and String::Contains(all_data.test_name, '.flake8')  = FALSE
+        and (CASE 
+            WHEN String::Contains(all_data.test_name, 'chunk chunk') OR String::Contains(all_data.test_name, 'chunk+chunk') THEN TRUE
+            ELSE FALSE
+            END) = FALSE
+        and (all_data.branch = 'main' or all_data.branch like 'stable-%')
+        and fast_data_missed.run_timestamp is NULL
     """
 
     scan_query = ydb.ScanQuery(query, {})
@@ -127,7 +144,8 @@ def main():
         ]
 
     table_path = "test_results/analytics/test_history_fast"
-    batch_size = 50000
+    full_table_path = f'{DATABASE_PATH}/{table_path}'
+    batch_size = 1000
 
     with ydb.Driver(
         endpoint=DATABASE_ENDPOINT,
@@ -136,13 +154,24 @@ def main():
     ) as driver:
         driver.wait(timeout=10, fail_fast=True)
         with ydb.SessionPool(driver) as pool:
+            # Проверяем существование таблицы и создаем её если нужно
+            def check_and_create_table(session):
+                exists = check_table_exists(session, full_table_path)
+                if not exists:
+                    create_test_history_fast_table(session, full_table_path)
+                    return True
+                return exists
+            
+            pool.retry_operation_sync(check_and_create_table)
+            
+            # Продолжаем с основной логикой скрипта
             prepared_for_upload_rows = get_missed_data_for_upload(driver)
             print(f'Preparing to upsert: {len(prepared_for_upload_rows)} rows')
             if prepared_for_upload_rows:
                 for start in range(0, len(prepared_for_upload_rows), batch_size):
                     batch_rows_for_upload = prepared_for_upload_rows[start:start + batch_size]
                     print(f'upserting: {start}-{start + len(batch_rows_for_upload)}/{len(prepared_for_upload_rows)} rows')
-                    bulk_upsert(driver.table_client, f'{DATABASE_PATH}/{table_path}', batch_rows_for_upload)
+                    bulk_upsert(driver.table_client, full_table_path, batch_rows_for_upload)
                 print('Tests uploaded')
             else:
                 print('Nothing to upload')

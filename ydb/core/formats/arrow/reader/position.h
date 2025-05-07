@@ -73,11 +73,47 @@ private:
         return StartPosition <= position && position < FinishPosition;
     }
 
+    std::partial_ordering CompareImpl(const ui64 position, const TSortableScanData& item, const ui64 itemPosition, const ui32 size) const {
+        AFL_VERIFY(size <= PositionAddress.size() && size <= item.PositionAddress.size());
+        AFL_VERIFY(size);
+        if (Contains(position) && item.Contains(itemPosition)) {
+            for (ui32 idx = 0; idx < size; ++idx) {
+                std::partial_ordering cmp = PositionAddress[idx].Compare(position, item.PositionAddress[idx], itemPosition);
+                if (cmp != std::partial_ordering::equivalent) {
+                    return cmp;
+                }
+            }
+        } else {
+            for (ui32 idx = 0; idx < size; ++idx) {
+                std::partial_ordering cmp = std::partial_ordering::equivalent;
+                const bool containsSelf = PositionAddress[idx].GetAddress().Contains(position);
+                const bool containsItem = item.PositionAddress[idx].GetAddress().Contains(itemPosition);
+                if (containsSelf && containsItem) {
+                    cmp = PositionAddress[idx].Compare(position, item.PositionAddress[idx], itemPosition);
+                } else if (containsSelf) {
+                    auto temporaryAddress = item.Columns[idx]->GetChunk(item.PositionAddress[idx].GetAddress(), itemPosition);
+                    cmp = PositionAddress[idx].Compare(position, temporaryAddress, itemPosition);
+                } else if (containsItem) {
+                    auto temporaryAddress = Columns[idx]->GetChunk(PositionAddress[idx].GetAddress(), position);
+                    cmp = temporaryAddress.Compare(position, item.PositionAddress[idx], itemPosition);
+                } else {
+                    AFL_VERIFY(false);
+                }
+                if (cmp != std::partial_ordering::equivalent) {
+                    return cmp;
+                }
+            }
+        }
+
+        return std::partial_ordering::equivalent;
+    }
+
 public:
     TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch);
     TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns);
     TSortableScanData(const ui64 position, const std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& columns);
     TSortableScanData(const ui64 position, const std::shared_ptr<TGeneralContainer>& batch, const std::vector<std::string>& columns);
+    TSortableScanData(const ui64 position, const std::shared_ptr<TGeneralContainer>& batch);
     TSortableScanData(const ui64 position, const ui64 recordsCount, const std::vector<std::shared_ptr<NAccessor::IChunkedArray>>& columns,
         const std::vector<std::shared_ptr<arrow::Field>>& fields)
         : RecordsCount(recordsCount)
@@ -117,36 +153,11 @@ public:
 
     std::partial_ordering Compare(const ui64 position, const TSortableScanData& item, const ui64 itemPosition) const {
         AFL_VERIFY(PositionAddress.size() == item.PositionAddress.size());
-        if (Contains(position) && item.Contains(itemPosition)) {
-            for (ui32 idx = 0; idx < PositionAddress.size(); ++idx) {
-                std::partial_ordering cmp = PositionAddress[idx].Compare(position, item.PositionAddress[idx], itemPosition);
-                if (cmp != std::partial_ordering::equivalent) {
-                    return cmp;
-                }
-            }
-        } else {
-            for (ui32 idx = 0; idx < PositionAddress.size(); ++idx) {
-                std::partial_ordering cmp = std::partial_ordering::equivalent;
-                const bool containsSelf = PositionAddress[idx].GetAddress().Contains(position);
-                const bool containsItem = item.PositionAddress[idx].GetAddress().Contains(itemPosition);
-                if (containsSelf && containsItem) {
-                    cmp = PositionAddress[idx].Compare(position, item.PositionAddress[idx], itemPosition);
-                } else if (containsSelf) {
-                    auto temporaryAddress = item.Columns[idx]->GetChunk(item.PositionAddress[idx].GetAddress(), itemPosition);
-                    cmp = PositionAddress[idx].Compare(position, temporaryAddress, itemPosition);
-                } else if (containsItem) {
-                    auto temporaryAddress = Columns[idx]->GetChunk(PositionAddress[idx].GetAddress(), position);
-                    cmp = temporaryAddress.Compare(position, item.PositionAddress[idx], itemPosition);
-                } else {
-                    AFL_VERIFY(false);
-                }
-                if (cmp != std::partial_ordering::equivalent) {
-                    return cmp;
-                }
-            }
-        }
+        return CompareImpl(position, item, itemPosition, item.PositionAddress.size());
+    }
 
-        return std::partial_ordering::equivalent;
+    std::partial_ordering ComparePartial(const ui64 position, const TSortableScanData& item, const ui64 itemPosition) const {
+        return CompareImpl(position, item, itemPosition, std::min<ui32>(PositionAddress.size(), item.PositionAddress.size()));
     }
 
     void AppendPositionTo(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const ui64 position, ui64* recordSize) const;
@@ -411,6 +422,12 @@ public:
         Y_ABORT_UNLESS(item.ReverseSort == ReverseSort);
         Y_ABORT_UNLESS(item.Sorting->GetColumns().size() == Sorting->GetColumns().size());
         const auto directResult = Sorting->Compare(Position, *item.Sorting, item.GetPosition());
+        return ApplyOptionalReverseForCompareResult(directResult);
+    }
+
+    std::partial_ordering ComparePartial(const TSortableBatchPosition& item) const {
+        Y_ABORT_UNLESS(item.ReverseSort == ReverseSort);
+        const auto directResult = Sorting->ComparePartial(Position, *item.Sorting, item.GetPosition());
         return ApplyOptionalReverseForCompareResult(directResult);
     }
 

@@ -183,21 +183,22 @@ protected:
 
     void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         auto *self = Self();
-        if (ev->Get()->Config->GetGeneration() || self->IsDistconfEnableQuery()) { // distconf (will be) enabled
+        if (ev->Get()->SelfManagementEnabled || self->IsDistconfEnableQuery()) { // distconf (will be) enabled
             auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
             self->FillDistconfQuery(*ev);
             self->Send(MakeBlobStorageNodeWardenID(self->SelfId().NodeId()), ev.release());
         } else { // classic BSC
-            BSCTabletId = MakeBSControllerID();
             CreatePipe();
-            SendGetInterfaceVersion();
         }
     }
 
     void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr ev) {
         auto *self = Self();
         auto& record = ev->Get()->Record;
-        if (record.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
+        if (auto status = record.GetStatus(); status == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::CONTINUE_BSC) {
+            // continue with BSC
+            CreatePipe();
+        } else if (status != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
             self->Reply(Ydb::StatusIds::INTERNAL_ERROR, record.GetErrorReason(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
                 self->ActorContext());
         } else {
@@ -217,15 +218,13 @@ protected:
 
     void CreatePipe() {
         auto *self = Self();
-        BSCPipeClient = self->Register(NTabletPipe::CreateClient(self->SelfId(), BSCTabletId, GetPipeConfig()));
-    }
+        BSCPipeClient = self->Register(NTabletPipe::CreateClient(self->SelfId(), MakeBSControllerID(), GetPipeConfig()));
 
-    void SendGetInterfaceVersion() {
         auto req = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         auto& record = req->Record;
         auto *request = record.MutableRequest();
         request->AddCommand()->MutableGetInterfaceVersion();
-        NTabletPipe::SendData(Self()->SelfId(), BSCPipeClient, req.release(), 0, TBase::Span_.GetTraceId());
+        NTabletPipe::SendData(self->SelfId(), BSCPipeClient, req.release(), 0, TBase::Span_.GetTraceId());
         State = EState::GET_INTERFACE_VERSION;
     }
 
@@ -285,6 +284,14 @@ protected:
         if constexpr (std::is_same_v<TResultRecord, Ydb::Config::FetchConfigResult>) {
             TResultRecord result;
             const auto& record = ev->Get()->Record;
+            if (record.HasErrorReason()) {
+                const auto status = record.GetDisabledConfigV2()
+                    ? Ydb::StatusIds::UNSUPPORTED
+                    : Ydb::StatusIds::INTERNAL_ERROR;
+                self->Reply(status, TStringBuilder() << "failed to fetch config: " << record.GetErrorReason(),
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+                return;
+            }
             if (record.HasClusterYaml()) {
                 auto conf = ev->Get()->Record.GetClusterYaml();
                 auto metadata = NYamlConfig::GetMainMetadata(conf);
@@ -328,7 +335,10 @@ protected:
                 TResultRecord result;
                 self->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, self->ActorContext());
             } else {
-                self->Reply(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "failed to replace configuration: "
+                const auto status = record.GetDisabledConfigV2()
+                    ? Ydb::StatusIds::UNSUPPORTED
+                    : Ydb::StatusIds::INTERNAL_ERROR;
+                self->Reply(status, TStringBuilder() << "failed to replace configuration: "
                     << NKikimrBlobStorage::TEvControllerReplaceConfigResponse::EStatus_Name(record.GetStatus())
                     << ": " << record.GetErrorReason(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
             }
@@ -397,7 +407,6 @@ private:
     };
 
     EState State = EState::UNKNOWN;
-    ui64 BSCTabletId = 0;
     TActorId BSCPipeClient;
     ui32 InterfaceVersion = 0;
 };

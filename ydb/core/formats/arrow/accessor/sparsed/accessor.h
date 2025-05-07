@@ -58,6 +58,11 @@ private:
         : TSparsedArrayChunk(original) {
         AFL_VERIFY(!original.GetNotDefaultRecordsCount());
         RecordsCount = recordsCount;
+        AFL_VERIFY(RemapExternalToInternal.size() == 1);
+        AFL_VERIFY(RemapExternalToInternal[0].GetStartExt() == 0);
+        AFL_VERIFY(RemapExternalToInternal[0].GetStartInt() == 0);
+        AFL_VERIFY(RemapExternalToInternal[0].GetIsDefault());
+        RemapExternalToInternal[0] = TInternalChunkInfo(0, 0, recordsCount, true);
     }
 
 public:
@@ -170,10 +175,19 @@ protected:
 
     static ui32 GetLastIndex(const std::shared_ptr<arrow::RecordBatch>& batch);
 
-    static std::shared_ptr<arrow::Schema> BuildSchema(const std::shared_ptr<arrow::DataType>& type) {
-        std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>("index", arrow::uint32()),
-            std::make_shared<arrow::Field>("value", type) };
-        return std::make_shared<arrow::Schema>(fields);
+    static std::shared_ptr<arrow::Schema> BuildSchema(const std::shared_ptr<arrow::DataType>& typePtr) {
+        std::shared_ptr<arrow::Schema> result;
+        NArrow::SwitchType(typePtr->id(), [&](const auto& /*type*/) {
+            static const std::shared_ptr<arrow::Schema> schemaResult = [&]() {
+                std::vector<std::shared_ptr<arrow::Field>> fields = { std::make_shared<arrow::Field>("index", arrow::uint32()),
+                    std::make_shared<arrow::Field>("value", typePtr) };
+                return std::make_shared<arrow::Schema>(fields);
+            }();
+            result = schemaResult;
+            return true;
+        });
+        AFL_VERIFY(result);
+        return result;
     }
 
     static TSparsedArrayChunk MakeDefaultChunk(
@@ -224,7 +238,7 @@ public:
         std::unique_ptr<arrow::ArrayBuilder> ValueBuilder;
         ui32 RecordsCount = 0;
         const std::shared_ptr<arrow::Scalar> DefaultValue;
-
+        std::optional<ui32> LastRecordIndex;
     public:
         TSparsedBuilder(const std::shared_ptr<arrow::Scalar>& defaultValue, const ui32 reserveItems, const ui32 reserveData)
             : DefaultValue(defaultValue) {
@@ -233,9 +247,24 @@ public:
         }
 
         void AddRecord(const ui32 recordIndex, const std::string_view value) {
+            if (!!LastRecordIndex) {
+                AFL_VERIFY(*LastRecordIndex < recordIndex);
+            }
+            LastRecordIndex = recordIndex;
             AFL_VERIFY(NArrow::Append<arrow::UInt32Type>(*IndexBuilder, recordIndex));
             AFL_VERIFY(NArrow::Append<TDataType>(*ValueBuilder, arrow::util::string_view(value.data(), value.size())));
             ++RecordsCount;
+        }
+
+        void AddNull(const ui32 recordIndex) {
+            if (!!LastRecordIndex) {
+                AFL_VERIFY(*LastRecordIndex < recordIndex);
+            }
+            LastRecordIndex = recordIndex;
+            if (!!DefaultValue && DefaultValue->type->id() != arrow::null()->id()) {
+                AFL_VERIFY(NArrow::Append<arrow::UInt32Type>(*IndexBuilder, recordIndex));
+                TStatusValidator::Validate(ValueBuilder->AppendNull());
+            }
         }
 
         std::shared_ptr<IChunkedArray> Finish(const ui32 recordsCount) {

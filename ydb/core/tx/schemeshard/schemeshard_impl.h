@@ -359,6 +359,7 @@ public:
     TActorId TabletMigrator;
 
     ui32 MaxCdcInitialScanShardsInFlight = 10;
+    ui32 MaxRestoreBuildIndexShardsInFlight = 0;
 
     TDuration StatsMaxExecuteTime;
     TDuration StatsBatchTimeout;
@@ -603,7 +604,7 @@ public:
     TTabletId SelectCoordinator(TTxId txId, TPathId pathId) const;
     TTabletId SelectCoordinator(TTxId txId, TPathElement::TPtr pathEl) const;
 
-    bool CheckApplyIf(const NKikimrSchemeOp::TModifyScheme& scheme, TString& errStr);
+    bool CheckApplyIf(const NKikimrSchemeOp::TModifyScheme& scheme, TString& errStr, std::optional<TPathElement::EPathType> pathType = {});
     bool CheckLocks(const TPathId pathId, const TTxId lockTxId, TString& errStr) const;
     bool CheckLocks(const TPathId pathId, const NKikimrSchemeOp::TModifyScheme& scheme, TString& errStr) const;
     bool CheckInFlightLimit(TTxState::ETxType txType, TString& errStr) const;
@@ -1426,6 +1427,7 @@ public:
         struct TTxReplySampleK;
         struct TTxReplyReshuffleKMeans;
         struct TTxReplyLocalKMeans;
+        struct TTxReplyPrefixKMeans;
         struct TTxReplyUpload;
 
         struct TTxPipeReset;
@@ -1445,6 +1447,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvSampleKResponse::TPtr& sampleK);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& reshuffle);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvLocalKMeansResponse::TPtr& local);
+    NTabletFlatExecutor::ITransaction* CreateTxReply(TEvDataShard::TEvPrefixKMeansResponse::TPtr& prefix);
     NTabletFlatExecutor::ITransaction* CreateTxReply(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& upload);
     NTabletFlatExecutor::ITransaction* CreatePipeRetry(TIndexBuildId indexBuildId, TTabletId tabletId);
     NTabletFlatExecutor::ITransaction* CreateTxBilling(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev);
@@ -1459,6 +1462,7 @@ public:
     void Handle(TEvDataShard::TEvSampleKResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvReshuffleKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvLocalKMeansResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDataShard::TEvPrefixKMeansResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvIndexBuilder::TEvUploadSampleKResponse::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvIndexBuildingMakeABill::TPtr& ev, const TActorContext& ctx);

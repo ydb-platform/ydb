@@ -70,8 +70,7 @@ private:
         return false;
     }
 
-    TVector<std::pair<TString, Ydb::Type>> GetRequestColumns(TString& errorMessage) const override {
-        Y_UNUSED(errorMessage);
+    TConclusion<TVector<std::pair<TString, Ydb::Type>>> GetRequestColumns() const override {
         return *ColumnTypes;
     }
 

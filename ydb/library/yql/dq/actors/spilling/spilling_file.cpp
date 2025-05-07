@@ -353,7 +353,9 @@ private:
                 closeOp->FileNames.emplace_back(std::move(fp.FileName));
             }
 
-            RunOp("CloseFile", std::move(closeOp), fd);
+            if (!RunOp("CloseFile", std::move(closeOp), fd)) {
+                LOG_E("[CloseFile] Can not run operation");
+            }
         } else {
             MoveFileToClosed(it);
         }
@@ -469,7 +471,12 @@ private:
         writeOp->BlobId = msg.BlobId;
         writeOp->Blob = std::move(msg.Blob);
 
-        RunOp("Write", std::move(writeOp), fd);
+        if (!RunOp("Write", std::move(writeOp), fd)) {
+            TString error = "[Write] Can not run operation";
+            LOG_E(error);
+
+            Send(ev->Sender, new TEvDqSpilling::TEvError(error));
+        } 
     }
 
     void HandleWork(TEvPrivate::TEvWriteFileResponse::TPtr& ev) {
@@ -526,8 +533,15 @@ private:
 
         Counters_->SpillingWriteBlobs->Inc();
 
-        Send(msg.Client, new TEvDqSpilling::TEvWriteResult(msg.BlobId));
-        RunNextOp(fd);
+        if (RunNextOp(fd)) {
+            Send(msg.Client, new TEvDqSpilling::TEvWriteResult(msg.BlobId));
+        } else {
+            TString error = "[WriteFileResponse] Can not run operation";
+            LOG_E(error);
+
+            Send(ev->Sender, new TEvDqSpilling::TEvError(error));
+            return;
+        }
     }
 
     void HandleWork(TEvDqSpilling::TEvRead::TPtr& ev) {
@@ -602,7 +616,12 @@ private:
             readOp->RemoveFile = std::move(fp->FileHandle);
         }
 
-        RunOp("Read", std::move(readOp), fd);
+        if (!RunOp("Read", std::move(readOp), fd)) {
+            TString error = "[Read] Can not run operation";
+            LOG_E(error);
+
+            Send(ev->Sender, new TEvDqSpilling::TEvError(error));
+        } 
     }
 
     void HandleWork(TEvPrivate::TEvReadFileResponse::TPtr& ev) {
@@ -660,8 +679,15 @@ private:
 
         Counters_->SpillingReadBlobs->Inc();
 
-        Send(msg.Client, new TEvDqSpilling::TEvReadResult(msg.BlobId, std::move(msg.Blob)));
-        RunNextOp(fd);
+        if (RunNextOp(fd)) {
+            Send(msg.Client, new TEvDqSpilling::TEvReadResult(msg.BlobId, std::move(msg.Blob)));
+        } else {
+            TString error = "[ReadFileResponse] Can not run operation";
+            LOG_E(error);
+
+            Send(ev->Sender, new TEvDqSpilling::TEvError(error));
+            return;
+        }
     }
 
     void HandleWork(NMon::TEvHttpInfo::TPtr& ev) {
@@ -789,25 +815,28 @@ private:
     }
 
 private:
-    void RunOp(TStringBuf opName, THolder<IObjectInQueue> op, TFileDesc& fd) {
+
+    bool RunOp(TStringBuf opName, THolder<IObjectInQueue> op, TFileDesc& fd) {
         if (fd.HasActiveOp) {
             fd.Ops.emplace_back(opName, std::move(op));
-        } else {
-            fd.HasActiveOp = true;
-            // TODO: retry if fails
-            IoThreadPool_->SafeAddAndOwn(std::move(op));
+            return true;
         }
+
+        fd.HasActiveOp = true;
+
+        return IoThreadPool_->AddAndOwn(std::move(op));
     }
 
-    void RunNextOp(TFileDesc& fd) {
+    bool RunNextOp(TFileDesc& fd) {
         fd.HasActiveOp = false;
-        if (!fd.Ops.empty()) {
-            auto op = std::move(fd.Ops.front().second);
-            auto opName = fd.Ops.front().first;
-            fd.Ops.pop_front();
-
-            RunOp(opName, std::move(op), fd);
+        if (fd.Ops.empty()) {
+            return true;
         }
+        auto op = std::move(fd.Ops.front().second);
+        auto opName = fd.Ops.front().first;
+        fd.Ops.pop_front();
+
+        return RunOp(opName, std::move(op), fd);
     }
 
     void MoveFileToClosed(TFilesIt it) {

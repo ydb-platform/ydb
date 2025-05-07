@@ -667,7 +667,7 @@ ui32 TIndexInfo::GetColumnIndexVerified(const ui32 id) const {
 }
 
 std::vector<std::shared_ptr<NIndexes::TSkipIndex>> TIndexInfo::FindSkipIndexes(
-    const NIndexes::NRequest::TOriginalDataAddress& originalDataAddress, const NArrow::NSSA::EIndexCheckOperation op) const {
+    const NIndexes::NRequest::TOriginalDataAddress& originalDataAddress, const NArrow::NSSA::TIndexCheckOperation& op) const {
     std::vector<std::shared_ptr<NIndexes::TSkipIndex>> result;
     for (auto&& [_, i] : Indexes) {
         if (!i->IsSkipIndex()) {

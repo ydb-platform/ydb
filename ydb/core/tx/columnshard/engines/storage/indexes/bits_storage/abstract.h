@@ -50,7 +50,7 @@ private:
     virtual TConclusion<std::shared_ptr<IBitsStorage>> DoBuild(const TString& data) const = 0;
 
 public:
-    static std::shared_ptr<IBitsStorageConstructor> GetDefault();;
+    static std::shared_ptr<IBitsStorageConstructor> GetDefault();
 
     virtual ~IBitsStorageConstructor() = default;
 

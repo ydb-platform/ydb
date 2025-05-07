@@ -2,7 +2,7 @@
 #include "worker.h"
 #include <ydb/core/tx/conveyor/usage/config.h>
 #include <ydb/core/tx/conveyor/usage/events.h>
-#include <ydb/core/tx/columnshard/counters/common/owner.h>
+#include <ydb/library/signals/owner.h>
 #include <ydb/library/accessor/positive_integer.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
@@ -35,7 +35,8 @@ public:
 
     const ::NMonitoring::THistogramPtr WaitingHistogram;
     const ::NMonitoring::THistogramPtr PackHistogram;
-    const ::NMonitoring::THistogramPtr ExecuteHistogram;
+    const ::NMonitoring::THistogramPtr PackExecuteHistogram;
+    const ::NMonitoring::THistogramPtr TaskExecuteHistogram;
     const ::NMonitoring::THistogramPtr SendBackHistogram;
     const ::NMonitoring::THistogramPtr SendFwdHistogram;
     const ::NMonitoring::THistogramPtr ReceiveTaskHistogram;
@@ -58,7 +59,8 @@ public:
         , UseWorkerRate(TBase::GetDeriviative("UseWorker"))
         , WaitingHistogram(TBase::GetHistogram("Waiting/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
         , PackHistogram(TBase::GetHistogram("ExecutionPack/Count", NMonitoring::LinearHistogram(25, 1, 1)))
-        , ExecuteHistogram(TBase::GetHistogram("Execute/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
+        , PackExecuteHistogram(TBase::GetHistogram("PackExecute/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
+        , TaskExecuteHistogram(TBase::GetHistogram("TaskExecute/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
         , SendBackHistogram(TBase::GetHistogram("SendBack/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
         , SendFwdHistogram(TBase::GetHistogram("SendForward/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))
         , ReceiveTaskHistogram(TBase::GetHistogram("ReceiveTask/Duration/Us", NMonitoring::ExponentialHistogram(25, 2, 50)))

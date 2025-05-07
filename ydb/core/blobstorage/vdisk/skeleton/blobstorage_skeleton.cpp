@@ -2472,6 +2472,9 @@ namespace NKikimr {
 
         void Handle(TEvents::TEvGone::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ctx);
+            if (ev->Sender == ShredActorId) {
+                ShredActorId = {};
+            }
             ActiveActors.Erase(ev->Sender);
         }
 

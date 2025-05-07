@@ -181,6 +181,7 @@ SRCS(
     operation.cpp
     operation.h
     plan_queue_unit.cpp
+    prefix_kmeans.cpp
     prepare_data_tx_in_rs_unit.cpp
     prepare_distributed_erase_tx_in_rs_unit.cpp
     prepare_kqp_data_tx_in_rs_unit.cpp
@@ -294,6 +295,7 @@ IF (OS_WINDOWS)
 ELSE()
     SRCS(
         export_s3_buffer.cpp
+        export_s3_buffer_zstd.cpp
         export_s3_uploader.cpp
         extstorage_usage_config.cpp
         import_s3.cpp
@@ -326,6 +328,7 @@ RECURSE_FOR_TESTS(
     ut_minstep
     ut_object_storage_listing
     ut_order
+    ut_prefix_kmeans
     ut_range_ops
     ut_read_iterator
     ut_read_table

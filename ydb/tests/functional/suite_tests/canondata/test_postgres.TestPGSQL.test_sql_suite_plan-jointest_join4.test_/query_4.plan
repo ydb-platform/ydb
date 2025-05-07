@@ -93,6 +93,30 @@
                                         "PlanNodeId": 14,
                                         "Plans": [
                                             {
+                                                "Node Type": "TableFullScan",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [],
+                                                        "Name": "TableFullScan",
+                                                        "Path": "/Root/postgres_jointest/join4.test_plan/c",
+                                                        "ReadColumns": [
+                                                            "a",
+                                                            "name"
+                                                        ],
+                                                        "ReadRanges": [
+                                                            "name (-\u221e, +\u221e)"
+                                                        ],
+                                                        "ReadRangesPointPrefixLen": "0",
+                                                        "Scan": "Parallel",
+                                                        "Table": "postgres_jointest/join4.test_plan/c"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 13,
+                                                "Tables": [
+                                                    "postgres_jointest/join4.test_plan/c"
+                                                ]
+                                            },
+                                            {
                                                 "Node Type": "Broadcast",
                                                 "PlanNodeId": 12,
                                                 "PlanNodeType": "Connection",
@@ -243,30 +267,6 @@
                                                             }
                                                         ]
                                                     }
-                                                ]
-                                            },
-                                            {
-                                                "Node Type": "TableFullScan",
-                                                "Operators": [
-                                                    {
-                                                        "Inputs": [],
-                                                        "Name": "TableFullScan",
-                                                        "Path": "/Root/postgres_jointest/join4.test_plan/c",
-                                                        "ReadColumns": [
-                                                            "a",
-                                                            "name"
-                                                        ],
-                                                        "ReadRanges": [
-                                                            "name (-\u221e, +\u221e)"
-                                                        ],
-                                                        "ReadRangesPointPrefixLen": "0",
-                                                        "Scan": "Parallel",
-                                                        "Table": "postgres_jointest/join4.test_plan/c"
-                                                    }
-                                                ],
-                                                "PlanNodeId": 13,
-                                                "Tables": [
-                                                    "postgres_jointest/join4.test_plan/c"
                                                 ]
                                             }
                                         ]

@@ -76,12 +76,10 @@ public:
                 PartialArray->GetHeader().GetField(i.second.GetColumnIdx()), nullptr, 0);
             source->GetContext()->GetCommonContext()->GetCounters().GetSubColumns()->GetColumnCounters().OnRead(
                 i.second.GetBlobDataVerified().size());
-            std::vector<NArrow::NAccessor::TDeserializeChunkedArray::TChunk> chunks = { NArrow::NAccessor::TDeserializeChunkedArray::TChunk(
-                GetRecordsCount(), i.second.GetBlobDataVerified()) };
             const std::shared_ptr<NArrow::NAccessor::IChunkedArray> arrOriginal =
-                deserialize
-                    ? columnLoader->ApplyVerified(i.second.GetBlobDataVerified(), GetRecordsCount())
-                    : std::make_shared<NArrow::NAccessor::TDeserializeChunkedArray>(GetRecordsCount(), columnLoader, std::move(chunks), true);
+                deserialize ? columnLoader->ApplyVerified(i.second.GetBlobDataVerified(), GetRecordsCount())
+                            : std::make_shared<NArrow::NAccessor::TDeserializeChunkedArray>(
+                                  GetRecordsCount(), columnLoader, i.second.GetBlobDataVerified(), true);
             if (applyFilter) {
                 PartialArray->AddColumn(i.first, applyFilter->Apply(arrOriginal));
             } else {

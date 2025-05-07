@@ -639,7 +639,8 @@ message TEvScanInitActor {
     optional NActorsProto.TActorId ScanActorId = 2;
     optional uint32 Generation = 3;
     optional uint64 TabletId = 4;
-};
+    optional bool AllowPings = 5;
+}
 
 message TEvScanError {
     optional Ydb.StatusIds.StatusCode Status = 1;
@@ -648,16 +649,26 @@ message TEvScanError {
     optional uint64 TabletId = 4;
 }
 
+message TEvScanPing {
+}
+
 message TEvKqpScanCursor {
+    optional uint64 TabletId = 1;
+
     message TColumnShardScanPlain {
     }
     message TColumnShardScanSimple {
         optional uint64 SourceId = 1;
         optional uint32 StartRecordIndex = 2;
     }
+    message TColumnShardScanNotSortedSimple {
+        optional uint64 SourceId = 1;
+        optional uint32 StartRecordIndex = 2;
+    }
     oneof Implementation {
         TColumnShardScanPlain ColumnShardPlain = 10;
         TColumnShardScanSimple ColumnShardSimple = 11;
+        TColumnShardScanNotSortedSimple ColumnShardNotSortedSimple = 12;
     }
 }
 

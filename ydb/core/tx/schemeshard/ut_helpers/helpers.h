@@ -326,11 +326,11 @@ namespace NSchemeShardUT_Private {
                                const TVector<TExpectedResult>& expectedResults = {NKikimrScheme::StatusAccepted});
 
     // modify acl
-    TEvTx* CreateModifyACLRequest(ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner);
-    void AsyncModifyACL(TTestActorRuntime& runtime, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner);
-    void AsyncModifyACL(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner);
-    void TestModifyACL(TTestActorRuntime& runtime, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner, TEvSchemeShard::EStatus expectedResult = NKikimrScheme::StatusSuccess);
-    void TestModifyACL(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner, TEvSchemeShard::EStatus expectedResult = NKikimrScheme::StatusSuccess);
+    TEvTx* CreateModifyACLRequest(ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner, const TApplyIf& applyIf = {});
+    void AsyncModifyACL(TTestActorRuntime& runtime, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner, const TApplyIf& applyIf = {});
+    void AsyncModifyACL(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner, const TApplyIf& applyIf = {});
+    void TestModifyACL(TTestActorRuntime& runtime, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner, TEvSchemeShard::EStatus expectedResult = NKikimrScheme::StatusSuccess, const TApplyIf& applyIf = {});
+    void TestModifyACL(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner, TEvSchemeShard::EStatus expectedResult = NKikimrScheme::StatusSuccess, const TApplyIf& applyIf = {});
 
     // upgrade subdomain
     TEvTx* UpgradeSubDomainRequest(ui64 txId, const TString& parentPath, const TString& name);

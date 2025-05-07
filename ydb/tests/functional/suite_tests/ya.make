@@ -10,7 +10,9 @@ IF (NOT SANITIZER_TYPE AND NOT WITH_VALGRIND)
         test_stream_query.py
     )
 
-    SIZE(MEDIUM)
+    SIZE(LARGE)
+    TAG(ya:fat)
+
 
     DEPENDS(
         ydb/apps/ydbd

@@ -31,16 +31,25 @@ void TTrivialArray::Reallocate() {
 }
 
 std::shared_ptr<arrow::Array> TTrivialArray::BuildArrayFromOptionalScalar(
-    const std::shared_ptr<arrow::Scalar>& scalar, const std::shared_ptr<arrow::DataType>& type) {
+    const std::shared_ptr<arrow::Scalar>& scalar, const std::shared_ptr<arrow::DataType>& typePtr) {
     if (scalar) {
-        AFL_VERIFY(scalar->type->id() == type->id());
+        AFL_VERIFY(scalar->type->id() == typePtr->id());
         auto builder = NArrow::MakeBuilder(scalar->type, 1);
         TStatusValidator::Validate(builder->AppendScalar(*scalar));
         return NArrow::FinishBuilder(std::move(builder));
     } else {
-        auto builder = NArrow::MakeBuilder(type, 1);
-        TStatusValidator::Validate(builder->AppendNull());
-        return NArrow::FinishBuilder(std::move(builder));
+        std::shared_ptr<arrow::Array> result;
+        NArrow::SwitchType(typePtr->id(), [&](const auto& /*type*/) {
+            static const std::shared_ptr<arrow::Array> arrResult = [&]() {
+                auto builder = NArrow::MakeBuilder(typePtr, 1);
+                TStatusValidator::Validate(builder->AppendNull());
+                return NArrow::FinishBuilder(std::move(builder));
+            }();
+            result = arrResult;
+            return true;
+        });
+        AFL_VERIFY(result);
+        return result;
     }
 }
 

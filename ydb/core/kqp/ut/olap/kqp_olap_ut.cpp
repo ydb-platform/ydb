@@ -332,6 +332,31 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(EmptyColumnsRead) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TLocalHelper(kikimr).CreateTestOlapTable();
+
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
+
+        auto client = kikimr.GetQueryClient();
+
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        {
+            auto it = client.ExecuteQuery(R"(
+                --!syntax_v1
+
+                SELECT 1
+                FROM `/Root/olapStore/olapTable`
+            )",NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(SimpleQueryOlapStats) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
@@ -812,54 +837,81 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 128);
 
         auto tableClient = kikimr.GetTableClient();
-        auto selectQueryWithSort = TString(R"(
+        auto selectQuerySortDesc = TString(R"(
             --!syntax_v1
             SELECT `timestamp` FROM `/Root/olapStore/olapTable` ORDER BY `timestamp` DESC LIMIT 4;
         )");
-        auto selectQuery = TString(R"(
+        auto selectQuerySortAsc = TString(R"(
             --!syntax_v1
             SELECT `timestamp` FROM `/Root/olapStore/olapTable` ORDER BY `timestamp` LIMIT 4;
         )");
-
-        auto it = tableClient.StreamExecuteScanQuery(selectQuery, scanSettings).GetValueSync();
-        auto result = CollectStreamResult(it);
+        auto selectQueryNoSort = TString(R"(
+            --!syntax_v1
+            SELECT `timestamp` FROM `/Root/olapStore/olapTable` LIMIT 4;
+        )");
 
         NJson::TJsonValue plan, node, reverse, limit, pushedLimit;
-        NJson::ReadJsonTree(*result.PlanJson, &plan, true);
-        Cerr << *result.PlanJson << Endl;
-        Cerr << result.QueryStats->query_plan() << Endl;
-        Cerr << result.QueryStats->query_ast() << Endl;
+        {
+            auto it = tableClient.StreamExecuteScanQuery(selectQuerySortAsc, scanSettings).GetValueSync();
+            auto result = CollectStreamResult(it);
 
-        node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableFullScan");
-        UNIT_ASSERT(node.IsDefined());
-        reverse = FindPlanNodeByKv(node, "Reverse", "false");
-        UNIT_ASSERT(!reverse.IsDefined());
-        pushedLimit = FindPlanNodeByKv(node, "ReadLimit", "4");
-        UNIT_ASSERT(pushedLimit.IsDefined());
-        limit = FindPlanNodeByKv(node, "Limit", "4");
-        UNIT_ASSERT(limit.IsDefined());
+            NJson::ReadJsonTree(*result.PlanJson, &plan, true);
+            Cerr << *result.PlanJson << Endl;
+            Cerr << result.QueryStats->query_plan() << Endl;
+            Cerr << result.QueryStats->query_ast() << Endl;
 
-        // Check that Reverse flag is set in query plan
-        it = tableClient.StreamExecuteScanQuery(selectQueryWithSort, scanSettings).GetValueSync();
-        result = CollectStreamResult(it);
+            node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableFullScan");
+            UNIT_ASSERT(node.IsDefined());
+            reverse = FindPlanNodeByKv(node, "Reverse", "false");
+            UNIT_ASSERT(reverse.IsDefined());
+            pushedLimit = FindPlanNodeByKv(node, "ReadLimit", "4");
+            UNIT_ASSERT(pushedLimit.IsDefined());
+            limit = FindPlanNodeByKv(node, "Limit", "4");
+            UNIT_ASSERT(limit.IsDefined());
+        }
 
-        NJson::ReadJsonTree(*result.PlanJson, &plan, true);
-        Cerr << "==============================" << Endl;
-        Cerr << *result.PlanJson << Endl;
-        Cerr << result.QueryStats->query_plan() << Endl;
-        Cerr << result.QueryStats->query_ast() << Endl;
+        {
+            // Check that Reverse flag is set in query plan
+            auto it = tableClient.StreamExecuteScanQuery(selectQuerySortDesc, scanSettings).GetValueSync();
+            auto result = CollectStreamResult(it);
 
-        node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableFullScan");
-        UNIT_ASSERT(node.IsDefined());
-        reverse = FindPlanNodeByKv(node, "Reverse", "true");
-        UNIT_ASSERT(reverse.IsDefined());
-        limit = FindPlanNodeByKv(node, "Limit", "4");
-        UNIT_ASSERT(limit.IsDefined());
-        pushedLimit = FindPlanNodeByKv(node, "ReadLimit", "4");
-        UNIT_ASSERT(pushedLimit.IsDefined());
+            NJson::ReadJsonTree(*result.PlanJson, &plan, true);
+            Cerr << "==============================" << Endl;
+            Cerr << *result.PlanJson << Endl;
+            Cerr << result.QueryStats->query_plan() << Endl;
+            Cerr << result.QueryStats->query_ast() << Endl;
+
+            node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableFullScan");
+            UNIT_ASSERT(node.IsDefined());
+            reverse = FindPlanNodeByKv(node, "Reverse", "true");
+            UNIT_ASSERT(reverse.IsDefined());
+            limit = FindPlanNodeByKv(node, "Limit", "4");
+            UNIT_ASSERT(limit.IsDefined());
+            pushedLimit = FindPlanNodeByKv(node, "ReadLimit", "4");
+            UNIT_ASSERT(pushedLimit.IsDefined());
+        }
+
+        {
+            // Check that Reverse flag is set in query plan
+            auto it = tableClient.StreamExecuteScanQuery(selectQueryNoSort, scanSettings).GetValueSync();
+            auto result = CollectStreamResult(it);
+
+            NJson::ReadJsonTree(*result.PlanJson, &plan, true);
+            Cerr << "==============================" << Endl;
+            Cerr << *result.PlanJson << Endl;
+            Cerr << result.QueryStats->query_plan() << Endl;
+            Cerr << result.QueryStats->query_ast() << Endl;
+
+            node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan");
+            UNIT_ASSERT(node.IsDefined());
+            limit = FindPlanNodeByKv(node, "Limit", "4");
+            UNIT_ASSERT(limit.IsDefined());
+            pushedLimit = FindPlanNodeByKv(node, "ReadLimit", "4");
+            UNIT_ASSERT(pushedLimit.IsDefined());
+        }
 
         // Run actual request in case explain did not execute anything
-        it = tableClient.StreamExecuteScanQuery(selectQueryWithSort).GetValueSync();
+        auto it = tableClient.StreamExecuteScanQuery(selectQuerySortDesc).GetValueSync();
 
         UNIT_ASSERT(it.IsSuccess());
 
@@ -1092,11 +1144,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         scanSettings.Explain(true);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
-#if SSA_RUNTIME_VERSION >= 4U
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5, true);
-#else
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 5, false);
-#endif
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         auto tableClient = kikimr.GetTableClient();
@@ -1153,13 +1201,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"((`level`, `uid`) != (Int32("1"), NULL))",
             R"(`level` >= CAST("2" As Int32))",
             R"(CAST("2" As Int32) >= `level`)",
-#if SSA_RUNTIME_VERSION >= 2U
             R"(`uid` LIKE "%30000%")",
             R"(`uid` LIKE "uid%")",
             R"(`uid` LIKE "%001")",
             R"(`uid` LIKE "uid%001")",
-#endif
-#if SSA_RUNTIME_VERSION >= 4U
             R"(`level` + 2 < 5)",
             R"(`level` - 2 >= 1)",
             R"(`level` * 3 > 4)",
@@ -1187,7 +1232,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             //R"(`timestamp` >= Timestamp("1970-01-01T00:00:00.000001Z"))",
             R"(`timestamp` >= Timestamp("1970-01-01T00:00:03.000001Z") AND `level` < 4)",
             R"((`timestamp`, `level`) >= (Timestamp("1970-01-01T00:00:03.000001Z"), 3))",
-#endif
 #if SSA_RUNTIME_VERSION >= 5U
             R"(`resource_id` != "10001" XOR "XXX" == "YYY")",
             R"(IF(`level` > 3, -`level`, +`level`) < 2)",
@@ -1257,27 +1301,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             R"(`level` = NULL)",
             R"(`level` > NULL)",
             R"(Re2::Match('uid.*')(`uid`))",
-#if SSA_RUNTIME_VERSION < 2U
-            R"(`uid` LIKE "%30000%")",
-            R"(`uid` LIKE "uid%")",
-            R"(`uid` LIKE "%001")",
-            R"(`uid` LIKE "uid%001")",
-#endif
-#if SSA_RUNTIME_VERSION < 4U
-            R"(`level` * 3.14 > 4)",
-            R"(LENGTH(`uid`) > 0 OR `resource_id` = "10001")",
-            R"((LENGTH(`uid`) > 0 AND `resource_id` = "10001") OR `resource_id` = "10002")",
-            R"((LENGTH(`uid`) > 0 OR `resource_id` = "10002") AND (LENGTH(`uid`) < 15 OR `resource_id` = "10001"))",
-            R"(NOT(LENGTH(`uid`) > 0 AND `resource_id` = "10001"))",
-            R"(Unwrap(`level`/1) = `level` AND `resource_id` = "10001")",
-            R"(NOT(LENGTH(`uid`) > 0 OR `resource_id` = "10001"))",
-            R"(`level` + 2 < 5)",
-            R"(`level` - 2 >= 1)",
-            R"(`level` * 3 > 4)",
-            R"(`level` / 2 <= 1)",
-            R"(`level` % 3 != 1)",
-            R"(`timestamp` >= Timestamp("1970-01-01T00:00:00.000001Z"))",
-#endif
         };
 
         for (const auto& predicate: testDataNoPush) {
@@ -1360,7 +1383,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                           TStringBuilder() << "NarrowMap was removed. Query: " << pushQuery);
         }
     }
-#if SSA_RUNTIME_VERSION >= 2U
     Y_UNIT_TEST(PredicatePushdown_DifferentLvlOfFilters) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
@@ -1380,11 +1402,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             { R"(`uid` NOT LIKE "%30000%")", "Filter-TableFullScan" },
             { R"(`uid` LIKE "uid%")", "Filter-TableFullScan" },
             { R"(`uid` LIKE "%001")", "Filter-TableFullScan" },
-#if SSA_RUNTIME_VERSION >= 4U
             { R"(`uid` LIKE "uid%001")", "Filter-TableFullScan" },
-#else
-            { R"(`uid` LIKE "uid%001")", "Filter-TableFullScan" }, // We have filter (Size >= 6)
-#endif
         };
         std::string query = R"(
             SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE
@@ -1412,13 +1430,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             }
         }
     }
-#endif
 
-#if SSA_RUNTIME_VERSION >= 3U
     Y_UNIT_TEST(PredicatePushdown_LikePushedDownForStringType) {
-#else
-    Y_UNIT_TEST(PredicatePushdown_LikeNotPushedDownForStringType) {
-#endif
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -1437,13 +1450,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto result = CollectStreamResult(it);
         auto ast = result.QueryStats->Getquery_ast();
-#if SSA_RUNTIME_VERSION >= 3U
         UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
                         TStringBuilder() << "Predicate wasn't pushed down. Query: " << query);
-#else
-        UNIT_ASSERT_C(ast.find("KqpOlapFilter") == std::string::npos,
-                        TStringBuilder() << "Predicate was pushed down. Query: " << query);
-#endif
     }
 #if SSA_RUNTIME_VERSION < 5U
     Y_UNIT_TEST(PredicatePushdown_LikeNotPushedDownIfAnsiLikeDisabled) {
@@ -1496,9 +1504,15 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto result = CollectStreamResult(it);
         auto ast = result.QueryStats->Getquery_ast();
         UNIT_ASSERT_C(ast.find(R"(('eq '"resource_id")") != std::string::npos,
-                          TStringBuilder() << "Predicate not pushed down. Query: " << query);
-        UNIT_ASSERT_C(ast.find(R"(('gt '"level")") == std::string::npos,
-                          TStringBuilder() << "Predicate pushed down. Query: " << query);
+                          TStringBuilder() << "Subpredicate is not pushed down. Query: " << query);
+        UNIT_ASSERT_C(ast.find(R"(('gt '"level")") != std::string::npos,
+                          TStringBuilder() << "Subpredicate is not pushed down. Query: " << query);
+        //This check is based on an assumpltion, that for pushed down predicates column names are preserved in AST
+        //But for non-pushed down predicates column names are (usually) replaced with a label, started with $. It' not a rule, but a heuristic
+        //So this check may require a correction when some ast optimization rules are changed
+        UNIT_ASSERT_C(ast.find(R"((Unwrap (/ $)") != std::string::npos,
+                          TStringBuilder() << "Unsafe subpredicate is pushed down. Query: " << query);
+
         UNIT_ASSERT_C(ast.find("NarrowMap") != std::string::npos,
                           TStringBuilder() << "NarrowMap was removed. Query: " << query);
     }
@@ -1812,6 +1826,87 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         NDataShard::NKqpHelpers::SendRequest(*runtime, streamSender, NDataShard::NKqpHelpers::MakeStreamRequest(streamSender, "SELECT COUNT(*) FROM `/Root/largeOlapStore/largeOlapTable`;", false));
         auto ev = runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
         UNIT_ASSERT_VALUES_EQUAL(result, insertRows);
+    }
+
+    Y_UNIT_TEST(PredicatePushdownWithParametersILike) {
+        constexpr bool logQueries = true;
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+
+        TLocalHelper(kikimr.GetTestServer()).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
+
+        auto tableClient = kikimr.GetTableClient();
+
+        auto buildQuery = [](bool pushEnabled) {
+            TStringBuilder builder;
+
+            builder << "--!syntax_v1" << Endl;
+
+            if (!pushEnabled) {
+                builder << "PRAGMA Kikimr.OptEnableOlapPushdown = \"false\";" << Endl;
+            }
+
+            builder << R"(
+                DECLARE $in_uid AS Utf8;
+                DECLARE $in_level AS Int32;
+
+                SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE
+                    uid ILIKE "uid_%" || $in_uid || "%" AND level > $in_level
+                ORDER BY `timestamp`;
+            )" << Endl;
+
+            return builder;
+        };
+
+        auto normalQuery = buildQuery(false);
+        auto pushQuery = buildQuery(true);
+
+        auto params = tableClient.GetParamsBuilder()
+            .AddParam("$in_uid")
+                .Utf8("3000")
+                .Build()
+            .AddParam("$in_level")
+                .Int32(2)
+                .Build()
+            .Build();
+
+        auto it = tableClient.StreamExecuteScanQuery(normalQuery, params).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        auto goodResult = CollectStreamResult(it);
+
+        it = tableClient.StreamExecuteScanQuery(pushQuery, params).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        auto pushResult = CollectStreamResult(it);
+
+        if (logQueries) {
+            Cerr << "Query: " << normalQuery << Endl;
+            Cerr << "Expected: " << goodResult.ResultSetYson << Endl;
+            Cerr << "Received: " << pushResult.ResultSetYson << Endl;
+        }
+
+        CompareYson(goodResult.ResultSetYson, pushResult.ResultSetYson);
+
+        it = tableClient.StreamExecuteScanQuery(pushQuery, scanSettings).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        auto result = CollectStreamResult(it);
+        auto ast = result.QueryStats->Getquery_ast();
+
+        UNIT_ASSERT_C(ast.find("KqpOlapFilter") != std::string::npos,
+                      TStringBuilder() << "Predicate not pushed down. Query: " << pushQuery);
+
+        NJson::TJsonValue plan, readRange;
+        NJson::ReadJsonTree(*result.PlanJson, &plan, true);
+
+        Cerr << result.PlanJson << Endl;
+
+        readRange = FindPlanNodeByKv(plan, "Name", "TableFullScan");
+        UNIT_ASSERT(readRange.IsDefined());
     }
 
     Y_UNIT_TEST(PredicatePushdownWithParameters) {
@@ -2258,7 +2353,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         auto tableClient = kikimr.GetTableClient();
 
-#if SSA_RUNTIME_VERSION >= 4U
         const std::set<std::string> numerics = {"Int8", "Int16", "Int32", "Int64", "UInt8", "UInt16", "UInt32", "UInt64", "Float", "Double"};
         const std::map<std::string, std::set<std::string>> exceptions = {
             {"Int8", numerics},
@@ -2274,18 +2368,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             {"String", {"Utf8"}},
             {"Utf8", {"String"}},
         };
-#else
-        std::map<std::string, std::set<std::string>> exceptions = {
-            {"Int8", {"Int16", "Int32"}},
-            {"Int16", {"Int8", "Int32"}},
-            {"Int32", {"Int8", "Int16"}},
-            {"UInt8", {"UInt16", "UInt32"}},
-            {"UInt16", {"UInt8", "UInt32"}},
-            {"UInt32", {"UInt8", "UInt16"}},
-            {"String", {"Utf8"}},
-            {"Utf8", {"String", "Json", "Yson"}},
-        };
-#endif
 
         std::vector<std::string> allTypes = {
             //"Bool",
@@ -3331,9 +3413,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             )", noTx).GetValueSync();
             UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-            
+
             result = queryClient.ExecuteQuery(R"(
-                UPSERT INTO Test (Id, Name, Comment) VALUES 
+                UPSERT INTO Test (Id, Name, Comment) VALUES
                     (10,  "n1", "aa"),
                     (20, "n2", "bb"),
                     (30, "n3", "cc"),
@@ -3387,6 +3469,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTableTest` WHERE time > CurrentUtcTimestamp()", "[[1u]]");
     }
+
     Y_UNIT_TEST(ReverseMerge) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
@@ -3430,6 +3513,65 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         testHelper.ReadData(
             "SELECT k, v FROM (SELECT * FROM `/Root/ColumnTableTest` WHERE k >= 0 AND k < 1000) ORDER BY k DESC LIMIT 3", "[[3u;0u];[2u;0u];[1u;0u]]");
+}
+
+    Y_UNIT_TEST(WithDefaultValue) {
+        std::unique_ptr<TKikimrRunner> Kikimr;
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto kikimr = std::make_unique<TKikimrRunner>(settings);
+        Tests::NCommon::TLoggerInit(*kikimr).Initialize();
+        auto queryClient = kikimr->GetQueryClient();
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                CREATE TABLE Test (
+                    Id Uint32 not null,
+                    Value String DEFAULT "aba",
+                    PRIMARY KEY (Id)
+                ) WITH (
+                    STORE = COLUMN
+                );
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Default values are not supported in column tables", result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(SimpleRequestHasProjections) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+        TLocalHelper(kikimr).CreateTestOlapTable();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 20);
+        auto client = kikimr.GetTableClient();
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+
+                SELECT 1
+                FROM `/Root/olapStore/olapTable`
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+
+            CompareYson(result, R"([[1];[1];[1];[1];[1];[1];[1];[1];[1];[1];[1];[1];[1];[1];[1];[1];[1];[1];[1];[1]])");
+        }
+
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+
+                SELECT count(*)
+                FROM `/Root/olapStore/olapTable`
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+
+            CompareYson(result, R"([[20u]])");
+        }
     }
 }
 }

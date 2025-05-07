@@ -207,6 +207,31 @@
                                         "PlanNodeId": 17,
                                         "Plans": [
                                             {
+                                                "Node Type": "TableFullScan",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [],
+                                                        "Name": "TableFullScan",
+                                                        "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
+                                                        "ReadColumns": [
+                                                            "stringu1",
+                                                            "unique2"
+                                                        ],
+                                                        "ReadRanges": [
+                                                            "unique1 (-\u221e, +\u221e)",
+                                                            "unique2 (-\u221e, +\u221e)"
+                                                        ],
+                                                        "ReadRangesPointPrefixLen": "0",
+                                                        "Scan": "Parallel",
+                                                        "Table": "postgres_jointest/join0.test_plan/tenk1"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 16,
+                                                "Tables": [
+                                                    "postgres_jointest/join0.test_plan/tenk1"
+                                                ]
+                                            },
+                                            {
                                                 "Node Type": "Broadcast",
                                                 "PlanNodeId": 15,
                                                 "PlanNodeType": "Connection",
@@ -383,31 +408,6 @@
                                                             }
                                                         ]
                                                     }
-                                                ]
-                                            },
-                                            {
-                                                "Node Type": "TableFullScan",
-                                                "Operators": [
-                                                    {
-                                                        "Inputs": [],
-                                                        "Name": "TableFullScan",
-                                                        "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
-                                                        "ReadColumns": [
-                                                            "stringu1",
-                                                            "unique2"
-                                                        ],
-                                                        "ReadRanges": [
-                                                            "unique1 (-\u221e, +\u221e)",
-                                                            "unique2 (-\u221e, +\u221e)"
-                                                        ],
-                                                        "ReadRangesPointPrefixLen": "0",
-                                                        "Scan": "Parallel",
-                                                        "Table": "postgres_jointest/join0.test_plan/tenk1"
-                                                    }
-                                                ],
-                                                "PlanNodeId": 16,
-                                                "Tables": [
-                                                    "postgres_jointest/join0.test_plan/tenk1"
                                                 ]
                                             }
                                         ]

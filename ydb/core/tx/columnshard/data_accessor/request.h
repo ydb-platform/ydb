@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
+#include <ydb/library/signals/object_counter.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>

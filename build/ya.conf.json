@@ -192,6 +192,15 @@
             },
             "formula": "build/platform/clang/clang18.json"
         },
+        "clangd": {
+            "executable": {
+                "clangd": [
+                    "bin",
+                    "clangd"
+                ]
+            },
+            "formula": "build/platform/clang/clangd/clangd18.json"
+        },
         "gdb": {
             "executable": {
                 "gcore": [
@@ -1901,6 +1910,49 @@
                 }
             }
         },
+        "clangd": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "x86_64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "aarch64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                }
+            ],
+            "tools": {
+                "clangd": {
+                    "bottle": "clangd",
+                    "executable": "clangd"
+                }
+            }
+        },
         "gdb": {
             "env": {
                 "TERMINFO": [
@@ -2366,6 +2418,9 @@
         },
         "clang-rename": {
             "description": "Run Clang-Rename refactoring tool"
+        },
+        "clangd": {
+            "description": "Run clangd language server"
         },
         "gcov": {
             "description": "Run gcov"

@@ -55,7 +55,7 @@ public:
     size_t GetNumActiveSlots() {
         size_t sum = 0;
         for (TOwner id: ActiveOwnerIds) {
-            sum += QuotaForOwner[id].Weight ?: 1;
+            sum += QuotaForOwner[id].GetWeight();
         }
         return sum;
     }
@@ -69,10 +69,10 @@ public:
         size_t parts = Max(ExpectedOwnerCount, GetNumActiveSlots());
         if (parts) {
             i64 limit = Total / parts;
-            
+
             // Divide into equal parts and that's it.
             for (TOwner id : ActiveOwnerIds) {
-                auto weight = QuotaForOwner[id].Weight ?: 1;
+                auto weight = QuotaForOwner[id].GetWeight();
                 ForceHardLimit(id, limit * weight);
             }
         }
@@ -165,7 +165,7 @@ public:
         str << "<td>" << q.GetHardLimit() << "</td>";
         str << "<td>" << q.GetFree() << "</td>";
         str << "<td>" << q.GetUsed() << "</td>";
-        str << "<td>" << (q.Weight ?: 1) << "</td>";
+        str << "<td>" << q.GetWeight() << "</td>";
         double occupancy;
         str << "<td>" << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(q.EstimateSpaceColor(0, &occupancy)) << "</td>";
         str << "<td>" << occupancy << "</td>";

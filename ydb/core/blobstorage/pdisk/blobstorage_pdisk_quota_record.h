@@ -62,6 +62,10 @@ public:
         return AtomicGet(Free);
     }
 
+    ui32 GetWeight() const {
+        return Weight ?: 1;
+    }
+
     TString Print() const {
         TStringStream str;
         Print(str);
@@ -77,7 +81,7 @@ public:
         str << " HardLimit# " << HardLimit;
         str << " Free# " << Free;
         str << " Used# " << GetUsed();
-        str << " Weight# " << Weight;
+        str << " Weight# " << GetWeight();
         double occupancy;
         str << " CurrentColor# " << NKikimrBlobStorage::TPDiskSpaceColor::E_Name(EstimateSpaceColor(0, &occupancy)) << "\n";
         str << " Occupancy# " << occupancy << "\n";

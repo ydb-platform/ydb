@@ -1,6 +1,7 @@
 #include "interconnect_handshake.h"
 #include "handshake_broker.h"
 #include "interconnect_tcp_proxy.h"
+#include "rdma/rdma_ctx.h"
 
 #include <ydb/library/actors/core/actor_coroutine.h>
 #include <ydb/library/actors/core/log.h>
@@ -242,6 +243,7 @@ namespace NActors {
         std::optional<TBrokerLeaseHolder> BrokerLeaseHolder;
         std::optional<TString> HandshakeId; // for XDC
         bool SubscribedForConnection = false;
+        NInterconnect::NRdma::TRdmaCtx* RdmaCtx;
 
     public:
         THandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self, const TActorId& peer,
@@ -268,12 +270,13 @@ namespace NActors {
             EntropyPool().Read(HandshakeId->Detach(), HandshakeId->size());
         }
 
-        THandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket)
+        THandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket, NInterconnect::NRdma::TRdmaCtx* rdmaCtx)
             : TActorCoroImpl(StackSize, true)
             , Common(std::move(common))
             , MainChannel(this, std::move(socket))
             , ExternalDataChannel(this, nullptr)
             , HandshakeKind("incoming handshake")
+            , RdmaCtx(rdmaCtx)
         {
             Y_ABORT_UNLESS(MainChannel);
             PeerAddr = TString::Uninitialized(1024);
@@ -282,6 +285,7 @@ namespace NActors {
             } else {
                 PeerAddr.clear();
             }
+            Y_UNUSED(RdmaCtx);
         }
 
         void UpdatePrefix() {
@@ -1230,8 +1234,8 @@ namespace NActors {
             std::move(peerHostName), std::move(params)), IActor::EActivityType::INTERCONNECT_HANDSHAKE);
     }
 
-    IActor* CreateIncomingHandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket) {
-        return new TActorCoro(MakeHolder<THandshakeActor>(std::move(common), std::move(socket)),
+    IActor* CreateIncomingHandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket, NInterconnect::NRdma::TRdmaCtx* rdmaCtx) {
+        return new TActorCoro(MakeHolder<THandshakeActor>(std::move(common), std::move(socket), rdmaCtx),
             IActor::EActivityType::INTERCONNECT_HANDSHAKE);
     }
 

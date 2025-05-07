@@ -78,6 +78,9 @@ void TConfigurationInfoCollector::Handle(TEvPrivate::TEvTimeout::TPtr &ev) {
     Y_UNUSED(ev);
     STLOG(PRI_WARN, CMS_CONFIGS, CIG5, "Collection timed out. Missing responses from " << PendingNodes.size() << " nodes.");
     UnknownNodes += PendingNodes.size();
+    for (ui32 nodeId : PendingNodes) {
+        UnknownNodesList.push_back(nodeId);
+    }
     PendingNodes.clear();
     ReplyAndDie();
 }

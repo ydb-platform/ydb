@@ -6,7 +6,6 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/map_subrange.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
     struct TBlobId {

@@ -3,8 +3,17 @@ import yatest
 import pytest
 
 from ydb.tests.sql.lib.test_base import TestBase
-from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, index_first, index_second, \
-    index_first_sync, index_second_sync, index_three_sync, index_four_sync, index_zero_sync
+from ydb.tests.datashard.lib.types_of_variables import (
+    pk_types,
+    non_pk_types,
+    index_first,
+    index_second,
+    index_first_sync,
+    index_second_sync,
+    index_three_sync,
+    index_four_sync,
+    index_zero_sync,
+)
 from ydb.tests.datashard.lib.dml_operations import DMLOperations
 
 
@@ -22,32 +31,34 @@ class TestDumpRestore(TestBase):
             # index_first_sync, "", "UNIQUE", "SYNC"),
             # ("table_index_0_UNIQUE_SYNC", pk_types, {},
             # index_zero_sync, "", "UNIQUE", "SYNC"),
-            ("table_index_4__SYNC", pk_types, {},
-             index_four_sync, "", "", "SYNC"),
-            ("table_index_3__SYNC", pk_types, {},
-             index_three_sync, "", "", "SYNC"),
-            ("table_index_2__SYNC", pk_types, {},
-             index_second_sync, "", "", "SYNC"),
-            ("table_index_1__SYNC", pk_types, {},
-             index_first_sync, "", "", "SYNC"),
-            ("table_index_0__SYNC", pk_types, {},
-             index_zero_sync, "", "", "SYNC"),
+            ("table_index_4__SYNC", pk_types, {}, index_four_sync, "", "", "SYNC"),
+            ("table_index_3__SYNC", pk_types, {}, index_three_sync, "", "", "SYNC"),
+            ("table_index_2__SYNC", pk_types, {}, index_second_sync, "", "", "SYNC"),
+            ("table_index_1__SYNC", pk_types, {}, index_first_sync, "", "", "SYNC"),
+            ("table_index_0__SYNC", pk_types, {}, index_zero_sync, "", "", "SYNC"),
             ("table_index_1__ASYNC", pk_types, {}, index_second, "", "", "ASYNC"),
             ("table_index_0__ASYNC", pk_types, {}, index_first, "", "", "ASYNC"),
-            ("table_all_types", pk_types, {
-             **pk_types, **non_pk_types}, {}, "", "", ""),
+            ("table_all_types", pk_types, {**pk_types, **non_pk_types}, {}, "", "", ""),
             ("table_ttl_DyNumber", pk_types, {}, {}, "DyNumber", "", ""),
             ("table_ttl_Uint32", pk_types, {}, {}, "Uint32", "", ""),
             ("table_ttl_Uint64", pk_types, {}, {}, "Uint64", "", ""),
             ("table_ttl_Datetime", pk_types, {}, {}, "Datetime", "", ""),
             ("table_ttl_Timestamp", pk_types, {}, {}, "Timestamp", "", ""),
             ("table_ttl_Date", pk_types, {}, {}, "Date", "", ""),
-        ]
+        ],
     )
-    def test_dump_restore(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
+    def test_dump_restore(
+        self,
+        table_name: str,
+        pk_types: dict[str, str],
+        all_types: dict[str, str],
+        index: dict[str, str],
+        ttl: str,
+        unique: str,
+        sync: str,
+    ):
         dml = DMLOperations(self)
-        dml.create_table(table_name, pk_types, all_types,
-                         index, ttl, unique, sync)
+        dml.create_table(table_name, pk_types, all_types, index, ttl, unique, sync)
         dml.insert(table_name, all_types, pk_types, index, ttl)
         self.dump(table_name)
         dml.query(f"drop table {table_name}")
@@ -55,25 +66,35 @@ class TestDumpRestore(TestBase):
         dml.select_after_insert(table_name, all_types, pk_types, index, ttl)
 
     def dump(self, table_name):
-        yatest.common.execute([
-            yatest.common.binary_path(os.getenv('YDB_CLI_BINARY')),
-            '-e', 'grpc://'+self.get_endpoint(),
-            "--database", self.get_database(),
-            "tools",
-            "dump",
-            "--path", "/Root",
-            "--output",
-            f"dump_{table_name}"
-        ])
+        yatest.common.execute(
+            [
+                yatest.common.binary_path(os.getenv('YDB_CLI_BINARY')),
+                '-e',
+                'grpc://' + self.get_endpoint(),
+                "--database",
+                self.get_database(),
+                "tools",
+                "dump",
+                "--path",
+                "/Root",
+                "--output",
+                f"dump_{table_name}",
+            ]
+        )
 
     def restore(self, table_name):
-        yatest.common.execute([
-            yatest.common.binary_path(os.getenv('YDB_CLI_BINARY')),
-            '-e', 'grpc://'+self.get_endpoint(),
-            "--database", self.get_database(),
-            "tools",
-            "restore",
-            "--path", "/Root",
-            "--input",
-            f"dump_{table_name}"
-        ])
+        yatest.common.execute(
+            [
+                yatest.common.binary_path(os.getenv('YDB_CLI_BINARY')),
+                '-e',
+                'grpc://' + self.get_endpoint(),
+                "--database",
+                self.get_database(),
+                "tools",
+                "restore",
+                "--path",
+                "/Root",
+                "--input",
+                f"dump_{table_name}",
+            ]
+        )

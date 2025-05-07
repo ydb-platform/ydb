@@ -11,8 +11,18 @@ def format_sql_value(value, type_name):
         value = value.strftime("%Y-%m-%dT%H:%M:%SZ")
     if type_name == "String" or type_name == "Utf8":
         return f"'{value}'"
-    if type_name in non_pk_types.keys() or type_name == "Datetime64" or type_name == "Date32" or type_name == "Datetime" or \
-            type_name == "Date" or type_name == "UUID" or type_name == "DyNumber" or type_name == "Decimal(35,10)" or type_name == "Decimal(22,9)" or type_name == "Decimal(15,0))":
+    if (
+        type_name in non_pk_types.keys()
+        or type_name == "Datetime64"
+        or type_name == "Date32"
+        or type_name == "Datetime"
+        or type_name == "Date"
+        or type_name == "UUID"
+        or type_name == "DyNumber"
+        or type_name == "Decimal(35,10)"
+        or type_name == "Decimal(22,9)"
+        or type_name == "Decimal(15,0))"
+    ):
         return f"CAST('{value}' AS {type_name})"
     return f"CAST({value} AS {type_name})"
 
@@ -125,11 +135,9 @@ pk_types = {
     "Decimal(22,9)": lambda i: "{}.123".format(i),
     "Decimal(35,10)": lambda i: "{}.123456".format(i),
     "DyNumber": lambda i: float(f"{i}e1"),
-
     "String": lambda i: f"String {i}",
     "Utf8": lambda i: f"Utf8 {i}",
     "UUID": lambda i: UUID("3{:03}5678-e89b-12d3-a456-556642440000".format(i)),
-
     "Date": lambda i: datetime.strptime("2{:03}-01-01".format(i), "%Y-%m-%d").date(),
     "Datetime": lambda i: datetime.strptime("2{:03}-10-02T11:00:00Z".format(i), "%Y-%m-%dT%H:%M:%SZ"),
     "Timestamp": lambda i: 1696200000000000 + i * 100000000,
@@ -145,5 +153,5 @@ non_pk_types = {
     "Double": lambda i: i + 0.2,
     "Json": lambda i: "{{\"another_key\": {}}}".format(i),
     "JsonDocument": lambda i: "{{\"another_doc_key\": {}}}".format(i),
-    "Yson": lambda i: "[{}]".format(i)
+    "Yson": lambda i: "[{}]".format(i),
 }

@@ -3,6 +3,7 @@
 #include "queue_backpressure_server.h"
 #include "unisched.h"
 #include "common.h"
+#include "load_based_timeout.h"
 
 //#define BSQUEUE_EVENT_COUNTERS 1
 
@@ -48,6 +49,10 @@ class TVDiskBackpressureClientActor : public TActorBootstrapped<TVDiskBackpressu
     TBlobStorageGroupType GType;
     TInstant ConnectionFailureTime;
 
+    constexpr static TDuration MinimumReconnectTimeout = TDuration::Seconds(1);
+    constexpr static TDuration ReconnectTimeoutPerRequest = TDuration::Seconds(1) / 100'000;
+    TLoadBasedTimeoutManager ReconnectTimeoutManager;
+
     enum class EState {
         INITIAL,
         CHECK_READINESS_SENT,
@@ -91,6 +96,7 @@ public:
         , InterconnectChannel(interconnectChannel)
         , Info(info)
         , GType(info->Type)
+        , ReconnectTimeoutManager(MinimumReconnectTimeout, ReconnectTimeoutPerRequest)
     {
         Y_ABORT_UNLESS(Info);
     }
@@ -503,7 +509,7 @@ private:
                     << " ConnectionFailureTime# " << ConnectionFailureTime);
             }
 
-            ResetConnection(ctx, NKikimrProto::ERROR, "node disconnected", TDuration::Seconds(1));
+            ResetConnection(ctx, NKikimrProto::ERROR, "node disconnected", ReconnectTimeoutManager.GetTimeoutForNewRequest());
             Y_ABORT_UNLESS(!SessionId || SessionId == ev->Sender);
             SessionId = {};
         }
@@ -562,6 +568,8 @@ private:
             return; // we don't expect this message right now, or this is some race reply
         }
 
+        ReconnectTimeoutManager.RequestCompleted();
+
         const auto& record = ev->Get()->Record;
         if (record.GetStatus() != NKikimrProto::NOTREADY) {
             ExtraBlockChecksSupport = record.GetExtraBlockChecksSupport();
@@ -608,7 +616,7 @@ private:
             << " ConnectionFailureTime# " << ConnectionFailureTime);
 
         if (ev->Sender == RemoteVDisk) {
-            ResetConnection(ctx, NKikimrProto::ERROR, "event undelivered", TDuration::Seconds(1));
+            ResetConnection(ctx, NKikimrProto::ERROR, "event undelivered", ReconnectTimeoutManager.GetTimeoutForNewRequest());
         }
     }
 

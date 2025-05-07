@@ -314,7 +314,7 @@ public:
             return;
         }
 
-        NExternalSource::IExternalSourceFactory::TPtr externalSourceFactory{NExternalSource::CreateExternalSourceFactory({})};
+        NExternalSource::IExternalSourceFactory::TPtr externalSourceFactory{NExternalSource::CreateExternalSourceFactory({}, nullptr, 50000, nullptr, false, false, NYql::GetAllExternalDataSourceTypes())};
         NJson::TJsonValue root;
         const auto& sourceType = DescribeResult->GetPathDescription().GetExternalTableDescription().GetSourceType();
         try {

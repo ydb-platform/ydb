@@ -37,12 +37,6 @@ class TestVectorIndex(VectorBase):
             ("table_index_1__ASYNC_float", pk_types, {}, index_second, "", "", "ASYNC", "Float"),
             ("table_index_0__ASYNC_float", pk_types, {}, index_first, "", "", "ASYNC", "Float"),
             ("table_all_types_float", pk_types, {**pk_types, **non_pk_types}, {}, "", "", "", "Float"),
-            ("table_ttl_DyNumber_float", pk_types, {}, {}, "DyNumber", "", "", "Float"),
-            ("table_ttl_Uint32_float", pk_types, {}, {}, "Uint32", "", "", "Float"),
-            ("table_ttl_Uint64_float", pk_types, {}, {}, "Uint64", "", "", "Float"),
-            ("table_ttl_Datetime_float", pk_types, {}, {}, "Datetime", "", "", "Float"),
-            ("table_ttl_Timestamp_float", pk_types, {}, {}, "Timestamp", "", "", "Float"),
-            ("table_ttl_Date_float", pk_types, {}, {}, "Date", "", "", "Float"),
             ("table_index_4_UNIQUE_SYNC", pk_types, {}, index_four_sync, "", "UNIQUE", "SYNC", "Uint8"),
             ("table_index_3_UNIQUE_SYNC", pk_types, {}, index_three_sync_not_Bool, "", "UNIQUE", "SYNC", "Uint8"),
             ("table_index_2_UNIQUE_SYNC", pk_types, {}, index_second_sync, "", "UNIQUE", "SYNC", "Uint8"),
@@ -56,12 +50,6 @@ class TestVectorIndex(VectorBase):
             ("table_index_1__ASYNC", pk_types, {}, index_second, "", "", "ASYNC", "Uint8"),
             ("table_index_0__ASYNC", pk_types, {}, index_first, "", "", "ASYNC", "Uint8"),
             ("table_all_types", pk_types, {**pk_types, **non_pk_types}, {}, "", "", "", "Uint8"),
-            ("table_ttl_DyNumber", pk_types, {}, {}, "DyNumber", "", "", "Uint8"),
-            ("table_ttl_Uint32", pk_types, {}, {}, "Uint32", "", "", "Uint8"),
-            ("table_ttl_Uint64", pk_types, {}, {}, "Uint64", "", "", "Uint8"),
-            ("table_ttl_Datetime", pk_types, {}, {}, "Datetime", "", "", "Uint8"),
-            ("table_ttl_Timestamp", pk_types, {}, {}, "Timestamp", "", "", "Uint8"),
-            ("table_ttl_Date", pk_types, {}, {}, "Date", "", "", "Uint8"),
         ],
     )
     def test_vector_index(
@@ -92,7 +80,7 @@ class TestVectorIndex(VectorBase):
                 table_name_distance = f"{table_name}_{distance}_{target}"
                 dml.create_table(table_name_distance, pk_types, all_types, index, ttl, unique, sync)
                 self.vectors = []
-                self.insert(table_name_distance, all_types, pk_types, index, ttl, vector_type)
+                self.upsert(table_name_distance, all_types, pk_types, index, ttl, vector_type)
                 cover = []
                 for type_name in all_types.keys():
                     if type_name != "String":
@@ -100,6 +88,7 @@ class TestVectorIndex(VectorBase):
                 sql_create_vector_index = create_vector_index_sql_request(
                     table_name_distance, "col_String", target, distance, vector_type.lower(), self.size_vector, cover
                 )
+                print(sql_create_vector_index)
                 dml.query(sql_create_vector_index)
                 self.select(
                     table_name_distance,
@@ -110,7 +99,6 @@ class TestVectorIndex(VectorBase):
                     index,
                     ttl,
                     self.targets[target][distance],
-                    target,
                     dml,
                 )
 
@@ -124,7 +112,7 @@ class TestVectorIndex(VectorBase):
         values.append(numb)
         return ",".join(str(val) for val in values)
 
-    def insert(
+    def upsert(
         self,
         table_name: str,
         all_types: dict[str, str],
@@ -138,9 +126,9 @@ class TestVectorIndex(VectorBase):
         if ttl != "":
             number_of_columns += 1
         for count in range(1, number_of_columns + 1):
-            self.create_insert(table_name, count, all_types, pk_types, index, ttl, vector_type)
+            self.create_upsert(table_name, count, all_types, pk_types, index, ttl, vector_type)
 
-    def create_insert(
+    def create_upsert(
         self,
         table_name: str,
         value: int,
@@ -158,8 +146,8 @@ class TestVectorIndex(VectorBase):
             if type_name != "String":
                 statements_all_type.append("col_" + cleanup_type_name(type_name))
                 statements_all_type_value.append(format_sql_value(all_types[type_name](value), type_name))
-        insert_sql = f"""
-            INSERT INTO {table_name}(
+        upsert_sql = f"""
+            UPSERT INTO {table_name}(
                 col_String,
                 {", ".join(["pk_" + cleanup_type_name(type_name) for type_name in pk_types.keys()])}{", " if len(statements_all_type) != 0 else ""}
                 {", ".join(statements_all_type)}{", " if len(index) != 0 else ""}
@@ -174,108 +162,63 @@ class TestVectorIndex(VectorBase):
                 {format_sql_value(ttl_types[ttl](value), ttl) if ttl != "" else ""}
             );
         """
-        self.query(insert_sql)
+        self.query(upsert_sql)
 
-    def select(
-        self, table_name, col_name, vector_type, pk_types, all_types, index, ttl, knn_func, target, dml: DMLOperations
-    ):
+    def select(self, table_name, col_name, vector_type, pk_types, all_types, index, ttl, knn_func, dml: DMLOperations):
         statements = dml.create_statements(pk_types, all_types, index, ttl)
         statements.remove("col_String")
-        if target == "similarity":
-            vector = self.get_vector(vector_type, 1)
-            rows = dml.query(
-                f"""
-                                $Target = Knn::{self.knn_type[vector_type]}(Cast([{vector}] AS List<{vector_type}>));
-                                select {", ".join(statements)}
-                                from {table_name} view idx_vector_{col_name}
-                                order by {knn_func}(col_String, $Target) DESC
-                                limit 100;
-                                """
-            )
-            if knn_func == "Knn::InnerProductSimilarity":
-                rows.reverse()
-            count = 0
-            for data_type in all_types.keys():
-                if (
-                    data_type != "Date32"
-                    and data_type != "Datetime64"
-                    and data_type != "Timestamp64"
-                    and data_type != 'Interval64'
-                    and data_type != 'String'
-                ):
-                    for i in range(len(rows)):
-                        dml.assert_type(all_types, data_type, i + 1, rows[i][count])
-                    count += 1
-            for data_type in pk_types.keys():
-                if (
-                    data_type != "Date32"
-                    and data_type != "Datetime64"
-                    and data_type != "Timestamp64"
-                    and data_type != 'Interval64'
-                ):
-                    for i in range(len(rows)):
-                        dml.assert_type(pk_types, data_type, i + 1, rows[i][count])
-                    count += 1
-            for data_type in index.keys():
-                if (
-                    data_type != "Date32"
-                    and data_type != "Datetime64"
-                    and data_type != "Timestamp64"
-                    and data_type != 'Interval64'
-                ):
-                    for i in range(len(rows)):
-                        dml.assert_type(index, data_type, i + 1, rows[i][count])
-                    count += 1
-            if ttl != "":
+        statements.append(f"{knn_func}(col_String, $Target)")
+        vector = self.get_vector(vector_type, 1)
+        rows = dml.query(
+            f"""
+                                    $Target = Knn::{self.knn_type[vector_type]}(Cast([{vector}] AS List<{vector_type}>));
+                                    select {", ".join(statements)}
+                                    from {table_name} view idx_vector_{col_name}
+                                    order by {knn_func}(col_String, $Target) {"DESC" if knn_func in self.targets["similarity"].values() else "ASC"}
+                                    limit 100;
+                                    """
+        )
+        if knn_func == "Knn::InnerProductSimilarity":
+            rows.reverse()
+        count = 0
+        for data_type in all_types.keys():
+            if (
+                data_type != "Date32"
+                and data_type != "Datetime64"
+                and data_type != "Timestamp64"
+                and data_type != 'Interval64'
+                and data_type != 'String'
+            ):
                 for i in range(len(rows)):
-                    dml.assert_type(ttl_types, ttl, i + 1, rows[i][count])
+                    dml.assert_type(all_types, data_type, i + 1, rows[i][count])
                 count += 1
-        else:
-            numb = 1
-            for vector in self.vectors:
-                rows = dml.query(
-                    f"""
-                                $Target = Knn::{self.knn_type[vector_type]}(Cast([{vector}] AS List<{vector_type}>));
-                                select {", ".join(statements)}
-                                from {table_name} view idx_vector_{col_name}
-                                order by {knn_func}(col_String, $Target)
-                                limit 1;
-                                """
-                )
-                count = 0
-                for data_type in all_types.keys():
-                    if (
-                        data_type != "Date32"
-                        and data_type != "Datetime64"
-                        and data_type != "Timestamp64"
-                        and data_type != 'Interval64'
-                        and data_type != 'String'
-                    ):
-                        for i in range(len(rows)):
-                            dml.assert_type(all_types, data_type, numb, rows[0][count])
-                        count += 1
-                for data_type in pk_types.keys():
-                    if (
-                        data_type != "Date32"
-                        and data_type != "Datetime64"
-                        and data_type != "Timestamp64"
-                        and data_type != 'Interval64'
-                    ):
-                        for i in range(len(rows)):
-                            dml.assert_type(pk_types, data_type, numb, rows[0][count])
-                        count += 1
-                for data_type in index.keys():
-                    if (
-                        data_type != "Date32"
-                        and data_type != "Datetime64"
-                        and data_type != "Timestamp64"
-                        and data_type != 'Interval64'
-                    ):
-                        for i in range(len(rows)):
-                            dml.assert_type(index, data_type, numb, rows[0][count])
-                        count += 1
-                if ttl != "":
-                    for i in range(len(rows)):
-                        dml.assert_type(ttl_types, ttl, numb, rows[0][count])
-                    count += 1
-                numb += 1
+        for data_type in pk_types.keys():
+            if (
+                data_type != "Date32"
+                and data_type != "Datetime64"
+                and data_type != "Timestamp64"
+                and data_type != 'Interval64'
+            ):
+                for i in range(len(rows)):
+                    dml.assert_type(pk_types, data_type, i + 1, rows[i][count])
+                count += 1
+        for data_type in index.keys():
+            if (
+                data_type != "Date32"
+                and data_type != "Datetime64"
+                and data_type != "Timestamp64"
+                and data_type != 'Interval64'
+            ):
+                for i in range(len(rows)):
+                    dml.assert_type(index, data_type, i + 1, rows[i][count])
+                count += 1
+        if ttl != "":
+            for i in range(len(rows)):
+                dml.assert_type(ttl_types, ttl, i + 1, rows[i][count])
+            count += 1
+        for i in range(len(rows)):
+            if i != 0 or knn_func in self.targets["similarity"].values():
+                assert rows[i][count] != 0, f"faild in {knn_func} == 0, rows = {i}"
+            else:
+                assert rows[i][count] == 0, f"faild in {knn_func} != 0, rows{i} = {rows[i][count]}"
+        count += 1

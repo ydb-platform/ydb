@@ -11,7 +11,7 @@ If `GROUP BY` is present in the query, then when selecting columns (between `SEL
 3. Functions that return the start and end times of the current window (`HOP_START` and `HOP_END`).
 4. Arbitrary calculations combining items 1–3.
 
-You can group by the result of an arbitrary expression computed from the source columns. In this case, to access the result of this expression, we recommend assigning a name to it using `AS`. See the second example.
+You can group by the result of an arbitrary expression computed from the source columns. In this case, to access the result of this expression, we recommend assigning a name to it using `AS`. See the second [example](#examples).
 
 ### Syntax
 
@@ -42,7 +42,7 @@ Aggregate functions ignore `NULL` in their arguments, except for `COUNT`.
 
 YQL also provides aggregation factories implemented by the functions [`AGGREGATION_FACTORY`](../builtins/basic.md#aggregationfactory) and [`AGGREGATE_BY`](../builtins/aggregation.md#aggregateby).
 
-### Examples
+### Examples {#examples}
 
 ```yql
 SELECT key, COUNT(*) FROM my_table
@@ -275,7 +275,7 @@ LIMIT 3;
 
 ## GROUP BY ... HOP
 
-Group the table by the values of the specified columns or expressions and the time window.
+Group the table by the values of the specified columns or expressions and subsets by time (the time window).
 
 Among the columns used for grouping, make sure to use the `HOP` construct to define the time window for grouping.
 
@@ -283,7 +283,7 @@ Among the columns used for grouping, make sure to use the `HOP` construct to def
 HOP(time_extractor, hop, interval, delay)
 ```
 
-The implemented version of the time window is called the **hopping window**. This is a window that moves forward in discrete intervals (the `hop` parameter). The total duration of the window is set by the `interval` parameter. To determine the time of each input event, the `time_extractor` parameter is used. This expression depends only on the input values of the columns and must have the `Timestamp` type. It specifies where to extract the time value from input events.
+The implemented version of the time window is called the **hopping window**. This is a window that moves forward in discrete intervals (the `hop` parameter). The total duration of the window is set by the `interval` parameter. To determine the time of each input event, the `time_extractor` parameter is used. This expression depends only on the input values of the columns and must have the `Timestamp` type. It specifies where to extract the time value from data.
 
 {% if select_command != "SELECT STREAM" %}
 The following happens in this case:
@@ -303,12 +303,12 @@ The `interval` and `delay` parameters must be multiples of the `hop` parameter. 
 The `interval` and `hop` parameters must be positive.
 
 {% if select_command != "SELECT STREAM" %}
-The `delay` parameter is not used in the current implementation because the data in one partition is already sorted.
+The `delay` parameter is ignored in the current implementation because the data in one partition is already sorted.
 {% endif %}
 
 To set `hop`, `interval`, and `delay`, use a string expression compliant with [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601). This format is used to construct the built-in `Interval` type [from a string](../builtins/basic.md#data-type-literals).
 
-Functions with omitted `HOP_START` and `HOP_END` parameters return a value of the `Timestamp` type, corresponding to the start and end of the current window.
+When selecting columns (between `SELECT ... FROM`) you can use the `HOP_START` and `HOP_END` functions (without parameters), which return a value of  `Timestamp` type, corresponding to the start and end of the current window.
 
 The **tumbling window**, known in other systems, is a special case of a **hopping window** where `interval` == `hop`.
 

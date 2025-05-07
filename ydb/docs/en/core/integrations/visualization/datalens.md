@@ -25,13 +25,13 @@ To create a connection to {{ ydb-short-name }}:
 
    - Anonymous {#anonymous}
 
-     * **Host name**. Specify the host path for {{ ydb-short-name }}.
+     * **Host name**. Specify the hostname for {{ ydb-short-name }} connection.
      * **Port**. Specify the connection port for {{ ydb-short-name }}. The default port is 2135.
      * **Database path**. Specify the name of the database to connect to.
 
    - Password {#password}
 
-     * **Host name**. Specify the host path for {{ ydb-short-name }}.
+     * **Host name**. Specify the hostname for {{ ydb-short-name }} connection.
      * **Port**. Specify the connection port for {{ ydb-short-name }}. The default port is 2135.
      * **Database path**. Specify the name of the database to connect to.
      * **Username**. Enter the username to connect to {{ ydb-short-name }}.
@@ -40,7 +40,7 @@ To create a connection to {{ ydb-short-name }}:
    - OAuth {#oauth}
 
      * **OAuth token**. Provide the OAuth token to access {{ ydb-short-name }}.
-     * **Host name**. Specify the host path for {{ ydb-short-name }}.
+     * **Host name**. Specify the hostname for {{ ydb-short-name }} connection.
      * **Port**. Specify the connection port for {{ ydb-short-name }}. The default port is 2135.
      * **Database path**. Specify the name of the database to connect to.
 

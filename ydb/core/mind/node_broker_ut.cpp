@@ -18,6 +18,7 @@
 #include <ydb/core/tablet_flat/shared_cache_events.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/testlib/actors/block_events.h>
 
 #include <google/protobuf/text_format.h>
@@ -51,6 +52,7 @@ void SetupLogging(TTestActorRuntime& runtime)
 
     runtime.SetLogPriority(NKikimrServices::NODE_BROKER, priority);
     runtime.SetLogPriority(NKikimrServices::NAMESERVICE, priority);
+    runtime.SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, priority);
 }
 
 THashMap<ui32, TIntrusivePtr<TNodeWardenConfig>> NodeWardenConfigs;
@@ -191,17 +193,28 @@ void SetupServices(TTestActorRuntime &runtime,
     runtime.EnableScheduleForActor(aid, true);
 }
 
-void SetConfig(TTestActorRuntime& runtime,
-               TActorId sender,
-               const NKikimrNodeBroker::TConfig &config)
+void AsyncSetConfig(TTestActorRuntime& runtime,
+    TActorId sender,
+    const NKikimrNodeBroker::TConfig &config)
 {
     auto event = MakeHolder<TEvNodeBroker::TEvSetConfigRequest>();
     event->Record.MutableConfig()->CopyFrom(config);
     runtime.SendToPipe(MakeNodeBrokerID(), sender, event.Release(), 0, GetPipeConfigWithRetries());
+}
 
+void CheckAsyncSetConfig(TTestActorRuntime& runtime)
+{
     TAutoPtr<IEventHandle> handle;
     auto reply = runtime.GrabEdgeEventRethrow<TEvNodeBroker::TEvNodeBroker::TEvSetConfigResponse>(handle);
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), TStatus::OK);
+}
+
+void SetConfig(TTestActorRuntime& runtime,
+               TActorId sender,
+               const NKikimrNodeBroker::TConfig &config)
+{
+    AsyncSetConfig(runtime, sender, config);
+    CheckAsyncSetConfig(runtime);
 }
 
 void SetEpochDuration(TTestActorRuntime& runtime,
@@ -213,9 +226,9 @@ void SetEpochDuration(TTestActorRuntime& runtime,
     SetConfig(runtime, sender, config);
 }
 
-void SetBannedIds(TTestActorRuntime& runtime,
-                  TActorId sender,
-                  const TVector<std::pair<ui32, ui32>> ids)
+void AsyncSetBannedIds(TTestActorRuntime& runtime,
+    TActorId sender,
+    const TVector<std::pair<ui32, ui32>> ids)
 {
     NKikimrNodeBroker::TConfig config;
     for (auto &pr : ids) {
@@ -223,7 +236,15 @@ void SetBannedIds(TTestActorRuntime& runtime,
         entry.SetFrom(pr.first);
         entry.SetTo(pr.second);
     }
-    SetConfig(runtime, sender, config);
+    AsyncSetConfig(runtime, sender, config);
+}
+
+void SetBannedIds(TTestActorRuntime& runtime,
+                  TActorId sender,
+                  const TVector<std::pair<ui32, ui32>> ids)
+{
+    AsyncSetBannedIds(runtime, sender, ids);
+    CheckAsyncSetConfig(runtime);
 }
 
 void Setup(TTestActorRuntime& runtime,
@@ -300,13 +321,90 @@ MakeRegistrationRequest(const TString &host,
     event->Record.SetResolveHost(resolveHost);
     event->Record.SetAddress(address);
     auto &loc = *event->Record.MutableLocation();
-    loc.SetDataCenter(ToString(dc));
-    loc.SetModule(ToString(room));
-    loc.SetRack(ToString(rack));
-    loc.SetUnit(ToString(body));
+    if (dc) {
+        loc.SetDataCenter(ToString(dc));
+    }
+    if (room) {
+        loc.SetModule(ToString(room));
+    }
+    if (rack) {
+        loc.SetRack(ToString(rack));
+    }
+    if (body) {
+        loc.SetUnit(ToString(body));
+    }
     event->Record.SetFixedNodeId(fixed);
     event->Record.SetPath(path);
     return event;
+}
+
+void AsyncRegistration(TTestActorRuntime &runtime,
+                       TActorId sender,
+                       const TString &host,
+                       ui16 port,
+                       const TString &resolveHost,
+                       const TString &address,
+                       ui64 dc = 0,
+                       ui64 room = 0,
+                       ui64 rack = 0,
+                       ui64 body = 0,
+                       bool fixed = false,
+                       const TString &path = DOMAIN_NAME)
+{
+    auto event = MakeRegistrationRequest(host, port, resolveHost, address, path, dc, room, rack, body, fixed);
+    runtime.SendToPipe(MakeNodeBrokerID(), sender, event.Release(), 0, GetPipeConfigWithRetries());
+    // To prevent registration reordering due to scheme cache responses
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back(TEvTxProxySchemeCache::EvNavigateKeySetResult);
+    runtime.DispatchEvents(options);
+}
+
+void CheckAsyncRegistration(TTestActorRuntime &runtime,
+                            const TString &host,
+                            ui16 port,
+                            const TString &resolveHost,
+                            const TString &address,
+                            ui64 dc = 0,
+                            ui64 room = 0,
+                            ui64 rack = 0,
+                            ui64 body = 0,
+                            TStatus::ECode code = TStatus::OK,
+                            ui32 nodeId = 0,
+                            ui64 expire = 0,
+                            const TMaybe<TKikimrScopeId> &scopeId = {},
+                            const TString &name = "")
+{
+    TAutoPtr<IEventHandle> handle;
+    auto reply = runtime.GrabEdgeEventRethrow<TEvNodeBroker::TEvRegistrationResponse>(handle);
+    UNIT_ASSERT(reply);
+    const auto &rec = reply->Record;
+    UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus().GetCode(), code);
+
+    if (code == TStatus::OK) {
+        if (nodeId)
+            UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetNodeId(), nodeId);
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetHost(), host);
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetPort(), port);
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetResolveHost(), resolveHost);
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetAddress(), address);
+        if (dc)
+            UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetDataCenter(), ToString(dc));
+        if (room)
+            UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetModule(), ToString(room));
+        if (rack)
+            UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetRack(), ToString(rack));
+        if (body)
+            UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetUnit(), ToString(body));
+        if (expire)
+            UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetExpire(), expire);
+        if (scopeId) {
+            UNIT_ASSERT_VALUES_EQUAL(rec.GetScopeTabletId(), scopeId->GetSchemeshardId());
+            UNIT_ASSERT_VALUES_EQUAL(rec.GetScopePathId(), scopeId->GetPathItemId());
+        }
+        if (name) {
+            UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetName(), name);
+        }
+    }
 }
 
 void CheckRegistration(TTestActorRuntime &runtime,
@@ -327,36 +425,8 @@ void CheckRegistration(TTestActorRuntime &runtime,
                        const TMaybe<TKikimrScopeId> &scopeId = {},
                        const TString &name = "")
 {
-    auto event = MakeRegistrationRequest(host, port, resolveHost, address, path, dc, room, rack, body, fixed);
-    runtime.SendToPipe(MakeNodeBrokerID(), sender, event.Release(), 0, GetPipeConfigWithRetries());
-
-    TAutoPtr<IEventHandle> handle;
-    auto reply = runtime.GrabEdgeEventRethrow<TEvNodeBroker::TEvRegistrationResponse>(handle);
-    UNIT_ASSERT(reply);
-    const auto &rec = reply->Record;
-    UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus().GetCode(), code);
-
-    if (code == TStatus::OK) {
-        if (nodeId)
-            UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetNodeId(), nodeId);
-        UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetHost(), host);
-        UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetPort(), port);
-        UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetResolveHost(), resolveHost);
-        UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetAddress(), address);
-        UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetDataCenter(), ToString(dc));
-        UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetModule(), ToString(room));
-        UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetRack(), ToString(rack));
-        UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetUnit(), ToString(body));
-        if (expire)
-            UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetExpire(), expire);
-        if (scopeId) {
-            UNIT_ASSERT_VALUES_EQUAL(rec.GetScopeTabletId(), scopeId->GetSchemeshardId());
-            UNIT_ASSERT_VALUES_EQUAL(rec.GetScopePathId(), scopeId->GetPathItemId());
-        }
-        if (name) {
-            UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetName(), name);
-        }
-    }
+    AsyncRegistration(runtime, sender, host, port, resolveHost, address, dc, room, rack, body, fixed, path);
+    CheckAsyncRegistration(runtime, host, port, resolveHost, address, dc, room, rack, body, code, nodeId, expire, scopeId, name);
 }
 
 void CheckRegistration(TTestActorRuntime &runtime,
@@ -381,16 +451,27 @@ MakeEventGracefulShutdown (ui32 nodeId)
     return eventGracefulShutdown;
 }
 
+void AsyncGracefulShutdown(TTestActorRuntime &runtime,
+    TActorId sender,
+    ui32 nodeId)
+{
+    auto eventGracefulShutdown = MakeEventGracefulShutdown(nodeId);
+    runtime.SendToPipe(MakeNodeBrokerID(), sender, eventGracefulShutdown.Release(), 0, GetPipeConfigWithRetries());
+}
+
+void CheckAsyncGracefulShutdown(TTestActorRuntime &runtime)
+{
+    TAutoPtr<IEventHandle> handle;
+    auto replyGracefulShutdown = runtime.GrabEdgeEventRethrow<TEvNodeBroker::TEvGracefulShutdownResponse>(handle);
+    UNIT_ASSERT_VALUES_EQUAL(replyGracefulShutdown->Record.GetStatus().GetCode(), TStatus::OK);
+}
+
 void CheckGracefulShutdown(TTestActorRuntime &runtime,
                            TActorId sender,
                            ui32 nodeId)
-{   
-    auto eventGracefulShutdown = MakeEventGracefulShutdown(nodeId);
-    TAutoPtr<IEventHandle> handle;
-    runtime.SendToPipe(MakeNodeBrokerID(), sender, eventGracefulShutdown.Release(), 0, GetPipeConfigWithRetries());
-    auto replyGracefulShutdown = runtime.GrabEdgeEventRethrow<TEvNodeBroker::TEvGracefulShutdownResponse>(handle);
-
-    UNIT_ASSERT_VALUES_EQUAL(replyGracefulShutdown->Record.GetStatus().GetCode(), TStatus::OK);
+{
+    AsyncGracefulShutdown(runtime, sender, nodeId);
+    CheckAsyncGracefulShutdown(runtime);
 }
 
 NKikimrNodeBroker::TEpoch GetEpoch(TTestActorRuntime &runtime,
@@ -404,11 +485,9 @@ NKikimrNodeBroker::TEpoch GetEpoch(TTestActorRuntime &runtime,
     return reply->GetRecord().GetEpoch();
 }
 
-NKikimrNodeBroker::TEpoch WaitForEpochUpdate(TTestActorRuntime &runtime,
-                                             TActorId sender)
+void MoveToNextEpoch(TTestActorRuntime &runtime,
+                     const NKikimrNodeBroker::TEpoch& epoch)
 {
-    auto epoch = GetEpoch(runtime, sender);
-
     if (runtime.GetCurrentTime() < TInstant::FromValue(epoch.GetEnd())) {
         runtime.UpdateCurrentTime(TInstant::FromValue(epoch.GetEnd() + 1));
 
@@ -421,20 +500,41 @@ NKikimrNodeBroker::TEpoch WaitForEpochUpdate(TTestActorRuntime &runtime,
             }
         };
 
-        TDispatchOptions options;
-        options.FinalEvents.emplace_back(TIsEvUpdateEpoch(), 1);
-        runtime.DispatchEvents(options);
-    }
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TIsEvUpdateEpoch(), 1);
+            runtime.DispatchEvents(options);
+        }
 
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(NKikimr::TEvents::TEvFlushLog::EventType, 1);
+            runtime.DispatchEvents(options);
+        }
+    }
+}
+
+NKikimrNodeBroker::TEpoch WaitForEpochUpdate(TTestActorRuntime &runtime,
+                                             TActorId sender,
+                                             NKikimrNodeBroker::TEpoch& epoch)
+{
     ui64 reqEpoch = epoch.GetId() + 1;
-    while (epoch.GetId() != reqEpoch) {
+    auto nextEpoch = epoch;
+    while (nextEpoch.GetId() != reqEpoch) {
         TDispatchOptions options;
         options.FinalEvents.emplace_back(NKikimr::TEvents::TEvFlushLog::EventType, 1);
         runtime.DispatchEvents(options, TDuration::MilliSeconds(100));
-        epoch = GetEpoch(runtime, sender);
+        nextEpoch = GetEpoch(runtime, sender);
     }
+    return nextEpoch;
+}
 
-    return epoch;
+NKikimrNodeBroker::TEpoch WaitForEpochUpdate(TTestActorRuntime &runtime,
+                                             TActorId sender)
+{
+    auto epoch = GetEpoch(runtime, sender);
+    MoveToNextEpoch(runtime, epoch);
+    return WaitForEpochUpdate(runtime, sender, epoch);
 }
 
 void CheckNodesListResponse(const NKikimrNodeBroker::TNodesInfo &rec,
@@ -560,24 +660,36 @@ void CheckNodeInfo(TTestActorRuntime &runtime,
     UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetPort(), port);
     UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetResolveHost(), resolveHost);
     UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetAddress(), address);
-    UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetDataCenter(), ToString(dc));
-    UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetModule(), ToString(room));
-    UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetRack(), ToString(rack));
-    UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetUnit(), ToString(body));
+    if (dc) {
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetDataCenter(), ToString(dc));
+    }
+    if (room) {
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetModule(), ToString(room));
+    }
+    if (rack) {
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetRack(), ToString(rack));
+    }
+    if (body) {
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetLocation().GetUnit(), ToString(body));
+    }
     UNIT_ASSERT_VALUES_EQUAL(rec.GetNode().GetExpire(), expire);
 }
 
-void CheckLeaseExtension(TTestActorRuntime &runtime,
-                         TActorId sender,
-                         ui32 nodeId,
-                         TStatus::ECode code,
-                         const NKikimrNodeBroker::TEpoch &epoch = {},
-                         bool fixed = false)
+void AsyncLeaseExtension(TTestActorRuntime &runtime,
+                              TActorId sender,
+                              ui32 nodeId)
 {
     TAutoPtr<TEvNodeBroker::TEvExtendLeaseRequest> event = new TEvNodeBroker::TEvExtendLeaseRequest;
     event->Record.SetNodeId(nodeId);
     runtime.SendToPipe(MakeNodeBrokerID(), sender, event.Release(), 0, GetPipeConfigWithRetries());
+}
 
+void CheckAsyncLeaseExtension(TTestActorRuntime &runtime,
+                                   ui32 nodeId,
+                                   TStatus::ECode code,
+                                   const NKikimrNodeBroker::TEpoch &epoch = {},
+                                   bool fixed = false)
+{
     TAutoPtr<IEventHandle> handle;
     auto reply = runtime.GrabEdgeEventRethrow<TEvNodeBroker::TEvExtendLeaseResponse>(handle);
     UNIT_ASSERT(reply);
@@ -592,6 +704,17 @@ void CheckLeaseExtension(TTestActorRuntime &runtime,
         else
             UNIT_ASSERT_VALUES_EQUAL(rec.GetExpire(), epoch.GetNextEnd());
     }
+}
+
+void CheckLeaseExtension(TTestActorRuntime &runtime,
+                         TActorId sender,
+                         ui32 nodeId,
+                         TStatus::ECode code,
+                         const NKikimrNodeBroker::TEpoch &epoch = {},
+                         bool fixed = false)
+{
+    AsyncLeaseExtension(runtime, sender, nodeId);
+    CheckAsyncLeaseExtension(runtime, nodeId, code, epoch, fixed);
 }
 
 void AsyncResolveNode(TTestActorRuntime &runtime,
@@ -1604,6 +1727,356 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         // Restart NODE1 to serve my-database
         CheckRegistration(runtime, sender, "host1", 19001, "/dc-1/my-database",
                           TStatus::OK, NODE1, epoch.GetNextEnd(), "slot-2");
+    }
+
+    Y_UNIT_TEST(NoEffectBeforeCommit)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        // There should be no dynamic nodes initially
+        auto epoch = GetEpoch(runtime, sender);
+        CheckNodesList(runtime, sender, {}, {}, epoch.GetId());
+        CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
+
+        // Block commits
+        TBlockEvents<TEvTablet::TEvCommit> block(runtime);
+
+        // Register node NODE1
+        AsyncRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4);
+
+        // Wait until commit is blocked
+        runtime.WaitFor("commit", [&]{ return block.size() >= 1; });
+
+        // No effect before commit
+        CheckNodesList(runtime, sender, {}, {}, epoch.GetId());
+        CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
+
+        // Unblock commit
+        block.Unblock();
+
+        // Check registration request
+        CheckAsyncRegistration(runtime, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                               1, 2, 3, 4, TStatus::OK, NODE1, epoch.GetNextEnd());
+
+        // Check committed state
+        CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+        CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                      1, 2, 3, 4, epoch.GetNextEnd());
+    }
+
+    Y_UNIT_TEST(RegistrationPipelining)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        // There should be no dynamic nodes initially
+        auto epoch = GetEpoch(runtime, sender);
+        CheckNodesList(runtime, sender, {}, {}, epoch.GetId());
+        CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
+        CheckNodeInfo(runtime, sender, NODE2, TStatus::WRONG_REQUEST);
+
+        // Block commits
+        TBlockEvents<TEvTablet::TEvCommit> block(runtime);
+
+        // Register node NODE1
+        AsyncRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4);
+        // Register node NODE2
+        AsyncRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.4");
+        // Register node NODE2 with location info
+        AsyncRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4);
+
+        // Wait until commits are blocked
+        runtime.WaitFor("commit", [&]{ return block.size() >= 1; });
+
+        // No effect before commit
+        CheckNodesList(runtime, sender, {}, {}, epoch.GetId());
+        CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
+
+        // Unblock commit
+        block.Unblock();
+        block.Stop();
+
+        // Check registrations requests
+        CheckAsyncRegistration(runtime, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                               1, 2, 3, 4, TStatus::OK, NODE1, epoch.GetNextEnd());
+        CheckAsyncRegistration(runtime, "host2", 1001, "host2.yandex.net", "1.2.3.4",
+                               0, 0, 0, 0, TStatus::OK, NODE2, epoch.GetNextEnd());
+        CheckAsyncRegistration(runtime, "host2", 1001, "host2.yandex.net", "1.2.3.4",
+                               1, 2, 3, 4, TStatus::OK, NODE2, epoch.GetNextEnd());
+
+        // Check committed state
+        CheckNodesList(runtime, sender, {NODE1, NODE2}, {}, epoch.GetId());
+        CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                      1, 2, 3, 4, epoch.GetNextEnd());
+        CheckNodeInfo(runtime, sender, NODE2, "host2", 1001, "host2.yandex.net", "1.2.3.4",
+                      1, 2, 3, 4, epoch.GetNextEnd());
+    }
+
+    Y_UNIT_TEST(RegistrationPipeliningNodeName)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4, { "/dc-1/my-database", "/dc-1/yet-another-database" });
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        // There should be no dynamic nodes initially
+        auto epoch = GetEpoch(runtime, sender);
+        CheckNodesList(runtime, sender, {}, {}, epoch.GetId());
+        CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
+        CheckNodeInfo(runtime, sender, NODE2, TStatus::WRONG_REQUEST);
+        CheckNodeInfo(runtime, sender, NODE3, TStatus::WRONG_REQUEST);
+        CheckNodeInfo(runtime, sender, NODE4, TStatus::WRONG_REQUEST);
+
+        // Block commits
+        TBlockEvents<TEvTablet::TEvCommit> block(runtime);
+
+        // Register node NODE1
+        AsyncRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, false, "/dc-1/my-database");
+        // Register node NODE2
+        AsyncRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, false, "/dc-1/my-database");
+        // Register node NODE2 with different tenant and release its node name
+        AsyncRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, false, "/dc-1/yet-another-database");
+        // Register node NODE3 and reuse NODE2 node name
+        AsyncRegistration(runtime, sender, "host3", 1001, "host3.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, false, "/dc-1/my-database");
+        // Shutdown NODE3 and release its node name
+        AsyncGracefulShutdown(runtime, sender, NODE3);
+        // Register node NODE4 and reuse NODE3 node name
+        AsyncRegistration(runtime, sender, "host4", 1001, "host4.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, false, "/dc-1/my-database");
+
+        // Wait until commits are blocked
+        runtime.WaitFor("commit", [&]{ return block.size() >= 1; });
+
+        // No effect before commit
+        CheckNodesList(runtime, sender, {}, {}, epoch.GetId());
+        CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
+        CheckNodeInfo(runtime, sender, NODE2, TStatus::WRONG_REQUEST);
+        CheckNodeInfo(runtime, sender, NODE3, TStatus::WRONG_REQUEST);
+        CheckNodeInfo(runtime, sender, NODE4, TStatus::WRONG_REQUEST);
+
+        // Unblock commit
+        block.Unblock();
+        block.Stop();
+
+        // Check requests
+        CheckAsyncRegistration(runtime, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                               1, 2, 3, 4, TStatus::OK, NODE1, epoch.GetNextEnd(), {}, "slot-0");
+        CheckAsyncRegistration(runtime, "host2", 1001, "host2.yandex.net", "1.2.3.4",
+                               1, 2, 3, 4, TStatus::OK, NODE2, epoch.GetNextEnd(), {}, "slot-1");
+        CheckAsyncRegistration(runtime, "host2", 1001, "host2.yandex.net", "1.2.3.4",
+                               1, 2, 3, 4, TStatus::OK, NODE2, epoch.GetNextEnd(), {}, "slot-0");
+        CheckAsyncRegistration(runtime, "host3", 1001, "host3.yandex.net", "1.2.3.4",
+                               1, 2, 3, 4, TStatus::OK, NODE3, epoch.GetNextEnd(), {}, "slot-1");
+        CheckAsyncGracefulShutdown(runtime);
+        CheckAsyncRegistration(runtime, "host4", 1001, "host4.yandex.net", "1.2.3.4",
+                               1, 2, 3, 4, TStatus::OK, NODE4, epoch.GetNextEnd(), {}, "slot-1");
+
+        // Check committed state
+        CheckNodesList(runtime, sender, {NODE1, NODE2, NODE3, NODE4}, {}, epoch.GetId());
+        CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                      1, 2, 3, 4, epoch.GetNextEnd());
+        CheckNodeInfo(runtime, sender, NODE2, "host2", 1001, "host2.yandex.net", "1.2.3.4",
+                      1, 2, 3, 4, epoch.GetNextEnd());
+        CheckNodeInfo(runtime, sender, NODE3, "host3", 1001, "host3.yandex.net", "1.2.3.4",
+                      1, 2, 3, 4, epoch.GetNextEnd());
+        CheckNodeInfo(runtime, sender, NODE4, "host4", 1001, "host4.yandex.net", "1.2.3.4",
+                      1, 2, 3, 4, epoch.GetNextEnd());
+    }
+
+    Y_UNIT_TEST(ConfigPipelining)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 4);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        // There should be no dynamic nodes initially
+        auto epoch = GetEpoch(runtime, sender);
+        CheckNodesList(runtime, sender, {}, {}, epoch.GetId());
+        CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
+
+        // Block commits
+        TBlockEvents<TEvTablet::TEvCommit> block(runtime);
+
+        // Ban all ids
+        AsyncSetBannedIds(runtime, sender, {{ NODE1, NODE4 }});
+
+        // Register node
+        AsyncRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4);
+
+        // Unban NODE2
+        AsyncSetBannedIds(runtime, sender, {{ NODE1, NODE1 }, { NODE3, NODE4 }});
+
+        // Register node again
+        AsyncRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4);
+
+        // Wait until commit is blocked
+        runtime.WaitFor("commit", [&]{ return block.size() >= 1; });
+
+        // Unblock commit
+        block.Unblock();
+
+        // Check registration is failed - no free ids
+        CheckAsyncRegistration(runtime, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                               1, 2, 3, 4, TStatus::ERROR_TEMP);
+        // Check registration is successful
+        CheckAsyncRegistration(runtime, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                               1, 2, 3, 4, TStatus::OK, NODE2, epoch.GetNextEnd());
+
+        // Observe registration effect
+        CheckNodesList(runtime, sender, {NODE2}, {}, epoch.GetId());
+        CheckNodeInfo(runtime, sender, NODE2, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                      1, 2, 3, 4, epoch.GetNextEnd());
+    }
+
+    Y_UNIT_TEST(UpdateEpochPipelining)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 1);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        // Register node NODE1
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1);
+
+        // There should NODE1 in the node list
+        auto epoch = GetEpoch(runtime, sender);
+        CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+        CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                      1, 2, 3, 4, epoch.GetNextEnd());
+
+        // Move epochs to expire NODE1
+        epoch = WaitForEpochUpdate(runtime, sender);
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesList(runtime, sender, {}, {NODE1}, epoch.GetId());
+        CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
+
+        // Register new node, should be no free ids
+        CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::ERROR_TEMP);
+
+        // Block commits
+        TBlockEvents<TEvTablet::TEvCommit> block(runtime);
+
+        // Move epoch to free NODE1 id
+        MoveToNextEpoch(runtime, epoch);
+        // Register new node again, should be successful
+        AsyncRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4);
+
+        // Wait until commit is blocked
+        runtime.WaitFor("commit", [&]{ return block.size() >= 1; });
+
+        // No effect before commit
+        CheckNodesList(runtime, sender, {}, {NODE1}, epoch.GetId());
+        CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
+
+        // Unblock commit
+        block.Unblock();
+        block.Stop();
+
+        // Check registration request
+        epoch = WaitForEpochUpdate(runtime, sender, epoch);
+        CheckAsyncRegistration(runtime, "host2", 1001, "host2.yandex.net", "1.2.3.4",
+                               1, 2, 3, 4, TStatus::OK, NODE1, epoch.GetNextEnd());
+
+        // Check committed state
+        CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+        CheckNodeInfo(runtime, sender, NODE1, "host2", 1001, "host2.yandex.net", "1.2.3.4",
+                      1, 2, 3, 4, epoch.GetNextEnd());
+    }
+
+    Y_UNIT_TEST(ExtendLeasePipelining)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 1);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        // Register node NODE1
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1);
+        auto epoch = GetEpoch(runtime, sender);
+        CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+        CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                      1, 2, 3, 4, epoch.GetNextEnd());
+
+        // Move epoch without extending lease
+        epoch = WaitForEpochUpdate(runtime, sender);
+        CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+        CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                      1, 2, 3, 4, epoch.GetEnd());
+
+        // Block commits
+        TBlockEvents<TEvTablet::TEvCommit> block(runtime);
+
+        // Extend lease and move epoch
+        AsyncLeaseExtension(runtime, sender, NODE1);
+        MoveToNextEpoch(runtime, epoch);
+
+        // Wait until commit is blocked
+        runtime.WaitFor("commit", [&]{ return block.size() >= 1; });
+
+        // Unblock commit
+        block.Unblock();
+        block.Stop();
+
+        // Check extend lease
+        CheckAsyncLeaseExtension(runtime, NODE1, TStatus::OK, epoch);
+        epoch = WaitForEpochUpdate(runtime, sender, epoch);
+
+        // Check committed state
+        CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+        CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                      1, 2, 3, 4, epoch.GetEnd());
+    }
+
+    Y_UNIT_TEST(LoadStateMoveEpoch)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 1);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        // Register node NODE1
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1);
+
+        // There should NODE1 in the node list
+        auto epoch = GetEpoch(runtime, sender);
+        CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+        CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                      1, 2, 3, 4, epoch.GetNextEnd());
+
+        // Move two epochs further to expire NODE1
+        runtime.UpdateCurrentTime(TInstant::FromValue(epoch.GetNextEnd() + 1));
+
+        // Restart NodeBroker to trigger loading state
+        RestartNodeBroker(runtime);
+
+        // Check epoch
+        epoch = GetEpoch(runtime, sender);
+        CheckNodesList(runtime, sender, {}, {NODE1}, epoch.GetId());
+        CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
+
+        // Move epoch to remove NODE1
+        runtime.UpdateCurrentTime(TInstant::FromValue(epoch.GetEnd() + 1));
+
+        // Restart NodeBroker to trigger loading state
+        RestartNodeBroker(runtime);
+
+        // Check epoch
+        epoch = GetEpoch(runtime, sender);
+        CheckNodesList(runtime, sender, {}, {}, epoch.GetId());
+        CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
     }
 }
 

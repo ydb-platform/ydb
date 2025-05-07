@@ -1,0 +1,11 @@
+{
+  "Command":
+    [
+      {
+        "DefineBox":
+          {
+            "BoxId":1
+          }
+      }
+    ]
+}

@@ -2136,7 +2136,6 @@ public:
 
     void ReportPDiskState(NKikimrBlobStorage::TPDiskState::E stateEnum, TSelfCheckContext& context) {
         using E = NKikimrBlobStorage::TPDiskState;
-        const TString stateStr = E::E_Name(stateEnum);
 
         switch (stateEnum) {
             case E::Normal:

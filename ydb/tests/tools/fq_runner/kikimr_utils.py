@@ -75,7 +75,7 @@ class AddDataInflightExtension(ExtensionPoint):
 
 
 def enable_external_data_sources(qs_config):
-    qs_config['available_all_external_data_sources'] = True
+    qs_config['all_external_data_sources_are_available'] = True
 
 
 class AddFormatSizeLimitExtension(ExtensionPoint):

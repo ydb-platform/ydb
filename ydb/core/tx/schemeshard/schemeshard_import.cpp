@@ -1,6 +1,7 @@
 #include "schemeshard_import.h"
 #include "schemeshard_import_helpers.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_import_getters.h"
 
 #include <util/generic/xrange.h>
 
@@ -263,10 +264,7 @@ void TSchemeShard::Handle(TEvImport::TEvListImportsRequest::TPtr& ev, const TAct
 }
 
 void TSchemeShard::Handle(TEvImport::TEvListObjectsInS3ExportRequest::TPtr& ev, const TActorContext&) {
-    auto result = MakeHolder<TEvImport::TEvListObjectsInS3ExportResponse>();
-    result->Record.set_status(Ydb::StatusIds::UNSUPPORTED);
-    result->Record.add_issues()->set_message("UNSUPPORTED");
-    Send(ev->Sender, std::move(result));
+    Register(CreateListObjectsInS3ExportGetter(std::move(ev)));
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvImportSchemeReady::TPtr& ev, const TActorContext& ctx) {

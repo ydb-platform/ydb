@@ -91,7 +91,7 @@ void TUsersInfoStorage::ParseDeprecated(const TString& key, const TString& data,
     ui32 gen = 0;
     ui32 step = 0;
     TString session;
-    NDeprecatedUserData::Parse(data, offset, gen, step, session);
+    NDeprecatedUserData::Parse(data, offset, gen, step, session); // тут парсить committedMetadata?
     // metadata!!
     Y_ABORT_UNLESS(offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, offset);
 
@@ -113,7 +113,7 @@ void TUsersInfoStorage::Parse(const TString& key, const TString& data, const TAc
     Y_ABORT_UNLESS(sizeof(ui64) <= data.size());
 
     NKikimrPQ::TUserInfo userData;
-    bool res = userData.ParseFromString(data);
+    bool res = userData.ParseFromString(data); // вот тут
     Y_ABORT_UNLESS(res);
 
     Y_ABORT_UNLESS(userData.GetOffset() <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, userData.GetOffset());

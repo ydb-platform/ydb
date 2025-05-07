@@ -3245,6 +3245,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
 {
     const TString& user = act.ClientId;
     ui64 offset = act.Offset;
+    TString committedMetadata = act.CommittedMetadata; // тут константная ссылка?
     // вот тут metadata!
     const TString& session = act.SessionId;
     ui32 generation = act.Generation;
@@ -3261,6 +3262,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         userInfo.Generation = userInfo.Step = 0;
         userInfo.Offset = 0;
         userInfo.AnyCommits = false;
+        userInfo.CommittedMetadata = "";
 
         PQ_LOG_D("Topic '" << TopicName() << "' partition " << Partition << " user " << user
                     << " drop done"
@@ -3277,6 +3279,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         userInfo.Generation = userInfo.Step = 0;
         userInfo.Offset = 0;
         userInfo.AnyCommits = false;
+        userInfo.CommittedMetadata = "";
 
         if (userInfo.Important) {
             userInfo.Offset = StartOffset;
@@ -3284,7 +3287,8 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
     } else {
         if (createSession || dropSession) {
             offset = userInfo.Offset;
-            // metadata = userInfo.CommittedMetadata
+            committedMetadata = userInfo.CommittedMetadata;
+
             auto *ui = UsersInfoStorage->GetIfExists(userInfo.User);
             auto ts = ui ? GetTime(*ui, userInfo.Offset) : std::make_pair<TInstant, TInstant>(TInstant::Zero(), TInstant::Zero());
 
@@ -3316,6 +3320,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         );
 
         userInfo.Offset = offset;
+        userInfo.CommittedMetadata = committedMetadata;
         // userInfo.CommittedMetadata = metadata;
         if (userInfo.Offset <= (i64)StartOffset) {
             userInfo.AnyCommits = false;
@@ -3540,6 +3545,7 @@ TUserInfoBase& TPartition::GetOrCreatePendingUser(const TString& user,
             newPendingUserIt->second.Generation = userIt->Generation;
             newPendingUserIt->second.Step = userIt->Step;
             newPendingUserIt->second.Offset = userIt->Offset;
+            newPendingUserIt->second.CommittedMetadata = userIt->CommittedMetadata;
             // metadata?
             newPendingUserIt->second.ReadRuleGeneration = userIt->ReadRuleGeneration;
             newPendingUserIt->second.Important = userIt->Important;

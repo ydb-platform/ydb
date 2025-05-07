@@ -325,27 +325,27 @@ void TKqpCountersBase::ReportQueryWithFullScan() {
 }
 
 void TKqpCountersBase::ReportQueryAffectedShards(ui64 shardsCount) {
-    QueryAffectedShardsCount->Collect(shardsCount > Max<i64>() ? Max<i64>() : static_cast<i64>(shardsCount));
+    QueryAffectedShardsCount->Collect(shardsCount);
 }
 
 void TKqpCountersBase::ReportQueryReadSets(ui64 readSetsCount) {
-    QueryReadSetsCount->Collect(readSetsCount > Max<i64>() ? Max<i64>() : static_cast<i64>(readSetsCount));
+    QueryReadSetsCount->Collect(readSetsCount);
 }
 
 void TKqpCountersBase::ReportQueryReadBytes(ui64 bytesCount) {
-    QueryReadBytes->Collect(bytesCount > Max<i64>() ? Max<i64>() : static_cast<i64>(bytesCount));
+    QueryReadBytes->Collect(bytesCount);
 }
 
 void TKqpCountersBase::ReportQueryReadRows(ui64 rowsCount) {
-    QueryReadRows->Collect(rowsCount > Max<i64>() ? Max<i64>() : static_cast<i64>(rowsCount));
+    QueryReadRows->Collect(rowsCount);
 }
 
 void TKqpCountersBase::ReportQueryMaxShardReplySize(ui64 replySize) {
-    QueryMaxShardReplySize->Collect(replySize > Max<i64>() ? Max<i64>() : static_cast<i64>(replySize));
+    QueryMaxShardReplySize->Collect(replySize);
 }
 
 void TKqpCountersBase::ReportQueryMaxShardProgramSize(ui64 programSize) {
-    QueryMaxShardProgramSize->Collect(programSize > Max<i64>() ? Max<i64>() : static_cast<i64>(programSize));
+    QueryMaxShardProgramSize->Collect(programSize);
 }
 
 void TKqpCountersBase::ReportResponseStatus(ui64 responseSize, Ydb::StatusIds::StatusCode ydbStatus) {

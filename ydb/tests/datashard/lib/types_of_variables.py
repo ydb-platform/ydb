@@ -73,6 +73,19 @@ index_four_sync = {
     "Uint8": lambda i: i,
 }
 
+index_first_not_Bool = {
+    "Int64": lambda i: i,
+    "Uint64": lambda i: i,
+    "Int32": lambda i: i,
+    "Uint32": lambda i: i,
+    # "Int16": lambda i: i, https://github.com/ydb-platform/ydb/issues/15842
+    # "Uint16": lambda i: i, https://github.com/ydb-platform/ydb/issues/15842
+    "Int8": lambda i: i,
+    "Uint8": lambda i: i,
+    "Decimal(15,0)": lambda i: "{}".format(i),
+    "Decimal(22,9)": lambda i: "{}.123".format(i),
+    "Decimal(35,10)": lambda i: "{}.123456".format(i),
+}
 
 index_first = {
     "Int64": lambda i: i,

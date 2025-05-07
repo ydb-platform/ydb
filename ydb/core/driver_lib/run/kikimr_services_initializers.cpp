@@ -2852,8 +2852,8 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
         );
         
         setup->LocalServices.emplace_back(
-            NKafka::MakeKafkaTransactionsServiceID(),
-            TActorSetupCmd(NKafka::CreateKafkaTransactionsCoordinator(),
+            NKafka::MakeTransactionsServiceID(),
+            TActorSetupCmd(NKafka::CreateTransactionsCoordinator(),
                 TMailboxType::HTSwap, appData->UserPoolId
             )
         );

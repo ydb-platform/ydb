@@ -7,15 +7,15 @@
 
 namespace NKafka {
     /* 
-    This class serves as a proxy between Kafka SDK and TKafkaTransactionActor
+    This class serves as a proxy between Kafka SDK and TTransactionActor
 
     It validates that requester is not a zombie (by checking request's tranasactional_id+producer_id+producer_epoch)
     It does so by maintaining a set of the most relevant for this node tranasactional_id+producer_id+producer_epoch. 
     Recieves updates from init_producer_id_actors. 
     */
-    class TKafkaTransactionsCoordinator : public NActors::TActorBootstrapped<TKafkaTransactionsCoordinator> {
+    class TTransactionsCoordinator : public NActors::TActorBootstrapped<TTransactionsCoordinator> {
 
-        using TBase = NActors::TActorBootstrapped<TKafkaTransactionsCoordinator>;
+        using TBase = NActors::TActorBootstrapped<TTransactionsCoordinator>;
 
         struct TTransactionalRequest {
             TString TransactionalId;
@@ -26,7 +26,7 @@ namespace NKafka {
 
         public:
             void Bootstrap(const TActorContext&) {
-                TBase::Become(&TKafkaTransactionsCoordinator::StateWork);
+                TBase::Become(&TTransactionsCoordinator::StateWork);
             }
 
             TStringBuilder LogPrefix() const {
@@ -50,7 +50,7 @@ namespace NKafka {
             // Handles new transactional_id+producer_id+producer_epoch: saves for validation of future requests
             void Handle(TEvKafka::TEvSaveTxnProducerRequest::TPtr& ev, const TActorContext& ctx);
             
-            // Proxies requests to the relevant TKafkaTransactionActor
+            // Proxies requests to the relevant TTransactionActor
             void Handle(TEvKafka::TEvAddPartitionsToTxnRequest::TPtr& ev, const TActorContext& ctx);
             void Handle(TEvKafka::TEvAddOffsetsToTxnRequest::TPtr& ev, const TActorContext& ctx);
             void Handle(TEvKafka::TEvTxnOffsetCommitRequest::TPtr& ev, const TActorContext& ctx);
@@ -76,11 +76,11 @@ namespace NKafka {
             std::unordered_map<TString, TActorId> TxnActorByTransactionalId;
     };
 
-    inline NActors::IActor* CreateKafkaTransactionsCoordinator() {
-        return new TKafkaTransactionsCoordinator();
+    inline NActors::IActor* CreateTransactionsCoordinator() {
+        return new TTransactionsCoordinator();
     };
 
-    inline TActorId MakeKafkaTransactionsServiceID() {
+    inline TActorId MakeTransactionsServiceID() {
         static const char x[12] = "kafka_txns";
         return TActorId(0, TStringBuf(x, 12));
     };

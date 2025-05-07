@@ -72,7 +72,7 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
 
             SafeEntropyPoolRead(&runCfg.TestContext->PDiskGuid, sizeof(runCfg.TestContext->PDiskGuid));
             if (!runCfg.IsBad) {
-                FormatPDiskForTest(dataPath, runCfg.TestContext->PDiskGuid, runCfg.ChunkSize,
+                FormatPDiskForTest(dataPath, runCfg.TestContext->PDiskGuid, runCfg.ChunkSize, 0,
                         runCfg.IsErasureEncodeUserLog, runCfg.TestContext->SectorMap);
             }
         } else {

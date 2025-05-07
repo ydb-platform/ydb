@@ -5,6 +5,7 @@ from typing import Callable, Type
 import pytest
 
 IMPLEMENTATION = getattr(sys, "implementation")  # to suppress mypy error
+GIL_ENABLED = getattr(sys, "_is_gil_enabled", lambda: True)()
 
 
 def test_ctor(case_insensitive_str_class: Type[str]) -> None:
@@ -63,6 +64,10 @@ def create_istrs(case_insensitive_str_class: Type[str]) -> Callable[[], None]:
     IMPLEMENTATION.name != "cpython",
     reason="PyPy has different GC implementation",
 )
+@pytest.mark.skipif(
+    not GIL_ENABLED,
+    reason="free threading has different GC implementation",
+)
 def test_leak(create_istrs: Callable[[], None]) -> None:
     gc.collect()
     cnt = len(gc.get_objects())
@@ -71,4 +76,4 @@ def test_leak(create_istrs: Callable[[], None]) -> None:
 
     gc.collect()
     cnt2 = len(gc.get_objects())
-    assert abs(cnt - cnt2) < 50  # on PyPy these numbers are not equal
+    assert abs(cnt - cnt2) < 10  # on other GC impls these numbers are not equal

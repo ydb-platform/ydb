@@ -234,6 +234,7 @@ private:
     std::vector<std::optional<ui64>> ColumnIndexes;  // Output column index in schema passed into RowDispatcher
     const TType* InputDataType = nullptr;  // Multi type (comes from Row Dispatcher)
     std::unique_ptr<NKikimr::NMiniKQL::TValuePackerTransport<true>> DataUnpacker;
+    // Set on Parent
     ui64 CpuMicrosec = 0;
     // Set on both Parent (cumulative) and Childern (separate)
 
@@ -377,9 +378,46 @@ public:
         hFunc(TEvPrivate::TEvRefreshClusters, Handle);
         hFunc(TEvPrivate::TEvReceivedClusters, Handle);
         hFunc(TEvPrivate::TEvDescribeTopicResult, Handle);
-
-        cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
     })
+
+    STRICT_STFUNC(IgnoreState, {
+        // ignore all events except for retry queue
+        hFunc(NFq::TEvRowDispatcher::TEvCoordinatorChanged, IgnoreEvent);
+        hFunc(NFq::TEvRowDispatcher::TEvCoordinatorResult, ReplyNoSession);
+        hFunc(NFq::TEvRowDispatcher::TEvNewDataArrived, ReplyNoSession);
+        hFunc(NFq::TEvRowDispatcher::TEvMessageBatch, ReplyNoSession);
+        hFunc(NFq::TEvRowDispatcher::TEvStartSessionAck, ReplyNoSession);
+        hFunc(NFq::TEvRowDispatcher::TEvSessionError, ReplyNoSession);
+        hFunc(NFq::TEvRowDispatcher::TEvStatistics, ReplyNoSession);
+        hFunc(NFq::TEvRowDispatcher::TEvGetInternalStateRequest, ReplyNoSession);
+
+        hFunc(NActors::TEvents::TEvPong, Handle);
+        hFunc(TEvInterconnect::TEvNodeConnected, HandleConnected);
+        hFunc(TEvInterconnect::TEvNodeDisconnected, HandleDisconnected);
+        hFunc(NActors::TEvents::TEvUndelivered, Handle);
+        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle);
+        hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat, Handle);
+
+        // ignore all row dispatcher events
+        hFunc(NFq::TEvRowDispatcher::TEvHeartbeat, ReplyNoSession);
+        hFunc(TEvPrivate::TEvPrintState, IgnoreEvent);
+        hFunc(TEvPrivate::TEvProcessState, IgnoreEvent);
+        hFunc(TEvPrivate::TEvNotifyCA, IgnoreEvent);
+        hFunc(TEvPrivate::TEvRefreshClusters, IgnoreEvent);
+        hFunc(TEvPrivate::TEvReceivedClusters, IgnoreEvent);
+        hFunc(TEvPrivate::TEvDescribeTopicResult, IgnoreEvent);
+    })
+
+    template <class TEventPtr>
+    void IgnoreEvent(TEventPtr& ev) {
+        SRC_LOG_D("Ignore " << typeid(TEventPtr).name() << " from " << ev->Sender);
+    }
+
+    template <class TEventPtr>
+    void ReplyNoSession(TEventPtr& ev) {
+        SRC_LOG_D("Ignore (no session) " << typeid(TEventPtr).name() << " from " << ev->Sender);
+        SendNoSession(ev->Sender, ev->Cookie);
+    }
 
     static constexpr char ActorName[] = "DQ_PQ_READ_ACTOR";
 
@@ -485,9 +523,13 @@ TDqPqRdReadActor::TDqPqRdReadActor(
         , CredentialsProviderFactory(std::move(credentialsProviderFactory))
         , MaxBufferSize(bufferSize)
 {
-    if (Parent == this) {
-        State = EState::START_CLUSTER_DISCOVERY;
+
+    SRC_LOG_I("Start read actor, local row dispatcher " << LocalRowDispatcherActorId.ToString() << ", metadatafields: " << JoinSeq(',', SourceParams.GetMetadataFields())
+        << ", partitions: " << JoinSeq(',', GetPartitionsToRead()));
+    if (Parent != this) {
+        return;
     }
+    State = EState::START_CLUSTER_DISCOVERY;
     const auto programBuilder = std::make_unique<TProgramBuilder>(typeEnv, *holderFactory.GetFunctionRegistry());
 
     // Parse output schema (expected struct output type)
@@ -510,8 +552,6 @@ TDqPqRdReadActor::TDqPqRdReadActor(
     DataUnpacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(InputDataType);
 
     IngressStats.Level = statsLevel;
-    SRC_LOG_I("Start read actor, local row dispatcher " << LocalRowDispatcherActorId.ToString() << ", metadatafields: " << JoinSeq(',', SourceParams.GetMetadataFields())
-        << ", partitions: " << JoinSeq(',', GetPartitionsToRead()));
 }
 
 void TDqPqRdReadActor::Init() {
@@ -534,6 +574,7 @@ void TDqPqRdReadActor::InitChild() {
             NextOffsetFromRD[partitionKey.PartitionId] = offset;
         }
     }
+    StartingMessageTimestamp = Parent->StartingMessageTimestamp;
     SRC_LOG_I("Send TEvCoordinatorChangesSubscribe to local RD (" << LocalRowDispatcherActorId << ")");
     Send(LocalRowDispatcherActorId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
     Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
@@ -663,15 +704,18 @@ void TDqPqRdReadActor::StopSession(TSession& sessionInfo) {
 // IActor & IDqComputeActorAsyncInput
 void TDqPqRdReadActor::PassAway() { // Is called from Compute Actor
     SRC_LOG_I("PassAway");
+    Become(&TDqPqRdReadActor::IgnoreState);
     PrintInternalState();
     for (auto& [rowDispatcherActorId, sessionInfo] : Sessions) {
         StopSession(sessionInfo);
     }
     for (auto& clusterState : Clusters) {
-        if (clusterState.Child == this) {
+        auto child = clusterState.Child;
+        if (child == this) {
             continue;
         }
-        Send(clusterState.ChildId, new NActors::TEvents::TEvPoison);
+        // all actors are on same mailbox, safe to call
+        child->PassAway();
     }
     Clusters.clear();
     FederatedTopicClient.Reset();
@@ -681,6 +725,7 @@ void TDqPqRdReadActor::PassAway() { // Is called from Compute Actor
 }
 
 i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& /*watermark*/, bool&, i64 freeSpace) {
+    Counters.GetAsyncInputData++;
     SRC_LOG_T("GetAsyncInputData freeSpace = " << freeSpace);
     Init();
     Metrics.InFlyAsyncInputData->Set(0);
@@ -717,6 +762,7 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
             continue;
         }
         for (auto& [rowDispatcherActorId, sessionInfo] : child->Sessions) {
+            // all actors are on same mailbox, safe to call
             child->TrySendGetNextBatch(sessionInfo);
         }
     }
@@ -769,6 +815,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvStatistics::TPtr& ev) {
     SRC_LOG_T("Received TEvStatistics from " << ev->Sender << ", seqNo " << meta.GetSeqNo() << ", ConfirmedSeqNo " << meta.GetConfirmedSeqNo() << " generation " << ev->Cookie);
     Counters.Statistics++;
     CpuMicrosec += ev->Get()->Record.GetCpuMicrosec();
+    // all actors are on same mailbox, this method is not called after Parent stopped, safe to access directly
     if (Parent != this) {
         Parent->CpuMicrosec += ev->Get()->Record.GetCpuMicrosec();
     }
@@ -872,7 +919,7 @@ void TDqPqRdReadActor::Handle(const NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& e
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
     SRC_LOG_D("TEvCoordinatorChanged, new coordinator " << ev->Get()->CoordinatorActorId);
-    Counters.GetAsyncInputData++;
+    Counters.CoordinatorChanged++;
 
     if (CoordinatorActorId
         && CoordinatorActorId == ev->Get()->CoordinatorActorId) {
@@ -900,6 +947,7 @@ void TDqPqRdReadActor::ScheduleProcessState() {
 
 void TDqPqRdReadActor::ReInit(const TString& reason) {
     SRC_LOG_I("ReInit state, reason " << reason);
+    // all actors are on same mailbox, this method is not called after Parent stopped, safe to access directly
     Parent->Metrics.ReInit->Inc();
 
     State = EState::WAIT_COORDINATOR_ID;
@@ -915,7 +963,7 @@ void TDqPqRdReadActor::Stop(NDqProto::StatusIds::StatusCode status, TIssues issu
 
 void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvCoordinatorResult::TPtr& ev) {
     SRC_LOG_I("Received TEvCoordinatorResult from " << ev->Sender.ToString() << ", cookie " << ev->Cookie);
-    Counters.CoordinatorChanged++;
+    Counters.CoordinatorResult++;
     if (ev->Cookie != CoordinatorRequestCookie) {
         SRC_LOG_W("Ignore TEvCoordinatorResult. wrong cookie");
         return;
@@ -991,6 +1039,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
         Stop(NDqProto::StatusIds::INTERNAL_ERROR, {TIssue(TStringBuilder() << LogPrefix << "No partition with id " << partitionId)});
         return;
     }
+    // all actors are on same mailbox, this method is not called after Parent stopped, safe to access directly
     Parent->Metrics.InFlyGetNextBatch->Set(0);
     if (ev->Get()->Record.GetMessages().empty()) {
         return;
@@ -1016,7 +1065,7 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
         SRC_LOG_T("TEvMessageBatch NextOffset " << nextOffset);
     }
     activeBatch.UsedSpace = bytes;
-    ReadyBufferSizeBytes += bytes;
+    Parent->ReadyBufferSizeBytes += bytes;
     activeBatch.NextOffset = ev->Get()->Record.GetNextMessageOffset();
     Parent->NotifyCA();
 }
@@ -1068,14 +1117,21 @@ void TDqPqRdReadActor::PrintInternalState() {
 
 TString TDqPqRdReadActor::GetInternalState() {
     TStringStream str;
-    str << LogPrefix << "State: used buffer size " << Parent->ReadyBufferSizeBytes << " ready buffer event size " << Parent->ReadyBuffer.size()  << " state " << static_cast<ui64>(State) << " InFlyAsyncInputData " << Parent->InFlyAsyncInputData << "\n";
-    str << "Counters: GetAsyncInputData " << Counters.GetAsyncInputData << " CoordinatorChanged " << Counters.CoordinatorChanged << " CoordinatorResult " << Counters.CoordinatorResult
+    str << LogPrefix << "State:";
+    str << " used buffer size " << Parent->ReadyBufferSizeBytes << " ready buffer event size " << Parent->ReadyBuffer.size()
+        << " state " << static_cast<ui64>(State)
+        << " InFlyAsyncInputData " << Parent->InFlyAsyncInputData
+        << "\n";
+    str << "Counters:"
+        << " CoordinatorChanged " << Counters.CoordinatorChanged << " CoordinatorResult " << Counters.CoordinatorResult
         << " MessageBatch " << Counters.MessageBatch << " StartSessionAck " << Counters.StartSessionAck << " NewDataArrived " << Counters.NewDataArrived
         << " SessionError " << Counters.SessionError << " Statistics " << Counters.Statistics << " NodeDisconnected " << Counters.NodeDisconnected
         << " NodeConnected " << Counters.NodeConnected << " Undelivered " << Counters.Undelivered << " Retry " << Counters.Retry
         << " PrivateHeartbeat " << Counters.PrivateHeartbeat << " SessionClosed " << Counters.SessionClosed << " Pong " << Counters.Pong
         << " Heartbeat " << Counters.Heartbeat << " PrintState " << Counters.PrintState << " ProcessState " << Counters.ProcessState
-        << " NotifyCA " << Parent->Counters.NotifyCA << "\n";
+        << " GetAsyncInputData " << Parent->Counters.GetAsyncInputData
+        << " NotifyCA " << Parent->Counters.NotifyCA
+        << "\n";
     
     for (auto& [rowDispatcherActorId, sessionInfo] : Sessions) {
         str << " " << rowDispatcherActorId << " status " << static_cast<ui64>(sessionInfo.Status)
@@ -1365,6 +1421,7 @@ void TDqPqRdReadActor::StartCluster(ui32 clusterIndex) {
         PqGateway,
         this,
         TString(Clusters[clusterIndex].Info.Name));
+    Clusters[clusterIndex].Child = actor;
     Clusters[clusterIndex].ChildId = RegisterWithSameMailbox(actor);
     actor->Init();
     actor->InitChild();

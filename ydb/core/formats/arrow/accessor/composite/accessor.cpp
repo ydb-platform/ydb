@@ -119,6 +119,7 @@ std::shared_ptr<arrow::ChunkedArray> TCompositeChunkedArray::GetChunkedArray(con
             if (chunks.size()) {
                 break;
             } else {
+                pos += i->GetRecordsCount();
                 continue;
             }
         }

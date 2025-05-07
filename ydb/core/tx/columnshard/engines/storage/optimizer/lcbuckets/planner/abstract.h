@@ -11,9 +11,9 @@ namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 class TOrderedPortion {
 private:
     TPortionInfo::TConstPtr Portion;
-    NArrow::TReplaceKey Start;
+    NArrow::TSimpleRow Start;
     ui64 PortionId;
-    NArrow::NMerger::TSortableBatchPosition StartPosition;
+    NArrow::TSimpleRow StartPosition;
 
 public:
     const TPortionInfo::TConstPtr& GetPortion() const {
@@ -21,11 +21,11 @@ public:
         return Portion;
     }
 
-    const NArrow::TReplaceKey& GetStart() const {
+    const NArrow::TSimpleRow& GetStart() const {
         return Start;
     }
 
-    const NArrow::NMerger::TSortableBatchPosition& GetStartPosition() const {
+    const NArrow::TSimpleRow& GetStartPosition() const {
         AFL_VERIFY(Portion);
         return StartPosition;
     }
@@ -34,19 +34,32 @@ public:
         : Portion(portion)
         , Start(portion->IndexKeyStart())
         , PortionId(portion->GetPortionId())
-        , StartPosition(Portion->GetMeta().GetFirstLastPK().GetBatch(), 0, false) {
+        , StartPosition(Portion->IndexKeyStart()) {
     }
 
     TOrderedPortion(const TPortionInfo::TPtr& portion)
         : Portion(portion)
         , Start(portion->IndexKeyStart())
         , PortionId(portion->GetPortionId())
-        , StartPosition(Portion->GetMeta().GetFirstLastPK().GetBatch(), 0, false) {
+        , StartPosition(Portion->IndexKeyStart()) {
     }
 
-    TOrderedPortion(const NArrow::TReplaceKey& start)
-        : Start(start)
-        , PortionId(Max<ui64>()) {
+    friend bool operator<(const NArrow::TSimpleRow& item, const TOrderedPortion& portion) {
+        auto cmp = item.CompareNotNull(portion.Start);
+        if (cmp == std::partial_ordering::equivalent) {
+            return false;
+        } else {
+            return cmp == std::partial_ordering::less;
+        }
+    }
+
+    bool operator<(const NArrow::TSimpleRow& item) const {
+        auto cmp = Start.CompareNotNull(item);
+        if (cmp == std::partial_ordering::equivalent) {
+            return true;
+        } else {
+            return cmp == std::partial_ordering::less;
+        }
     }
 
     bool operator<(const TOrderedPortion& item) const {
@@ -130,7 +143,7 @@ private:
     THashSet<ui64> NextLevelPortionIds;
     THashSet<ui64> CurrentLevelPortionIds;
     std::vector<TPortionsChain> Chains;
-    std::optional<NArrow::TReplaceKey> StopSeparation;
+    std::optional<NArrow::TSimpleRow> StopSeparation;
 
 public:
     ui64 GetTargetCompactionLevel() const {
@@ -141,7 +154,7 @@ public:
         }
     }
 
-    void SetStopSeparation(const NArrow::TReplaceKey& point) { 
+    void SetStopSeparation(const NArrow::TSimpleRow& point) {
         AFL_VERIFY(!StopSeparation);
         StopSeparation = point;
     }
@@ -225,7 +238,7 @@ public:
     }
 
     NArrow::NMerger::TIntervalPositions GetCheckPositions(const std::shared_ptr<arrow::Schema>& pkSchema, const bool withMoved);
-    std::vector<NArrow::TReplaceKey> GetFinishPoints(const bool withMoved);
+    std::vector<NArrow::NMerger::TSortableBatchPosition> GetFinishPoints(const bool withMoved);
 
     void AddCurrentLevelPortion(const TPortionInfo::TConstPtr& portion, std::optional<TPortionsChain>&& chain, const bool repackMoved) {
         AFL_VERIFY(UsedPortionIds.emplace(portion->GetPortionId()).second);
@@ -260,8 +273,8 @@ public:
         if (Portions.size() <= 1) {
             return true;
         }
-        return MemoryUsage < (((ui64)512) << 20) && CurrentLevelPortionsInfo.GetCount() + TargetLevelPortionsInfo.GetCount() < 1000
-            && Portions.size() < 10000;
+        return MemoryUsage < (((ui64)512) << 20) && CurrentLevelPortionsInfo.GetCount() + TargetLevelPortionsInfo.GetCount() < 1000 &&
+               Portions.size() < 10000;
     }
 
     TCompactionTaskData(const ui64 targetCompactionLevel)
@@ -276,8 +289,8 @@ private:
     virtual TInstant DoGetWeightExpirationInstant() const = 0;
     virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& pkSchema) const = 0;
     virtual TCompactionTaskData DoGetOptimizationTask() const = 0;
-    virtual std::optional<TPortionsChain> DoGetAffectedPortions(const NArrow::TReplaceKey& from, const NArrow::TReplaceKey& to) const = 0;
-    virtual ui64 DoGetAffectedPortionBytes(const NArrow::TReplaceKey& from, const NArrow::TReplaceKey& to) const = 0;
+    virtual std::optional<TPortionsChain> DoGetAffectedPortions(const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to) const = 0;
+    virtual ui64 DoGetAffectedPortionBytes(const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to) const = 0;
 
     virtual NJson::TJsonValue DoSerializeToJson() const {
         return NJson::JSON_MAP;
@@ -357,11 +370,11 @@ public:
         return DoDebugString();
     }
 
-    std::optional<TPortionsChain> GetAffectedPortions(const NArrow::TReplaceKey& from, const NArrow::TReplaceKey& to) const {
+    std::optional<TPortionsChain> GetAffectedPortions(const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to) const {
         return DoGetAffectedPortions(from, to);
     }
 
-    ui64 GetAffectedPortionBytes(const NArrow::TReplaceKey& from, const NArrow::TReplaceKey& to) const {
+    ui64 GetAffectedPortionBytes(const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to) const {
         return DoGetAffectedPortionBytes(from, to);
     }
 

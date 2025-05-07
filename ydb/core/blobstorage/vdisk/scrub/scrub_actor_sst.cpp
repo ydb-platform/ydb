@@ -31,10 +31,13 @@ namespace NKikimr {
     }
 
     void TScrubCoroImpl::ReadOutAndResilverIndex(TLevelSegmentPtr sst) {
+        TTrackableVector<TLevelSegment::TRec> linearIndex(TMemoryConsumer(VCtx->SstIndex));
+        sst->SaveLinearIndex(&linearIndex);
+
         TDiskPart prevPart;
         bool first = true;
         ui32 remainOutboundSize = sst->LoadedOutbound.size() * sizeof(TDiskPart);
-        ui32 remainIndexSize = sst->LoadedIndex.size() * sizeof(TLevelSegment::TRec);
+        ui32 remainIndexSize = linearIndex.size() * sizeof(TLevelSegment::TRec);
         for (TDiskPart part : sst->IndexParts) {
             TString regen = TString::Uninitialized(part.Size);
             ui32 destLen = regen.size();
@@ -72,7 +75,7 @@ namespace NKikimr {
             // third step: the index
             const ui32 isize = Min(remainIndexSize, destLen);
             remainIndexSize -= isize;
-            prepend(reinterpret_cast<const char*>(sst->LoadedIndex.data()) + remainIndexSize, isize);
+            prepend(reinterpret_cast<const char*>(linearIndex.data()) + remainIndexSize, isize);
 
             // fourth step: sanity check
             Y_VERIFY_S(!destLen, LogPrefix);

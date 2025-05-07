@@ -66,7 +66,7 @@ message TTableServiceConfig {
 
             message TIoThreadPoolConfig {
                 optional uint32 WorkersCount = 1 [default = 2];
-                optional uint32 QueueSize = 2 [default = 1000];
+                optional uint32 QueueSize = 2 [default = 10000];
             };
             optional TIoThreadPoolConfig IoThreadPool = 6;
         }
@@ -241,8 +241,8 @@ message TTableServiceConfig {
     reserved 27; // EnableKqpDataQuerySourceRead
     optional uint64 SessionIdleDurationSeconds = 28 [default = 600];
     optional TAggregationConfig AggregationConfig = 29;
-    optional bool EnableKqpScanQueryStreamLookup = 30 [default = true];
-    optional bool EnableKqpDataQueryStreamLookup = 31 [default = true];
+    reserved 30; // optional bool EnableKqpScanQueryStreamLookup = 30 [default = true];
+    reserved 31; // optional bool EnableKqpDataQueryStreamLookup = 31 [default = true];
     optional TExecuterRetriesConfig ExecuterRetriesConfig = 32;
     reserved 33; // optional bool EnableKqpDataQueryStreamPointLookup = 33 [default = false];
     optional bool EnablePublishKqpProxyByRM = 34 [default = true];
@@ -335,7 +335,7 @@ message TTableServiceConfig {
 
     message TWriteActorSettings {
         optional uint64 InFlightMemoryLimitPerActorBytes = 1 [ default = 67108864 ];
-        optional uint64 MemoryLimitPerMessageBytes = 2 [ default = 67108864 ];
+        reserved 2; // MemoryLimitPerMessageBytes
 
         optional uint64 StartRetryDelayMs = 4 [ default = 1000 ];
         optional uint64 MaxRetryDelayMs = 5 [ default = 10000 ];
@@ -368,7 +368,21 @@ message TTableServiceConfig {
     optional bool EnableStreamWrite = 77 [default = false];
     optional bool EnableBatchUpdates = 78 [default = false];
 
-    optional bool AllowMultiBroadcasts = 79 [default = false];
+    optional bool AllowMultiBroadcasts = 79 [default = true];
 
     optional bool DefaultEnableShuffleElimination = 80 [default = true];
+
+    message TBatchOperationSettings {
+        optional uint64 MaxBatchSize = 1 [ default = 10000 ];
+        optional uint64 MinBatchSize = 2 [ default = 1 ];
+        optional uint64 StartRetryDelayMs = 3 [ default = 50 ];
+        optional uint64 MaxRetryDelayMs = 4 [ default = 30000 ];
+        optional uint64 PartitionExecutionLimit = 5 [ default = 10 ];
+    }
+
+    optional TBatchOperationSettings BatchOperationSettings = 81;
+
+    optional bool EnableFoldUdfs = 82 [ default = true ];
+
+    optional bool FilterPushdownOverJoinOptionalSide = 83 [ default = true ];
 };

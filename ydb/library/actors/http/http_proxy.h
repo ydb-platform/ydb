@@ -294,7 +294,7 @@ struct TPrivateEndpointInfo : THttpEndpointInfo {
 
 NActors::IActor* CreateHttpProxy(std::weak_ptr<NMonitoring::IMetricFactory> registry = NMonitoring::TMetricRegistry::SharedInstance());
 NActors::IActor* CreateHttpAcceptorActor(const TActorId& owner);
-NActors::IActor* CreateOutgoingConnectionActor(const TActorId& owner, bool secure);
+NActors::IActor* CreateOutgoingConnectionActor(const TActorId& owner, TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event);
 NActors::IActor* CreateIncomingConnectionActor(
         std::shared_ptr<TPrivateEndpointInfo> endpoint,
         TIntrusivePtr<TSocketDescriptor> socket,

@@ -36,6 +36,9 @@ struct TRootCause {
 
     // Walk the cause tree from leaf to root and output it as an LWTRACK
     void RenderTrack(NLWTrace::TOrbit &orbit) {
+#ifdef LWTRACE_DISABLE
+        Y_UNUSED(orbit);
+#else //LWTRACE_DISABLE
         if (HasShuttles(orbit)) {
             if (CurrentCauseIdx < Items.size()) {
                 const TRootCauseItem &item = Items[CurrentCauseIdx];
@@ -56,6 +59,7 @@ struct TRootCause {
                 }
             }
         }
+#endif //LWTRACE_DISABLE
     }
 
     ui64 RegisterCause(const TString& requestType = "") {
@@ -100,3 +104,4 @@ struct TRootCause {
 };
 
 }//NKikimr
+

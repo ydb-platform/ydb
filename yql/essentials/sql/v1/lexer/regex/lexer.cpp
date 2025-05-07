@@ -19,6 +19,9 @@ namespace NSQLTranslationV1 {
 
     class TRegexLexer: public NSQLTranslation::ILexer {
         static constexpr const char* CommentTokenName = "COMMENT";
+        static constexpr const char* StringValueName = "STRING_VALUE";
+
+        static constexpr const TStringBuf Utf8BOM = "\xEF\xBB\xBF";
 
     public:
         TRegexLexer(
@@ -29,10 +32,16 @@ namespace NSQLTranslationV1 {
             , Ansi_(ansi)
         {
             for (const auto& [token, regex] : RegexByOtherName) {
+                RE2::Options custom;
+                if (token != CommentTokenName && token != StringValueName) {
+                    custom.set_longest_match(true);
+                }
+
+                RE2* re2 = new RE2(regex, custom);
                 if (token == CommentTokenName) {
-                    CommentRegex_.Reset(new RE2(regex));
+                    CommentRegex_.Reset(re2);
                 } else {
-                    OtherRegexes_.emplace_back(token, new RE2(regex));
+                    OtherRegexes_.emplace_back(token, re2);
                 }
             }
         }
@@ -44,7 +53,13 @@ namespace NSQLTranslationV1 {
             NYql::TIssues& issues,
             size_t maxErrors) override {
             size_t errors = 0;
-            for (size_t pos = 0; pos < query.size();) {
+
+            size_t pos = 0;
+            if (query.StartsWith(Utf8BOM)) {
+                pos += Utf8BOM.size();
+            }
+
+            while (pos < query.size()) {
                 TParsedToken matched = Match(TStringBuf(query, pos));
 
                 if (matched.Name.empty() && maxErrors == errors) {
@@ -62,7 +77,7 @@ namespace NSQLTranslationV1 {
                 onNextToken(std::move(matched));
             }
 
-            onNextToken(TParsedToken{.Name = "EOF"});
+            onNextToken(TParsedToken{.Name = "EOF", .Content = "<EOF>"});
             return errors == 0;
         }
 
@@ -109,8 +124,9 @@ namespace NSQLTranslationV1 {
         bool MatchKeyword(const TStringBuf prefix, TParsedTokenList& matches) {
             size_t count = 0;
             for (const auto& keyword : Grammar_.KeywordNames) {
-                const TStringBuf content = prefix.substr(0, keyword.length());
-                if (AsciiEqualsIgnoreCase(content, keyword)) {
+                const TStringBuf block = NSQLReflect::TLexerGrammar::KeywordBlock(keyword);
+                const TStringBuf content = prefix.substr(0, block.length());
+                if (AsciiEqualsIgnoreCase(content, block)) {
                     matches.emplace_back(keyword, TString(content));
                     count += 1;
                 }

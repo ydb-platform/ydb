@@ -18,8 +18,12 @@ SRCS(
     actors/kafka_create_topics_actor.cpp
     actors/kafka_create_partitions_actor.cpp
     actors/kafka_alter_configs_actor.cpp
+    actors/kafka_describe_configs_actor.cpp
     actors/kafka_balance_actor_sql.cpp
     actors/kafka_balancer_actor.cpp
+    actors/txn_actor_response_builder.cpp
+    actors/kafka_transaction_actor_sql.cpp
+    actors/kafka_transaction_actor.cpp
     kafka_connection.cpp
     kafka_connection.h
     kafka_constants.h

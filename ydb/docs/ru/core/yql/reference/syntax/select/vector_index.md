@@ -6,11 +6,13 @@
 
 {% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
 
+{% include [limitations](../../../../_includes/vector_index_limitations.md) %}
+
 {% endnote %}
 
 {% endif %}
 
-Для выполнения запроса `SELECT` с использованием векторного индекса в строчно-ориентированной таблице используйте следующий синтаксис:
+Для выполнения запроса `SELECT` с использованием [векторного индекса](../../../../concepts/glossary.md#vector-index) в строчно-ориентированной таблице используйте следующий синтаксис:
 
 ```yql
 SELECT ...
@@ -28,6 +30,11 @@ SELECT ...
     LIMIT ...
 ```
 
+{% note info %}
+
+Векторный индекс не будет автоматически выбран  [оптимизатором](../../../../concepts/glossary.md#optimizer), поэтому его нужно указывать явно с помощью выражения `VIEW IndexName`.
+
+{% endnote %}
 
 ## Примеры
 

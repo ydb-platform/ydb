@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    codecs.cpp
+    GLOBAL codecs.cpp
 )
 
 PEERDIR(

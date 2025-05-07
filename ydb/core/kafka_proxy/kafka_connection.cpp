@@ -51,7 +51,7 @@ public:
     TEvPollerReady* InactivityEvent = nullptr;
 
     const TActorId ListenerActorId;
-    const TActorId KafkaTxnCoordinatorActorId = NKafka::MakeKafkaTransactionsServiceID();
+    const TActorId KafkaTxnCoordinatorActorId = NKafka::MakeTransactionsServiceID();
 
     TIntrusivePtr<TSocketDescriptor> Socket;
     TSocketAddressType Address;
@@ -296,6 +296,10 @@ protected:
         Register(CreateKafkaMetadataActor(Context, header->CorrelationId, message, NKafka::MakeKafkaDiscoveryCacheID()));
     }
 
+    void HandleMessage(TRequestHeaderData* header, const TMessagePtr<TDescribeConfigsRequestData>& message) {
+        Register(CreateKafkaDescribeConfigsActor(Context, header->CorrelationId, message));
+    }
+
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TSaslAuthenticateRequestData>& message) {
         Register(CreateKafkaSaslAuthActor(Context, header->CorrelationId, Address, message));
     }
@@ -425,6 +429,10 @@ protected:
 
             case CREATE_TOPICS:
                 HandleMessage(&Request->Header, Cast<TCreateTopicsRequestData>(Request));
+                break;
+
+            case DESCRIBE_CONFIGS:
+                HandleMessage(&Request->Header, Cast<TDescribeConfigsRequestData>(Request));
                 break;
 
             case CREATE_PARTITIONS:
@@ -562,7 +570,10 @@ protected:
             responseHeader.Write(writable, headerVersion);
             reply->Write(writable, version);
 
-            Buffer.flush();
+            ssize_t res = Buffer.flush();
+            if (res < 0) {
+                ythrow yexception() << "Error during flush of the written to socket data. Error code: " << strerror(-res) << " (" << res << ")";
+            }
 
             KAFKA_LOG_D("Sent reply: ApiKey=" << header->RequestApiKey << ", Version=" << version << ", Correlation=" << responseHeader.CorrelationId <<  ", Size=" << size);
         } catch(const yexception& e) {

@@ -198,22 +198,24 @@
             ]
         },
         {
-            "Name": "TYtTableContent",
+            "Name": "TYtTableContentBase",
             "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "YtTableContent"},
+            "Match": {"Type": "CallableBase"},
+            "Builder": {"Generate": "None"},
             "Children": [
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 1, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {
+            "Name": "TYtTableContent",
+            "Base": "TYtTableContentBase",
+            "Match": {"Type": "Callable", "Name": "YtTableContent"}
+        },
+        {
             "Name": "TYtBlockTableContent",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "YtBlockTableContent"},
-            "Children": [
-                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
-                {"Index": 1, "Name": "Settings", "Type": "TCoNameValueTupleList"}
-            ]
+            "Base": "TYtTableContentBase",
+            "Match": {"Type": "Callable", "Name": "YtBlockTableContent"}
         },
         {
             "Name": "TYtLength",

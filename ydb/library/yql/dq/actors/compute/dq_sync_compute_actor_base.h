@@ -262,7 +262,7 @@ protected:
         );
     }
 
-    const NYql::NDq::TTaskRunnerStatsBase* GetTaskRunnerStats() override {
+    const NYql::NDq::TDqTaskRunnerStats* GetTaskRunnerStats() override {
         return TaskRunner ? TaskRunner->GetStats() : nullptr;
     }
 

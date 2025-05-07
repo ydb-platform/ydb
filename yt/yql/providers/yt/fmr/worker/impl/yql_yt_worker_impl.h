@@ -1,3 +1,5 @@
+#pragma once
+
 #include <library/cpp/random_provider/random_provider.h>
 #include <yt/yql/providers/yt/fmr/coordinator/interface/yql_yt_coordinator.h>
 #include <yt/yql/providers/yt/fmr/job_factory/interface/yql_yt_job_factory.h>

@@ -147,6 +147,12 @@ class BaseQuerySession:
             .with_timeout(DEFAULT_ATTACH_LONG_TIMEOUT)
         )
 
+        self._last_query_stats = None
+
+    @property
+    def last_query_stats(self):
+        return self._last_query_stats
+
     def _get_client_settings(
         self,
         driver: common_utils.SupportedDriverType,
@@ -189,22 +195,26 @@ class BaseQuerySession:
     def _execute_call(
         self,
         query: str,
+        parameters: dict = None,
         commit_tx: bool = False,
         syntax: base.QuerySyntax = None,
         exec_mode: base.QueryExecMode = None,
-        parameters: dict = None,
+        stats_mode: Optional[base.QueryStatsMode] = None,
         concurrent_result_sets: bool = False,
         settings: Optional[BaseRequestSettings] = None,
     ) -> Iterable[_apis.ydb_query.ExecuteQueryResponsePart]:
+        self._last_query_stats = None
+
         request = base.create_execute_query_request(
             query=query,
-            session_id=self._state.session_id,
+            parameters=parameters,
             commit_tx=commit_tx,
+            session_id=self._state.session_id,
             tx_mode=None,
             tx_id=None,
             syntax=syntax,
             exec_mode=exec_mode,
-            parameters=parameters,
+            stats_mode=stats_mode,
             concurrent_result_sets=concurrent_result_sets,
         )
 
@@ -293,7 +303,7 @@ class QuerySession(BaseQuerySession):
     def transaction(self, tx_mode: Optional[base.BaseQueryTxMode] = None) -> QueryTxContext:
         """Creates a transaction context manager with specified transaction mode.
 
-        :param tx_mode: Transaction mode, which is a one from the following choises:
+        :param tx_mode: Transaction mode, which is a one from the following choices:
          1) QuerySerializableReadWrite() which is default mode;
          2) QueryOnlineReadOnly(allow_inconsistent_reads=False);
          3) QuerySnapshotReadOnly();
@@ -321,15 +331,22 @@ class QuerySession(BaseQuerySession):
         exec_mode: base.QueryExecMode = None,
         concurrent_result_sets: bool = False,
         settings: Optional[BaseRequestSettings] = None,
+        *,
+        stats_mode: Optional[base.QueryStatsMode] = None,
     ) -> base.SyncResponseContextIterator:
         """Sends a query to Query Service
 
         :param query: (YQL or SQL text) to be executed.
-        :param syntax: Syntax of the query, which is a one from the following choises:
+        :param syntax: Syntax of the query, which is a one from the following choices:
          1) QuerySyntax.YQL_V1, which is default;
          2) QuerySyntax.PG.
         :param parameters: dict with parameters and YDB types;
         :param concurrent_result_sets: A flag to allow YDB mix parts of different result sets. Default is False;
+        :param stats_mode: Mode of query statistics to gather, which is a one from the following choices:
+         1) QueryStatsMode:NONE, which is default;
+         2) QueryStatsMode.BASIC;
+         3) QueryStatsMode.FULL;
+         4) QueryStatsMode.PROFILE;
 
         :return: Iterator with result sets
         """
@@ -337,10 +354,11 @@ class QuerySession(BaseQuerySession):
 
         stream_it = self._execute_call(
             query=query,
+            parameters=parameters,
             commit_tx=True,
             syntax=syntax,
             exec_mode=exec_mode,
-            parameters=parameters,
+            stats_mode=stats_mode,
             concurrent_result_sets=concurrent_result_sets,
             settings=settings,
         )
@@ -351,6 +369,7 @@ class QuerySession(BaseQuerySession):
                 rpc_state=None,
                 response_pb=resp,
                 session_state=self._state,
+                session=self,
                 settings=self._settings,
             ),
         )

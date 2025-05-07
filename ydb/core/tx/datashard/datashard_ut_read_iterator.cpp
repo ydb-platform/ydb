@@ -4748,11 +4748,19 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorConsistency) {
         // Slee for some time, this will make sure the lease expires and stops getting renewed
         runtime.SimulateSleep(TDuration::Seconds(10));
 
-        // Start blocking new commits for the tablet
+        // Start blocking new commits and leases for the tablet
         TBlockEvents<TEvBlobStorage::TEvPut> blockCommits(runtime,
             [tabletId = table1.TabletId](auto& ev) {
                 if (ev->Get()->Id.TabletID() == tabletId) {
                     Cerr << "... blocking blob " << ev->Get()->Id << Endl;
+                    return true;
+                }
+                return false;
+            });
+        TBlockEvents<TEvBlobStorage::TEvGetBlock> blockLeases(runtime,
+            [tabletId = table1.TabletId](auto& ev) {
+                if (ev->Get()->TabletId == tabletId) {
+                    Cerr << "... blocking getblock " << ev->Get()->TabletId << Endl;
                     return true;
                 }
                 return false;
@@ -4766,9 +4774,11 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorConsistency) {
 
         // Sleep for some time, giving the tablet a chance to produce out-of-order results
         runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT_C((blockCommits.size() + blockLeases.size()) > 0, "no commits or leases have been blocked");
 
-        // Stop blocking commits
+        // Stop blocking commits and leases
         blockCommits.Stop().Unblock();
+        blockLeases.Stop().Unblock();
 
         // The first result we receive should be with the first row
         auto readResult2 = helper.WaitReadResult();
@@ -4776,6 +4786,157 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorConsistency) {
             {1, 1, 1, 100},
         });
         UNIT_ASSERT(!readResult2->Record.GetFinished());
+    }
+
+    Y_UNIT_TEST(BrokenWriteLockBeforeIteration) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+        TServer::TPtr server = new TServer(serverSettings);
+
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, index int, value int, PRIMARY KEY (key, index));
+            )"),
+            "SUCCESS"
+        );
+
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table` (key, index, value) VALUES
+                (42, 0, 1001),
+                (42, 1, 1002);
+        )");
+
+        TString sessionId;
+        TString txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                $maxIndex = (SELECT MAX(index) FROM `/Root/table` WHERE key = 42);
+
+                UPSERT INTO `/Root/table` (key, index, value) VALUES
+                    (42, COALESCE($maxIndex + 1, 0) + 0, 2001),
+                    (42, COALESCE($maxIndex + 1, 0) + 1, 2002);
+
+                SELECT count(*) FROM `/Root/table` WHERE key = 42;
+            )"),
+            "{ items { uint64_value: 4 } }"
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                $maxIndex = (SELECT MAX(index) FROM `/Root/table` WHERE key = 42);
+
+                UPSERT INTO `/Root/table` (key, index, value) VALUES
+                    (42, COALESCE($maxIndex + 1, 0) + 0, 3001);
+            )"),
+            "<empty>"
+        );
+
+        // Transaction should abort instead of observing wild results like:
+        // 0 -> 1001
+        // 1 -> 1002
+        // 3 -> 2002
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleContinue(runtime, sessionId, txId, R"(
+                SELECT index, value FROM `/Root/table`
+                WHERE key = 42
+                ORDER BY index;
+            )"),
+            "ERROR: ABORTED"
+        );
+    }
+
+    Y_UNIT_TEST(BrokenWriteLockDuringIteration) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+        TServer::TPtr server = new TServer(serverSettings);
+
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, index int, value int, PRIMARY KEY (key, index));
+            )"),
+            "SUCCESS"
+        );
+
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table` (key, index, value) VALUES
+                (42, 0, 1001),
+                (42, 1, 1002);
+        )");
+
+        TString sessionId;
+        TString txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                $maxIndex = (SELECT MAX(index) FROM `/Root/table` WHERE key = 42);
+
+                UPSERT INTO `/Root/table` (key, index, value) VALUES
+                    (42, COALESCE($maxIndex + 1, 0) + 0, 2001),
+                    (42, COALESCE($maxIndex + 1, 0) + 1, 2002);
+
+                SELECT count(*) FROM `/Root/table` WHERE key = 42;
+            )"),
+            "{ items { uint64_value: 4 } }"
+        );
+
+        TBlockEvents<TEvDataShard::TEvRead> blockedRead(runtime,
+            [&](auto& ev) {
+                ev->Get()->Record.SetMaxRowsInResult(1);
+                return true;
+            });
+        auto readFuture = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+                SELECT index, value FROM `/Root/table`
+                WHERE key = 42
+                ORDER BY index;
+            )", sessionId, txId, /* commit */ false));
+        runtime.WaitFor("blocked read", [&]{ return blockedRead.size() >= 1; });
+        blockedRead.Stop().Unblock();
+
+        TBlockEvents<TEvDataShard::TEvReadContinue> blockedReadContinue(runtime);
+        runtime.WaitFor("blocked read continue", [&]{ return blockedReadContinue.size() >= 1; });
+        blockedReadContinue.Stop();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                $maxIndex = (SELECT MAX(index) FROM `/Root/table` WHERE key = 42);
+
+                UPSERT INTO `/Root/table` (key, index, value) VALUES
+                    (42, COALESCE($maxIndex + 1, 0) + 0, 3001);
+            )"),
+            "<empty>"
+        );
+
+        blockedReadContinue.Unblock();
+
+        // Transaction should abort instead of observing wild results like:
+        // 0 -> 1001
+        // 1 -> 1002
+        // 3 -> 2002
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(AwaitResponse(runtime, std::move(readFuture))),
+            "ERROR: ABORTED"
+        );
     }
 
 }

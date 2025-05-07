@@ -109,6 +109,8 @@ void FillColumnFamilies(Ydb::Table::DescribeTableResult& out,
     const NKikimrSchemeOp::TTableDescription& in);
 void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
     const NKikimrSchemeOp::TTableDescription& in);
+void FillColumnFamilies(Ydb::Table::DescribeTableResult& out,
+    const NKikimrSchemeOp::TColumnTableDescription& in);
 void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
     const NKikimrSchemeOp::TColumnTableDescription& in);
 
@@ -138,6 +140,8 @@ void FillKeyBloomFilter(Ydb::Table::CreateTableRequest& out,
 void FillReadReplicasSettings(Ydb::Table::DescribeTableResult& out,
     const NKikimrSchemeOp::TTableDescription& in);
 void FillReadReplicasSettings(Ydb::Table::CreateTableRequest& out,
+    const NKikimrSchemeOp::TTableDescription& in);
+void FillReadReplicasSettings(Ydb::Table::GlobalIndexSettings& out,
     const NKikimrSchemeOp::TTableDescription& in);
 
 // in

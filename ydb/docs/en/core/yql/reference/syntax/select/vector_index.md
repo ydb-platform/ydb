@@ -6,11 +6,13 @@
 
 {% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
 
+{% include [limitations](../../../../_includes/vector_index_limitations.md) %}
+
 {% endnote %}
 
 {% endif %}
 
-To select data from a row-oriented table using a vector index, use the following statements:
+To select data from a row-oriented table using a [vector index](../../../../concepts/glossary.md#vector-index), use the following statements:
 
 ```yql
 SELECT ...
@@ -28,6 +30,11 @@ SELECT ...
     LIMIT ...
 ```
 
+{% note info %}
+
+The vector index will not be automatically selected by the [optimizer](../../../../concepts/glossary.md#optimizer), so it must be specified explicitly using the expression `VIEW IndexName'.
+
+{% endnote %}
 
 ## Examples
 

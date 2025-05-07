@@ -203,7 +203,7 @@ struct TIndexDescription {
             case EType::GlobalAsync:
                 return false;
             case EType::GlobalSyncVectorKMeansTree:
-                return true;
+                return false;
         }
     }
 
@@ -923,7 +923,7 @@ struct TTransferSettings : public TReplicationSettingsBase {
 
     struct TBatching {
         TDuration FlushInterval;
-        ui64 BatchSizeBytes;
+        std::optional<ui64> BatchSizeBytes;
     };
 
     TMaybe<TString> ConsumerName;

@@ -31,6 +31,7 @@ class Schema;
 
 namespace NKikimr::NOlap {
 class TPortionInfo;
+class TCompactedPortionInfo;
 namespace NIndexes {
 class TSkipIndex;
 }
@@ -56,6 +57,7 @@ struct TIndexInfo: public IIndexInfo {
 private:
     using TColumns = THashMap<ui32, NTable::TColumn>;
     friend class TPortionInfo;
+    friend class TCompactedPortionInfo;
     friend class TPortionDataAccessor;
 
     std::vector<ui32> ColumnIdxSortedByName;
@@ -237,6 +239,7 @@ public:
         result.PKColumnIds = pkIds;
         result.SetAllKeys(operators, columns);
         result.Validate();
+        result.Version = 1;
         return result;
     }
 
@@ -382,6 +385,16 @@ public:
         return PKColumnIds[0];
     }
 
+    std::shared_ptr<arrow::Schema> GetReplaceKeyPrefix(const ui32 size) const {
+        AFL_VERIFY(size);
+        AFL_VERIFY(size <= (ui32)PrimaryKey->num_fields());
+        if (size == (ui32)PrimaryKey->num_fields()) {
+            return PrimaryKey;
+        } else {
+            std::vector<std::shared_ptr<arrow::Field>> fields(PrimaryKey->fields().begin(), PrimaryKey->fields().begin() + size);
+            return std::make_shared<arrow::Schema>(std::move(fields));
+        }
+    }
     const std::shared_ptr<arrow::Schema>& GetReplaceKey() const {
         return PrimaryKey;
     }
@@ -408,7 +421,7 @@ public:
         return Version;
     }
 
-    bool CheckCompatible(const TIndexInfo& other) const;
+    TConclusionStatus CheckCompatible(const TIndexInfo& other) const;
     NArrow::NSerialization::TSerializerContainer GetDefaultSerializer() const {
         return DefaultSerializer;
     }

@@ -191,6 +191,25 @@ TExprNode::TPtr OptimizeWideToBlocks(const TExprNode::TPtr& node, TExprContext& 
     return node;
 }
 
+TExprNode::TPtr OptimizeListToBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(types);
+    const auto& input = node->Head();
+    if (input.IsCallable("ListFromBlocks")) {
+        // TODO: actually (ListToBlocks (ListFromBlocks a)) is (ReplicateScalars a),
+        // but there is no sources of scalars in block lists at the moment, so just ensure it
+        auto inputItemType = input.Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        for (auto item : inputItemType->GetItems()) {
+            YQL_ENSURE(item->GetItemType()->IsBlock() || (item->GetItemType()->IsScalar() && item->GetName() == BlockLengthColumnName));
+        }
+
+        YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Content() << " over " << input.Content();
+        return input.HeadPtr();
+    }
+
+    return node;
+}
+
 TExprNode::TPtr OptimizeWideFromBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     Y_UNUSED(types);
     const auto& input = node->Head();
@@ -202,6 +221,18 @@ TExprNode::TPtr OptimizeWideFromBlocks(const TExprNode::TPtr& node, TExprContext
     if (input.IsCallable("ReplicateScalars")) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << input.Content() << " as input of " << node->Content();
         return ctx.ChangeChild(*node, 0, input.HeadPtr());
+    }
+
+    return node;
+}
+
+TExprNode::TPtr OptimizeListFromBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(types);
+    const auto& input = node->Head();
+    if (input.IsCallable("ListToBlocks")) {
+        YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Content() << " over " << input.Content();
+        return input.HeadPtr();
     }
 
     return node;
@@ -2112,17 +2143,6 @@ TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) {
             dictKeyType = collectionType->Cast<TListExprType>()->GetItemType();
         }
     } else if (collectionType->GetKind() == ETypeAnnotationKind::Tuple) {
-        if (ansiIn && collectionType->Cast<TTupleExprType>()->GetSize()) {
-            return ctx.Builder(input->Pos())
-                .Callable("SqlIn")
-                    .Callable(0, "AsListStrict")
-                        .Add(collection->ChildrenList())
-                    .Seal()
-                    .Add(1, std::move(lookup))
-                    .Add(2, std::move(options))
-                .Seal()
-                .Build();
-        }
         YQL_CLOG(DEBUG, CorePeepHole) << "IN Tuple";
         dict = BuildDictOverTuple(std::move(collection), dictKeyType, ctx);
     } else if (collectionType->GetKind() == ETypeAnnotationKind::EmptyDict) {
@@ -2729,19 +2749,11 @@ TExprNode::TPtr ExpandListHas(const TExprNode::TPtr& input, TExprContext& ctx) {
     return RewriteSearchByKeyForTypesMismatch<true, true>(input, ctx);
 }
 
-TExprNode::TPtr ExpandPruneAdjacentKeys(const TExprNode::TPtr& input, TExprContext& ctx) {
-    const auto type = input->Head().GetTypeAnn();
-    const auto& keyExtractorLambda = input->ChildRef(1);
-
-    YQL_ENSURE(type->GetKind() == ETypeAnnotationKind::List || type->GetKind() == ETypeAnnotationKind::Stream);
-
-    const auto elemType = type->GetKind() == ETypeAnnotationKind::List
-        ? type->Cast<TListExprType>()->GetItemType()
-        : type->Cast<TStreamExprType>()->GetItemType();
-    const auto optionalElemType = *ctx.MakeType<TOptionalExprType>(elemType);
+TExprNode::TPtr ExpandPruneAdjacentKeys(const TExprNode::TPtr& input, TExprContext& ctx, TTypeAnnotationContext& /*typesCtx*/) {
+    const auto& keyExtractorLambda = input->ChildPtr(1);
 
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content();
-    return ctx.Builder(input->Pos())
+    return KeepConstraints(ctx.Builder(input->Pos())
         .Callable("OrderedFlatMap")
             .Callable(0, "Fold1Map")
                 .Add(0, input->HeadPtr())
@@ -2768,7 +2780,11 @@ TExprNode::TPtr ExpandPruneAdjacentKeys(const TExprNode::TPtr& input, TExprConte
                                 .Seal()
                             .Seal()
                             .Callable(1, "Nothing")
-                                .Add(0, ExpandType(input->Pos(), optionalElemType, ctx))
+                                .Callable(0, "OptionalType")
+                                    .Callable(0, "TypeOf")
+                                        .Arg(0, "item")
+                                    .Seal()
+                                .Seal()
                             .Seal()
                             .Callable(2, "Just")
                                 .Arg(0, "item")
@@ -2783,13 +2799,16 @@ TExprNode::TPtr ExpandPruneAdjacentKeys(const TExprNode::TPtr& input, TExprConte
                 .Arg(0, "item")
             .Seal()
         .Seal()
-        .Build();
+        .Build(), *input, ctx);
 }
 
-TExprNode::TPtr ExpandPruneKeys(const TExprNode::TPtr& input, TExprContext& ctx) {
+TExprNode::TPtr ExpandPruneKeys(const TExprNode::TPtr& input, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
     const auto type = input->Head().GetTypeAnn();
-    const auto& keyExtractorLambda = input->ChildRef(1);
-    YQL_ENSURE(type->GetKind() == ETypeAnnotationKind::List || type->GetKind() == ETypeAnnotationKind::Stream);
+    auto keyExtractorLambda = input->ChildPtr(1);
+
+    YQL_ENSURE(type->GetKind() == ETypeAnnotationKind::Flow
+        || type->GetKind() == ETypeAnnotationKind::List
+        || type->GetKind() == ETypeAnnotationKind::Stream);
 
     auto initHandler = ctx.Builder(input->Pos())
         .Lambda()
@@ -2834,6 +2853,39 @@ TExprNode::TPtr ExpandPruneKeys(const TExprNode::TPtr& input, TExprContext& ctx)
             .Seal()
             .Build();
     } else {
+        // Slight copy of GetDictionaryKeyTypes to check if keyExtractorLambda result type is complicated
+        // mkql CombineCore supports only simple types; for others we should add pickling
+        bool keyExtractorLambdaShouldBePickled = false;
+        auto itemType = keyExtractorLambda->GetTypeAnn();
+        if (itemType->GetKind() == ETypeAnnotationKind::Optional) {
+            itemType = itemType->Cast<TOptionalExprType>()->GetItemType();
+        }
+
+        if (itemType->GetKind() == ETypeAnnotationKind::Tuple) {
+            auto tuple = itemType->Cast<TTupleExprType>();
+            for (const auto& item : tuple->GetItems()) {
+                if (!IsDataOrOptionalOfData(item)) {
+                    keyExtractorLambdaShouldBePickled = true;
+                    break;
+                }
+            }
+        } else if (itemType->GetKind() != ETypeAnnotationKind::Data) {
+            keyExtractorLambdaShouldBePickled = true;
+        }
+
+        if (keyExtractorLambdaShouldBePickled) {
+            keyExtractorLambda = ctx.Builder(input->Pos())
+            .Lambda()
+                .Param("item")
+                .Callable(0, "StablePickle")
+                    .Apply(0, keyExtractorLambda)
+                        .With(0, "item")
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+        }
+
         return ctx.Builder(input->Pos())
             .Callable("CombineCore")
                 .Add(0, input->HeadPtr())
@@ -2841,6 +2893,7 @@ TExprNode::TPtr ExpandPruneKeys(const TExprNode::TPtr& input, TExprContext& ctx)
                 .Add(2, initHandler)
                 .Add(3, updateHandler)
                 .Add(4, finishHandler)
+                .Atom(5, ToString(typesCtx.PruneKeysMemLimit))
             .Seal()
             .Build();
     }
@@ -8556,6 +8609,69 @@ TExprNode::TPtr ExpandSqlCompare(const TExprNode::TPtr& node, TExprContext& ctx)
 
     return node;
 }
+TExprNode::TPtr ExpandContainsIgnoreCase(const TExprNode::TPtr& node, TExprContext& ctx) {
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
+    const TString part{node->Child(1)->Child(0)->Content()};
+    TString pattern;
+    if (node->Content() == "EqualsIgnoreCase") {
+        pattern = part;
+    } else if (node->Content() == "StartsWithIgnoreCase") {
+        pattern = part + "%";
+    } else if (node->Content() == "EndsWithIgnoreCase") {
+        pattern = "%" + part;
+    } else if (node->Content() == "StringContainsIgnoreCase") {
+        pattern = "%" + part + "%";
+    } else {
+        YQL_ENSURE(!"Unknown IngoreCase node");
+    }
+    const auto pos = node->Pos();
+    auto patternExpr = ctx.Builder(pos)
+        .Callable("Apply")
+            .Callable(0, "Udf")
+                .Atom(0, "Re2.PatternFromLike")
+            .Seal()
+            .Callable(1, node->Child(1)->Content())
+                .Atom(0, pattern)
+            .Seal()
+        .Seal()
+    .Build();
+
+
+    auto optionsExpr = ctx.Builder(pos)
+        .Callable("NamedApply")
+            .Callable(0, "Udf")
+                .Atom(0, "Re2.Options")
+            .Seal()
+            .List(1)
+            .Seal()
+            .Callable(2, "AsStruct")
+                .List(0)
+                    .Atom(0, "CaseSensitive")
+                    .Callable(1, "Bool")
+                        .Atom(0, "false", TNodeFlags::Default)
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+    .Build();
+
+    auto result = ctx.Builder(pos)
+        .Callable("Apply")
+            .Callable(0, "AssumeStrict")
+                .Callable(0, "Udf")
+                    .Atom(0, "Re2.Match")
+                    .List(1)
+                        .Add(0, patternExpr)
+                        .Add(1, optionsExpr)
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Add(1, node->Child(0))
+        .Seal()
+    .Build();
+
+    return result;
+}
 
 template <bool Equals>
 TExprNode::TPtr ExpandAggrEqual(const TExprNode::TPtr& node, TExprContext& ctx) {
@@ -8875,13 +8991,15 @@ struct TPeepHoleRules {
         {"CheckedDiv", &ExpandCheckedDiv},
         {"CheckedMod", &ExpandCheckedMod},
         {"CheckedMinus", &ExpandCheckedMinus},
-        {"PruneAdjacentKeys", &ExpandPruneAdjacentKeys},
-        {"PruneKeys", &ExpandPruneKeys},
         {"JsonValue", &ExpandJsonValue},
         {"JsonExists", &ExpandJsonExists},
         {"EmptyIterator", &DropDependsOnFromEmptyIterator},
         {"Version", &ExpandVersion},
         {RightName, &ExpandRightOverCons},
+        {"EqualsIgnoreCase", &ExpandContainsIgnoreCase},
+        {"StartsWithIgnoreCase", &ExpandContainsIgnoreCase},
+        {"EndsWithIgnoreCase", &ExpandContainsIgnoreCase},
+        {"StringContainsIgnoreCase", &ExpandContainsIgnoreCase},
     };
 
     const TExtPeepHoleOptimizerMap CommonStageExtRules = {
@@ -8895,6 +9013,8 @@ struct TPeepHoleRules {
         {"CostsOf", &ExpandCostsOf},
         {"JsonQuery", &ExpandJsonQuery},
         {"MatchRecognize", &ExpandMatchRecognize},
+        {"PruneAdjacentKeys", &ExpandPruneAdjacentKeys},
+        {"PruneKeys", &ExpandPruneKeys},
         {"CalcOverWindow", &ExpandCalcOverWindow},
         {"CalcOverSessionWindow", &ExpandCalcOverWindow},
         {"CalcOverWindowGroup", &ExpandCalcOverWindow},
@@ -8995,7 +9115,9 @@ struct TPeepHoleRules {
         {"NarrowMap", &OptimizeWideMapBlocks},
         {"WideFilter", &OptimizeWideFilterBlocks},
         {"WideToBlocks", &OptimizeWideToBlocks},
+        {"ListToBlocks", &OptimizeListToBlocks},
         {"WideFromBlocks", &OptimizeWideFromBlocks},
+        {"ListFromBlocks", &OptimizeListFromBlocks},
         {"WideTakeBlocks", &OptimizeWideTakeSkipBlocks},
         {"WideSkipBlocks", &OptimizeWideTakeSkipBlocks},
         {"BlockCompress", &OptimizeBlockCompress},
@@ -9042,7 +9164,7 @@ THolder<IGraphTransformer> CreatePeepHoleCommonStageTransformer(TTypeAnnotationC
 
     auto issueCode = TIssuesIds::CORE_EXEC;
 
-    pipeline.AddCommonOptimization(issueCode);
+    pipeline.AddCommonOptimization(true, issueCode);
     pipeline.Add(CreateFunctorTransformer(
             [&types](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                 return PeepHoleCommonStage(input, output, ctx, types,

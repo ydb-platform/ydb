@@ -1015,6 +1015,7 @@ void FillGlobalIndexSettings(Ydb::Table::GlobalIndexSettings& settings,
     }
 
     FillPartitioningSettingsImpl(settings, indexImplTableDescription);
+    FillReadReplicasSettings(settings, indexImplTableDescription);
 }
 
 template <typename TYdbProto>
@@ -1503,7 +1504,8 @@ void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
     FillColumnFamiliesImpl(out, in);
 }
 
-void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
+template <typename TYdbProto>
+void FillColumnFamiliesImpl(TYdbProto& out,
         const NKikimrSchemeOp::TColumnTableDescription& in) {
     const auto& schema = in.GetSchema();
     for (size_t i = 0; i < schema.ColumnFamiliesSize(); ++i) {
@@ -1512,6 +1514,16 @@ void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
 
         FillColumnFamily(*r, family, true);
     }
+}
+
+void FillColumnFamilies(Ydb::Table::DescribeTableResult& out,
+        const NKikimrSchemeOp::TColumnTableDescription& in) {
+    FillColumnFamiliesImpl(out, in);
+}
+
+void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
+        const NKikimrSchemeOp::TColumnTableDescription& in) {
+    FillColumnFamiliesImpl(out, in);
 }
 
 void FillAttributes(Ydb::Table::DescribeTableResult& out,
@@ -1619,6 +1631,11 @@ void FillReadReplicasSettings(Ydb::Table::DescribeTableResult& out,
 
 void FillReadReplicasSettings(Ydb::Table::CreateTableRequest& out,
         const NKikimrSchemeOp::TTableDescription& in) {
+    FillReadReplicasSettingsImpl(out, in);
+}
+
+void FillReadReplicasSettings(Ydb::Table::GlobalIndexSettings& out,
+    const NKikimrSchemeOp::TTableDescription& in) {
     FillReadReplicasSettingsImpl(out, in);
 }
 

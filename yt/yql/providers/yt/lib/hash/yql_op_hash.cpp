@@ -3,6 +3,7 @@
 
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 
@@ -81,10 +82,34 @@ TString TNodeHashCalculator::GetHashImpl(const TExprNode& node, TArgIndex& argIn
                     isHashable = false;
                 }
                 else {
-                    if (TCoUdf::Match(&node) && node.ChildrenSize() > TCoUdf::idx_FileAlias && !node.Child(TCoUdf::idx_FileAlias)->Content().empty()) {
-                        // an udf from imported file, use hash of file
-                        auto alias = node.Child(TCoUdf::idx_FileAlias)->Content();
-                        UpdateFileHash(builder, alias);
+                    if (TCoUdf::Match(&node)) {
+                        if (node.ChildrenSize() > TCoUdf::idx_FileAlias && !node.Child(TCoUdf::idx_FileAlias)->Content().empty()) {
+                            // an udf from imported file, use hash of file
+                            auto alias = node.Child(TCoUdf::idx_FileAlias)->Content();
+                            UpdateFileHash(builder, alias);
+                        } else {
+                            // preinstalled
+                            TStringBuf moduleName, funcName;
+                            YQL_ENSURE(SplitUdfName(node.Head().Content(), moduleName, funcName));
+                            const auto res = Types.UdfResolver->GetSystemModulePath(moduleName);
+                            YQL_ENSURE(res, "Expected either file alias or system module");
+                            builder << moduleName << res->Md5;
+                        }
+                    } else if (TCoScriptUdf::Match(&node)) {
+                        if (node.ChildrenSize() > TCoScriptUdf::idx_FileAlias && !node.Child(TCoScriptUdf::idx_FileAlias)->Content().empty()) {
+                            // an udf from imported file, use hash of file
+                            auto alias = node.Child(TCoScriptUdf::idx_FileAlias)->Content();
+                            UpdateFileHash(builder, alias);
+                        } else {
+                            auto moduleName = node.Head().Content();
+                            auto scriptType = NKikimr::NMiniKQL::CanonizeScriptType(NKikimr::NMiniKQL::ScriptTypeFromStr(moduleName));
+                            if (!NKikimr::NMiniKQL::IsCustomPython(scriptType)) {
+                                moduleName = NKikimr::NMiniKQL::ScriptTypeAsStr(scriptType);
+                            }
+                            const auto res = Types.UdfResolver->GetSystemModulePath(moduleName);
+                            YQL_ENSURE(res, "Expected either file alias or system module");
+                            builder << moduleName << res->Md5;
+                        }
                     } else if (node.Content() == "FilePath" || node.Content() == "FileContent") {
                         auto alias = node.Child(0)->Content();
                         UpdateFileHash(builder, alias);

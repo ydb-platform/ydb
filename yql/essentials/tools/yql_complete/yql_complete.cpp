@@ -1,7 +1,7 @@
 #include <yql/essentials/sql/v1/complete/sql_complete.h>
-#include <yql/essentials/sql/v1/complete/name/static/frequency.h>
-#include <yql/essentials/sql/v1/complete/name/static/ranking.h>
-#include <yql/essentials/sql/v1/complete/name/static/name_service.h>
+#include <yql/essentials/sql/v1/complete/name/service/ranking/frequency.h>
+#include <yql/essentials/sql/v1/complete/name/service/ranking/ranking.h>
+#include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
 
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_pure_ansi/lexer.h>
@@ -15,7 +15,7 @@
 
 NSQLComplete::TFrequencyData LoadFrequencyDataFromFile(TString filepath) {
     TString text = TUnbufferedFileInput(filepath).ReadAll();
-    return NSQLComplete::ParseJsonFrequencyData(text);
+    return NSQLComplete::Pruned(NSQLComplete::ParseJsonFrequencyData(text));
 }
 
 NSQLComplete::TLexerSupplier MakePureLexerSupplier() {
@@ -38,9 +38,11 @@ int Run(int argc, char* argv[]) {
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
 
     TString inFileName;
+    TString inQueryText;
     TString freqFileName;
     TMaybe<ui64> pos;
     opts.AddLongOption('i', "input", "input file").RequiredArgument("input").StoreResult(&inFileName);
+    opts.AddLongOption('q', "query", "input query text").RequiredArgument("query").StoreResult(&inQueryText);
     opts.AddLongOption('f', "freq", "frequences file").StoreResult(&freqFileName);
     opts.AddLongOption('p', "pos", "position").StoreResult(&pos);
     opts.SetFreeArgsNum(0);
@@ -48,25 +50,34 @@ int Run(int argc, char* argv[]) {
 
     NLastGetopt::TOptsParseResult res(&opts, argc, argv);
 
-    THolder<TUnbufferedFileInput> inFile;
-    if (!inFileName.empty()) {
-        inFile.Reset(new TUnbufferedFileInput(inFileName));
+    if (res.Has("input") && res.Has("query")) {
+        ythrow yexception() << "use either 'input' or 'query', not both";
     }
-    IInputStream& in = inFile ? *inFile.Get() : Cin;
-    auto queryString = in.ReadAll();
 
-    NSQLComplete::IRanking::TPtr ranking;
-    if (freqFileName.empty()) {
-        ranking = NSQLComplete::MakeDefaultRanking();
+    TString queryString;
+    if (res.Has("query")) {
+        queryString = std::move(inQueryText);
     } else {
-        auto freq = LoadFrequencyDataFromFile(freqFileName);
-        ranking = NSQLComplete::MakeDefaultRanking(std::move(freq));
+        THolder<TUnbufferedFileInput> inFile;
+        if (!inFileName.empty()) {
+            inFile.Reset(new TUnbufferedFileInput(inFileName));
+        }
+        IInputStream& in = inFile ? *inFile.Get() : Cin;
+        queryString = in.ReadAll();
     }
+
+    NSQLComplete::TFrequencyData frequency;
+    if (freqFileName.empty()) {
+        frequency = NSQLComplete::LoadFrequencyData();
+    } else {
+        frequency = LoadFrequencyDataFromFile(freqFileName);
+    }
+
     auto engine = NSQLComplete::MakeSqlCompletionEngine(
         MakePureLexerSupplier(),
         NSQLComplete::MakeStaticNameService(
-            NSQLComplete::MakeDefaultNameSet(),
-            std::move(ranking)));
+            NSQLComplete::LoadDefaultNameSet(), 
+            std::move(frequency)));
 
     NSQLComplete::TCompletionInput input;
 
@@ -87,7 +98,7 @@ int Run(int argc, char* argv[]) {
         input.CursorPosition = queryString.size();
     }
 
-    auto output = engine->Complete(input);
+    auto output = engine->CompleteAsync(input).ExtractValueSync();
     for (const auto& c : output.Candidates) {
         Cout << "[" << c.Kind << "] " << c.Content << "\n";
     }

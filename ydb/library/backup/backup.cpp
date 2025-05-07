@@ -152,6 +152,7 @@ void PrintPrimitive(IOutputStream& out, const TValueParser& parser) {
         CASE_PRINT_PRIMITIVE_TYPE(out, Datetime64);
         CASE_PRINT_PRIMITIVE_TYPE(out, Timestamp64);
         CASE_PRINT_PRIMITIVE_TYPE(out, Interval64);
+        CASE_PRINT_PRIMITIVE_TYPE(out, Uuid);
         CASE_PRINT_PRIMITIVE_STRING_TYPE(out, TzDate);
         CASE_PRINT_PRIMITIVE_STRING_TYPE(out, TzDatetime);
         CASE_PRINT_PRIMITIVE_STRING_TYPE(out, TzTimestamp);
@@ -820,6 +821,10 @@ namespace NExternalDataSource {
 
 }
 
+void CanonizeForBackup(Ydb::Table::DescribeExternalDataSourceResult& desc) {
+    desc.mutable_properties()->erase("REFERENCES");
+}
+
 TString BuildCreateExternalDataSourceQuery(const Ydb::Table::DescribeExternalDataSourceResult& description) {
     return std::format(
         "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `{}` WITH (\n{},\n{}{}\n);",
@@ -839,7 +844,8 @@ void BackupExternalDataSource(TDriver driver, const TString& dbPath, const TFsPa
     Y_ENSURE(!dbPath.empty());
     LOG_I("Backup external data source " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
 
-    const auto description = DescribeExternalDataSource(driver, dbPath);
+    auto description = DescribeExternalDataSource(driver, dbPath);
+    CanonizeForBackup(description);
     const auto creationQuery = BuildCreateExternalDataSourceQuery(description);
 
     WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateExternalDataSource());

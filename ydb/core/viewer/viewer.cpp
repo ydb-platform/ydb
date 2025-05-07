@@ -83,6 +83,24 @@ public:
                 .UseAuth = false,
             });
             mon->RegisterActorPage({
+                .RelPath = "viewer/json/capabilities", // temporary handling of old paths
+                .ActorSystem = ctx.ActorSystem(),
+                .ActorId = ctx.SelfID,
+                .UseAuth = false,
+            });
+            mon->RegisterActorPage({
+                .RelPath = "viewer/whoami",
+                .ActorSystem = ctx.ActorSystem(),
+                .ActorId = ctx.SelfID,
+                .UseAuth = false,
+            });
+            mon->RegisterActorPage({
+                .RelPath = "viewer/json/whoami", // temporary handling of old paths
+                .ActorSystem = ctx.ActorSystem(),
+                .ActorId = ctx.SelfID,
+                .UseAuth = false,
+            });
+            mon->RegisterActorPage({
                 .Title = "Viewer",
                 .RelPath = "viewer/v2",
                 .ActorSystem = ctx.ActorSystem(),
@@ -729,11 +747,16 @@ IActor* CreateViewer(const TKikimrRunConfig& kikimrRunConfig) {
 }
 
 void TViewer::FillCORS(TStringBuilder& stream, const TRequestState& request) {
+    TString requestOrigin = request && request.HasHeader("Origin") ? request.GetHeader("Origin") : TString();
     TString origin;
     if (AllowOrigin) {
-        origin = AllowOrigin;
-    } else if (request && request.HasHeader("Origin")) {
-        origin = request.GetHeader("Origin");
+        if (IsMatchesWildcards(requestOrigin, AllowOrigin)) {
+            origin = requestOrigin;
+        } else {
+            return; // no CORS headers - no access
+        }
+    } else if (requestOrigin) {
+        origin = requestOrigin;
     }
     if (origin.empty()) {
         origin = "*";

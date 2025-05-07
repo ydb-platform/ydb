@@ -644,6 +644,10 @@ ids {
   severity: S_ERROR
 }
 ids {
+  code: YT_OP_SPEC_CONTAINS_SECRETS
+  severity: S_ERROR
+}
+ids {
   code: YQL_OFFSET_WITHOUT_SORT
   severity: S_WARNING
 }
@@ -673,6 +677,14 @@ ids {
 }
 ids {
   code: CORE_LINEAGE_INTERNAL_ERROR
+  severity: S_WARNING
+}
+ids {
+  code: CORE_DEPRECATED_LANG_VER
+  severity: S_WARNING
+}
+ids {
+  code: CORE_UNSUPPORTED_LANG_VER
   severity: S_WARNING
 }
 ids {

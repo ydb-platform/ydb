@@ -1,6 +1,8 @@
 #pragma once
-#include "collections.h"
 #include "source.h"
+
+#include "collections/abstract.h"
+#include "sync_points/abstract.h"
 
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
@@ -14,27 +16,39 @@ class TPlainReadData;
 class TScanHead {
 private:
     std::shared_ptr<TSpecialReadContext> Context;
-    THashMap<ui64, std::shared_ptr<IDataSource>> FetchingSourcesByIdx;
-    std::deque<std::shared_ptr<IDataSource>> FetchingSources;
-    TPositiveControlInteger IntervalsInFlightCount;
-    std::unique_ptr<ISourcesCollection> SourcesCollection;
-
-    void StartNextSource(const std::shared_ptr<TPortionDataSource>& source);
+    std::shared_ptr<ISourcesCollection> SourcesCollection;
+    std::vector<std::shared_ptr<ISyncPoint>> SyncPoints;
 
 public:
-    ~TScanHead();
-
-    void ContinueSource(const ui32 sourceIdx) const {
-        auto it = FetchingSourcesByIdx.find(sourceIdx);
-        AFL_VERIFY(it != FetchingSourcesByIdx.end())("source_idx", sourceIdx)("count", FetchingSourcesByIdx.size());
-        it->second->ContinueCursor(it->second);
+    const std::shared_ptr<ISyncPoint>& GetResultSyncPoint() const {
+        return SyncPoints.back();
     }
+
+    const std::shared_ptr<ISyncPoint>& GetSyncPoint(const ui32 index) const {
+        AFL_VERIFY(index < SyncPoints.size());
+        return SyncPoints[index];
+    }
+
+    ISourcesCollection& MutableSourcesCollection() const {
+        return *SourcesCollection;
+    }
+
+    const ISourcesCollection& GetSourcesCollection() const {
+        return *SourcesCollection;
+    }
+
+    ~TScanHead();
 
     bool IsReverse() const;
     void Abort();
 
     bool IsFinished() const {
-        return FetchingSources.empty() && SourcesCollection->IsFinished();
+        for (auto&& i : SyncPoints) {
+            if (!i->IsFinished()) {
+                return false;
+            }
+        }
+        return SourcesCollection->IsFinished();
     }
 
     const TReadContext& GetContext() const;
@@ -42,15 +56,13 @@ public:
     TString DebugString() const {
         TStringBuilder sb;
         sb << "S:{" << SourcesCollection->DebugString() << "};";
-        sb << "F:";
-        for (auto&& i : FetchingSources) {
-            sb << i->GetSourceId() << ";";
+        sb << "SP:[";
+        for (auto&& i : SyncPoints) {
+            sb << "{" << i->DebugString() << "};";
         }
+        sb << "]";
         return sb;
     }
-
-    void OnSourceReady(const std::shared_ptr<IDataSource>& source, std::shared_ptr<arrow::Table>&& table, const ui32 startIndex,
-        const ui32 recordsCount, TPlainReadData& reader);
 
     TConclusionStatus Start();
 

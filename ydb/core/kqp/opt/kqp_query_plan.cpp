@@ -96,13 +96,15 @@ struct TExprScope {
 };
 
 struct TSerializerCtx {
-    TSerializerCtx(TExprContext& exprCtx, const TString& cluster,
+    TSerializerCtx(TExprContext& exprCtx, const TString& database,
+        const TString& cluster,
         const TIntrusivePtr<NYql::TKikimrTablesData> tablesData,
         const TKikimrConfiguration::TPtr config, ui32 txCount,
         TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults,
         TTypeAnnotationContext& typeCtx,
         TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx)
         : ExprCtx(exprCtx)
+        , Database(database)
         , Cluster(cluster)
         , TablesData(tablesData)
         , Config(config)
@@ -120,6 +122,7 @@ struct TSerializerCtx {
     ui32 PlanNodeId = 0;
 
     const TExprContext& ExprCtx;
+    const TString Database;
     const TString& Cluster;
     const TIntrusivePtr<NYql::TKikimrTablesData> TablesData;
     const TKikimrConfiguration::TPtr Config;
@@ -813,6 +816,7 @@ private:
         if (dataSinkCategory == NYql::KqpTableSinkName) {
             auto settings = sink.Settings().Cast<TKqpTableSinkSettings>();
 
+            TString tablePath;
             TTableWrite writeInfo;
             if (settings.Mode().StringValue() == "replace") {
                 op.Properties["Name"] = "Replace";
@@ -829,14 +833,32 @@ private:
             } else if (settings.Mode().StringValue() == "update") {
                 op.Properties["Name"] = "Update";
                 writeInfo.Type = EPlanTableWriteType::MultiUpdate;
+            } else if (settings.Mode().StringValue() == "fill_table") {
+                op.Properties["Name"] = "FillTable";
+                writeInfo.Type = EPlanTableWriteType::MultiReplace;
             } else {
                 YQL_ENSURE(false, "Unsupported sink mode");
             }
 
-            const auto tablePath = settings.Table().Path().StringValue();
-            const auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, tablePath);
-            op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : tablePath;
-            op.Properties["Path"] = tablePath;
+            if (settings.Mode().StringValue() != "fill_table") {
+                tablePath = settings.Table().Path().StringValue();
+                const auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, tablePath);
+                op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : tablePath;
+                op.Properties["Path"] = tablePath;
+            } else {
+                const auto originalPathNode = GetSetting(settings.Settings().Ref(), "OriginalPath");
+                AFL_ENSURE(originalPathNode);
+                tablePath = TCoNameValueTuple(originalPathNode).Value().Cast<TCoAtom>().StringValue();
+                op.Properties["Path"] = tablePath;
+
+                TString error;
+                std::pair<TString, TString> pathPair;
+                if (NKikimr::TrySplitPathByDb(tablePath, SerializerCtx.Database, pathPair, error)) {
+                    op.Properties["Table"]= pathPair.second;
+                } else {
+                    op.Properties["Table"] = tablePath;
+                }
+            }
 
             if (writeInfo.Type != EPlanTableWriteType::MultiErase) {
                 const auto& tupleType = stage.Ref().GetTypeAnn()->Cast<TTupleExprType>();
@@ -1038,6 +1060,8 @@ private:
             return {CurrentArgContext.AddArg(node.Get())};
         } else if (auto maybeCrossJoin = TMaybeNode<TDqPhyCrossJoin>(node)) {
             operatorId = Visit(maybeCrossJoin.Cast(), planNode);
+        } else if (auto maybeCombineByKey = TMaybeNode<TCoCombineByKey>(node)) {
+            operatorId = Visit(maybeCombineByKey.Cast(), planNode);
         }
 
         TVector<std::variant<ui32, TArgContext>> inputIds;
@@ -1352,6 +1376,28 @@ private:
             op.Properties["ToFlow"] = *planNode.CteRefName;
         } else {
             auto inputs = Visit(toflow.Input().Ptr(), planNode);
+            if (inputs.size() == 1) {
+                return inputs[0];
+            } else {
+                return TMaybe<std::variant<ui32, TArgContext>> ();
+            }
+        }
+
+        return AddOperator(planNode, "ConstantExpr", std::move(op));
+    }
+
+    TMaybe<std::variant<ui32, TArgContext>> Visit(const TCoCombineByKey& combineByKey, TQueryPlanNode& planNode) {
+        const auto combineByKeyValue = NPlanUtils::PrettyExprStr(combineByKey.Input());
+
+        TOperator op;
+        op.Properties["Name"] = "CombineByKey";
+
+        if (auto maybeResultBinding = ContainResultBinding(combineByKeyValue)) {
+            auto [txId, resId] = *maybeResultBinding;
+            planNode.CteRefName = TStringBuilder() << "precompute_" << txId << "_" << resId;
+            op.Properties["CombineByKey"] = *planNode.CteRefName;
+        } else {
+            auto inputs = Visit(combineByKey.Input().Ptr(), planNode);
             if (inputs.size() == 1) {
                 return inputs[0];
             } else {
@@ -2313,11 +2359,14 @@ struct TQueryPlanReconstructor {
             op.GetMapSafe().erase("Inputs");
         }
 
-        if (op.GetMapSafe().contains("Input")
+        if (
+            op.GetMapSafe().contains("Input")
             || op.GetMapSafe().contains("ToFlow")
             || op.GetMapSafe().contains("Member")
             || op.GetMapSafe().contains("AssumeSorted")
-            || op.GetMapSafe().contains("Iterator")) {
+            || op.GetMapSafe().contains("Iterator")
+            || op.GetMapSafe().contains("CombineByKey")
+        ) {
 
             TString maybePrecompute = "";
             if (op.GetMapSafe().contains("Input")) {
@@ -2330,6 +2379,8 @@ struct TQueryPlanReconstructor {
                 maybePrecompute = op.GetMapSafe().at("AssumeSorted").GetStringSafe();
             } else if (op.GetMapSafe().contains("Iterator")) {
                 maybePrecompute = op.GetMapSafe().at("Iterator").GetStringSafe();
+            } else if (op.GetMapSafe().contains("CombineByKey")) {
+                maybePrecompute = op.GetMapSafe().at("CombineByKey").GetStringSafe();
             }
 
             if (Precomputes.contains(maybePrecompute) && planInputs.empty()) {
@@ -2523,7 +2574,8 @@ NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
         "PartitionByKey",
         "ToFlow",
         "Member",
-        "AssumeSorted"
+        "AssumeSorted",
+        "CombineByKey"
     };
 
     THashMap<int, NJson::TJsonValue> planIndex;
@@ -2632,11 +2684,11 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NO
 // TODO(sk): check prepared statements params in read ranges
 // TODO(sk): check params from correlated subqueries // lookup join
 void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQuery& query,
-    TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, TExprContext& ctx, const TString& cluster,
-    const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TKikimrConfiguration::TPtr config,
+    TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, TExprContext& ctx, const TString& database,
+    const TString& cluster, const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TKikimrConfiguration::TPtr config,
     TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx)
 {
-    TSerializerCtx serializerCtx(ctx, cluster, tablesData, config, query.Transactions().Size(), std::move(pureTxResults), typeCtx, optCtx);
+    TSerializerCtx serializerCtx(ctx, database, cluster, tablesData, config, query.Transactions().Size(), std::move(pureTxResults), typeCtx, optCtx);
 
     /* bindingName -> stage */
     auto collectBindings = [&serializerCtx, &query] (auto id, const auto& phase) {
@@ -2893,6 +2945,9 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 stats["PhysicalStageId"] = (*stat)->GetStageId();
                 stats["Tasks"] = (*stat)->GetTotalTasksCount();
                 stats["FinishedTasks"] = (*stat)->GetFinishedTasksCount();
+                if (auto updateTimeUs = (*stat)->GetUpdateTimeMs(); updateTimeUs) {
+                    stats["UpdateTimeMs"] = updateTimeUs;
+                }
 
                 stats["StageDurationUs"] = (*stat)->GetStageDurationUs();
 

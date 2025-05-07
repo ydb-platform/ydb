@@ -1,55 +1,6 @@
 import threading
 from ydb.tests.stress.common.common import WorkloadBase
-
-
-digits = 2  # should be consistent with format string below
-pk_types = {
-    "Int64": "CAST({} AS Int64)",
-    "Uint64": "CAST({} AS Uint64)",
-    "Int32": "CAST({} AS Int32)",
-    "Uint32": "CAST({} AS Uint32)",
-    "Int16": "CAST({} AS Int16)",
-    "Uint16": "CAST({} AS Uint16)",
-    "Int8": "CAST({} AS Int8)",
-    "Uint8": "CAST({} AS Uint8)",
-    "Bool": "CAST({} AS Bool)",
-    "Decimal(15,0)": "CAST('{}.0' AS Decimal(15,0))",
-    "Decimal(22,9)": "CAST('{}.123' AS Decimal(22,9))",
-    "Decimal(35,10)": "CAST('{}.123456' AS Decimal(35,10))",
-    "DyNumber": "CAST('{}E1' AS DyNumber)",
-
-    "String": "'String {}'",
-    "Utf8": "'Uft8 {}'",
-    "Uuid": "CAST('{:2}345678-e89b-12d3-a456-556642440000' AS UUID)",
-
-    "Date": "CAST('20{:02}-01-01' AS Date)",
-    "Datetime": "CAST('20{:02}-10-02T11:00:00Z' AS Datetime)",
-    "Timestamp": "CAST(169624{:02}00000000 AS Timestamp)",
-    "Interval": "CAST({} AS Interval)",
-    "Date32": "CAST('20{:02}-01-01' AS Date32)",
-    "Datetime64": "CAST('20{:02}-10-02T11:00:00Z' AS Datetime64)",
-    "Timestamp64": "CAST(169624{:02}00000000 AS Timestamp64)",
-    "Interval64": "CAST({} AS Interval64)"
-}
-
-non_pk_types = {
-    "Float": "CAST('{}.1' AS Float)",
-    "Double": "CAST('{}.2' AS Double)",
-    "Json": "CAST('{{\"another_key\":{}}}' AS Json)",
-    "JsonDocument": "CAST('{{\"another_doc_key\":{}}}' AS JsonDocument)",
-    "Yson": "CAST('[{}]' AS Yson)"
-}
-
-null_types = {
-    "Int64": "CAST({} AS Int64)",
-    "Decimal(22,9)": "CAST('{}.123' AS Decimal(22,9))",
-    "Decimal(35,10)": "CAST('{}.123456' AS Decimal(35,10))",
-    "String": "'{}'",
-}
-
-
-def cleanup_type_name(type_name):
-    return type_name.replace('(', '').replace(')', '').replace(',', '')
+from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, null_types, cleanup_type_name, format_sql_value
 
 
 class WorkloadInsertDeleteAllTypes(WorkloadBase):
@@ -96,9 +47,9 @@ class WorkloadInsertDeleteAllTypes(WorkloadBase):
                 VALUES
                 (
                 {i},
-                {", ".join([pk_types[type_name].format(value) for type_name in pk_types.keys()])},
+                {", ".join([format_sql_value(pk_types[type_name](value), type_name) for type_name in pk_types.keys()])},
                 {", ".join(['NULL' for type_name in null_types.keys()])},
-                {", ".join([non_pk_types[type_name].format(value) for type_name in non_pk_types.keys()])},
+                {", ".join([format_sql_value(non_pk_types[type_name](value), type_name) for type_name in non_pk_types.keys()])},
                 {", ".join(['NULL' for type_name in null_types.keys()])}
                 )
                 ;

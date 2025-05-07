@@ -124,6 +124,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TKikimrSettings& SetEnableForceFollowers(bool value) { EnableForceFollowers = value; return *this; };
     TKikimrSettings& SetS3ActorsFactory(std::shared_ptr<NYql::NDq::IS3ActorsFactory> value) { S3ActorsFactory = std::move(value); return *this; };
     TKikimrSettings& SetControls(const NKikimrConfig::TImmediateControlsConfig& value) { Controls = value; return *this; }
+    TKikimrSettings& SetColumnShardReaderClassName(const TString& value) { AppConfig.MutableColumnShardConfig()->SetReaderClassName(value); return *this; }
     TKikimrSettings& SetColumnShardAlterObjectEnabled(bool enable) {
             AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(enable);
             return *this;
@@ -346,6 +347,8 @@ inline NYdb::NTable::TDataQueryResult ExecQueryAndTestResult(NYdb::NTable::TSess
     return ExecQueryAndTestResult(session, query, NYdb::TParamsBuilder().Build(), expectedYson);
 }
 
+NYdb::NQuery::TExecuteQueryResult ExecQueryAndTestEmpty(NYdb::NQuery::TSession& session, const TString& query);
+
 class TStreamReadError : public yexception {
 public:
     TStreamReadError(NYdb::EStatus status)
@@ -388,6 +391,7 @@ TVector<ui64> GetColumnTableShards(Tests::TServer* server, TActorId sender, cons
 
 void WaitForZeroSessions(const NKqp::TKqpCounters& counters);
 void WaitForZeroReadIterators(Tests::TServer& server, const TString& path);
+int GetCumulativeCounterValue(Tests::TServer& server, const TString& path, const TString& counterName);
 
 void WaitForCompaction(Tests::TServer* server, const TString& path, bool compactBorrowed = false);
 

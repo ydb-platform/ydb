@@ -680,7 +680,7 @@ message TIcebergCatalog {
     }
 
     // Hive Iceberg Catalog which is based on a Hive Metastore
-    message THive {
+    message THiveMetastore {
         // Location of a hive metastore
         // e.g., thrift://host:9083/
         optional string uri = 1;
@@ -688,8 +688,10 @@ message TIcebergCatalog {
 
     oneof payload {
         THadoop hadoop = 1;
-        THive hive = 2;
+        THiveMetastore hive_metastore = 3;
     }
+
+    reserved 2;
 }
 
 // TIcebergWarehouse represents settings specific to iceberg warehouse

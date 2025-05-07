@@ -1,62 +1,124 @@
-# Vector indexes
+# Vector Indexes
 
-[Vector indexes](https://en.wikipedia.org/wiki/Vector_database) are specialized data structures that enable efficient similarity search in high-dimensional spaces. Unlike traditional indexes that optimize exact lookups, vector indexes allow finding the most similar items to a query vector based on mathematical distance or similarity measures.
+{% include [limitations](../_includes/vector_index_limitations.md) %}
 
-Data in a {{ ydb-short-name }} table is stored and sorted by a primary key, enabling efficient point lookups and range scans. Vector indexes provide similar efficiency for nearest neighbor searches in vector spaces, which is particularly valuable for working with embeddings and other high-dimensional data representations.
+[Vector indexes](../concepts/glossary.md#vector-index) are specialized data structures that enable efficient [vector search](../concepts/vector_search.md) in multidimensional spaces. Unlike [secondary indexes](../concepts/glossary.md#secondary-index), which optimize searching by equality or range, vector indexes allow similarity searching based on [similarity or distance functions](../yql/reference/udf/list/knn.md#functions).
 
-This article describes practical operations with vector indexes. For conceptual information about vector index types and their characteristics, see [Vector indexes](../concepts/vector_indexes.md) in the Concepts section.
+Data in a {{ ydb-short-name }} table is stored and sorted by the primary key, ensuring efficient searching by exact match and range scanning. Vector indexes provide similar efficiency for nearest neighbor searches in vector spaces.
 
-## Creating vector indexes {#create}
+## Characteristics of Vector Indexes {#characteristics}
 
-A vector index can be created with the following YQL commands:
-* [`CREATE TABLE`](../yql/reference/syntax/create_table/index.md)
-* [`ALTER TABLE`](../yql/reference/syntax/alter_table/index.md)
+Vector indexes in {{ ydb-short-name }} address the nearest neighbor search problem using [similarity or distance functions](../yql/reference/udf/list/knn.md#functions). Several distance/similarity functions are supported: "inner_product", "cosine" (similarity) and "cosine", "euclidean", "manhattan" (distance).
 
-Example of creating a prefixed vector index with covered columns:
+The current implementation offers one type of index: `vector_kmeans_tree`.
+
+## Vector Index Type `vector_kmeans_tree` {#kmeans-tree-type}
+
+The `vector_kmeans_tree` index implements hierarchical data clustering. The structure of the index includes:
+
+1. Hierarchical clustering:
+
+    * the index builds multiple levels of k-means clusters
+    * at each level, vectors are distributed across a predefined number of clusters raised to the power of the level
+    * the first level clusters the entire dataset
+    * subsequent levels recursively cluster the contents of each parent cluster
+
+2. Search process:
+
+    * search proceeds recursively from the first level to the subsequent ones
+    * during queries, the index analyzes only the most promising clusters
+    * such search space pruning avoids complete enumeration of all vectors
+
+3. Parameters:
+
+    * `levels`: number of levels in the tree, defining search depth (recommended 1-3)
+    * `clusters`: number of clusters in k-means, defining search width (recommended 64-512)
+
+Internally, a vector index consists of hidden index tables named `indexImpl*Table`. In [selection queries](#select) using the vector index, the index tables will appear in [query statistics](query-plans-optimization.md).
+
+## Types of Vector Indexes {#types}
+
+A vector index can be **covering**, meaning it includes additional columns to enable reading from the index without accessing the main table.
+
+Alternatively, it can be **prefixed**, allowing for additional columns to be used for quick filtering during reading.
+
+Below are examples of creating vector indexes of different types.
+
+### Basic Vector Index {#basic}
+
+Global vector index on the `embedding` column:
+
+```yql
+ALTER TABLE my_table
+  ADD INDEX my_index
+  GLOBAL USING vector_kmeans_tree
+  ON (embedding)
+  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
+```
+
+### Vector Index with Covering Columns {#covering}
+
+A covering vector index, including an additional column `data` to avoid reading from the main table during a search:
+
+```yql
+ALTER TABLE my_table
+  ADD INDEX my_index
+  GLOBAL USING vector_kmeans_tree
+  ON (embedding) COVER (data)
+  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
+```
+
+### Prefixed Vector Index {#prefixed}
+
+A prefixed vector index, allowing filtering by the prefix column `user` during vector search:
+
+```yql
+ALTER TABLE my_table
+  ADD INDEX my_index
+  GLOBAL USING vector_kmeans_tree
+  ON (user, embedding)
+  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
+```
+
+### Prefixed Vector Index with Covering Columns {#prefixed-covering}
+
+A prefixed vector index with covering columns:
 
 ```yql
 ALTER TABLE my_table
   ADD INDEX my_index
   GLOBAL USING vector_kmeans_tree
   ON (user, embedding) COVER (data)
-  WITH (distance=cosine, type="uint8", dimension=512, levels=2, clusters=128);
+  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
 ```
 
-Key parameters for `vector_kmeans_tree`:
-* `distance`/`similarity`: Metric function ("cosine", "euclidean", etc.)
-* `type`: Data type ("float", "int8", "uint8")
-* `dimension`: Number of dimensions (<= 16384)
-* `levels`: Tree depth
-* `clusters`: Number of clusters per level (values > 1000 may impact performance)
+## Creating Vector Indexes {#creation}
 
-Since building a vector index requires processing existing data, index creation on populated tables may take significant time. This operation runs in the background, allowing continued table access during construction. The index becomes available automatically when ready.
+Vector indexes can be created:
 
-## Using vector indexes for similarity search {#use}
+* during table creation using the YQL operator [CREATE TABLE](../yql/reference/syntax/create_table/vector_index.md);
+* added to an existing table using the YQL operator [ALTER TABLE](../yql/reference/syntax/alter_table/indexes.md).
 
-To perform similarity searches, explicitly specify the index name in the VIEW clause. For prefixed indexes, include prefix column conditions in the WHERE clause:
+## Using Vector Indexes {#select}
+
+Queries to vector indexes are executed using the `VIEW` syntax in YQL. For prefixed indexes, specify the prefix columns in the `WHERE` clause:
 
 ```yql
 DECLARE $query_vector AS List<Uint8>;
 
 SELECT user, data
 FROM my_table VIEW my_index
-WHERE user = "john_doe"
 ORDER BY Knn::CosineSimilarity(embedding, $query_vector) DESC
 LIMIT 10;
 ```
 
-Without the VIEW clause, the query would perform a full table scan with brute-force vector comparison.
+For more details on executing `SELECT` queries using vector indexes, see the section [VIEW VECTOR INDEX](../yql/reference/syntax/select/vector_index.md).
 
-## Checking the cost of queries {#cost}
+{% note info %}
 
-Any query made in a transactional application should be checked in terms of the number of I/O operations it performed in the database and how much CPU was used to run it. You should also make sure these indicators don't continuously grow as the database volume grows. {{ ydb-short-name }} returns statistics required for the analysis after running each query.
+If the `VIEW` expression is not used, the query will perform a full table scan with pairwise comparison of vectors.
 
-If you use the {{ ydb-short-name }} CLI, select the `--stats` option to enable printing statistics after executing the `yql` command. All {{ ydb-short-name }} SDKs also contain structures with statistics returned after running a query. If you make a query in the UI, you'll see a tab with statistics next to the results tab.
-
-{% note warning %}
-
-Vector indexes currently don't support data modification operations. 
-Any attempt to modify rows in indexed tables will fail. 
-This limitation will be removed in future releases.
+It is recommended to check the optimality of the written query using [query statistics](query-plans-optimization.md). In particular, ensure there is no full scan of the main table.
 
 {% endnote %}
+

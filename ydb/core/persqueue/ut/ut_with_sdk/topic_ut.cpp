@@ -47,7 +47,8 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             settings.DeduplicationEnabled(false);
             auto session = client.CreateSimpleBlockingWriteSession(settings);
 
-            TWriteMessage msg(TStringBuilder() << "message_" << seqNo);
+            TString msgTxt = TStringBuilder() << "message_" << seqNo;
+            TWriteMessage msg(msgTxt);
             msg.CreateTimestamp(TInstant::Now() - TDuration::Seconds(10 - seqNo));
             UNIT_ASSERT(session->Write(std::move(msg)));
 
@@ -138,6 +139,8 @@ Y_UNIT_TEST_SUITE(WithSDK) {
                 }
                 UNIT_ASSERT_C(endTime > TInstant::Now(), "Unable wait");
             }
+
+            session->Close(TDuration::Seconds(1));
         }
 
         // Check describe for topic wich contains messages, has commited offset of first message and read second message
@@ -158,7 +161,6 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             UNIT_ASSERT_TIME_EQUAL(TInstant::Now(), c->GetLastReadTime(), TDuration::Seconds(3));
             UNIT_ASSERT_VALUES_EQUAL(2, c->GetLastReadOffset());
         }
-
     }
 }
 

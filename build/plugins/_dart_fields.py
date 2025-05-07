@@ -1116,6 +1116,7 @@ class TestFiles:
         'maps/renderer/libs/data_sets/yt_data_set',
         'maps/renderer/libs/design',
         'maps/renderer/libs/geosx',
+        'maps/renderer/libs/geojson_to_yt',
         'maps/renderer/libs/gltf',
         'maps/renderer/libs/golden',
         'maps/renderer/libs/hd3d',
@@ -1340,6 +1341,14 @@ class TestPartition:
     @classmethod
     def value(cls, unit, flat_args, spec_args):
         return {cls.KEY: unit.get("TEST_PARTITION")}
+
+
+class TestExperimentalFork:
+    KEY = 'TEST_EXPERIMENTAL_FORK'
+
+    @classmethod
+    def value(cls, unit, flat_args, spec_args):
+        return {cls.KEY: unit.get("TEST_EXPERIMENTAL_FORK")}
 
 
 class TestRecipes:

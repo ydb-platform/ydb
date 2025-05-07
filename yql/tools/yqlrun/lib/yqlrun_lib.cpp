@@ -107,14 +107,17 @@ TYqlRunTool::TYqlRunTool()
     AddClusterMapping(TString{"plato"}, TString{YtProviderName});
 
     AddProviderFactory([this]() -> NYql::TDataProviderInitializer {
-        auto yqlNativeServices = NFile::TYtFileServices::Make(GetFuncRegistry().Get(), TablesMapping_, GetFileStorage(), TmpDir_, KeepTemp_, TablesDirMapping_);
-        auto ytNativeGateway = CreateYtFileGateway(yqlNativeServices);
+        auto ytNativeGateway = CreateYtGateway();
         auto optimizerFactory = CreateCboFactory();
         return GetYtNativeDataProviderInitializer(ytNativeGateway, optimizerFactory, {});
     });
 
     SetPeepholePipelineConfigurator(&PEEPHOLE_CONFIG_INSTANCE);
+}
 
+IYtGateway::TPtr TYqlRunTool::CreateYtGateway() {
+    auto yqlNativeServices = NFile::TYtFileServices::Make(GetFuncRegistry().Get(), TablesMapping_, GetFileStorage(), TmpDir_, KeepTemp_, TablesDirMapping_);
+    return CreateYtFileGateway(yqlNativeServices);
 }
 
 IOptimizerFactory::TPtr TYqlRunTool::CreateCboFactory() {

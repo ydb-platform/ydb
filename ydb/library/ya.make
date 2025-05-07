@@ -14,6 +14,7 @@ RECURSE(
     folder_service
     formats
     fyamlcpp
+    global_plugins
     grpc
     http_proxy
     keys
@@ -33,6 +34,7 @@ RECURSE(
     security
     shop
     signal_backtrace
+    signals
     table_creator
     testlib
     time_series_vec

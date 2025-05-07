@@ -325,7 +325,8 @@ public:
 
         TComputationPatternOpts opts(alloc.Ref(), typeEnv, taskRunnerFactory,
             Context.FuncRegistry, NUdf::EValidateMode::None, validatePolicy, optLLVM, EGraphPerProcess::Multi,
-            AllocatedHolder->ProgramParsed.StatsRegistry.Get(), CollectFull() ? &CountersProvider : nullptr, nullptr, ComputationLogProvider.Get());
+            AllocatedHolder->ProgramParsed.StatsRegistry.Get(), CollectFull() ? &CountersProvider : nullptr, nullptr,
+            ComputationLogProvider.Get(), task.GetProgram().GetLangVer());
 
         if (!SecureParamsProvider) {
             SecureParamsProvider = MakeSimpleSecureParamsProvider(Settings.SecureParams);
@@ -531,6 +532,7 @@ public:
         const IDqTaskRunnerExecutionContext& execCtx) override
     {
         TaskId = task.GetId();
+        StageId = task.GetStageId();
         auto entry = BuildTask(task);
 
         LOG(TStringBuilder() << "Prepare task: " << TaskId);
@@ -786,14 +788,24 @@ public:
         if (Y_LIKELY(CollectBasic())) {
             switch (runStatus) {
                 case ERunStatus::Finished:
+                    // finished => waiting for nothing
+                    Stats->CurrentWaitInputTime = TDuration::Zero();
+                    Stats->CurrentWaitOutputTime = TDuration::Zero();
                     Stats->FinishTs = TInstant::Now();
                     break;
                 case ERunStatus::PendingInput:
-                    if (!InputConsumed) {
+                    // output is checked first => not waiting for output
+                    Stats->CurrentWaitOutputTime = TDuration::Zero();
+                    if (Y_LIKELY(InputConsumed)) {
+                        // did smth => waiting for nothing
+                        Stats->CurrentWaitInputTime = TDuration::Zero();
+                    } else {
                         StartWaitingInput();
                     }
                     break;
                 case ERunStatus::PendingOutput:
+                    // waiting for output => not waiting for input
+                    Stats->CurrentWaitInputTime = TDuration::Zero();
                     StartWaitingOutput();
                     break;
             }
@@ -992,6 +1004,7 @@ private:
     NUdf::TUniquePtr<NUdf::ILogProvider> ComputationLogProvider;
 
     ui64 TaskId = 0;
+    ui32 StageId = 0;
     TDqTaskRunnerContext Context;
     TDqTaskRunnerSettings Settings;
     TLogFunc LogFunc;
@@ -1056,28 +1069,46 @@ private:
     std::unique_ptr<NUdf::IPgBuilder> PgBuilder_ = CreatePgBuilder();
 
     void StartWaitingInput() {
-        if (!StartWaitInputTime) {
-            StartWaitInputTime = TInstant::Now();
+        auto now = TInstant::Now();
+        if (Y_LIKELY(StartWaitInputTime)) {
+            auto delta = now - *StartWaitInputTime;
+            if (Y_LIKELY(Stats->StartTs)) {
+                Stats->WaitInputTime += delta;
+            } else {
+                Stats->WaitStartTime += delta;
+            }
+            Stats->CurrentWaitInputTime += delta;
         }
+        StartWaitInputTime = now;
     }
 
     void StartWaitingOutput() {
-        if (!StartWaitOutputTime) {
-            StartWaitOutputTime = TInstant::Now();
+        auto now = TInstant::Now();
+        if (Y_LIKELY(StartWaitOutputTime)) {
+            auto delta = now - *StartWaitOutputTime;
+            Stats->WaitOutputTime += delta;
+            Stats->CurrentWaitOutputTime += delta;
         }
+        StartWaitOutputTime = now;
     }
 
     void StopWaiting() {
+        auto now = TInstant::Now();
         if (StartWaitInputTime) {
+            auto delta = now - *StartWaitInputTime;
             if (Y_LIKELY(Stats->StartTs)) {
-                Stats->WaitInputTime += (TInstant::Now() - *StartWaitInputTime);
+                Stats->WaitInputTime += delta;
             } else {
-                Stats->WaitStartTime += (TInstant::Now() - *StartWaitInputTime);
+                Stats->WaitStartTime += delta;
             }
+            Stats->CurrentWaitInputTime += delta;
             StartWaitInputTime.reset();
+            TDuration::Zero();
         }
         if (StartWaitOutputTime) {
-            Stats->WaitOutputTime += (TInstant::Now() - *StartWaitOutputTime);
+            auto delta = now - *StartWaitOutputTime;
+            Stats->WaitOutputTime += delta;
+            Stats->CurrentWaitOutputTime += delta;
             StartWaitOutputTime.reset();
         }
     }

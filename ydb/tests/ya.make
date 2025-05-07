@@ -1,4 +1,6 @@
 RECURSE(
+    compatibility
+    datashard
     example
     fq
     functional

@@ -416,6 +416,10 @@ class StaticConfigGenerator(object):
         all_configs["config.yaml"] = self.get_yaml_format_config(normalized_config)
 
         all_configs["dynconfig.yaml"] = self.get_yaml_format_dynconfig(normalized_config)
+
+        if 'log.txt' in self.__proto_configs and self.__proto_configs['log.txt'].ClusterName:
+            all_configs['cluster.txt'] = self.__proto_configs['log.txt'].ClusterName
+
         return all_configs
 
     def get_yaml_format_string(self, key):

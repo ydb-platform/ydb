@@ -24,8 +24,8 @@ TConclusion<bool> TColumnShardScanIterator::ReadNextInterval() {
     return IndexedData->ReadNextInterval();
 }
 
-void TColumnShardScanIterator::DoOnSentDataFromInterval(const ui32 intervalIdx) const {
-    return IndexedData->OnSentDataFromInterval(intervalIdx);
+void TColumnShardScanIterator::DoOnSentDataFromInterval(const TPartialSourceAddress& address) {
+    return IndexedData->OnSentDataFromInterval(address);
 }
 
 TColumnShardScanIterator::~TColumnShardScanIterator() {

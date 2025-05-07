@@ -44,7 +44,7 @@ public:
         , HolderFactory(Alloc.Ref(), MemInfo, FunctionRegistry.Get())
         , Builder(HolderFactory, NUdf::EValidatePolicy::Exception)
         , TypeInfoHelper(new TTypeInfoHelper())
-        , FunctionTypeInfoBuilder(Env, TypeInfoHelper, "", nullptr, {})
+        , FunctionTypeInfoBuilder(NYql::UnknownLangVersion, Env, TypeInfoHelper, "", nullptr, {})
     {
         BoolOid = NYql::NPg::LookupType("bool").TypeId;
     }

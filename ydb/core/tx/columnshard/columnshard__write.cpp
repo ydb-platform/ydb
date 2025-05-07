@@ -121,12 +121,12 @@ void TColumnShard::Handle(NPrivateEvents::NWrite::TEvWritePortionResult::TPtr& e
             Counters.OnWritePutBlobsFailed(now - i.GetWriteMeta().GetWriteStartInstant(), i.GetRecordsCount());
             Counters.GetCSCounters().OnWritePutBlobsFail(now - i.GetWriteMeta().GetWriteStartInstant());
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("writing_size", i.GetDataSize())("event", "data_write_error")(
-                "writing_id", i.GetWriteMeta().GetId());
+                "writing_id", i.GetWriteMeta().GetId())("reason", i.GetErrorMessage());
             Counters.GetWritesMonitor()->OnFinishWrite(i.GetDataSize(), 1);
             i.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::Finished);
         }
 
-        Execute(new TTxBlobsWritingFailed(this, ev->Get()->GetWriteStatus(), std::move(writtenData)), ctx);
+        Execute(new TTxBlobsWritingFailed(this, std::move(writtenData)), ctx);
     }
 }
 

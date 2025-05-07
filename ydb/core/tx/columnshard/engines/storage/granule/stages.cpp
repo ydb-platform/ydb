@@ -9,10 +9,10 @@ namespace NKikimr::NOlap::NLoading {
 bool TGranuleOnlyPortionsReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     TDbWrapper db(txc.DB, &*DsGroupSelector);
     std::vector<TPortionInfo::TPtr> portions;
-    if (!db.LoadPortions(Self->GetPathId(), [&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
-        const TIndexInfo& indexInfo = portion.GetSchema(*VersionedIndex)->GetIndexInfo();
-        AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo, *DsGroupSelector));
-        portions.emplace_back(portion.Build());
+    if (!db.LoadPortions(Self->GetPathId(), [&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+        const TIndexInfo& indexInfo = portion->GetSchema(*VersionedIndex)->GetIndexInfo();
+        AFL_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, *DsGroupSelector));
+        portions.emplace_back(portion->Build());
     })) {
         return false;
     }
@@ -29,7 +29,6 @@ bool TGranuleOnlyPortionsReader::DoPrecharge(NTabletFlatExecutor::TTransactionCo
 
 bool TGranuleColumnsReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     TDbWrapper db(txc.DB, &*DsGroupSelector);
-    TPortionInfo::TSchemaCursor schema(*VersionedIndex);
     Context->ClearRecords();
     return db.LoadColumns(Self->GetPathId(), [&](TColumnChunkLoadContextV2&& loadContext) {
         Context->Add(std::move(loadContext));

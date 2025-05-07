@@ -10,14 +10,15 @@
 #include <yql/essentials/providers/common/codec/yql_codec_type_flags.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/core/yql_expr_constraint.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_expr_csee.h>
+#include <yql/essentials/minikql/mkql_block_map_join_utils.h>
 #include <yql/essentials/public/udf/udf_value.h>
 #include <yql/essentials/utils/log/log.h>
-#include <yql/essentials/core/services/yql_transform_pipeline.h>
 
 #include <util/generic/xrange.h>
 #include <util/generic/ptr.h>
@@ -450,7 +451,7 @@ IGraphTransformer::TStatus UpdateTableContentMemoryUsage(const TExprNode::TPtr& 
         TExprNode::TPtr newCurrent;
         auto status = OptimizeExpr(current, newCurrent,
             [&parentsMap, current, state, estimateTableContentWeight](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-                if (auto maybeContent = TMaybeNode<TYtTableContent>(node)) {
+                if (auto maybeContent = TMaybeNode<TYtTableContentBase>(node)) {
                     auto content = maybeContent.Cast();
                     if (NYql::HasAnySetting(content.Settings().Ref(), EYtSettingType::MemUsage | EYtSettingType::Small)) {
                         return node;
@@ -475,14 +476,15 @@ IGraphTransformer::TStatus UpdateTableContentMemoryUsage(const TExprNode::TPtr& 
                         collectRowFactor = 2 * (1 + fieldsCount) * sizeof(NKikimr::NUdf::TUnboxedValuePod);
                     }
 
+                    ui64 rawMemUsage = 0;
+
                     bool wrapToCollect = false;
                     TVector<std::pair<double, ui64>> factors; // first: sizeFactor, second: rowFactor
                     TNodeSet tableContentConsumers;
                     if (!GetTableContentConsumerNodes(*node, *current, parentsMap, tableContentConsumers)) {
                         wrapToCollect = true;
                         factors.emplace_back(2., collectRowFactor);
-                    }
-                    else {
+                    } else {
                         for (auto consumer: tableContentConsumers) {
                             if (consumer->IsCallable({"ToDict","SqueezeToDict", "SqlIn"})) {
                                 double sizeFactor = 1.;
@@ -492,9 +494,16 @@ IGraphTransformer::TStatus UpdateTableContentMemoryUsage(const TExprNode::TPtr& 
                                     return {};
                                 }
                                 factors.emplace_back(sizeFactor, rowFactor);
-                            }
-                            else if (consumer->IsCallable("Collect")) {
+                            } else if (consumer->IsCallable("Collect")) {
                                 factors.emplace_back(2., collectRowFactor);
+                            } else if (consumer->IsCallable("BlockStorage")) {
+                                factors.emplace_back(1., 0);
+                            } else if (consumer->IsCallable("BlockMapJoinIndex")) {
+                                auto rowCountSetting = GetSetting(*consumer->Child(TCoBlockMapJoinIndex::idx_Options), "rowCount");
+                                YQL_ENSURE(rowCountSetting);
+
+                                auto rowCount = FromString<size_t>(rowCountSetting->Child(1)->Content());
+                                rawMemUsage += NKikimr::NMiniKQL::EstimateBlockMapJoinIndexSize(rowCount);
                             }
                         }
                     }
@@ -563,12 +572,12 @@ IGraphTransformer::TStatus UpdateTableContentMemoryUsage(const TExprNode::TPtr& 
                                         }
                                         dataWeight += dataSizes->at(i);
                                     }
+                                    memUsage += rawMemUsage;
                                 } else {
                                     return {};
                                 }
                             }
-                        }
-                        else {
+                        } else {
                             TYtOutTableInfo info(GetOutTable(content.Input().Cast<TYtOutput>()));
                             if (info.Stat) {
                                 const ui64 dataSize = info.Stat->DataSize;
@@ -576,6 +585,7 @@ IGraphTransformer::TStatus UpdateTableContentMemoryUsage(const TExprNode::TPtr& 
                                 for (auto& factor: factors) {
                                     memUsage += factor.first * dataSize + factor.second * records;
                                 }
+                                memUsage += rawMemUsage;
                                 itemsCount += records;
                                 dataWeight += dataSize;
                             }

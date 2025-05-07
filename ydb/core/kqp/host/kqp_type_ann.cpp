@@ -87,6 +87,11 @@ TStatus AnnotateTable(const TExprNode::TPtr& node, TExprContext& ctx, const TStr
         return TStatus::Error;
     }
 
+    if (pathId->Content() == "") {
+        node->SetTypeAnn(ctx.MakeType<TVoidExprType>());
+        return TStatus::Ok;
+    }
+
     TString tablePath(path->Content());
     auto tableDesc = tablesData.EnsureTableExists(cluster, tablePath, node->Pos(), ctx);
     if (!tableDesc) {
@@ -603,6 +608,46 @@ TStatus AnnotateKeyTuple(const TExprNode::TPtr& node, TExprContext& ctx) {
 
     auto tupleType = ctx.MakeType<TTupleExprType>(keyTypes);
     node->SetTypeAnn(tupleType);
+    return TStatus::Ok;
+}
+
+TStatus AnnotateFillTable(const TExprNode::TPtr& node, TExprContext& ctx)
+{
+    if (!EnsureMinMaxArgsCount(*node, 4, 4, ctx)) {
+        return TStatus::Error;
+    }
+
+    const auto* input = node->Child(TKqlFillTable::idx_Input);
+
+    AFL_ENSURE(input->GetTypeAnn());
+
+    const TTypeAnnotationNode* itemType = nullptr;
+    bool isStream = false;
+    if (input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream) {
+        if (!EnsureStreamType(*input, ctx)) {
+            return TStatus::Error;
+        }
+        itemType = input->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType();
+        isStream = true;
+    } else {
+        if (!EnsureListType(*input, ctx)) {
+            return TStatus::Error;
+        }
+        itemType = input->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+        isStream = false;
+    }
+
+    if (!EnsureStructType(input->Pos(), *itemType, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto effectType = MakeKqpEffectType(ctx);
+    if (isStream) {
+        node->SetTypeAnn(ctx.MakeType<TStreamExprType>(effectType));
+    } else {
+        node->SetTypeAnn(ctx.MakeType<TListExprType>(effectType));
+    }
+
     return TStatus::Ok;
 }
 
@@ -1913,6 +1958,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateKeyTuple(input, ctx);
             }
 
+            if (TKqlFillTable::Match(input.Get())) {
+                return AnnotateFillTable(input, ctx);
+            }
+
             if (TKqlUpsertRowsBase::Match(input.Get())) {
                 return AnnotateUpsertRows(input, ctx, cluster, *tablesData);
             }
@@ -1963,10 +2012,6 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpOlapJsonExists::Match(input.Get())) {
                 return AnnotateOlapJsonExists(input, ctx);
-            }
-
-            if (TKqpCnMapShard::Match(input.Get()) || TKqpCnShuffleShard::Match(input.Get())) {
-                return AnnotateDqConnection(input, ctx);
             }
 
             if (TKqpCnSequencer::Match(input.Get())) {

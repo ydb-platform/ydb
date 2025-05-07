@@ -11,10 +11,11 @@
 
 #include <yt/yt/core/misc/crash_handler.h>
 #include <yt/yt/core/misc/hazard_ptr.h>
-#include <yt/yt/core/misc/signal_registry.h>
 #include <yt/yt/core/misc/shutdown.h>
 
 #include <yt/yt/library/profiling/solomon/registry.h>
+
+#include <yt/yt/library/signals/signal_registry.h>
 
 #include <library/cpp/testing/gtest/gtest.h>
 #include <library/cpp/testing/hook/hook.h>
@@ -152,8 +153,8 @@ Y_TEST_HOOK_BEFORE_RUN(GTEST_YT_SETUP)
 #endif
     NYT::EnableShutdownLoggingToFile((GetOutputPath() / "shutdown.log").GetPath());
 #ifdef _unix_
-    NYT::TSignalRegistry::Get()->PushCallback(NYT::AllCrashSignals, NYT::CrashSignalHandler);
-    NYT::TSignalRegistry::Get()->PushDefaultSignalHandler(NYT::AllCrashSignals);
+    NYT::NSignals::TSignalRegistry::Get()->PushCallback(NYT::NSignals::AllCrashSignals, NYT::CrashSignalHandler);
+    NYT::NSignals::TSignalRegistry::Get()->PushDefaultSignalHandler(NYT::NSignals::AllCrashSignals);
 #endif
 
     NYT::TErrorCodicils::Initialize();

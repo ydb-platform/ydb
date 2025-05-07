@@ -192,7 +192,7 @@ public:
     }
 
     void Write(NYdb::NTopic::TContinuationToken&&, NYdb::NTopic::TWriteMessage&& message,
-               NYdb::NTable::TTransaction* tx) override {
+               NYdb::TTransactionBase* tx) override {
         Y_UNUSED(tx);
 
         auto size = message.Data.size();
@@ -214,7 +214,7 @@ public:
 
     // Ignores codec in message and always writes raw for debugging purposes
     void WriteEncoded(NYdb::NTopic::TContinuationToken&& token, NYdb::NTopic::TWriteMessage&& params,
-                              NYdb::NTable::TTransaction* tx) override {
+                      NYdb::TTransactionBase* tx) override {
         Y_UNUSED(tx);
 
         NYdb::NTopic::TWriteMessage message(params.Data);

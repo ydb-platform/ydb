@@ -655,8 +655,6 @@ TKeyBoundaries SplitBodyHeadAndFastWrite(const std::deque<TDataKey>& keys)
 void TInitDataRangeStep::FormHeadAndProceed() {
     auto& endOffset = Partition()->BlobEncoder.EndOffset;
     auto& startOffset = Partition()->BlobEncoder.StartOffset;
-    //auto& head = Partition()->BlobEncoder.Head;
-    //auto& headKeys = Partition()->BlobEncoder.HeadKeys;
     auto& dataKeysBody = Partition()->BlobEncoder.DataKeysBody;
 
     auto keys = std::move(dataKeysBody);

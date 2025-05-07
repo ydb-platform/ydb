@@ -462,7 +462,7 @@ void TPartitionBlobEncoder::SyncHeadFastWrite(ui64& startOffset, ui64& endOffset
     Y_ABORT_UNLESS(Head.PackedSize == 0,
                    "Head.PackedSize=%" PRIu32, Head.PackedSize);
 
-    // если это первая запись
+    // We calculate the initial offset if this is the first write operation.
     if (NewHead.PackedSize > 0 && DataKeysBody.empty()) {
         Y_ABORT_UNLESS(Head.Offset == NewHead.Offset);
         Y_ABORT_UNLESS(Head.PartNo == NewHead.PartNo);
@@ -470,7 +470,7 @@ void TPartitionBlobEncoder::SyncHeadFastWrite(ui64& startOffset, ui64& endOffset
         startOffset = NewHead.Offset + (NewHead.PartNo > 0 ? 1 : 0);
     }
 
-    // перенести всё записанное из головы в тело
+    // In the FastWrite zone, everything is stored in the body. That's why we need to move the keys out of my head.
     for (auto& k : HeadKeys) {
         BodySize += k.Size;
         k.CumulativeSize = DataKeysBody.empty() ? 0 : (DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size);
@@ -478,16 +478,16 @@ void TPartitionBlobEncoder::SyncHeadFastWrite(ui64& startOffset, ui64& endOffset
     }
     HeadKeys.clear();
 
-    // мы только что записали, в теле должно что-то быть
+    // Here is the Head.Packed Size != 0. Therefore, the keys must be in the body.
     Y_ABORT_UNLESS(!DataKeysBody.empty());
 
     endOffset = NewHead.GetNextOffset();
 
-    // в случае быстрой записи голова пустая
+    // In the FastWrite zone, the head should be empty after the write operation.
     Head.Clear();
     Head.Offset = endOffset;
 
-    // уровни для упаковки тоже надо почистить
+    // There's nothing in my head. Therefore, the packaging levels also need to be cleaned.
     for (ui32 i = 0; i < DataKeysHead.size(); ++i) {
         DataKeysHead[i].Clear();
     }

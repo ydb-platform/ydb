@@ -385,7 +385,6 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
 
     BlobEncoder.SyncHeadKeys();
 
-    // возможно, надо перенести DefferedKeysForDeletion в TPartitionBlobEncoder
     // New blocks have been recorded. You can now delete the keys of the repackaged blocks.
     DefferedKeysForDeletion.clear();
 
@@ -1307,9 +1306,9 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                           BlobEncoder,
                           ctx);
 
-        // здесь мы собираем вместе всё, что хотим записать на диск. список ключей для готовых блобов будет лежать в
-        // BlobEncoder.CompactedKeys, а оставшиеся небольшие блобы - в BlobEncoder.NewHead. ключ для них появится чуть позже
-        // см. функцию TPartition::EndProcessWrites
+        // Here we put together everything we want to burn to a disc. The list of keys for the finished
+        // blocks will be in BlobEncoder.CompactedKeys, and the remaining small blobs in BlobEncoder.NewHead.
+        // The key for them will appear later in the TPartition::EndProcessWrites function.
 
         ui32 countOfLastParts = 0;
         for (auto& x : BlobEncoder.PartitionedBlob.GetClientBlobs()) {

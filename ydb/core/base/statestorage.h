@@ -28,6 +28,7 @@ struct TEvStateStorage {
         EvListStateStorage,
         EvBoardInfoUpdate,
         EvPublishActorGone,
+        EvRingGroupPassAway,
 
         // replies (local, from proxy)
         EvInfo = EvLookup + 512,
@@ -49,6 +50,7 @@ struct TEvStateStorage {
         EvReplicaUnregFollower,
         EvReplicaDelete,
         EvReplicaCleanup,
+        EvReplicaUpdateConfig,
 
         EvReplicaInfo = EvLock + 3 * 512,
         EvReplicaShutdown,
@@ -75,9 +77,11 @@ struct TEvStateStorage {
         };
 
         ESigWaitMode SigWaitMode;
+        ESigWaitMode RingGroupsSigWaitMode;
 
-        TProxyOptions(ESigWaitMode sigWaitMode = SigNone)
+        TProxyOptions(ESigWaitMode sigWaitMode = SigNone, ESigWaitMode ringGroupsSigWaitMode = SigNone)
             : SigWaitMode(sigWaitMode)
+            , RingGroupsSigWaitMode(ringGroupsSigWaitMode)
         {}
 
         TString ToString() const {
@@ -99,6 +103,12 @@ struct TEvStateStorage {
             : TabletID(tabletId)
             , Cookie(cookie)
             , ProxyOptions(proxyOptions)
+        {}
+
+        TEvLookup(const TEvLookup& ev)            
+            : TabletID(ev.TabletID)
+            , Cookie(ev.Cookie)
+            , ProxyOptions(ev.ProxyOptions)
         {}
 
         TString ToString() const {
@@ -134,6 +144,21 @@ struct TEvStateStorage {
             , ProxyOptions(proxyOptions)
         {
             Copy(sig, sig + sigsz, Signature.Get());
+        }
+
+        TEvUpdate(const TEvUpdate& ev, ui32 sigOffset, ui32 sigSize) 
+            : TabletID(ev.TabletID)
+            , Cookie(ev.Cookie)
+            , ProposedLeader(ev.ProposedLeader)
+            , ProposedLeaderTablet(ev.ProposedLeaderTablet)
+            , ProposedGeneration(ev.ProposedGeneration)
+            , ProposedStep(ev.ProposedStep)
+            , SignatureSz(sigSize)
+            , Signature(new ui64[sigSize])
+            , ProxyOptions(ev.ProxyOptions) 
+        {
+            Y_ABORT_UNLESS(sigOffset + sigSize <= ev.SignatureSz);
+            Copy(ev.Signature.Get() + sigOffset, ev.Signature.Get() + sigOffset + sigSize, Signature.Get());
         }
 
         TString ToString() const {
@@ -223,6 +248,19 @@ struct TEvStateStorage {
             , ProxyOptions(proxyOptions)
         {
             Copy(sig, sig + sigsz, Signature.Get());
+        }
+
+        TEvLock(const TEvLock& ev, ui32 sigOffset, ui32 sigSize)
+            : TabletID(ev.TabletID)
+            , Cookie(ev.Cookie)
+            , ProposedLeader(ev.ProposedLeader)
+            , ProposedGeneration(ev.ProposedGeneration)
+            , SignatureSz(sigSize)
+            , Signature(new ui64[sigSize])
+            , ProxyOptions(ev.ProxyOptions) 
+        {
+            Y_ABORT_UNLESS(sigOffset + sigSize <= ev.SignatureSz);
+            Copy(ev.Signature.Get() + sigOffset, ev.Signature.Get() + sigOffset + sigSize, Signature.Get());
         }
 
         TString ToString() const {
@@ -380,6 +418,8 @@ struct TEvStateStorage {
     struct TEvListStateStorageResult;
     struct TEvPublishActorGone;
     struct TEvUpdateGroupConfig;
+    struct TEvRingGroupPassAway;
+    struct TEvReplicaUpdateConfig;
 
     struct TEvReplicaShutdown : public TEventPB<TEvStateStorage::TEvReplicaShutdown, NKikimrStateStorage::TEvReplicaShutdown, TEvStateStorage::EvReplicaShutdown> {
     };
@@ -472,11 +512,11 @@ struct TStateStorageInfo : public TThrRefBase {
             StatusOutdated,
             StatusUnavailable,
         };
-
+ 
         ui32 Sz;
         TArrayHolder<TActorId> SelectedReplicas;
         TArrayHolder<EStatus> Status;
-
+        
         TSelection()
             : Sz(0)
         {}
@@ -496,19 +536,26 @@ struct TStateStorageInfo : public TThrRefBase {
         ui32 ContentHash() const;
     };
 
-    ui32 NToSelect;
-    TVector<TRing> Rings;
+    struct TRingGroup {
+        bool writeOnly = false;
+        ui32 NToSelect = 0;
+        TVector<TRing> Rings;
+
+        TString ToString() const;
+    };
+
+    TVector<TRingGroup> RingGroups;
 
     ui32 StateStorageVersion;
     TVector<ui32> CompatibleVersions;
 
-    void SelectReplicas(ui64 tabletId, TSelection *selection) const;
+    void SelectReplicas(ui64 tabletId, TSelection *selection, size_t ringGroupIdx) const;
     TList<TActorId> SelectAllReplicas() const;
     ui32 ContentHash() const;
+    ui32 RingGroupsSelectionSize() const;
 
     TStateStorageInfo()
-        : NToSelect(0)
-        , Hash(Max<ui64>())
+        : Hash(Max<ui64>())
     {}
 
     TString ToString() const;

@@ -189,6 +189,10 @@ message TEvNodeConfigInvokeOnRoot {
         bool SchemeBoard = 5;
     }
 
+    message TReconfigStateStorage {
+        NKikimrConfig.TDomainsConfig.TStateStorage NewStateStorageConfig = 1;
+    }
+
     message TAdvanceGeneration
     {}
 
@@ -223,6 +227,7 @@ message TEvNodeConfigInvokeOnRoot {
         TFetchStorageConfig FetchStorageConfig = 8;
         TReplaceStorageConfig ReplaceStorageConfig = 9;
         TBootstrapCluster BootstrapCluster = 10;
+        TReconfigStateStorage ReconfigStateStorage = 11;
     }
 }
 

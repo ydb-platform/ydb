@@ -64,29 +64,33 @@ public:
     }
 };
 
-void TStateStorageInfo::SelectReplicas(ui64 tabletId, TSelection *selection) const {
+void TStateStorageInfo::SelectReplicas(ui64 tabletId, TSelection *selection, size_t ringGroupIdx) const {
     const ui32 hash = StateStorageHashFromTabletID(tabletId);
-    const ui32 total = Rings.size();
 
-    Y_ABORT_UNLESS(NToSelect <= total);
+    Y_ABORT_UNLESS(ringGroupIdx < RingGroups.size());
+    
+    auto& ringGroup = RingGroups[ringGroupIdx];
+    const ui32 total = ringGroup.Rings.size();
 
-    if (selection->Sz < NToSelect) {
-        selection->Status.Reset(new TStateStorageInfo::TSelection::EStatus[NToSelect]);
-        selection->SelectedReplicas.Reset(new TActorId[NToSelect]);
+    Y_ABORT_UNLESS(ringGroup.NToSelect <= total);
+
+    if (selection->Sz < ringGroup.NToSelect) {
+        selection->Status.Reset(new TStateStorageInfo::TSelection::EStatus[ringGroup.NToSelect]);
+        selection->SelectedReplicas.Reset(new TActorId[ringGroup.NToSelect]);
     }
 
-    selection->Sz = NToSelect;
+    selection->Sz = ringGroup.NToSelect;
 
-    Fill(selection->Status.Get(), selection->Status.Get() + NToSelect, TStateStorageInfo::TSelection::StatusUnknown);
+    Fill(selection->Status.Get(), selection->Status.Get() + ringGroup.NToSelect, TStateStorageInfo::TSelection::StatusUnknown);
 
-    if (NToSelect == total) {
+    if (ringGroup.NToSelect == total) {
         for (ui32 idx : xrange(total)) {
-            selection->SelectedReplicas[idx] = Rings[idx].SelectReplica(hash);
+            selection->SelectedReplicas[idx] = ringGroup.Rings[idx].SelectReplica(hash);
         }
     } else { // NToSelect < total, first - select rings with walker, then select concrete node
         TStateStorageRingWalker walker(hash, total);
-        for (ui32 idx : xrange(NToSelect))
-            selection->SelectedReplicas[idx] = Rings[walker.Next()].SelectReplica(hash);
+        for (ui32 idx : xrange(ringGroup.NToSelect))
+            selection->SelectedReplicas[idx] = ringGroup.Rings[walker.Next()].SelectReplica(hash);
     }
 }
 
@@ -105,13 +109,21 @@ TActorId TStateStorageInfo::TRing::SelectReplica(ui32 hash) const {
 TList<TActorId> TStateStorageInfo::SelectAllReplicas() const {
 // TODO: we really need this method in such way?
     TList<TActorId> replicas;
-
-    for (auto &ring : Rings) {
-        for (TActorId replica : ring.Replicas)
-            replicas.push_back(replica);
+    for (auto &ringGroup : RingGroups) {
+        for (auto &ring : ringGroup.Rings) {
+            for (TActorId replica : ring.Replicas)
+                replicas.push_back(replica);
+        }
     }
 
     return replicas;
+}
+
+ui32 TStateStorageInfo::RingGroupsSelectionSize() const {
+    ui32 res = 0;
+    for (auto &ringGroup : RingGroups)
+        res += ringGroup.NToSelect;
+    return res;
 }
 
 ui32 TStateStorageInfo::TRing::ContentHash() const {
@@ -126,17 +138,19 @@ ui32 TStateStorageInfo::ContentHash() const {
     ui64 hash = RelaxedLoad<ui64>(&Hash);
     if (Y_UNLIKELY(hash == Max<ui64>())) {
         hash = 37;
-        for (const TRing &ring : Rings) {
-            hash = Hash64to32((hash << 32) | ring.ContentHash());
+        for (auto &ringGroup : RingGroups) {
+            for (const TRing &ring : ringGroup.Rings) {
+                hash = Hash64to32((hash << 32) | ring.ContentHash());
+            }
         }
         RelaxedStore<ui64>(&Hash, static_cast<ui32>(hash));
     }
     return static_cast<ui32>(hash);
 }
 
-TString TStateStorageInfo::ToString() const {
+TString TStateStorageInfo::TRingGroup::ToString() const {
     TStringStream s;
-    s << '{';
+    s << "{";
     s << "NToSelect# " << NToSelect;
     s << " Rings# [";
     for (size_t ring = 0; ring < Rings.size(); ++ring) {
@@ -153,6 +167,21 @@ TString TStateStorageInfo::ToString() const {
             s << " UseRingSpecificNodeSelection";
         }
         s << '}';
+    }
+    s << '}';
+    return s.Str();
+}
+
+TString TStateStorageInfo::ToString() const {
+    TStringStream s;
+    s << '{';
+    s << "RingGroups# [";
+    for (size_t ringGroupIdx = 0; ringGroupIdx < RingGroups.size(); ++ringGroupIdx) {
+        auto& ringGroup = RingGroups[ringGroupIdx];
+        if (ringGroupIdx) {
+            s << ' ';
+        }
+        s << ringGroupIdx << ":" << ringGroup.ToString();
     }
     s << "] StateStorageVersion# " << StateStorageVersion;
     s << " CompatibleVersions# " << FormatList(CompatibleVersions);
@@ -213,11 +242,10 @@ void TStateStorageInfo::TSelection::MergeReply(EStatus status, EStatus *owner, u
 
 static void CopyStateStorageRingInfo(
     const NKikimrConfig::TDomainsConfig::TStateStorage::TRing &source,
-    TStateStorageInfo *info,
+    TStateStorageInfo::TRingGroup& ringGroup,
     char *serviceId,
     ui32 depth
 ) {
-    info->NToSelect = source.GetNToSelect();
 
     const bool hasRings = source.RingSize() > 0;
     const bool hasNodes = source.NodeSize() > 0;
@@ -225,20 +253,20 @@ static void CopyStateStorageRingInfo(
     if (hasRings) { // has explicitely defined rings, use them as info rings
         Y_ABORT_UNLESS(!hasNodes);
         Y_ABORT_UNLESS(source.RingSize() < MaxRingCount);
-        info->Rings.resize(source.RingSize());
+        ringGroup.Rings.resize(source.RingSize());
 
         for (ui32 iring = 0, ering = source.RingSize(); iring != ering; ++iring) {
             serviceId[depth] = (iring + 1);
 
             const NKikimrConfig::TDomainsConfig::TStateStorage::TRing &ring = source.GetRing(iring);
-            info->Rings[iring].UseRingSpecificNodeSelection = ring.GetUseRingSpecificNodeSelection();
-            info->Rings[iring].IsDisabled = ring.GetIsDisabled();
+            ringGroup.Rings[iring].UseRingSpecificNodeSelection = ring.GetUseRingSpecificNodeSelection();
+            ringGroup.Rings[iring].IsDisabled = ring.GetIsDisabled();
 
             if (ring.GetUseSingleNodeActorId()) {
                 Y_ABORT_UNLESS(ring.NodeSize() == 1);
 
                 const TActorId replicaActorID = TActorId(ring.GetNode(0), TStringBuf(serviceId, serviceId + 12));
-                info->Rings[iring].Replicas.push_back(replicaActorID);
+                ringGroup.Rings[iring].Replicas.push_back(replicaActorID);
             }
             else {
                Y_ABORT_UNLESS(ring.NodeSize() > 0);
@@ -246,13 +274,14 @@ static void CopyStateStorageRingInfo(
                for (ui32 inode = 0, enode = ring.NodeSize(); inode != enode; ++inode) {
                     serviceId[depth + 1] = (inode + 1);
                     const TActorId replicaActorID = TActorId(ring.GetNode(inode), TStringBuf(serviceId, serviceId + 12));
-                    info->Rings[iring].Replicas.push_back(replicaActorID);
+                    ringGroup.Rings[iring].Replicas.push_back(replicaActorID);
                }
             }
             // reset for next ring
             serviceId[depth + 1] = char();
         }
-
+        // reset for next ring group
+        serviceId[depth] = char();
         return;
     }
 
@@ -260,37 +289,47 @@ static void CopyStateStorageRingInfo(
         Y_ABORT_UNLESS(!hasRings);
         Y_ABORT_UNLESS(source.NodeSize() < MaxNodeCount);
 
-        info->Rings.resize(source.NodeSize());
+        ringGroup.Rings.resize(source.NodeSize());
         for (ui32 inode = 0, enode = source.NodeSize(); inode != enode; ++inode) {
             serviceId[depth] = (inode + 1);
 
             const TActorId replicaActorID = TActorId(source.GetNode(inode), TStringBuf(serviceId, serviceId + 12));
-            info->Rings[inode].Replicas.push_back(replicaActorID);
+            ringGroup.Rings[inode].Replicas.push_back(replicaActorID);
         }
-
+        // reset for next ring group
+        serviceId[depth] = char();
         return;
     }
 
     Y_ABORT("must have rings or legacy node config");
 }
 
-TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActorId::MaxServiceIDLength], const NKikimrConfig::TDomainsConfig::TStateStorage& config) {
+TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActorId::MaxServiceIDLength], 
+        const NKikimrConfig::TDomainsConfig::TStateStorage& config) {
     TIntrusivePtr<TStateStorageInfo> info = new TStateStorageInfo();
     Y_ABORT_UNLESS(config.GetSSId() == 1);
     info->StateStorageVersion = config.GetStateStorageVersion();
     
     info->CompatibleVersions.reserve(config.CompatibleVersionsSize());
     for (ui32 version : config.GetCompatibleVersions()) {
-            info->CompatibleVersions.push_back(version);
+        info->CompatibleVersions.push_back(version);
     }
     
-    const size_t offset = FindIndex(namePrefix, char());
-    Y_ABORT_UNLESS(offset != NPOS && (offset + sizeof(ui32)) < TActorId::MaxServiceIDLength);
-
+    const size_t offset = FindIndex(namePrefix, char()) + sizeof(ui32);
+    Y_ABORT_UNLESS(offset != NPOS && (offset) < TActorId::MaxServiceIDLength);
     const ui32 stateStorageGroup = 1;
-    memcpy(namePrefix + offset, reinterpret_cast<const char *>(&stateStorageGroup), sizeof(ui32));
-    CopyStateStorageRingInfo(config.GetRing(), info.Get(), namePrefix, offset + sizeof(ui32));
-
+    memcpy(namePrefix + offset - sizeof(ui32), reinterpret_cast<const char *>(&stateStorageGroup), sizeof(ui32));
+    for (size_t i = 0; i < config.RingGroupsSize(); i++) {
+        memset(namePrefix + offset, 0, TActorId::MaxServiceIDLength - offset);
+        auto& ringGroup = config.GetRingGroups(i);
+        info.Get()->RingGroups.push_back({ringGroup.GetWriteOnly(), ringGroup.GetRing().GetNToSelect(), {}});
+        CopyStateStorageRingInfo(ringGroup.GetRing(), info.Get()->RingGroups.back(), namePrefix, offset);
+    }
+    if (config.HasRing() && config.RingGroupsSize() == 0) {
+        auto& ring = config.GetRing();
+        info.Get()->RingGroups.push_back({false, ring.GetNToSelect(), {}});
+        CopyStateStorageRingInfo(ring, info.Get()->RingGroups.back(), namePrefix, offset);
+    }
     return info;
 }
 

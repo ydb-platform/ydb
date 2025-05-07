@@ -829,7 +829,9 @@ void TTablet::HandleStateStorageInfoResolve(TEvStateStorage::TEvInfo::TPtr &ev) 
 void TTablet::HandleStateStorageInfoLock(TEvStateStorage::TEvInfo::TPtr &ev) {
     const TEvStateStorage::TEvInfo *msg = ev->Get();
 
-    StateStorageInfo.MergeSignature(msg->Signature.Get(), msg->SignatureSz);
+    if (!StateStorageInfo.MergeSignature(msg->Signature.Get(), msg->SignatureSz)) {
+        return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootSSError);
+    }
 
     switch (msg->Status) {
     case NKikimrProto::OK:
@@ -863,7 +865,9 @@ void TTablet::HandleStateStorageInfoLock(TEvStateStorage::TEvInfo::TPtr &ev) {
 void TTablet::HandleStateStorageInfoUpgrade(TEvStateStorage::TEvInfo::TPtr &ev) {
     const TEvStateStorage::TEvInfo *msg = ev->Get();
 
-    StateStorageInfo.MergeSignature(msg->Signature.Get(), msg->SignatureSz);
+    if (!StateStorageInfo.MergeSignature(msg->Signature.Get(), msg->SignatureSz)) {
+        return CancelTablet(TEvTablet::TEvTabletDead::ReasonBootSSError);
+    }
 
     switch (msg->Status){
     case NKikimrProto::OK:
@@ -1981,7 +1985,7 @@ void TTablet::BootstrapFollower() {
     }
 
     StateStorageInfo.ProxyID = MakeStateStorageProxyID();
-    Send(StateStorageInfo.ProxyID, new TEvStateStorage::TEvLookup(TabletID(), 0, TEvStateStorage::TProxyOptions(TEvStateStorage::TProxyOptions::SigAsync)));
+    Send(StateStorageInfo.ProxyID, new TEvStateStorage::TEvLookup(TabletID(), 0, TEvStateStorage::TProxyOptions(TEvStateStorage::TProxyOptions::SigAsync, TEvStateStorage::TProxyOptions::SigSync)));
     if (IntrospectionTrace) {
         IntrospectionTrace->Attach(MakeHolder<NTracing::TOnTabletBootstrap>(SuggestedGeneration, false, StateStorageInfo.ProxyID));
     }
@@ -2000,7 +2004,7 @@ void TTablet::Bootstrap() {
     }
     ReportTabletStateChange(TTabletStateInfo::Created); // useless?
     StateStorageInfo.ProxyID = MakeStateStorageProxyID();
-    Send(StateStorageInfo.ProxyID, new TEvStateStorage::TEvLookup(TabletID(), 0, TEvStateStorage::TProxyOptions(TEvStateStorage::TProxyOptions::SigAsync)));
+    Send(StateStorageInfo.ProxyID, new TEvStateStorage::TEvLookup(TabletID(), 0, TEvStateStorage::TProxyOptions(TEvStateStorage::TProxyOptions::SigAsync, TEvStateStorage::TProxyOptions::SigSync)));
     if (IntrospectionTrace) {
         IntrospectionTrace->Attach(MakeHolder<NTracing::TOnTabletBootstrap>(SuggestedGeneration, true, StateStorageInfo.ProxyID));
     }

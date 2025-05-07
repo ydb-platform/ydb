@@ -119,7 +119,7 @@ protected:
         }
         if (value != ReplicaMissingReported) {
             TDerived::Send(Guard, new TEvPrivate::TEvReplicaMissing(value));
-            ReplicaMissingReported = true;
+            ReplicaMissingReported = value;
         }
     }
 
@@ -392,43 +392,37 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         Y_ABORT_UNLESS(!replicasList.empty(), "must not happens, guardian must be created over active tablet");
 
         const ui32 replicaSz = replicasList.size();
-        Y_ABORT_UNLESS(ReplicaGuardians.empty() || ReplicaGuardians.size() == replicaSz);
+        // Reconfig StateStorage case replicas count can be the same, but actors changed
+        // Y_ABORT_UNLESS(ReplicaGuardians.empty() || ReplicaGuardians.size() == replicaSz);
 
         TVector<std::pair<TActorId, TActorId>> updatedReplicaGuardians;
         updatedReplicaGuardians.reserve(replicaSz);
 
-        const bool inspectCurrent = (ReplicaGuardians.size() == replicaSz);
-        if (!inspectCurrent) {
-            for (const auto &xpair : ReplicaGuardians) {
-                if (xpair.second)
-                    Send(xpair.second, new TEvents::TEvPoison());
-            }
-            ReplicaGuardians.clear();
-        }
-
         for (ui32 idx : xrange(replicasList.size())) {
             const TActorId replica = replicasList[idx];
-
-            if (inspectCurrent && ReplicaGuardians[idx].first == replica && ReplicaGuardians[idx].second) {
-                updatedReplicaGuardians.emplace_back(ReplicaGuardians[idx]);
-                ReplicaGuardians[idx].second = TActorId();
-            } else {
+            bool found = false;
+            for(auto& p : ReplicaGuardians)
+                if(p.first == replica && p.second) {
+                    updatedReplicaGuardians.emplace_back(p);
+                    p.second = TActorId();
+                    found = true;
+                    break;
+                }
+            if (!found) {
                 if (Info)
                     updatedReplicaGuardians.emplace_back(replica, RegisterWithSameMailbox(new TReplicaGuardian(Info.Get(), replica, SelfId())));
                 else
                     updatedReplicaGuardians.emplace_back(replica, RegisterWithSameMailbox(new TFollowerGuardian(FollowerInfo.Get(), replica, SelfId())));
             }
         }
-
         for (const auto &xpair : ReplicaGuardians) {
-            if (xpair.second)
+            if (xpair.second) {
                 Send(xpair.second, new TEvents::TEvPoison());
+            }
         }
-
         ReplicaGuardians.swap(updatedReplicaGuardians);
         ReplicasOnlineThreshold = (ReplicaGuardians.size() == 1) ? 0 : 1;
 
-        if (!FollowerTracker || !inspectCurrent) // would notify on first change
             FollowerTracker.Reset(new TFollowerTracker(replicaSz));
 
         Become(&TThis::StateCalm);
@@ -454,7 +448,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
     bool ValidateOnlineReplicasOrDie() {
         ui32 replicasOnline = CountOnlineReplicas();
 
-        if (replicasOnline == ReplicasOnlineThreshold) {
+        if (replicasOnline <= ReplicasOnlineThreshold) {
             Send(Launcher(), new TEvTablet::TEvDemoted(true));
             HandlePoison();
             return false;
@@ -508,6 +502,10 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
             const ui64 rndDelay = AppData()->RandomProvider->GenRand() % 150;
             SendResolveRequest(TDuration::MilliSeconds(150 + rndDelay), false);
         }
+    }
+
+    void HandleUpdateConfig(TEvStateStorage::TEvReplicaUpdateConfig::TPtr /*ev*/) {
+        SendResolveRequest(TDuration::Zero(), false);
     }
 
     void Handle(TEvPrivate::TEvReplicaMissing::TPtr &ev) {
@@ -617,6 +615,7 @@ public:
             hFunc(TEvPrivate::TEvReplicaMissing, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison);
             cFunc(TEvTablet::TEvTabletDead::EventType, HandlePoison);
+            hFunc(TEvStateStorage::TEvReplicaUpdateConfig, HandleUpdateConfig);
         }
     }
 
@@ -630,6 +629,7 @@ public:
             hFunc(TEvPrivate::TEvReplicaMissing, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison);
             cFunc(TEvTablet::TEvTabletDead::EventType, HandlePoison);
+            hFunc(TEvStateStorage::TEvReplicaUpdateConfig, HandleUpdateConfig);
         }
     }
 };

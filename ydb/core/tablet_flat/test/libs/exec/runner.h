@@ -140,9 +140,11 @@ namespace NFake {
 
                 TIntrusivePtr<TStateStorageInfo> info(new TStateStorageInfo());
 
-                info->NToSelect = 1;
-                info->Rings.resize(1);
-                info->Rings[0].Replicas.push_back(replica);
+                info->RingGroups.resize(1);
+                auto &group = info->RingGroups.back();
+                group.NToSelect = 1;
+                group.Rings.resize(1);
+                group.Rings[0].Replicas.push_back(replica);
 
                 {
                     auto *actor = CreateStateStorageReplica(info, 0);

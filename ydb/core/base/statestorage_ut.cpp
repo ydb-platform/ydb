@@ -8,13 +8,15 @@ namespace NKikimr {
 Y_UNIT_TEST_SUITE(TStateStorageConfig) {
 
     void FillStateStorageInfo(TStateStorageInfo *info, ui32 replicas, ui32 nToSelect, ui32 replicasInRing, bool useRingSpecificNodeSelection) {
-        info->NToSelect = nToSelect;
-
-        info->Rings.resize(replicas);
+        info->RingGroups.resize(info->RingGroups.size() + 1);
+        auto& group = info->RingGroups.back();
+        group.writeOnly = false;
+        group.NToSelect = nToSelect;
+        group.Rings.resize(replicas);
         for (ui32 i : xrange(replicas)) {
             for (ui32 j : xrange(replicasInRing)) {
-                info->Rings[i].Replicas.push_back(TActorId(i, i, i + j, i));
-                info->Rings[i].UseRingSpecificNodeSelection = useRingSpecificNodeSelection;
+                group.Rings[i].Replicas.push_back(TActorId(i, i, i + j, i));
+                group.Rings[i].UseRingSpecificNodeSelection = useRingSpecificNodeSelection;
             }
         }
     }
@@ -27,7 +29,7 @@ Y_UNIT_TEST_SUITE(TStateStorageConfig) {
 
         TStateStorageInfo::TSelection selection;
         for (ui64 tabletId = 8000000; tabletId < 9000000; ++tabletId) {
-            info.SelectReplicas(tabletId, &selection);
+            info.SelectReplicas(tabletId, &selection, 0);
             Y_ABORT_UNLESS(nToSelect == selection.Sz);
             for (ui32 idx : xrange(nToSelect))
                 retHash = CombineHashes<ui64>(retHash, selection.SelectedReplicas[idx].Hash());
@@ -46,7 +48,7 @@ Y_UNIT_TEST_SUITE(TStateStorageConfig) {
         TStateStorageInfo::TSelection selection;
         for (ui64 tabletId = tabletStartId; tabletId < tabletStartId + tabletCount; ++tabletId) {
             ui64 selectionHash = 0;
-            info.SelectReplicas(tabletId, &selection);
+            info.SelectReplicas(tabletId, &selection, 0);
             Y_ABORT_UNLESS(nToSelect == selection.Sz);
             for (ui32 idx : xrange(nToSelect))
                 selectionHash = CombineHashes<ui64>(selectionHash, selection.SelectedReplicas[idx].Hash());
@@ -96,7 +98,7 @@ Y_UNIT_TEST_SUITE(TStateStorageConfig) {
 
         TStateStorageInfo::TSelection selection;
         for (ui64 tabletId = 8000000; tabletId < 9000000; ++tabletId) {
-            info.SelectReplicas(tabletId, &selection);
+            info.SelectReplicas(tabletId, &selection, 0);
             Y_ABORT_UNLESS(nToSelect == selection.Sz);
             for (ui32 idx : xrange(nToSelect))
                 history[selection.SelectedReplicas[idx]] += 1;

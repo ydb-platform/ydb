@@ -497,6 +497,8 @@ namespace NKikimr::NBsController {
             
             // update the group size
             group->SlotSizeUnits = cmd.GetSlotSizeUnits().GetValue();
+            GroupContentChanged.insert(groupId);
+            Fit.PoolsAndGroups.emplace(poolId, groupId);
         }
     }
 

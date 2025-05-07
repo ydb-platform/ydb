@@ -338,8 +338,12 @@ namespace NKikimr::NStorage {
         const TVSlotId vslotId(loc);
         const auto [it, inserted] = LocalVDisks.try_emplace(vslotId);
         auto& record = it->second;
+        bool configChanged = false;
         if (!inserted) {
-            // -- check that configuration did not change
+            Y_ABORT_UNLESS(record.RuntimeData);
+            configChanged |= record.RuntimeData->DonorMode < vdisk.HasDonorMode();
+            configChanged |= record.RuntimeData->ReadOnly != vdisk.GetReadOnly();
+            configChanged |= record.RuntimeData->GroupInfo->SlotSizeUnits != vdisk.GetSlotSizeUnits().GetValue();
         }
 
         record.Config.CopyFrom(vdisk);
@@ -359,7 +363,7 @@ namespace NKikimr::NStorage {
             Slay(record);
         } else if (!record.RuntimeData) {
             StartLocalVDiskActor(record);
-        } else if (record.RuntimeData->DonorMode < record.Config.HasDonorMode() || record.RuntimeData->ReadOnly != record.Config.GetReadOnly()) {
+        } else if (configChanged) {
             PoisonLocalVDisk(record);
             StartLocalVDiskActor(record);
         }

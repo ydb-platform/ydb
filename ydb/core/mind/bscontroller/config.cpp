@@ -188,6 +188,12 @@ namespace NKikimr::NBsController {
 
                 if (const TGroupInfo *group = State.Groups.Find(vslotInfo.GroupId); group && mood != TMood::Delete) {
                     item.SetStoragePoolName(State.StoragePools.Get().at(group->StoragePoolId).Name);
+                    
+                    if (group->SlotSizeUnits.Defined()) {
+                        if (auto slotSizeUnits = *group->SlotSizeUnits.Get()) {
+                            item.MutableSlotSizeUnits()->SetValue(slotSizeUnits);
+                        }
+                    }
 
                     const TVSlotFinder vslotFinder{[this](TVSlotId vslotId, auto&& callback) {
                         if (const TVSlotInfo *vslot = State.VSlots.Find(vslotId)) {

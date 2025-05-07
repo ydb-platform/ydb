@@ -26,6 +26,8 @@ void TTester::Setup(TTestActorRuntime& runtime) {
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
     runtime.SetLogPriority(NKikimrServices::S3_WRAPPER, NLog::PRI_DEBUG);
 
+    NOlap::TSchemaCachesManager::DropCaches();
+
     ui32 domainId = 0;
     ui32 planResolution = 500;
 
@@ -449,7 +451,6 @@ namespace NKikimr::NColumnShard {
     }
 
     void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const NOlap::TSnapshot& snapshot, bool succeed) {
-
         auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
         while (controller && !controller->IsActiveTablet(TTestTxConfig::TxTablet0)) {
             runtime.SimulateSleep(TDuration::Seconds(1));
@@ -463,20 +464,18 @@ namespace NKikimr::NColumnShard {
         }
     }
 
-    void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
-                 const TestTableDescription& table, TString codec) {
+    void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId, const TestTableDescription& table, TString codec) {
         using namespace NTxUT;
         NOlap::TSnapshot snapshot(10, 10);
         TString txBody;
         auto specials = TTestSchema::TTableSpecials().WithCodec(codec);
         if (table.InStore) {
-            txBody = TTestSchema::CreateTableTxBody(pathId, table.Schema, table.Pk, specials);
+            txBody = TTestSchema::CreateInitShardTxBody(pathId, table.Schema, table.Pk, specials);
         } else {
             txBody = TTestSchema::CreateStandaloneTableTxBody(pathId, table.Schema, table.Pk, specials);
         }
         SetupSchema(runtime, sender, txBody, snapshot, true);
     }
-
 
     void PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize) {
         using namespace NTxUT;

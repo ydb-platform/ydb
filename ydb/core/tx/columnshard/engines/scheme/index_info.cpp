@@ -16,11 +16,12 @@
 
 namespace NKikimr::NOlap {
 
-bool TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
+TConclusionStatus TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
     if (!other.GetPrimaryKey()->Equals(PrimaryKey)) {
-        return false;
+        return TConclusionStatus::Fail(
+            TStringBuilder() << "PK mismatch: this=" << PrimaryKey->ToString() << " other=" << other.GetPrimaryKey()->ToString());
     }
-    return true;
+    return TConclusionStatus::Success();
 }
 
 ui32 TIndexInfo::GetColumnIdVerified(const std::string& name) const {

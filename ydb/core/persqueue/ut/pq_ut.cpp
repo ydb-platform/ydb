@@ -12,7 +12,6 @@
 
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 
 namespace NKikimr::NPQ {

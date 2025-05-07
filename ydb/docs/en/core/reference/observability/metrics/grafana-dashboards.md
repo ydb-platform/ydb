@@ -117,7 +117,7 @@ Download the [datashard.json](https://raw.githubusercontent.com/ydb-platform/ydb
 The dashboard includes the following filters:
 * database – selects the database for which metrics are displayed;
 * ds – selects the Prometheus data source the dashboard will use;
-* Tx type – determines the transaction type for which "`{{Tx type}}` average time" panel is displayed.
+* Tx type – determines the transaction type for which "`{Tx type}` average time" panel is displayed.
 
 | Name | Description |
 |---|---|
@@ -126,7 +126,7 @@ The dashboard includes the following filters:
 | Local transaction times | CPU time utilized by various local transaction types in Hive. Shows the structure of Hive load based on different activities. |
 | Tablet count | Total number of tablets in the database. |
 | Event queue size | Size of the incoming event queue in Hive. Consistently high values indicate Hive cannot process events fast enough. |
-| `{{Tx type}}` average time | Average execution time of a single local transaction of the type specified in the `Tx type` selector on the dashboard. |
+| `{Tx type}` average time | Average execution time of a single local transaction of the type specified in the `Tx type` selector on the dashboard. |
 | Versions | Versions of {{ ydb-short-name }} running on cluster nodes. |
 | Hive node | Node where the database Hive is running. |
 

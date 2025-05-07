@@ -3207,6 +3207,19 @@ void TTenantsManager::DbUpdateTenantUserToken(TTenant::TPtr tenant,
         .Update(NIceDb::TUpdate<Schema::Tenants::UserToken>(userToken));
 }
 
+void TTenantsManager::DbUpdateTenantPeerName(TTenant::TPtr tenant,
+                                             const TString &peerName,
+                                             TTransactionContext &txc,
+                                             const TActorContext &ctx)
+{
+    LOG_TRACE_S(ctx, NKikimrServices::CMS_TENANTS,
+    "Update peerName in database for " << tenant->Path);
+
+    NIceDb::TNiceDb db(txc.DB);
+    db.Table<Schema::Tenants>().Key(tenant->Path)
+        .Update(NIceDb::TUpdate<Schema::Tenants::PeerName>(peerName));
+}
+
 void TTenantsManager::DbUpdateSubdomainVersion(TTenant::TPtr tenant,
                                                ui64 version,
                                                TTransactionContext &txc,

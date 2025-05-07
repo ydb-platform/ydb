@@ -910,6 +910,10 @@ public:
                                  const TString &userToken,
                                  TTransactionContext &txc,
                                  const TActorContext &ctx);
+    void DbUpdateTenantPeerName(TTenant::TPtr tenant,
+                                 const TString &peerName,
+                                 TTransactionContext &txc,
+                                 const TActorContext &ctx);
     void DbUpdateSubdomainVersion(TTenant::TPtr tenant,
                                   ui64 version,
                                   TTransactionContext &txc,

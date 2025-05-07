@@ -848,15 +848,45 @@ public:
 
         if (Action == REMOVE) {
             switch (rec.GetStatus()) {
-            case NKikimrScheme::EStatus::StatusPathDoesNotExist:
+            case NKikimrScheme::EStatus::StatusPathDoesNotExist: {
+                AuditLogEndRemoveDatabase(
+                    Tenant->PeerName,
+                    Tenant->UserToken.GetUserSID(),
+                    Tenant->UserToken.GetSanitizedToken(),
+                    Tenant->Path,
+                    "Path does not exist",
+                    false
+                );
+        
                 ActionFinished(ctx);
                 break;
-            case NKikimrScheme::EStatus::StatusSuccess:
+            }
+            case NKikimrScheme::EStatus::StatusSuccess: {
+                AuditLogEndRemoveDatabase(
+                    Tenant->PeerName,
+                    Tenant->UserToken.GetUserSID(),
+                    Tenant->UserToken.GetSanitizedToken(),
+                    Tenant->Path,
+                    "",
+                    true
+                );
+
                 DropSubdomain(ctx);
                 break;
-            default:
+            }
+            default: {
+                AuditLogEndRemoveDatabase(
+                    Tenant->PeerName,
+                    Tenant->UserToken.GetUserSID(),
+                    Tenant->UserToken.GetSanitizedToken(),
+                    Tenant->Path,
+                    rec.GetReason(),
+                    false
+                );
+
                 ReplyAndDie(new TTenantsManager::TEvPrivate::TEvSubdomainFailed(Tenant, rec.GetReason()), ctx);
                 break;
+            }
             }
 
             return;
@@ -874,8 +904,8 @@ public:
                 Tenant->UserToken.GetUserSID(),
                 Tenant->UserToken.GetSanitizedToken(),
                 Tenant->Path,
-                "Resolve subdomain fail",
-                true
+                rec.GetReason(),
+                false
             );
 
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvSubdomainFailed(Tenant, rec.GetReason()), ctx);
@@ -896,8 +926,8 @@ public:
                 Tenant->UserToken.GetUserSID(),
                 Tenant->UserToken.GetSanitizedToken(),
                 Tenant->Path,
-                "Resolve subdomain fail",
-                true
+                "Path has invalid path type",
+                false
             );
 
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvSubdomainFailed(Tenant, "bad path type"), ctx);

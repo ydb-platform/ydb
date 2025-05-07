@@ -96,6 +96,7 @@ target_sources(ydb-core-tablet_flat-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_screen.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_bloom.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_shared_sausagecache.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_shared_sausagecache_actor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_slice.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_slice_loader.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tablet_flat/ut/ut_versions.cpp

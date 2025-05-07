@@ -264,4 +264,17 @@ std::shared_ptr<arrow::Array> ReallocateArray(
     return cArray->chunk(0);
 }
 
+std::vector<std::shared_ptr<arrow::Field>> BuildFakeFields(const std::vector<std::shared_ptr<arrow::Array>>& columns) {
+    arrow::FieldVector fields;
+    ui32 idx = 0;
+    for (auto&& i : columns) {
+        fields.emplace_back(std::make_shared<arrow::Field>(::ToString(idx++), i->type()));
+    }
+    return fields;
+}
+
+std::shared_ptr<arrow::Schema> BuildFakeSchema(const std::vector<std::shared_ptr<arrow::Array>>& columns) {
+    return std::make_shared<arrow::Schema>(BuildFakeFields(columns));
+}
+
 }   // namespace NKikimr::NArrow

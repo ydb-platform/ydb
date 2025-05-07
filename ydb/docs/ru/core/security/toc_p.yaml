@@ -3,7 +3,7 @@ items:
   href: authentication.md
 - name: Авторизация
   href: authorization.md
-- name: Встроенная настройка безопасности
+- name: Начальная настройка безопасности
   href: builtin-security.md
 - name: Аудитный лог
   href: audit-log.md

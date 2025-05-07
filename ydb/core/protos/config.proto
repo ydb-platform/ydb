@@ -1923,6 +1923,7 @@ message TColumnShardConfig {
     optional uint64 MemoryLimitMergeOnCompactionRawData = 38 [default = 512000000];
     optional bool AlterObjectEnabled = 39 [default = false];
     optional EJsonDoubleOutOfRangeHandlingPolicy DoubleOutOfRangeHandling = 40 [default = REJECT];
+    optional bool PortionMetaV0Usage = 41 [default = true];
 }
 
 message TSchemeShardConfig {

@@ -120,7 +120,7 @@ struct BOOST_CONTEXT_DECL fiber_activation_record {
     fiber_activation_record( stack_context sctx_) noexcept :
         sctx( sctx_ ),
         main_ctx( false ) {
-    } 
+    }
 
     virtual ~fiber_activation_record() {
 #if defined(BOOST_USE_TSAN)
@@ -289,7 +289,7 @@ public:
             c = boost::context::detail::invoke( fn_, std::move( c) );
 #else
             c = std::invoke( fn_, std::move( c) );
-#endif  
+#endif
         } catch ( forced_unwind const& ex) {
             c = Ctx{ ex.from };
         }
@@ -357,7 +357,7 @@ static fiber_activation_record * create_fiber1( StackAlloc && salloc, Fn && fn) 
 
 template< typename Ctx, typename StackAlloc, typename Fn >
 static fiber_activation_record * create_fiber2( preallocated palloc, StackAlloc && salloc, Fn && fn) {
-    typedef fiber_capture_record< Ctx, StackAlloc, Fn >  capture_t; 
+    typedef fiber_capture_record< Ctx, StackAlloc, Fn >  capture_t;
 
     // reserve space for control structure
     void * storage = reinterpret_cast< void * >(

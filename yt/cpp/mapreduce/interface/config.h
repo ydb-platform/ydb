@@ -90,6 +90,10 @@ struct TConfig
     TString LogPath;
     THashSet<TString> LogExcludeCategories = {"Bus", "Net", "Dns", "Concurrency"};
 
+    /// @brief Path to the structured log file for recording telemetry data in JSON format.
+    /// This allows later retrieval and analysis of these metrics.
+    TString StructuredLog;
+
     /// @brief Represents the role involved in HTTP proxy configuration.
     ///
     /// @note If the "Hosts" configuration option is specified, it is given priority over the HTTP proxy role.

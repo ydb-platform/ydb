@@ -1868,6 +1868,164 @@ ALTER SEQUENCE `/Root/test_show_create/_serial_column_Value1` START WITH 101 INC
         );
     }
 
+    Y_UNIT_TEST(ShowCreateTablePartitionPolicyIndexTable) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 Int64 NOT NULL,
+                Key2 Utf8 NOT NULL,
+                Key3 PgInt2 NOT NULL,
+                Value1 Utf8,
+                Value2 Bool,
+                Value3 String,
+                INDEX Index1 GLOBAL SYNC ON (Key2, Value1, Value2),
+                PRIMARY KEY (Key1, Key2, Key3)
+            );
+            ALTER TABLE test_show_create ALTER INDEX Index1 SET (
+                AUTO_PARTITIONING_BY_LOAD = ENABLED,
+                AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 5000
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key1` Int64 NOT NULL,
+    `Key2` Utf8 NOT NULL,
+    `Key3` pgint2 NOT NULL,
+    `Value1` Utf8,
+    `Value2` Bool,
+    `Value3` String,
+    INDEX `Index1` GLOBAL SYNC ON (`Key2`, `Value1`, `Value2`),
+    PRIMARY KEY (`Key1`, `Key2`, `Key3`)
+);
+
+ALTER TABLE `test_show_create`
+    ALTER INDEX `Index1` SET (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 5000)
+;
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 Int64 NOT NULL DEFAULT -100,
+                Key2 Utf8 NOT NULL,
+                Key3 BigSerial NOT NULL,
+                Value1 Utf8 FAMILY Family1,
+                Value2 Bool FAMILY Family2,
+                Value3 String FAMILY Family2,
+                INDEX Index1 GLOBAL ASYNC ON (Key2, Value1, Value2),
+                INDEX Index2 GLOBAL ASYNC ON (Key3, Value2) COVER (Value1, Value3),
+                PRIMARY KEY (Key1, Key2, Key3),
+                FAMILY Family1 (
+                    DATA = "test0",
+                    COMPRESSION = "off"
+                ),
+                FAMILY Family2 (
+                    DATA = "test1",
+                    COMPRESSION = "lz4"
+                )
+            ) WITH (
+                AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000
+            );
+            ALTER TABLE test_show_create ALTER INDEX Index1 SET (
+                AUTO_PARTITIONING_BY_LOAD = ENABLED,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2000
+            );
+            ALTER TABLE test_show_create ALTER INDEX Index2 SET (
+                AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 100
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key1` Int64 NOT NULL DEFAULT -100,
+    `Key2` Utf8 NOT NULL,
+    `Key3` Serial8 NOT NULL,
+    `Value1` Utf8 FAMILY `Family1`,
+    `Value2` Bool FAMILY `Family2`,
+    `Value3` String FAMILY `Family2`,
+    INDEX `Index1` GLOBAL ASYNC ON (`Key2`, `Value1`, `Value2`),
+    INDEX `Index2` GLOBAL ASYNC ON (`Key3`, `Value2`) COVER (`Value1`, `Value3`),
+    FAMILY `Family1` (DATA = 'test0', COMPRESSION = 'off'),
+    FAMILY `Family2` (DATA = 'test1', COMPRESSION = 'lz4'),
+    PRIMARY KEY (`Key1`, `Key2`, `Key3`)
+)
+WITH (
+    AUTO_PARTITIONING_BY_SIZE = ENABLED,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000
+);
+
+ALTER TABLE `test_show_create`
+    ALTER INDEX `Index1` SET (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2000)
+;
+
+ALTER TABLE `test_show_create`
+    ALTER INDEX `Index2` SET (AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 100)
+;
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 Int64 NOT NULL,
+                Key2 Utf8 NOT NULL,
+                Key3 PgInt2 NOT NULL,
+                Value1 Utf8,
+                Value2 Bool,
+                Value3 String,
+                INDEX Index1 GLOBAL SYNC ON (Key2, Value1, Value2),
+                INDEX Index2 GLOBAL ASYNC ON (Key3, Value1) COVER (Value2, Value3),
+                INDEX Index3 GLOBAL SYNC ON (Key1, Key2, Value1),
+                PRIMARY KEY (Key1, Key2, Key3)
+            );
+            ALTER TABLE test_show_create ALTER INDEX Index1 SET (
+                AUTO_PARTITIONING_BY_LOAD = ENABLED,
+                AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 5000,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1000
+            );
+            ALTER TABLE test_show_create ALTER INDEX Index2 SET (
+                AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                AUTO_PARTITIONING_PARTITION_SIZE_MB = 10000,
+                AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 2700
+            );
+            ALTER TABLE test_show_create ALTER INDEX Index3 SET (
+                AUTO_PARTITIONING_BY_SIZE = DISABLED,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3500
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key1` Int64 NOT NULL,
+    `Key2` Utf8 NOT NULL,
+    `Key3` pgint2 NOT NULL,
+    `Value1` Utf8,
+    `Value2` Bool,
+    `Value3` String,
+    INDEX `Index1` GLOBAL SYNC ON (`Key2`, `Value1`, `Value2`),
+    INDEX `Index2` GLOBAL ASYNC ON (`Key3`, `Value1`) COVER (`Value2`, `Value3`),
+    INDEX `Index3` GLOBAL SYNC ON (`Key1`, `Key2`, `Value1`),
+    PRIMARY KEY (`Key1`, `Key2`, `Key3`)
+);
+
+ALTER TABLE `test_show_create`
+    ALTER INDEX `Index1` SET (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1000, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 5000)
+;
+
+ALTER TABLE `test_show_create`
+    ALTER INDEX `Index2` SET (AUTO_PARTITIONING_BY_SIZE = ENABLED, AUTO_PARTITIONING_PARTITION_SIZE_MB = 10000, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 2700)
+;
+
+ALTER TABLE `test_show_create`
+    ALTER INDEX `Index3` SET (AUTO_PARTITIONING_BY_SIZE = DISABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3500)
+;
+)"
+        );
+    }
+
     Y_UNIT_TEST(Nodes) {
         TTestEnv env;
         CreateTenantsAndTables(env, false);

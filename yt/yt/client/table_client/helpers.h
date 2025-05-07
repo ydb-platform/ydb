@@ -392,6 +392,12 @@ TUnversionedValueRangeTruncationResult TruncateUnversionedValues(TUnversionedVal
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool GetBit(TRef bitmap, i64 index);
+
+void SetBit(TMutableRef bitmap, i64 index, bool value);
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NTableClient
 
 #define HELPERS_INL_H_

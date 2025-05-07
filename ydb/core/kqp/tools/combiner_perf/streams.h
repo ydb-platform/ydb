@@ -1,9 +1,11 @@
-// Sample data generators and streams
+// Sample data generators, streams, and reference aggregation implementations
 
 #pragma once
 
 #include "converters.h"
 #include "run_params.h"
+#include "value_wrapper.h"
+#include "hashmaps.h"
 
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
@@ -17,6 +19,7 @@ T6464Samples MakeKeyed6464Samples(const ui64 seed, const size_t numSamples, cons
 using TString64Samples = std::vector<std::pair<std::string, ui64>>;
 TString64Samples MakeKeyedString64Samples(const ui64 seed, const size_t numSamples, const unsigned int maxKey, const bool longStrings);
 
+
 struct IWideStream : public NUdf::TBoxedValue
 {
     NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final override {
@@ -27,7 +30,7 @@ struct IWideStream : public NUdf::TBoxedValue
     NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* result, ui32 width) override = 0;
 };
 
-template<typename K, typename V, bool EmbeddedKeys>
+template<typename K, typename V, bool EmbeddedKeys, size_t NumAggregates = 1>
 struct TKVStream : public IWideStream {
     using TSamples = std::vector<std::pair<K, V>>;
 
@@ -61,13 +64,17 @@ public:
             CurrSample = Samples.begin();
         }
 
-        if (width != 2) {
-            ythrow yexception() << "width 2 expected";
+        if (width != 1 + NumAggregates) {
+            ythrow yexception() << "width " << (1 + NumAggregates) << " expected";
         }
 
         // TODO: support embedded strings in values?
         NativeToUnboxed<EmbeddedKeys>(CurrSample->first, result[0]);
-        NativeToUnboxed<false>(CurrSample->second, result[1]);
+        NUdf::TUnboxedValuePod val;
+        NativeToUnboxed<false>(CurrSample->second, val);
+        for (size_t i = 0; i < NumAggregates; ++i) {
+            result[1 + i] = val;
+        }
 
         ++CurrSample;
 
@@ -75,7 +82,8 @@ public:
     }
 };
 
-template<typename K, typename V>
+
+template<typename K, typename V, size_t NumAggregates>
 std::unordered_map<K, V> ComputeStreamSumResult(const NUdf::TUnboxedValue& wideStream)
 {
     std::unordered_map<K, V> expects;
@@ -91,7 +99,10 @@ std::unordered_map<K, V> ComputeStreamSumResult(const NUdf::TUnboxedValue& wideS
             continue; // spilling combiners do yield sometimes
         }
         const K key = UnboxedToNative<K>(resultValues[0]);
-        const V value = UnboxedToNative<V>(resultValues[1]);
+        V value;
+        for (size_t i = 0; i < NumAggregates; ++i) {
+            value[i] = UnboxedToNative<typename V::TElement>(resultValues[1 + i]);
+        }
         expects[key] += value;
         ++numFetches;
     }
@@ -100,53 +111,69 @@ std::unordered_map<K, V> ComputeStreamSumResult(const NUdf::TUnboxedValue& wideS
     return expects;
 }
 
-// Direct version without the BoxedValueAccessor
-template<typename K, typename V>
-std::unordered_map<K, V> ComputeStreamSumResult(IWideStream& referenceStream)
+// Direct version without the BoxedValueAccessor for use in reference timing measurements
+template<typename K, typename V, size_t NumAggregates, typename TMapImpl>
+void ComputeReferenceStreamSumResult(IWideStream& referenceStream, typename TMapImpl::TMapType& refResult)
 {
-    std::unordered_map<K, V> expects;
-    {
-        NUdf::TUnboxedValue inputs[2];
+    NUdf::TUnboxedValue inputs[2];
 
-        while (referenceStream.WideFetch(inputs, 2) == NUdf::EFetchStatus::Ok) {
-            expects[UnboxedToNative<K>(inputs[0])] += inputs[1].Get<V>();
+    while (referenceStream.WideFetch(inputs, 1 + NumAggregates) == NUdf::EFetchStatus::Ok) {
+        V tmp;
+        for (size_t i = 0; i < V::ArrayWidth; ++i) {
+            tmp[i] = inputs[1 + i].Get<typename V::TElement>();
+        }
+        if constexpr (!TMapImpl::CustomOps) {
+            refResult[UnboxedToNative<K>(inputs[0])] += tmp;
+        } else {
+            TMapImpl::AggregateByKey(refResult, UnboxedToNative<K>(inputs[0]), tmp);
         }
     }
-    return expects;
 }
 
-template<typename K, typename V>
-void VerifyMapsAreEqual(const std::unordered_map<K, V> computedMap, const std::unordered_map<K, V>& refMap)
+template<typename K, typename V, typename TMapImpl>
+void VerifyMapsAreEqual(const std::unordered_map<K, V> computedMap, const typename TMapImpl::TMapType& refMap)
 {
-    UNIT_ASSERT_VALUES_EQUAL(computedMap.size(), refMap.size());
-
-    for (const auto referencePair : refMap) {
-        const auto ii = computedMap.find(referencePair.first);
-        UNIT_ASSERT(ii != computedMap.end());
-        UNIT_ASSERT_VALUES_EQUAL(referencePair.second, ii->second);
+    if constexpr (!TMapImpl::CustomOps) {
+        UNIT_ASSERT_VALUES_EQUAL(computedMap.size(), refMap.size());
+        for (const auto referencePair : refMap) {
+            const auto ii = computedMap.find(referencePair.first);
+            UNIT_ASSERT(ii != computedMap.end());
+            UNIT_ASSERT_VALUES_EQUAL(referencePair.second, ii->second);
+        }
+    } else {
+        UNIT_ASSERT_VALUES_EQUAL(computedMap.size(), TMapImpl::Size(refMap));
+        TMapImpl::IteratePairs(refMap, [computedMap](const K& k, const V& v){
+            const auto ii = computedMap.find(k);
+            UNIT_ASSERT(ii != computedMap.end());
+            UNIT_ASSERT_VALUES_EQUAL(v, ii->second);
+        });
     }
 }
 
-template<typename K, typename V>
-void VerifyStreamVsUnorderedMap(const NUdf::TUnboxedValue& wideStream, const std::unordered_map<K, V>& refMap)
+template<typename TMapImpl, typename K, typename V, size_t NumAggregates>
+void VerifyStreamVsMap(const NUdf::TUnboxedValue& wideStream, const typename TMapImpl::TMapType& refMap)
 {
-    std::unordered_map<K, V> resultMap = ComputeStreamSumResult<K, V>(wideStream);
-    VerifyMapsAreEqual(resultMap, refMap);
+    auto resultMap = ComputeStreamSumResult<K, V, NumAggregates>(wideStream);
+    VerifyMapsAreEqual<K, V, TMapImpl>(resultMap, refMap);
 }
 
-template<typename K, typename V>
-void VerifyListVsUnorderedMap(const NUdf::TUnboxedValue& pairList, const std::unordered_map<K, V>& refMap)
+template<typename TMapImpl, typename K, typename V, size_t NumAggregates>
+void VerifyListVsMap(const NUdf::TUnboxedValue& pairList, const typename TMapImpl::TMapType& refMap)
 {
     std::unordered_map<K, V> resultMap;
+
     const auto ptr = pairList.GetElements();
     for (size_t i = 0; i < pairList.GetListLength(); ++i) {
         const auto elements = ptr[i].GetElements();
         const auto key = UnboxedToNative<K>(elements[0]);
-        const auto value = UnboxedToNative<V>(elements[1]);
+        V value;
+        for (size_t i = 0; i < NumAggregates; ++i) {
+            value[i] = UnboxedToNative<typename V::TElement>(elements[1 + i]);
+        }
         resultMap[key] += value;
     }
 
-    VerifyMapsAreEqual(resultMap, refMap);
+    VerifyMapsAreEqual<K, V, TMapImpl>(resultMap, refMap);
 }
 
 template<size_t Width>
@@ -181,11 +208,12 @@ public:
     virtual std::string Describe() const = 0;
 };
 
+template<typename TMapImpl, size_t NumAggregates>
 class T6464DataSampler : public IDataSampler
 {
 public:
     TKVStream<ui64, ui64, false>::TSamples Samples;
-    std::unordered_map<ui64, ui64> Expects;
+    TMapImpl::TMapType Expects;
 
     size_t StreamNumIters = 0;
 
@@ -197,7 +225,7 @@ public:
 
     THolder<IWideStream> MakeStream(const THolderFactory& holderFactory) const override
     {
-        return THolder(new TKVStream<ui64, ui64, false>(holderFactory, Samples, StreamNumIters));
+        return THolder(new TKVStream<ui64, ui64, false, NumAggregates>(holderFactory, Samples, StreamNumIters));
     }
 
     TType* GetKeyType(TProgramBuilder& pb) const override
@@ -207,32 +235,33 @@ public:
 
     void ComputeReferenceResult(IWideStream& referenceStream) override
     {
-        Y_ENSURE(Expects.empty());
+        Y_ENSURE(MapEmpty<TMapImpl>(Expects));
 
-        Expects = ComputeStreamSumResult<ui64, ui64>(referenceStream);
+        ComputeReferenceStreamSumResult<ui64, TValueWrapper<ui64, NumAggregates>, NumAggregates, TMapImpl>(referenceStream, Expects);
     }
 
     void VerifyStreamVsReference(const NUdf::TUnboxedValue& wideStream) const override
     {
-        VerifyStreamVsUnorderedMap(wideStream, Expects);
+        VerifyStreamVsMap<TMapImpl, ui64, TValueWrapper<ui64, NumAggregates>, NumAggregates>(wideStream, Expects);
     }
 
     void VerifyComputedValueVsReference(const NUdf::TUnboxedValue& value) const override
     {
-        VerifyListVsUnorderedMap(value, Expects);
+        VerifyListVsMap<TMapImpl, ui64, TValueWrapper<ui64, NumAggregates>, NumAggregates>(value, Expects);
     }
 
     std::string Describe() const override
     {
-        return "ui64 keys, ui64 values";
+        return std::string("keys: ui64, values: ") + TValueWrapper<ui64, NumAggregates>::Describe();
     }
 };
 
+template<typename TMapImpl, size_t NumAggregates>
 class TString64DataSampler : public IDataSampler
 {
 public:
-    TKVStream<std::string, ui64, false>::TSamples Samples;
-    std::unordered_map<std::string, ui64> Expects;
+    TKVStream<std::string, ui64, false, NumAggregates>::TSamples Samples;
+    TMapImpl::TMapType Expects;
 
     size_t StreamNumIters = 0;
     bool LongStrings = false;
@@ -247,9 +276,9 @@ public:
     THolder<IWideStream> MakeStream(const THolderFactory& holderFactory) const override
     {
         if (LongStrings) {
-            return THolder(new TKVStream<std::string, ui64, false>(holderFactory, Samples, StreamNumIters));
+            return THolder(new TKVStream<std::string, ui64, false, NumAggregates>(holderFactory, Samples, StreamNumIters));
         } else {
-            return THolder(new TKVStream<std::string, ui64, true>(holderFactory, Samples, StreamNumIters));
+            return THolder(new TKVStream<std::string, ui64, true, NumAggregates>(holderFactory, Samples, StreamNumIters));
         }
     }
 
@@ -260,24 +289,25 @@ public:
 
     void ComputeReferenceResult(IWideStream& referenceStream) override
     {
-        Y_ENSURE(Expects.empty());
+        Y_ENSURE(MapEmpty<TMapImpl>(Expects));
 
-        Expects = ComputeStreamSumResult<std::string, ui64>(referenceStream);
+        ComputeReferenceStreamSumResult<std::string, TValueWrapper<ui64, NumAggregates>, NumAggregates, TMapImpl>(referenceStream, Expects);
     }
 
     void VerifyStreamVsReference(const NUdf::TUnboxedValue& wideStream) const override
     {
-        VerifyStreamVsUnorderedMap(wideStream, Expects);
+        VerifyStreamVsMap<TMapImpl, std::string, TValueWrapper<ui64, NumAggregates>, NumAggregates>(wideStream, Expects);
     }
 
     void VerifyComputedValueVsReference(const NUdf::TUnboxedValue& value) const override
     {
-        VerifyListVsUnorderedMap(value, Expects);
+        VerifyListVsMap<TMapImpl, std::string, TValueWrapper<ui64, NumAggregates>, NumAggregates>(value, Expects);
     }
 
     std::string Describe() const override
     {
-        return Sprintf("%s string keys, ui64 values", LongStrings ? "Long (24 byte)" : "Embedded");
+        std::string valueDescr = TValueWrapper<ui64, NumAggregates>::Describe();
+        return Sprintf("keys: %s string, values: %s", LongStrings ? "Long (24 byte)" : "Embedded", valueDescr.c_str());
     }
 };
 

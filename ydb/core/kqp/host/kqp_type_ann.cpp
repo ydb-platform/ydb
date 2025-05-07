@@ -2014,10 +2014,6 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateOlapJsonExists(input, ctx);
             }
 
-            if (TKqpCnMapShard::Match(input.Get()) || TKqpCnShuffleShard::Match(input.Get())) {
-                return AnnotateDqConnection(input, ctx);
-            }
-
             if (TKqpCnSequencer::Match(input.Get())) {
                 return AnnotateSequencerConnection(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
             }

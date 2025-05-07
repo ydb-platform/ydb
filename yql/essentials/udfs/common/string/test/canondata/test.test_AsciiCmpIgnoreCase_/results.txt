@@ -1,0 +1,69 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "value";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ];
+                            [
+                                "icstarts";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
+                                "icends";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        "fdsa";
+                        %false;
+                        %false
+                    ];
+                    [
+                        "aswedfg";
+                        %true;
+                        %false
+                    ];
+                    [
+                        "asdadsaasd";
+                        %true;
+                        %false
+                    ];
+                    [
+                        "gdsfsassas";
+                        %false;
+                        %true
+                    ];
+                    [
+                        "";
+                        %false;
+                        %false
+                    ];
+                    [
+                        "`\xD0\x9F\xD1\x80\xD0\xB8\xD0\xB2\xD0\xB5\xD1\x82, \xD0\xBC\xD0\xB8\xD1\x80!`";
+                        %false;
+                        %false
+                    ]
+                ]
+            }
+        ]
+    }
+]

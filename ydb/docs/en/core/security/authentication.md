@@ -31,8 +31,11 @@ To enable anonymous authentication, use `false` in the `enforce_user_token_requi
 
 ## Authenticating by username and password {#static-credentials}
 
+Authentication by username and password using the YDB server is available only to [local users](../concepts/glossary.md#access-user). Authentication of external users involves third-party servers.
+
 This access type implies that each database user has a username and password.
-Only digits and lowercase Latin letters can be used in usernames. Allow to set various [criteria](#password-complexity) to password complexity.
+
+Only digits and lowercase Latin letters can be used in usernames. [Password complexity requirements](#password-complexity) can be configured.
 
 The username and hashed password are stored in a table inside the authentication component. The password is hashed using the [Argon2](https://en.wikipedia.org/wiki/Argon2) method. Only the system administrator has access to this table.
 
@@ -44,33 +47,25 @@ Authentication by username and password includes the following steps:
 1. The service validates authentication data. If the data matches, it generates a token and returns it to the authentication service.
 1. The client accesses the database, presenting their token as authentication data.
 
-To enable username/password authentication, use `true` in the `enforce_user_token_requirement` key of the cluster's [configuration file](../reference/configuration/index.md#auth).
+To enable authentication by username and password, ensure that the `use_login_provider` and `enable_login_authentication` parameters are set to the default value of `true` in the [configuration file](../reference/configuration/auth_config.md). Besides, to disable anonymous authentication, set the [`enforce_user_token_requirement` parameter](../reference/configuration/security_config.md) to `true`.
 
 To learn how to manage roles and users, see [{#T}](../security/authorization.md).
 
 ### Password complexity {#password-complexity}
 
-{{ ydb-short-name }} allows for additional configuration of user password policies. Passwords specified in commands such as CREATE USER and ALTER USER must comply with the current password policy. By default, the following restrictions apply to passwords: passwords of any length are accepted, including empty strings; passwords can contain any number of digits, letters in various cases, and special characters from the list `!@#$%^&*()_+{}|<>?=`. To impose restrictions on password complexity, you need to configure the password_complexity section in the [configuration](../reference/configuration/index.md#password-complexity).
+{{ ydb-short-name }} allows configuring requirements for password complexity. If a password specified in the `CREATE USER` or `ALTER USER` command does not meet complexity requirements, the command will result in an error. By default, {{ ydb-short-name }} has no password complexity requirements. A password of any length is accepted, including an empty string. A password can contain any number of digits and uppercase or lowercase letters, as well as special characters from the `!@#$%^&*()_+{}|<>?=` list. To set requirements for password complexity, define parameters in the `password_complexity` section in the [configuration](../reference/configuration/auth_config.md#password-complexity).
 
-### Protection against password brute force
+### Password brute-force protection
 
-{{ ydb-short-name }} provides protection against password brute force. The user will be considered locked out if they exceed the number of allowed incorrect password attempts. After the specified period, they will be able to attempt authentication again.
+{{ ydb-short-name }} provides password brute-force protection. A user is locked out after exceeding a specified number of failed attempts to enter a password. After a certain period, the user will be unlocked and able to log in again.
 
-{% note info %}
+By default, a user has four attempts to enter a password. If a user fails to enter the correct password in four attempts, the user will be locked out for an hour. You can change these lockout settings in the `auth_config` section of the [configuration](../reference/configuration/auth_config.md#account-lockout).
 
-This mechanism applies only to users managed by {{ ydb-short-name }}, the so-called built-in users. When authentication is performed via external services, such as an LDAP server, this lockout mechanism is not applied. Each authentication attempt results in a corresponding request to the external authentication service.
+If necessary, a {{ ydb-short-name }} cluster or database administrator can [unlock](../yql/reference/syntax/alter-user.md) a user before the lockout period expires.
 
-{% endnote %}
+### Manual user lockout
 
-By default, a user is given 4 attempts to enter the correct password. Otherwise, authentication will be denied for one hour. You can configure the user lockout criteria in the [configuration](../reference/configuration/index.md#account-lockout).
-
-If necessary, the cluster or database administrator can [unlock](../yql/reference/syntax/alter-user.md) the user prematurely.
-
-Information about the user's lockout status and the number of incorrect password attempts can be found in the user's [system view](../dev/system-views.md#auth-users-users).
-
-### Forced lock/unlock of a user
-
-There is another way to prevent a user from authenticating—forced lockout by the cluster or database administrator. Administrators can unlock users who have been forcibly locked, as well as those who have exceeded the number of incorrect password attempts. Detailed information on forced locking and unlocking of users can be found in the [`ALTER USER`](../yql/reference/syntax/alter-user.md) command description.
+{{ ydb-short-name }} provides another method for disabling authentication for a user, manual user lockout by a {{ ydb-short-name } cluster or database administrator. An administrator can unlock user accounts that were previously locked manually or automatically after exceeding the number of failed attempts to enter the correct password. For more information about manual user lockout, see the [`ALTER USER LOGIN/NOLOGIN`](../yql/reference/syntax/alter-user.md) command description.
 
 ## LDAP directory integration {#ldap-auth-provider}
 

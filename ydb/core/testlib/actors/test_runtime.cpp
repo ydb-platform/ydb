@@ -185,6 +185,7 @@ namespace NActors {
             nodeAppData->IoContextFactory = app0->IoContextFactory;
             nodeAppData->SchemeOperationFactory = app0->SchemeOperationFactory;
             nodeAppData->WorkloadManagerConfig = app0->WorkloadManagerConfig;
+            nodeAppData->QueryServiceConfig = app0->QueryServiceConfig;
             nodeAppData->TransferWriterFactory = std::make_shared<NKikimr::Tests::MockTransferWriterFactory>();
             if (nodeIndex < egg.Icb.size()) {
                 nodeAppData->Icb = std::move(egg.Icb[nodeIndex]);

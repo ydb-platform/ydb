@@ -1278,6 +1278,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             DescribeDir(path);
             DescribeBackupCollection(base->PathId, base);
             break;
+        case NKikimrSchemeOp::EPathTypeSysView:
         case NKikimrSchemeOp::EPathTypeInvalid:
             Y_UNREACHABLE();
         }

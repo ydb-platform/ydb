@@ -528,8 +528,14 @@ message TCompactionLevelConstructorContainer {
         optional uint64 PortionsCountLimit = 4;
     }
 
+    message TOneLayer {
+        optional uint32 ExpectedPortionSize = 1;
+        optional float BytesLimitFraction = 2;
+    }
+
     oneof Implementation {
         TZeroLevel ZeroLevel = 10;
+        TOneLayer OneLayer = 11;
     }
 
 }
@@ -1814,6 +1820,7 @@ enum EPathType {
     EPathTypeResourcePool = 21;
     EPathTypeBackupCollection = 22;
     EPathTypeTransfer = 23;
+    EPathTypeSysView = 24;
 }
 
 enum EPathSubType {
@@ -2082,6 +2089,7 @@ message TExternalDataSourceDescription {
     optional TAuth Auth = 7;
     optional TExternalDataSourceProperties Properties = 8;
     optional bool ReplaceIfExists = 9;
+    optional TExternalTableReferences References = 10;
 }
 
 message TViewDescription {

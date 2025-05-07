@@ -40,6 +40,10 @@ public:
 };
 
 // ru_maxrss from rusage, converted to bytes
-long GetMaxRSS();
+long Y_NO_INLINE GetMaxRSS();
 
-long GetMaxRSSDelta(const long prevMaxRss);
+long Y_NO_INLINE GetMaxRSSDelta(const long prevMaxRss);
+
+TDuration Y_NO_INLINE GetThreadCPUTime();
+
+TDuration Y_NO_INLINE GetThreadCPUTimeDelta(const TDuration startTime);

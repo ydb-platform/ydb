@@ -44,8 +44,10 @@ public:
         Y_UNUSED(ctx);
         output = input;
         if (!TransformCtx.ExplainTransformerInput) {
+            YQL_CVLOG(NYql::NLog::ELevel::TRACE, NYql::NLog::EComponent::Core) << "Saving explain plan";
             TransformCtx.ExplainTransformerInput = input;
         }
+
         return TStatus::Ok;
     }
 

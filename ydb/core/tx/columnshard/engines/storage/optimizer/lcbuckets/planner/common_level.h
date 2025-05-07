@@ -4,11 +4,11 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
-class TLevelPortions: public IPortionsLevel {
+class TOneLayerPortions: public IPortionsLevel {
 private:
     using TBase = IPortionsLevel;
 
-    std::set<TOrderedPortion> Portions;
+    std::set<TOrderedPortion, std::less<>> Portions;
     const TLevelCounters LevelCounters;
     const double BytesLimitFraction = 1;
     const ui64 ExpectedPortionSize = (1 << 20);
@@ -29,7 +29,7 @@ private:
         return result;
     }
 
-    virtual std::optional<TPortionsChain> DoGetAffectedPortions(const NArrow::TReplaceKey& from, const NArrow::TReplaceKey& to) const override {
+    virtual std::optional<TPortionsChain> DoGetAffectedPortions(const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to) const override {
         if (Portions.empty()) {
             return std::nullopt;
         }
@@ -72,7 +72,7 @@ private:
     }
 
 public:
-    TLevelPortions(const ui64 levelId, const double bytesLimitFraction, const ui64 expectedPortionSize,
+    TOneLayerPortions(const ui64 levelId, const double bytesLimitFraction, const ui64 expectedPortionSize,
         const std::shared_ptr<IPortionsLevel>& nextLevel, const std::shared_ptr<TSimplePortionsGroupInfo>& summaryPortionsInfo,
         const TLevelCounters& levelCounters, const bool strictOneLayer = true)
         : TBase(levelId, nextLevel)
@@ -97,10 +97,12 @@ public:
         return false;
     }
 
-    virtual ui64 DoGetAffectedPortionBytes(const NArrow::TReplaceKey& from, const NArrow::TReplaceKey& to) const override {
+    virtual ui64 DoGetAffectedPortionBytes(const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to) const override {
         if (Portions.empty()) {
             return 0;
         }
+        AFL_VERIFY(from <= to);
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("from", from.DebugString())("to", to.DebugString());
         ui64 result = 0;
         auto itFrom = Portions.upper_bound(from);
         auto itTo = Portions.upper_bound(to);
@@ -111,6 +113,7 @@ public:
                 result += it->GetPortion()->GetTotalRawBytes();
             }
         }
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("itFrom", itFrom == Portions.end())("itTo", itTo == Portions.end());
         for (auto it = itFrom; it != itTo; ++it) {
             result += it->GetPortion()->GetTotalRawBytes();
         }
@@ -121,11 +124,10 @@ public:
 
     virtual TCompactionTaskData DoGetOptimizationTask() const override;
 
-    virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& pkSchema) const override {
+    virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& /*pkSchema*/) const override {
         NArrow::NMerger::TIntervalPositions result;
-        const auto& sortingColumns = pkSchema->field_names();
         for (auto&& i : Portions) {
-            result.AddPosition(i.GetStartPosition(), false);
+            result.AddPosition(i.GetStartPosition().BuildSortablePosition(), false);
         }
         return result;
     }

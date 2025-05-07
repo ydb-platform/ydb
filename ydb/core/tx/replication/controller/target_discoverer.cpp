@@ -183,7 +183,8 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             const auto& targetConf = Config.GetTransferSpecific().GetTarget();
 
             const auto& target = ToAdd.emplace_back(TReplication::ETargetKind::Transfer,
-                std::make_shared<TTargetTransfer::TTransferConfig>(path.first, path.second, targetConf.GetTransformLambda()));
+                std::make_shared<TTargetTransfer::TTransferConfig>(path.first, path.second, targetConf.GetTransformLambda(),
+                    Config.GetTransferSpecific().GetRunAsUser()));
             LOG_I("Add target"
                 << ": srcPath# " << target.Config->GetSrcPath()
                 << ", dstPath# " << target.Config->GetDstPath()

@@ -354,6 +354,13 @@ private:
         response->set_result_set_index(ev->Get()->Record.GetQueryResultIndex());
         response->mutable_result_set()->Swap(ev->Get()->Record.MutableResultSet());
 
+        if (ev->Get()->Record.HasVirtualTimestamp()) {
+            auto snap = response->mutable_snapshot_timestamp();
+            auto& ts = ev->Get()->Record.GetVirtualTimestamp();
+            snap->set_plan_step(ts.GetStep());
+            snap->set_tx_id(ts.GetTxId());
+        }
+
         TString out;
         Y_PROTOBUF_SUPPRESS_NODISCARD response->SerializeToString(&out);
 

@@ -7,6 +7,8 @@
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_pure_ansi/lexer.h>
 
+#include <util/charset/utf8.h>
+
 namespace NYdb::NConsoleClient {
 
     class TYQLCompleter: public IYQLCompleter {
@@ -19,11 +21,13 @@ namespace NYdb::NConsoleClient {
         {
         }
 
-        TCompletions Apply(const std::string& prefix, int& /* contextLen */) override {
+        TCompletions Apply(const std::string& prefix, int& contextLen) override {
             auto completion = Engine->Complete({
                 .Text = prefix,
                 .CursorPosition = prefix.length(),
             });
+
+            contextLen = GetNumberOfUTF8Chars(completion.CompletedToken.Content);
 
             replxx::Replxx::completions_t entries;
             for (auto& candidate : completion.Candidates) {

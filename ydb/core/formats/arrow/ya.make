@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/formats/arrow/dictionary
     ydb/core/formats/arrow/transformer
     ydb/core/formats/arrow/reader
+    ydb/core/formats/arrow/rows
     ydb/core/formats/arrow/save_load
     ydb/core/formats/arrow/splitter
     ydb/core/formats/arrow/hash

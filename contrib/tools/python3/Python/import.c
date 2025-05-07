@@ -2523,7 +2523,7 @@ remove_importlib_frames(PyThreadState *tstate)
 {
     const char *importlib_filename = "<frozen importlib._bootstrap>";
     const char *external_filename = "<frozen importlib._bootstrap_external>";
-    const char *importer_filename = "library/python/runtime_py3/importer.pxi";
+    const char *importer_filename = "library/python/runtime_py3/__res.py";
     const char *remove_frames = "_call_with_frames_removed";
     int always_trim = 0;
     int in_importlib = 0;

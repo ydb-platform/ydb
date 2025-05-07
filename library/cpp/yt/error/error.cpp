@@ -30,6 +30,7 @@ void FormatValue(TStringBuilderBase* builder, TErrorCode code, TStringBuf spec)
 constexpr TStringBuf ErrorMessageTruncatedSuffix = "...<message truncated>";
 
 TError::TEnricher TError::Enricher_;
+TError::TFromExceptionEnricher TError::FromExceptionEnricher_;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -248,6 +249,7 @@ TError::TErrorOr(const TErrorException& errorEx) noexcept
 {
     *this = errorEx.Error();
     // NB: TErrorException verifies that error not IsOK at throwing end.
+    EnrichFromException(errorEx);
 }
 
 TError::TErrorOr(const std::exception& ex)
@@ -277,8 +279,8 @@ TError::TErrorOr(const std::exception& ex)
         *this = TError(NYT::EErrorCode::Generic, TRuntimeFormat{ex.what()});
         *this <<= TErrorAttribute("exception_type", TypeName(ex));
     }
+    EnrichFromException(ex);
     YT_VERIFY(!IsOK());
-    Enrich();
 }
 
 TError::TErrorOr(std::string message, TDisableFormat)
@@ -644,14 +646,31 @@ void TError::RegisterEnricher(TEnricher enricher)
 {
     // NB: This daisy-chaining strategy is optimal when there's O(1) callbacks. Convert to a vector
     // if the number grows.
-    if (Enricher_) {
-        Enricher_ = [first = std::move(Enricher_), second = std::move(enricher)] (TError& error) {
-            first(error);
-            second(error);
-        };
-    } else {
+    if (!Enricher_) {
         Enricher_ = std::move(enricher);
+        return;
     }
+    Enricher_ = [first = std::move(Enricher_), second = std::move(enricher)] (TError* error) {
+        first(error);
+        second(error);
+    };
+}
+
+void TError::RegisterFromExceptionEnricher(TFromExceptionEnricher enricher)
+{
+    // NB: This daisy-chaining strategy is optimal when there's O(1) callbacks. Convert to a vector
+    // if the number grows.
+    if (!FromExceptionEnricher_) {
+        FromExceptionEnricher_ = std::move(enricher);
+        return;
+    }
+    FromExceptionEnricher_ = [
+        first = std::move(FromExceptionEnricher_),
+        second = std::move(enricher)
+    ] (TError* error, const std::exception& exception) {
+        first(error, exception);
+        second(error, exception);
+    };
 }
 
 TError::TErrorOr(std::unique_ptr<TImpl> impl)
@@ -668,7 +687,14 @@ void TError::MakeMutable()
 void TError::Enrich()
 {
     if (Enricher_) {
-        Enricher_(*this);
+        Enricher_(this);
+    }
+}
+
+void TError::EnrichFromException(const std::exception& exception)
+{
+    if (FromExceptionEnricher_) {
+        FromExceptionEnricher_(this, exception);
     }
 }
 

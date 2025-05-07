@@ -27,6 +27,8 @@ PEERDIR(
 
 DATA (
     arcadia/ydb/core/kqp/ut/join
+    arcadia/ydb/library/benchmarks/queries
+    arcadia/ydb/library/benchmarks/gen_queries/consts.yql
 )
 
 YQL_LAST_ABI_VERSION()

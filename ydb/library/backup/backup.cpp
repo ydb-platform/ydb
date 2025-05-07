@@ -821,6 +821,10 @@ namespace NExternalDataSource {
 
 }
 
+void CanonizeForBackup(Ydb::Table::DescribeExternalDataSourceResult& desc) {
+    desc.mutable_properties()->erase("REFERENCES");
+}
+
 TString BuildCreateExternalDataSourceQuery(const Ydb::Table::DescribeExternalDataSourceResult& description) {
     return std::format(
         "CREATE EXTERNAL DATA SOURCE IF NOT EXISTS `{}` WITH (\n{},\n{}{}\n);",
@@ -840,7 +844,8 @@ void BackupExternalDataSource(TDriver driver, const TString& dbPath, const TFsPa
     Y_ENSURE(!dbPath.empty());
     LOG_I("Backup external data source " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
 
-    const auto description = DescribeExternalDataSource(driver, dbPath);
+    auto description = DescribeExternalDataSource(driver, dbPath);
+    CanonizeForBackup(description);
     const auto creationQuery = BuildCreateExternalDataSourceQuery(description);
 
     WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateExternalDataSource());

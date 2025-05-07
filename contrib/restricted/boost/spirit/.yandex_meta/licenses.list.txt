@@ -338,6 +338,12 @@ file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 
 ====================COPYRIGHT====================
     Copyright (c) 2001-2014 Joel de Guzman
+    Copyright (c) 2017 wanghan02
+    Copyright (c) 2024 Nana Sakisaka
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2001-2014 Joel de Guzman
     http://spirit.sourceforge.net/
 
 
@@ -454,6 +460,8 @@ file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ====================COPYRIGHT====================
     Copyright (c) 2009 Chris Hoeppler
     Copyright (c) 2014 Lee Clagett
+    Copyright (c) 2017 wanghan02
+    Copyright (c) 2024 Nana Sakisaka
 
 
 ====================COPYRIGHT====================
@@ -464,6 +472,8 @@ file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ====================COPYRIGHT====================
     Copyright (c) 2011 Jamboree
     Copyright (c) 2014 Lee Clagett
+    Copyright (c) 2017 wanghan02
+    Copyright (c) 2024 Nana Sakisaka
 
 
 ====================COPYRIGHT====================
@@ -481,6 +491,8 @@ file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ====================COPYRIGHT====================
     Copyright (c) 2015 Mario Lang
     Copyright (c) 2001-2011 Hartmut Kaiser
+    Copyright (c) 2017 wanghan02
+    Copyright (c) 2024 Nana Sakisaka
 
 
 ====================COPYRIGHT====================

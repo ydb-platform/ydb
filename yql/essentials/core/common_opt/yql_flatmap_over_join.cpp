@@ -609,7 +609,20 @@ TExprNode::TPtr FilterPushdownOverJoinOptionalSide(TExprNode::TPtr equiJoin, TEx
         remJoinKeys = parentJoinPtr->ChildPtr(4);
     }
 
-    auto parentJoinLabel = remJoinKeys->ChildPtr(0);
+    TExprNode::TPtr parentJoinLabel;
+    if (remJoinKeys->ChildrenSize()) {
+        parentJoinLabel = remJoinKeys->ChildPtr(0);
+    } else {
+        // Parent join does not have a join keys, probably it's a Cross join,
+        // so we can take any label from Left join, because it associated with multi label input.
+        if (leftJoinTree->ChildPtr(1)->IsAtom()) {
+            parentJoinLabel = leftJoinTree->ChildPtr(1);
+        } else {
+            YQL_ENSURE(leftJoinTree->ChildPtr(2)->IsAtom());
+            parentJoinLabel = leftJoinTree->ChildPtr(2);
+        }
+    }
+
     auto newParentJoin = ctx.Builder(joinTree->Pos())
         .List()
             .Add(0, parentJoinPtr->ChildPtr(0))

@@ -108,6 +108,43 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         testCtx.Send(new NActors::TEvents::TEvPoisonPill());
     }
 
+    Y_UNIT_TEST(TestPDiskActorPDiskStopBroken) {
+        TActorTestContext testCtx{{}};
+
+        testCtx.GetRuntime()->WaitFor("Block device start", [&] {
+            return testCtx.SafeRunOnPDisk([&] (auto* pdisk) {
+                // Check that the PDisk is up
+                return pdisk->BlockDevice->IsGood();
+            });
+        });
+
+        testCtx.Send(new NPDisk::TEvDeviceError("test"));
+
+        // This doesn't stop the PDisk, it will be stopped by TEvDeviceError some time in the future
+        testCtx.TestResponse<NPDisk::TEvYardControlResult>(
+                new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr),
+                NKikimrProto::CORRUPTED);
+
+        testCtx.GetRuntime()->WaitFor("Block device stop", [&] {
+            return testCtx.SafeRunOnPDisk([&] (auto* pdisk) {
+                // Check that the PDisk is stopped
+                return !pdisk->BlockDevice->IsGood();
+            });
+        });
+
+        testCtx.Send(new NActors::TEvents::TEvPoisonPill());
+    }
+
+    Y_UNIT_TEST(TestPDiskActorPDiskStopUninitialized) {
+        TActorTestContext testCtx{{}};
+
+        testCtx.TestResponse<NPDisk::TEvYardControlResult>(
+                new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr),
+                NKikimrProto::OK);
+
+        testCtx.Send(new NActors::TEvents::TEvPoisonPill());
+    }
+
     Y_UNIT_TEST(TestChunkWriteRelease) {
         for (ui32 i = 0; i < 16; ++i) {
             TestChunkWriteReleaseRun();

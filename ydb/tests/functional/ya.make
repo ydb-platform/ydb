@@ -8,7 +8,6 @@ RECURSE(
     canonical
     clickbench
     cms
-    compatibility
     config
     encryption
     hive

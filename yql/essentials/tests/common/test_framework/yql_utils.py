@@ -572,6 +572,7 @@ def execute(
         output_tables=None,
         pretty_plan=True,
         parameters={},
+        langver=None
 ):
     '''
     Executes YQL/SQL
@@ -610,7 +611,8 @@ def execute(
         check_error=check_error,
         tables=(output_tables + input_tables),
         pretty_plan=pretty_plan,
-        parameters=parameters
+        parameters=parameters,
+        langver=langver
     )
 
     try:

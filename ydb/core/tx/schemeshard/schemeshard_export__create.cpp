@@ -452,7 +452,9 @@ private:
                     // Anonymize object name in export
                     itemPrefix << std::setfill('0') << std::setw(3) << std::right << itemIndex;
                 } else {
-                    itemPrefix << exportPath;
+                    TStringBuf exportPathBuf = exportPath;
+                    exportPathBuf.SkipPrefix("/");
+                    itemPrefix << exportPathBuf;
                 }
                 destinationPrefix = itemPrefix.str();
             }
@@ -1158,7 +1160,11 @@ private:
             Self->PersistExportItemState(db, exportInfo, itemIdx);
 
             if (AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                PrepareAutoDropping(Self, exportInfo, db);
+                if (!AppData()->FeatureFlags.GetEnableExportAutoDropping()) {
+                    EndExport(exportInfo, EState::Done, db);
+                } else {
+                    PrepareAutoDropping(Self, exportInfo, db);
+                }
             }
         } else if (exportInfo->State == EState::Cancellation) {
             item.State = EState::Cancelled;
@@ -1358,7 +1364,12 @@ private:
                 }
             }
             if (!itemHasIssues && AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                PrepareAutoDropping(Self, exportInfo, db);
+                if (!AppData()->FeatureFlags.GetEnableExportAutoDropping()) {
+                    exportInfo->State = EState::Done;
+                    exportInfo->EndTime = TAppData::TimeProvider->Now();
+                } else {
+                    PrepareAutoDropping(Self, exportInfo, db);
+                }
             }
 
             Self->PersistExportItemState(db, exportInfo, itemIdx);

@@ -409,8 +409,10 @@ void THttpParser<THttpResponse>::ConnectionClosed() {
 THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseString(TStringBuf data) {
     THttpParser<THttpResponse> parser(data);
     THeadersBuilder headers(parser.Headers);
-    if (!Endpoint->WorkerName.empty()) {
-        headers.Set("X-Worker-Name", Endpoint->WorkerName);
+    if (!headers.Has("X-Worker-Name")) {
+        if (!Endpoint->WorkerName.empty()) {
+            headers.Set("X-Worker-Name", Endpoint->WorkerName);
+        }
     }
     THttpOutgoingResponsePtr response = new THttpOutgoingResponse(this);
     response->InitResponse(parser.Protocol, parser.Version, parser.Status, parser.Message);
@@ -604,8 +606,10 @@ THttpIncomingResponsePtr THttpIncomingResponse::Duplicate(THttpOutgoingRequestPt
 
 THttpOutgoingResponsePtr THttpOutgoingResponse::Duplicate(THttpIncomingRequestPtr request) {
     THeadersBuilder headers(Headers);
-    if (!request->Endpoint->WorkerName.empty()) {
-        headers.Set("X-Worker-Name", request->Endpoint->WorkerName);
+    if (!headers.Has("X-Worker-Name")) {
+        if (!request->Endpoint->WorkerName.empty()) {
+            headers.Set("X-Worker-Name", request->Endpoint->WorkerName);
+        }
     }
     THttpOutgoingResponsePtr response = new THttpOutgoingResponse(request);
     response->InitResponse(Protocol, Version, Status, Message);
@@ -902,6 +906,12 @@ THeadersBuilder::THeadersBuilder(TStringBuf headers)
 
 THeadersBuilder::THeadersBuilder(const THeadersBuilder& builder) {
     for (const auto& pr : builder.Headers) {
+        Set(pr.first, pr.second);
+    }
+}
+
+THeadersBuilder::THeadersBuilder(std::initializer_list<std::pair<TString, TString>> headers) {
+    for (const auto& pr : headers) {
         Set(pr.first, pr.second);
     }
 }

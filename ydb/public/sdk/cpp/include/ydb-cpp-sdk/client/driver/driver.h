@@ -50,6 +50,7 @@ public:
     //! caCerts  - The buffer containing the PEM encoded root certificates for SSL/TLS connections.
     //!            If this parameter is empty, the default roots will be used.
     TDriverConfig& UseSecureConnection(const std::string& caCerts = std::string());
+    TDriverConfig& SetUsePerChannelTcpConnection(bool usePerChannel);
     TDriverConfig& UseClientCertificate(const std::string& clientCert, const std::string& clientPrivateKey);
     //! Set token, this option can be overridden for client by ClientSettings
     TDriverConfig& SetAuthToken(const std::string& token);

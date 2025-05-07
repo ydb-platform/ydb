@@ -39,7 +39,7 @@ public:
     NArrow::TColumnFilter BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const;
 
     bool IsUsed(const TPortionInfo& info) const;
-    bool CheckPoint(const NArrow::TReplaceKey& point) const;
+    bool CheckPoint(const NArrow::TSimpleRow& point) const;
 
     enum class EUsageClass {
         NoUsage,
@@ -47,7 +47,7 @@ public:
         FullUsage
     };
 
-    EUsageClass GetUsageClass(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const;
+    EUsageClass GetUsageClass(const NArrow::TSimpleRow& start, const NArrow::TSimpleRow& end) const;
 
     std::set<ui32> GetColumnIds(const TIndexInfo& indexInfo) const;
     TString DebugString() const;

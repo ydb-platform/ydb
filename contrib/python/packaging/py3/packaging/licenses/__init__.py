@@ -37,8 +37,8 @@ from typing import NewType, cast
 from packaging.licenses._spdx import EXCEPTIONS, LICENSES
 
 __all__ = [
-    "NormalizedLicenseExpression",
     "InvalidLicenseExpression",
+    "NormalizedLicenseExpression",
     "canonicalize_license_expression",
 ]
 

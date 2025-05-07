@@ -4788,6 +4788,157 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorConsistency) {
         UNIT_ASSERT(!readResult2->Record.GetFinished());
     }
 
+    Y_UNIT_TEST(BrokenWriteLockBeforeIteration) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+        TServer::TPtr server = new TServer(serverSettings);
+
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, index int, value int, PRIMARY KEY (key, index));
+            )"),
+            "SUCCESS"
+        );
+
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table` (key, index, value) VALUES
+                (42, 0, 1001),
+                (42, 1, 1002);
+        )");
+
+        TString sessionId;
+        TString txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                $maxIndex = (SELECT MAX(index) FROM `/Root/table` WHERE key = 42);
+
+                UPSERT INTO `/Root/table` (key, index, value) VALUES
+                    (42, COALESCE($maxIndex + 1, 0) + 0, 2001),
+                    (42, COALESCE($maxIndex + 1, 0) + 1, 2002);
+
+                SELECT count(*) FROM `/Root/table` WHERE key = 42;
+            )"),
+            "{ items { uint64_value: 4 } }"
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                $maxIndex = (SELECT MAX(index) FROM `/Root/table` WHERE key = 42);
+
+                UPSERT INTO `/Root/table` (key, index, value) VALUES
+                    (42, COALESCE($maxIndex + 1, 0) + 0, 3001);
+            )"),
+            "<empty>"
+        );
+
+        // Transaction should abort instead of observing wild results like:
+        // 0 -> 1001
+        // 1 -> 1002
+        // 3 -> 2002
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleContinue(runtime, sessionId, txId, R"(
+                SELECT index, value FROM `/Root/table`
+                WHERE key = 42
+                ORDER BY index;
+            )"),
+            "ERROR: ABORTED"
+        );
+    }
+
+    Y_UNIT_TEST(BrokenWriteLockDuringIteration) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+        TServer::TPtr server = new TServer(serverSettings);
+
+        auto& runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, index int, value int, PRIMARY KEY (key, index));
+            )"),
+            "SUCCESS"
+        );
+
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table` (key, index, value) VALUES
+                (42, 0, 1001),
+                (42, 1, 1002);
+        )");
+
+        TString sessionId;
+        TString txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                $maxIndex = (SELECT MAX(index) FROM `/Root/table` WHERE key = 42);
+
+                UPSERT INTO `/Root/table` (key, index, value) VALUES
+                    (42, COALESCE($maxIndex + 1, 0) + 0, 2001),
+                    (42, COALESCE($maxIndex + 1, 0) + 1, 2002);
+
+                SELECT count(*) FROM `/Root/table` WHERE key = 42;
+            )"),
+            "{ items { uint64_value: 4 } }"
+        );
+
+        TBlockEvents<TEvDataShard::TEvRead> blockedRead(runtime,
+            [&](auto& ev) {
+                ev->Get()->Record.SetMaxRowsInResult(1);
+                return true;
+            });
+        auto readFuture = SendRequest(runtime, MakeSimpleRequestRPC(R"(
+                SELECT index, value FROM `/Root/table`
+                WHERE key = 42
+                ORDER BY index;
+            )", sessionId, txId, /* commit */ false));
+        runtime.WaitFor("blocked read", [&]{ return blockedRead.size() >= 1; });
+        blockedRead.Stop().Unblock();
+
+        TBlockEvents<TEvDataShard::TEvReadContinue> blockedReadContinue(runtime);
+        runtime.WaitFor("blocked read continue", [&]{ return blockedReadContinue.size() >= 1; });
+        blockedReadContinue.Stop();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                $maxIndex = (SELECT MAX(index) FROM `/Root/table` WHERE key = 42);
+
+                UPSERT INTO `/Root/table` (key, index, value) VALUES
+                    (42, COALESCE($maxIndex + 1, 0) + 0, 3001);
+            )"),
+            "<empty>"
+        );
+
+        blockedReadContinue.Unblock();
+
+        // Transaction should abort instead of observing wild results like:
+        // 0 -> 1001
+        // 1 -> 1002
+        // 3 -> 2002
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResult(AwaitResponse(runtime, std::move(readFuture))),
+            "ERROR: ABORTED"
+        );
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorLatency) {

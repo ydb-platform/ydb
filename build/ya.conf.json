@@ -1618,6 +1618,16 @@
                         "os": "LINUX"
                     },
                     "target": {
+                        "arch": "armv6hf",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "target": {
                         "arch": "armv7a",
                         "os": "LINUX"
                     }

@@ -121,6 +121,8 @@ DATA_PARQUET = pa.Table.from_arrays(ARRAYS, names=ARRAY_NAMES)
 ALL_PARAMS = [("csv", []), ("csv", ["--newline-delimited"]), ("tsv", []), ("tsv", ["--newline-delimited"]), ("json", [])]
 ONLY_CSV_TSV_PARAMS = [("csv", []), ("csv", ["--newline-delimited"]), ("tsv", []), ("tsv", ["--newline-delimited"])]
 
+BOM_UTF8 = b'\xEF\xBB\xBF'
+
 
 def ydb_bin():
     if os.getenv("YDB_CLI_BINARY"):
@@ -237,16 +239,23 @@ class TestImpex(BaseTestTableService):
                 for key in range(i * rows, (i + 1) * rows):
                     f.write(TestImpex.get_row_in_format(ftype, key, id_set[key % len(id_set)], value_set[key % len(value_set)]))
 
-    def run_import(self, ftype, data, additional_args=[]):
+    def write_data_to_tmp_file(self, path, add_bom, data):
+        if add_bom:
+            with path.open("wb") as f:
+                f.write(BOM_UTF8 + data.encode('utf-8'))
+        else:
+            with path.open("w") as f:
+                f.writelines(data)
+
+    def run_import(self, ftype, data, additional_args=[], add_bom=False):
         path = self.tmp_path / "tempinput.{}".format(ftype)
-        with path.open("w") as f:
-            f.writelines(data)
+        self.write_data_to_tmp_file(path, add_bom, data)
         self.execute_ydb_cli_command(["import", "file", ftype, "-p", self.table_path, "-i", str(path)] + self.get_header_flag(ftype) + additional_args)
 
-    def run_import_from_stdin(self, ftype, data, additional_args=[]):
-        with (self.tmp_path / "tempinput.{}".format(ftype)).open("w") as f:
-            f.writelines(data)
-        with (self.tmp_path / "tempinput.{}".format(ftype)).open("r") as f:
+    def run_import_from_stdin(self, ftype, data, additional_args=[], add_bom=False):
+        path = self.tmp_path / "tempinput.{}".format(ftype)
+        self.write_data_to_tmp_file(path, add_bom, data)
+        with (path).open("r") as f:
             self.execute_ydb_cli_command(["import", "file", ftype, "-p", self.table_path] + self.get_header_flag(ftype) + additional_args, stdin=f)
 
     def run_import_multiple_files(self, ftype, files_count, additional_args=[]):
@@ -339,3 +348,15 @@ class TestImpex(BaseTestTableService):
         self.init_test(tmp_path, table_type, request.node.name)
         self.run_import_parquet(DATA_PARQUET)
         return self.run_export("csv")
+
+    @pytest.mark.parametrize("ftype,additional_args", ALL_PARAMS)
+    def test_import_file_with_bom(self, tmp_path, request, table_type, ftype, additional_args):
+        self.init_test(tmp_path, table_type, request.node.name)
+        self.run_import(ftype, DATA[ftype], additional_args, True)
+        return self.run_export(ftype)
+
+    @pytest.mark.parametrize("ftype,additional_args", ALL_PARAMS)
+    def test_import_stdin_with_bom(self, tmp_path, request, table_type, ftype, additional_args):
+        self.init_test(tmp_path, table_type, request.node.name)
+        self.run_import_from_stdin(ftype, DATA[ftype], additional_args, True)
+        return self.run_export(ftype)

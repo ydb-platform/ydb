@@ -98,9 +98,10 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
     switch (exportInfo->State) {
     case TExportInfo::EState::CreateExportDir:
     case TExportInfo::EState::CopyTables:
+    case TExportInfo::EState::UploadExportMetadata:
         exprt.SetProgress(Ydb::Export::ExportProgress::PROGRESS_PREPARING);
         break;
-    
+
     case TExportInfo::EState::AutoDropping:
     case TExportInfo::EState::Transferring:
     case TExportInfo::EState::Done:
@@ -111,7 +112,7 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
             ? Ydb::Export::ExportProgress::PROGRESS_DONE
             : Ydb::Export::ExportProgress::PROGRESS_TRANSFER_DATA);
         break;
-    
+
     case TExportInfo::EState::Dropping:
         exprt.SetProgress(Ydb::Export::ExportProgress::PROGRESS_DONE);
         break;

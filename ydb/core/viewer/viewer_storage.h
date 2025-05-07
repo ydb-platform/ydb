@@ -79,10 +79,6 @@ public:
         NeedDonors = FromStringWithDefault<bool>(params.Get("need_donors"), NeedDonors);
         NeedGroups = Max(NeedGroups, NeedDisks);
         UsagePace = FromStringWithDefault<uint32>(params.Get("usage_pace"), UsagePace);
-        if (UsagePace == 0) {
-            Send(Initiator, new NMon::TEvHttpInfoRes(Viewer->GetHTTPBADREQUEST(Event->Get(), {}, "Bad Request"), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-            PassAway();
-        }
         SplitIds(params.Get("usage_buckets"), ',', UsageBuckets);
         Sort(UsageBuckets);
 
@@ -127,6 +123,10 @@ public:
     }
 
     void Bootstrap() override {
+        if (UsagePace == 0) {
+            Send(Initiator, new NMon::TEvHttpInfoRes(Viewer->GetHTTPBADREQUEST(Event->Get(), {}, "Bad Request"), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            return PassAway();
+        }
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         ui64 hiveId = domains->GetHive();
         if (hiveId != TDomainsInfo::BadTabletId) {

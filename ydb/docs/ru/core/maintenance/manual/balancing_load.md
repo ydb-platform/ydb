@@ -11,7 +11,7 @@
 
 ## Распределить VDisk'и равномерно по устройствам {#cluster-balance}
 
-В результате некоторых операций, например [декомиссии](../../devops/manual/decommissioning.md), VDisk'и могут быть распределены на блочных устройствах неравномерно. Улучшить равномерность распределения можно одним из способов:
+В результате некоторых операций, например [декомиссии](../../devops/deployment-options/manual/decommissioning.md), VDisk'и могут быть распределены на блочных устройствах неравномерно. Улучшить равномерность распределения можно одним из способов:
 
 * [Перевезти VDisk'и](moving_vdisks.md#moving_vdisk) по одному с перегруженных устройств.
 * Воспользоваться утилитой [{{ ydb-short-name }} DSTool](../../reference/ydb-dstool/index.md). Следующая команда перевезет VDisk с перегруженного устройства на менее нагруженное:
@@ -20,36 +20,40 @@
     ydb-dstool -e <bs_endpoint> cluster balance
     ```
 
+    `<bs_endpoint>` - эндпоинт произвольного [узла хранения](../../concepts/glossary.md#storage-node) кластера.
     Команда перевозит не более одного VDisk'а за один запуск.
 
 ## Изменение количествa слотов для VDisk'ов на PDisk'ах
 
-Для добавления групп хранения требуется переопределить конфиг хоста, увеличив для него количество слотов на PDisk'ах.
+Для добавления групп хранения требуется переопределить конфиг хоста, увеличив для него количество слотов на PDisk'ах. Это можно осуществить, проделав следующие шаги:
 
-Перед этим требуется получить изменяемые конфиг, это можно сделать следующей командой:
+1. Получить текущую конфигурацию кластера:
 
-```proto
-Command {
-  TReadHostConfig{
-    HostConfigId: <host-config-id>
-  }
-}
-```
+    ```bash
+    ydb -e <endpoint> admin cluster config fetch > config.yaml
+    ```
 
-```bash
-ydbd -s <endpoint> admin bs config invoke --proto-file ReadHostConfig.txt
-```
+    `<endpoint>` - grpc/grpcs эндпоинт произвольного узла кластера.
 
-Требуется вставить полученный конфиг в протобуф ниже и поменять в нем поле **PDiskConfig/ExpectedSlotCount**.
+2. Добавить (или изменить) поле `expected_slot_count` для нужного устройства `drive` в секции `host_configs`.
 
-```proto
-Command {
-  TDefineHostConfig {
-    <хост конфиг>
-  }
-}
-```
+    Примерный вид секции конфигурации:
 
-```bash
-ydbd -s <endpoint> admin bs config invoke --proto-file DefineHostConfig.txt
-```
+    ```yaml
+    config:
+    host_configs:
+    - host_config_id: 1
+        drive:
+        - path: <path_to_device>
+          type: <type>
+          expected_slot_count: <number>
+        - path: ...
+    - host_config_id: 2
+        ...
+    ```
+
+3. Загрузить обновленный конфигурационный файл на кластер:
+
+    ```bash
+    ydb -e endpoint admin cluster config replace -f config.yaml
+    ```

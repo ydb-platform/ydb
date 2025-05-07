@@ -20,7 +20,7 @@ struct TSchemeShard::TXxport::TTxGet: public TSchemeShard::TXxport::TTxBase {
     {
     }
 
-    bool DoExecuteImpl(const THashMap<ui64, typename TInfo::TPtr>& container, TTransactionContext&, const TActorContext&) {
+    bool DoExecuteImpl(const TMap<ui64, typename TInfo::TPtr>& container, TTransactionContext&, const TActorContext&) {
         const auto& request = Request->Get()->Record;
 
         auto response = MakeHolder<TEvResponse>();

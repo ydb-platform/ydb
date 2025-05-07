@@ -2,9 +2,9 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
-void TLevelPortions::DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) {
+void TOneLayerPortions::DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) {
     for (auto&& i : remove) {
-        auto it = Portions.find(i);
+        auto it = Portions.find(TOrderedPortion(i));
         AFL_VERIFY(it != Portions.end());
         AFL_VERIFY(it->GetPortion()->GetPortionId() == i->GetPortionId());
         PortionsInfo.RemovePortion(i);
@@ -45,7 +45,7 @@ void TLevelPortions::DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add
     }
 }
 
-TCompactionTaskData TLevelPortions::DoGetOptimizationTask() const {
+TCompactionTaskData TOneLayerPortions::DoGetOptimizationTask() const {
     AFL_VERIFY(GetNextLevel());
     ui64 compactedData = 0;
     TCompactionTaskData result(GetNextLevel()->GetLevelId());

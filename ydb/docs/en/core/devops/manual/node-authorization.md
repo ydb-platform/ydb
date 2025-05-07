@@ -6,7 +6,7 @@ Database node authentication and authorization are performed in the following or
 
 1. The database node being started opens a gRPC connection to one of the cluster storage nodes specified in the `--node-broker` command-line option. The connection uses the TLS protocol, and the certificate of the running node is used as the client certificate for the connection.
 2. The storage node and the database node perform mutual authentication checks using the TLS protocol: the certificate trust chain is checked, and the hostname is matched against the value of the "Subject Name" field of the certificate.
-3. The storage node checks the "Subject" field of the certificate for compliance with the requirements [set up through settings](../../reference/configuration/node-authentication.md) in the static configuration.
+3. The storage node checks the "Subject" field of the certificate for compliance with the requirements [set up through settings](../../reference/configuration/client_certificate_authorization.md) in the static configuration.
 4. If the above checks are successful, the connection from the database node is considered authenticated, and it is assigned a security identifier - [SID](../../concepts/glossary.md#access-sid), which is determined by the settings.
 5. The database node uses the established gRPC connection to register with the cluster through the corresponding service request. When registering, the database node sends its network address intended to be used for communication with other cluster nodes.
 6. The storage node checks whether the SID assigned to the gRPC connection is in the list of acceptable ones. If this check is successful, the storage node registers the database node within the cluster, saving the association between the network address of the registered node and its identifier.
@@ -17,7 +17,7 @@ Below are the steps required to enable the node authentication and authorization
 ## Configuration prerequisites
 
 1. The deployed {{ ydb-short-name }} cluster must have [gRPC traffic encryption](../../reference/configuration/tls.md#grpc) configured to use the TLS protocol.
-1. When preparing node certificates for a cluster where you plan to use the node authorization feature, uniform rules must be used for populating the "Subject" field of the certificates. This allows the identification of certificates issued for the cluster nodes. For more information, see the [certificate verification rules documentation](../../reference/configuration/node-authentication.md).
+1. When preparing node certificates for a cluster where you plan to use the node authorization feature, uniform rules must be used for populating the "Subject" field of the certificates. This allows the identification of certificates issued for the cluster nodes. For more information, see the [certificate verification rules documentation](../../reference/configuration/client_certificate_authorization.md).
 
     {% note info %}
 
@@ -62,7 +62,7 @@ To enable mandatory database node authorization, add the following configuration
             values: ["YDB"]
     ```
 
-    Add other certificate validation settings [as defined in the documentation](../../reference/configuration/node-authentication.md), if required.
+    Add other certificate validation settings [as defined in the documentation](../../reference/configuration/client_certificate_authorization.md), if required.
 
     If the certificate is successfully verified and the components of the "Subject" field comply with the requirements defined in the `subject_terms` sub-block, the connection will be assigned the access subjects listed in the `member_groups` parameter. To distinguish these subjects from other user groups and accounts, their names typically have the `@cert` suffix.
 

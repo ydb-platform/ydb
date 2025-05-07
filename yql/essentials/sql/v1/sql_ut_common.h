@@ -3013,6 +3013,22 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         );
     }
 
+    Y_UNIT_TEST(AlterTableAlterIndexSetReadReplicasSettingsUncompatIsCorrect) {
+        const auto result = SqlToYql("USE plato; ALTER TABLE table ALTER INDEX index SET READ_REPLICAS_SETTINGS \"PER_AZ:1\"");
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableAlterIndexSetReadReplicasSettingsCompatIsCorrect) {
+        const auto result = SqlToYql("USE plato; ALTER TABLE table ALTER INDEX index SET (READ_REPLICAS_SETTINGS = \"PER_AZ:1\")");
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableAlterIndexResetReadReplicasSettingsIsNotSupported) {
+        ExpectFailWithError("USE plato; ALTER TABLE table ALTER INDEX index RESET (READ_REPLICAS_SETTINGS)",
+            "<main>:1:55: Error: READ_REPLICAS_SETTINGS reset is not supported\n"
+        );
+    }
+
     Y_UNIT_TEST(AlterTableAlterColumnDropNotNullAstCorrect) {
         auto reqSetNull = SqlToYql(R"(
             USE plato;

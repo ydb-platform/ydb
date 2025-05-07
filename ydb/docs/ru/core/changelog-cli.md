@@ -1,5 +1,3 @@
-
-
 # Список изменений {{ ydb-short-name }} CLI
 
 ## Версия 2.20.0 {#2-20-0}
@@ -18,7 +16,7 @@
 * Запросы при выполнении команды `{{ ydb-cli }} workload run` теперь отправляются на сервер в произвольном порядке.
 * **_(Требуется сервер v25.1+)_** Добавлена поддержка [внешних источников данных](./concepts/datamodel/external_data_source.md) и [внешних таблиц](./concepts/datamodel/external_table.md) при выполнении [команд](./reference/ydb-cli/export-import/tools-dump.md) `{{ ydb-cli }} tools dump` и `{{ ydb-cli }} tools restore`.
 * **_(Экспериментально)_** Добавлена команда `{{ ydb-cli }} admin node config init` для инициализации директории с конфигурационными файлами узла.
-* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Добавлена [команда](./reference/ydb-cli/configs.md) `{{ ydb-cli }} admin cluster config generate` для генерации файла динамической конфигурации из файла статической конфигурации кластера.
+* **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Добавлена [команда](./reference/ydb-cli/commands/configuration/cluster/generate.md) `{{ ydb-cli }} admin cluster config generate` для генерации файла [конфигурации V2](./devops/configuration-management/configuration-v2/index.md) из [файла конфигурации V1](./devops/configuration-management/configuration-v2/index.md).
 * **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Добавлены [команда](./reference/ydb-cli/export-import/tools-dump#cluster) `{{ ydb-cli }} admin cluster dump` и [команда](./reference/ydb-cli/export-import/tools-restore#cluster) `{{ ydb-cli }} admin cluster restore` для создания дампа кластера. Дамп кластера содержит список баз данных с метаданными, пользователей и группы, но не содержит схемные объекты.
 * **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Добавлены команды `{{ ydb-cli }} admin database dump` и `{{ ydb-cli }} admin database restore` для создания дампа базы данных. Такой дамп содержит метаданные базы данных, схемные объекты, данные в них, пользователей и группы.
 * **_(Требуется сервер v25.1+)_** **_(Экспериментально)_** Для команды `ydb admin cluster config fetch` добавлены новые опции `--dedicated-storage-section` и `--dedicated-cluster-section`, позволяющие получать части конфигурации для кластера и хранилища отдельно.

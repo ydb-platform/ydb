@@ -1,25 +1,27 @@
 """Record warnings during test function execution."""
-import re
-import warnings
+
 from pprint import pformat
+import re
 from types import TracebackType
 from typing import Any
 from typing import Callable
+from typing import final
 from typing import Generator
 from typing import Iterator
 from typing import List
 from typing import Optional
+from typing import overload
 from typing import Pattern
 from typing import Tuple
 from typing import Type
 from typing import TypeVar
 from typing import Union
+import warnings
 
-from _pytest.compat import final
-from _pytest.compat import overload
 from _pytest.deprecated import check_ispytest
 from _pytest.deprecated import WARNS_NONE_ARG
 from _pytest.fixtures import fixture
+from _pytest.outcomes import Exit
 from _pytest.outcomes import fail
 
 
@@ -56,7 +58,7 @@ def deprecated_call(  # noqa: F811
 def deprecated_call(  # noqa: F811
     func: Optional[Callable[..., Any]] = None, *args: Any, **kwargs: Any
 ) -> Union["WarningsRecorder", Any]:
-    """Assert that code produces a ``DeprecationWarning`` or ``PendingDeprecationWarning``.
+    """Assert that code produces a ``DeprecationWarning`` or ``PendingDeprecationWarning`` or ``FutureWarning``.
 
     This function can be used as a context manager::
 
@@ -82,7 +84,9 @@ def deprecated_call(  # noqa: F811
     __tracebackhide__ = True
     if func is not None:
         args = (func,) + args
-    return warns((DeprecationWarning, PendingDeprecationWarning), *args, **kwargs)
+    return warns(
+        (DeprecationWarning, PendingDeprecationWarning, FutureWarning), *args, **kwargs
+    )
 
 
 @overload
@@ -117,10 +121,10 @@ def warns(  # noqa: F811
     warning of that class or classes.
 
     This helper produces a list of :class:`warnings.WarningMessage` objects, one for
-    each warning raised (regardless of whether it is an ``expected_warning`` or not).
+    each warning emitted (regardless of whether it is an ``expected_warning`` or not).
+    Since pytest 8.0, unmatched warnings are also re-emitted when the context closes.
 
-    This function can be used as a context manager, which will capture all the raised
-    warnings inside it::
+    This function can be used as a context manager::
 
         >>> import pytest
         >>> with pytest.warns(RuntimeWarning):
@@ -135,8 +139,9 @@ def warns(  # noqa: F811
         >>> with pytest.warns(UserWarning, match=r'must be \d+$'):
         ...     warnings.warn("value must be 42", UserWarning)
 
-        >>> with pytest.warns(UserWarning, match=r'must be \d+$'):
-        ...     warnings.warn("this is not here", UserWarning)
+        >>> with pytest.warns(UserWarning):  # catch re-emitted warning
+        ...     with pytest.warns(UserWarning, match=r'must be \d+$'):
+        ...         warnings.warn("this is not here", UserWarning)
         Traceback (most recent call last):
           ...
         Failed: DID NOT WARN. No warnings of type ...UserWarning... were emitted...
@@ -205,10 +210,21 @@ class WarningsRecorder(warnings.catch_warnings):  # type:ignore[type-arg]
         return len(self._list)
 
     def pop(self, cls: Type[Warning] = Warning) -> "warnings.WarningMessage":
-        """Pop the first recorded warning, raise exception if not exists."""
+        """Pop the first recorded warning which is an instance of ``cls``,
+        but not an instance of a child class of any other match.
+        Raises ``AssertionError`` if there is no match.
+        """
+        best_idx: Optional[int] = None
         for i, w in enumerate(self._list):
-            if issubclass(w.category, cls):
-                return self._list.pop(i)
+            if w.category == cls:
+                return self._list.pop(i)  # exact match, stop looking
+            if issubclass(w.category, cls) and (
+                best_idx is None
+                or not issubclass(w.category, self._list[best_idx].category)
+            ):
+                best_idx = i
+        if best_idx is not None:
+            return self._list.pop(best_idx)
         __tracebackhide__ = True
         raise AssertionError(f"{cls!r} not found in warning list")
 
@@ -277,6 +293,12 @@ class WarningsChecker(WarningsRecorder):
         self.expected_warning = expected_warning_tup
         self.match_expr = match_expr
 
+    def matches(self, warning: warnings.WarningMessage) -> bool:
+        assert self.expected_warning is not None
+        return issubclass(warning.category, self.expected_warning) and bool(
+            self.match_expr is None or re.search(self.match_expr, str(warning.message))
+        )
+
     def __exit__(
         self,
         exc_type: Optional[Type[BaseException]],
@@ -287,27 +309,45 @@ class WarningsChecker(WarningsRecorder):
 
         __tracebackhide__ = True
 
+        if self.expected_warning is None:
+            # nothing to do in this deprecated case, see WARNS_NONE_ARG above
+            return
+
+        # BaseExceptions like pytest.{skip,fail,xfail,exit} or Ctrl-C within
+        # pytest.warns should *not* trigger "DID NOT WARN" and get suppressed
+        # when the warning doesn't happen. Control-flow exceptions should always
+        # propagate.
+        if exc_val is not None and (
+            not isinstance(exc_val, Exception)
+            # Exit is an Exception, not a BaseException, for some reason.
+            or isinstance(exc_val, Exit)
+        ):
+            return
+
         def found_str():
             return pformat([record.message for record in self], indent=2)
 
-        # only check if we're not currently handling an exception
-        if exc_type is None and exc_val is None and exc_tb is None:
-            if self.expected_warning is not None:
-                if not any(issubclass(r.category, self.expected_warning) for r in self):
-                    __tracebackhide__ = True
-                    fail(
-                        f"DID NOT WARN. No warnings of type {self.expected_warning} were emitted.\n"
-                        f"The list of emitted warnings is: {found_str()}."
+        try:
+            if not any(issubclass(w.category, self.expected_warning) for w in self):
+                fail(
+                    f"DID NOT WARN. No warnings of type {self.expected_warning} were emitted.\n"
+                    f" Emitted warnings: {found_str()}."
+                )
+            elif not any(self.matches(w) for w in self):
+                fail(
+                    f"DID NOT WARN. No warnings of type {self.expected_warning} matching the regex were emitted.\n"
+                    f" Regex: {self.match_expr}\n"
+                    f" Emitted warnings: {found_str()}."
+                )
+        finally:
+            # Whether or not any warnings matched, we want to re-emit all unmatched warnings.
+            for w in self:
+                if not self.matches(w):
+                    warnings.warn_explicit(
+                        message=w.message,
+                        category=w.category,
+                        filename=w.filename,
+                        lineno=w.lineno,
+                        module=w.__module__,
+                        source=w.source,
                     )
-                elif self.match_expr is not None:
-                    for r in self:
-                        if issubclass(r.category, self.expected_warning):
-                            if re.compile(self.match_expr).search(str(r.message)):
-                                break
-                    else:
-                        fail(
-                            f"""\
-DID NOT WARN. No warnings of type {self.expected_warning} matching the regex were emitted.
- Regex: {self.match_expr}
- Emitted warnings: {found_str()}"""
-                        )

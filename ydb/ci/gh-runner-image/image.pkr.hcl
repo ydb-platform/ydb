@@ -36,9 +36,11 @@ build {
     content     = <<EOF
 set -xe
 
+export DEBIAN_FRONTEND=noninteractive
+
 cat <<LLVM > /etc/apt/sources.list.d/llvm.list
 deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-16 main
-deb-src http://apt.llvm.org/jammy/ llvm-toolchain-jammy-16 main
+deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-18 main
 LLVM
 
 curl --no-progress-meter -o /etc/apt/trusted.gpg.d/apt.llvm.org.asc https://apt.llvm.org/llvm-snapshot.gpg.key
@@ -46,16 +48,21 @@ curl --no-progress-meter -o /etc/apt/trusted.gpg.d/apt.llvm.org.asc https://apt.
 apt-get update
 # wait for unattended-upgrade is finished
 apt-get -o DPkg::Lock::Timeout=600 -y --no-install-recommends dist-upgrade
+
+# add kitware apt repository for the latest cmake
+curl -sL https://apt.kitware.com/kitware-archive.sh | bash
+
 apt-get -y install --no-install-recommends \
-  antlr3 clang-12 clang-14 clang-16 llvm-16 lld-16 \
-  cmake docker.io git jq libaio-dev libaio1 libicu70 libidn11-dev libkrb5-3 \
-  liblttng-ust1 lld-14 llvm-14 m4 make ninja-build parallel postgresql-client postgresql-client \
+  gcc clang-12 clang-14 clang-16 clang-18 \
+  lld-14 llvm-14 llvm-16 lld-16 llvm-18 lld-18 \
+  antlr3 cmake docker.io git jq libaio-dev libaio1 libicu70 libidn11-dev libkrb5-3 \
+  liblttng-ust1 m4 make ninja-build parallel postgresql-client postgresql-client \
   python-is-python3 python3-pip s3cmd s3cmd zlib1g linux-tools-common linux-tools-generic
 
 apt-get -y purge lxd-agent-loader snapd modemmanager
 apt-get -y autoremove
 
-pip3 install conan==1.59 pytest==7.1.3 pytest-timeout pytest-xdist==3.3.1 setproctitle==1.3.2 \
+pip3 install conan==2.4.1 pytest==7.1.3 pytest-timeout pytest-xdist==3.3.1 setproctitle==1.3.2 \
   grpcio grpcio-tools PyHamcrest tornado xmltodict pyarrow boto3 moto[server] psutil pygithub==2.3.0
 
 (CCACHE_VERSION=4.8.1 OS_ARCH=$(uname -m);

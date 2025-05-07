@@ -58,7 +58,7 @@ namespace NBoot {
             LeftReads -= 1;
 
             if (msg.Status == NKikimrProto::OK) {
-                Loader->Save(msg.Cookie, msg.Loaded);
+                Loader->Save(msg.Cookie, msg.Pages);
 
                 TryFinalize();
 

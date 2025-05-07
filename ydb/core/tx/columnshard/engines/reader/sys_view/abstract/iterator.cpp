@@ -62,7 +62,7 @@ TConclusion<std::shared_ptr<TPartialReadResult>> TStatsIteratorBase::GetBatch() 
             continue;
         }
         auto table = collection->ToTable({}, &resolver, false);
-        return std::make_shared<TPartialReadResult>(table, std::make_shared<TPlainScanCursor>(lastKey), Context, std::nullopt);
+        return std::make_shared<TPartialReadResult>(table, std::make_shared<TPlainScanCursor>(std::make_shared<NArrow::TSimpleRow>(lastKey, 0)), Context, std::nullopt);
     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "finished_iterator");
     return std::shared_ptr<TPartialReadResult>();

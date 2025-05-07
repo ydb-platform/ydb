@@ -1044,7 +1044,7 @@ private:
     bool CompactionInProgress = false;
     size_t CompactionBlobsCount = 0;
 
-    void DumpZones(const char* file = nullptr, unsigned line = 0) const;
+    //void DumpZones(const char* file = nullptr, unsigned line = 0) const;
 
     const TPartitionBlobEncoder& GetPartitionZone(ui64 offset) const;
     ui64 GetCumulativeSizeLimit() const;

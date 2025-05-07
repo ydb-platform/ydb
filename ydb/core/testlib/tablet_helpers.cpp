@@ -830,7 +830,7 @@ namespace NKikimr {
 
                 TString dispatchName = Sprintf("Reboot tablet %" PRIu64 " (#%" PRIu32 ") run %" PRIu32 "" , tabletId, tabletEventCountBeforeReboot, runCount);
                 if (ENABLE_REBOOT_DISPATCH_LOG)
-                    Cerr << "===> BEGIN dispatch: " << dispatchName << "\n";
+                    Cout << "===> BEGIN dispatch: " << dispatchName << "\n";
 
                 try {
                     ++runCount;
@@ -864,7 +864,7 @@ namespace NKikimr {
                 }
 
                 if (ENABLE_REBOOT_DISPATCH_LOG)
-                    Cerr << "===> END dispatch: " << dispatchName << "\n";
+                    Cout << "===> END dispatch: " << dispatchName << "\n";
 
                 ++tabletEventCountBeforeReboot;
                 if (selectedReboot != Max<ui32>())

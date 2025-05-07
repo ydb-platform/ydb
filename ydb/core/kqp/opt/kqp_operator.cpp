@@ -155,6 +155,7 @@ TOpRead::TOpRead(TExprNode::TPtr node) : IOperator(EOperator::Source, node) {
 }
 
 std::shared_ptr<IOperator> TOpRead::Rebuild(TExprContext& ctx) {
+    Y_UNUSED(ctx);
     return std::make_shared<TOpRead>(Node);
 }
 

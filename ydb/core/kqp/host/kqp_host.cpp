@@ -1944,7 +1944,7 @@ private:
         const auto &yqlCoreOptFlags = SessionCtx->ConfigPtr()->YqlCoreOptimizerFlags;
         TypesCtx->OptimizerFlags.insert(yqlCoreOptFlags.begin(), yqlCoreOptFlags.end());
 
-        TypesCtx->IgnorePgRules = SessionCtx->ConfigPtr()->EnableNewRBO;
+        TypesCtx->IgnoreExpandPg = SessionCtx->ConfigPtr()->EnableNewRBO;
 
         bool addExternalDataSources = queryType == EKikimrQueryType::Script || queryType == EKikimrQueryType::Query
             || (queryType == EKikimrQueryType::YqlScript || queryType == EKikimrQueryType::YqlScriptStreaming) && AppData()->FeatureFlags.GetEnableExternalDataSources();
@@ -2031,7 +2031,7 @@ private:
             .AddTypeAnnotation()
             .Add(TCollectParametersTransformer::Sync(SessionCtx->QueryPtr()), "CollectParameters")
             .AddPostTypeAnnotation()
-            .AddOptimization(true, false, TIssuesIds::CORE_OPTIMIZATION, true)
+            .AddOptimization(true, false, TIssuesIds::CORE_OPTIMIZATION)
             .Add(GetDqIntegrationPeepholeTransformer(true, TypesCtx), "DqIntegrationPeephole")
             .Add(TLogExprTransformer::Sync("Optimized expr"), "LogExpr")
             .AddRun(&NullProgressWriter)

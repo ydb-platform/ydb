@@ -2073,12 +2073,14 @@ TStatus AnnotateOpJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 TStatus AnnotateOpLimit(const TExprNode::TPtr& input, TExprContext& ctx) {
+    Y_UNUSED(ctx);
     const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpRoot::idx_Input)->GetTypeAnn();
     input->SetTypeAnn(inputType);
     return TStatus::Ok;
 }
 
 TStatus AnnotateOpRoot(const TExprNode::TPtr& input, TExprContext& ctx) {
+    Y_UNUSED(ctx);
     const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpRoot::idx_Input)->GetTypeAnn();
     input->SetTypeAnn(inputType);
     return TStatus::Ok;

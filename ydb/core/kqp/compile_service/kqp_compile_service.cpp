@@ -352,7 +352,7 @@ private:
             TableServiceConfig.GetEnableSnapshotIsolationRW() != enableSnapshotIsolationRW ||
             TableServiceConfig.GetAllowMultiBroadcasts() != allowMultiBroadcasts ||
             TableServiceConfig.GetDefaultEnableShuffleElimination() != defaultEnableShuffleElimination ||
-            TableServiceConfig.GetEnableQueryServiceSpilling() != enableSpilling
+            TableServiceConfig.GetEnableQueryServiceSpilling() != enableSpilling ||
             TableServiceConfig.GetEnableNewRBO() != enableNewRBO) 
         {
 

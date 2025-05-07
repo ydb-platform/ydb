@@ -75,6 +75,11 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
     const TKikimrConfiguration::TPtr& config,
     TPlanProps& props) {
 
+    Y_UNUSED(kqpCtx);
+    Y_UNUSED(typeCtx);
+    Y_UNUSED(config);
+    Y_UNUSED(props);
+
     if (input->Kind != EOperator::Filter) {
         return input;
     }
@@ -176,6 +181,12 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprCo
     TTypeAnnotationContext& typeCtx, 
     const TKikimrConfiguration::TPtr& config,
     TPlanProps& props) {
+
+    Y_UNUSED(ctx);
+    Y_UNUSED(kqpCtx);
+    Y_UNUSED(typeCtx);
+    Y_UNUSED(config);
+    Y_UNUSED(props);
 
     auto nodeName = input->Node->Content();
 

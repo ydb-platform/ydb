@@ -9,7 +9,7 @@ using namespace NYql::NDq;
 namespace {
 
 TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
-
+    Y_UNUSED(typeCtx);
     auto setItems = GetSetting(node->Head(), "set_items");
     
     TVector<TExprNode::TPtr> resultElements;
@@ -92,6 +92,7 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
 }
 
 TExprNode::TPtr PushTakeIntoPlan(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
+    Y_UNUSED(typeCtx);
     auto take = TCoTake(node);
     if (auto root = take.Input().Maybe<TKqpOpRoot>()){
         return Build<TKqpOpRoot>(ctx, node->Pos())

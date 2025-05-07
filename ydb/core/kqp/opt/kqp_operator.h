@@ -189,7 +189,10 @@ class IBinaryOperator : public IOperator {
 class TOpEmptySource : public IOperator {
     public:
     TOpEmptySource(TExprNode::TPtr node) : IOperator(EOperator::EmptySource, node) {}
-    virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override { return std::make_shared<TOpEmptySource>(Node); }
+    virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override {
+        Y_UNUSED(ctx);
+        return std::make_shared<TOpEmptySource>(Node); 
+    }
 
 };
 

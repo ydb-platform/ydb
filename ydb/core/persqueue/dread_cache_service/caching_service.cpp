@@ -56,6 +56,7 @@ public:
           hFunc(TEvPQ::TEvGetFullDirectReadData, HandleGetData)
           hFunc(TEvPQProxy::TEvDirectReadDataSessionConnected, HandleCreateClientSession)
           hFunc(TEvPQProxy::TEvDirectReadDataSessionDead, HandleDestroyClientSession)
+          hFunc(TEvPQProxy::TEvDirectReadDestroyPartitionSession, HandlePartitionSessionReleased)
     )
 
 private:
@@ -72,15 +73,16 @@ private:
             CloseSession(ev->Sender, Ydb::PersQueue::ErrorCode::ErrorCode::BAD_REQUEST, "Unknown session");
             return;
         }
+
+        auto sender = ev->Sender;
         if (sessionIter->second.Generation != ev->Get()->Generation) {
             ctx.Send(
-                    sessionIter->second.Client->ProxyId,
-                    new TEvPQProxy::TEvDirectReadDestroyPartitionSession(key, Ydb::PersQueue::ErrorCode::ErrorCode::ERROR, "Generation mismatch")
+                sender,
+                new TEvPQProxy::TEvDirectReadDestroyPartitionSession(key, Ydb::PersQueue::ErrorCode::ErrorCode::ERROR, "Generation mismatch")
             );
             return;
         }
 
-        auto sender = ev->Sender;
         auto startingReadId = ev->Get()->StartingReadId;
 
         // Let the proxy respond with StartDirectReadPartitionSessionResponse right away,
@@ -110,6 +112,17 @@ private:
             );
         }
         AssignByProxy.erase(assignIter);
+    }
+
+    void HandlePartitionSessionReleased(TEvPQProxy::TEvDirectReadDestroyPartitionSession::TPtr& ev) {
+        auto assignIter = AssignByProxy.find(ev->Sender);
+        if (assignIter.IsEnd())
+            return;
+        if (!assignIter->second.contains(ev->Get()->ReadKey.PartitionSessionId))
+            return;
+
+        assignIter->second.erase(ev->Get()->ReadKey.PartitionSessionId);
+        ServerSessions.erase(ev->Get()->ReadKey);
     }
 
     void HandleRegister(TEvPQ::TEvRegisterDirectReadSession::TPtr& ev) {
@@ -344,6 +357,7 @@ private:
         auto* directReadMessage = message->mutable_direct_read_response();
         directReadMessage->set_direct_read_id(readId);
         directReadMessage->set_partition_session_id(partSessionId);
+        directReadMessage->set_bytes_size(response->GetPartitionResponse().GetCmdPrepareReadResult().GetBytesSizeEstimate());
 
         auto ok = VaildatePartitionResponse(proxyClient, *response);
         if (!ok) {

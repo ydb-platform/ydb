@@ -75,32 +75,44 @@ class TestVectorIndex(VectorBase):
         }
         dml = DMLOperations(self)
         all_types["String"] = lambda i: f"String {i}"
-        for target in self.targets.keys():
-            for distance in self.targets[target].keys():
-                table_name_distance = f"{table_name}_{distance}_{target}"
-                dml.create_table(table_name_distance, pk_types, all_types, index, ttl, unique, sync)
-                self.vectors = []
-                self.upsert(table_name_distance, all_types, pk_types, index, ttl, vector_type)
-                cover = []
-                for type_name in all_types.keys():
-                    if type_name != "String":
-                        cover.append("col_" + cleanup_type_name(type_name))
-                sql_create_vector_index = create_vector_index_sql_request(
-                    table_name_distance, "col_String", target, distance, vector_type.lower(), self.size_vector, cover
-                )
-                print(sql_create_vector_index)
-                dml.query(sql_create_vector_index)
-                self.select(
-                    table_name_distance,
-                    "col_String",
-                    vector_type,
-                    pk_types,
-                    all_types,
-                    index,
-                    ttl,
-                    self.targets[target][distance],
-                    dml,
-                )
+        self.sync = ["", "SYNC"]
+        dimensions = [{"levels": 1, "claster": 100}, {"levels": 2, "claster": 50}]
+        for dimension in dimensions:
+            for sync in self.sync:
+                for target in self.targets.keys():
+                    for distance in self.targets[target].keys():
+                        table_name_distance = f"{table_name}_{distance}_{target}"
+                        dml.create_table(table_name_distance, pk_types, all_types, index, ttl, unique, sync)
+                        self.vectors = []
+                        self.upsert(table_name_distance, all_types, pk_types, index, ttl, vector_type)
+                        cover = []
+                        for type_name in all_types.keys():
+                            if type_name != "String":
+                                cover.append("col_" + cleanup_type_name(type_name))
+                        sql_create_vector_index = create_vector_index_sql_request(
+                            table_name_distance,
+                            "col_String",
+                            target,
+                            distance,
+                            vector_type.lower(),
+                            self.size_vector,
+                            dimension["levels"],
+                            dimension["claster"],
+                            cover,
+                        )
+                        print(sql_create_vector_index)
+                        dml.query(sql_create_vector_index)
+                        self.select(
+                            table_name_distance,
+                            "col_String",
+                            vector_type,
+                            pk_types,
+                            all_types,
+                            index,
+                            ttl,
+                            self.targets[target][distance],
+                            dml,
+                        )
 
     def get_vector(self, type, numb):
         if type == "Float":

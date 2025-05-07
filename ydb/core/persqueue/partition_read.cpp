@@ -78,7 +78,7 @@ void TPartition::FillReadFromTimestamps(const TActorContext& ctx) {
             userInfo.Session = "";
             userInfo.Offset = 0;
             if (userInfo.Important) {
-                userInfo.Offset = CompactionZone.StartOffset;
+                userInfo.Offset = CompactionBlobEncoder.StartOffset;
             }
             userInfo.Step = userInfo.Generation = 0;
         }
@@ -255,8 +255,8 @@ void TPartition::InitUserInfoForImportantClients(const TActorContext& ctx) {
                     ctx, consumer.GetName(), 0, true, "", 0, 0, 0, 0, 0, TInstant::Zero(), {}, false
             );
         }
-        if (userInfo->Offset < (i64)CompactionZone.StartOffset)
-            userInfo->Offset = CompactionZone.StartOffset;
+        if (userInfo->Offset < (i64)CompactionBlobEncoder.StartOffset)
+            userInfo->Offset = CompactionBlobEncoder.StartOffset;
         ReadTimestampForOffset(consumer.GetName(), *userInfo, ctx);
     }
     for (auto& [consumer, userInfo] : UsersInfoStorage->GetAll()) {
@@ -273,7 +273,7 @@ void TPartition::InitUserInfoForImportantClients(const TActorContext& ctx) {
 void TPartition::Handle(TEvPQ::TEvPartitionOffsets::TPtr& ev, const TActorContext& ctx) {
     NKikimrPQ::TOffsetsResponse::TPartResult result;
     result.SetPartition(Partition.InternalPartitionId);
-    result.SetStartOffset(CompactionZone.StartOffset);
+    result.SetStartOffset(CompactionBlobEncoder.StartOffset);
     result.SetEndOffset(BlobEncoder.EndOffset);
     result.SetErrorCode(NPersQueue::NErrorCode::OK);
     result.SetWriteTimestampEstimateMS(WriteTimestampEstimate.MilliSeconds());
@@ -772,7 +772,7 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
     if (!res)
         return;
     TReadAnswer answer = res->FormAnswer(
-            ctx, nullptr, CompactionZone.StartOffset, res->Offset, Partition, nullptr, res->Destination, 0, Tablet, Config.GetMeteringMode(), IsActive()
+            ctx, nullptr, CompactionBlobEncoder.StartOffset, res->Offset, Partition, nullptr, res->Destination, 0, Tablet, Config.GetMeteringMode(), IsActive()
     );
     ctx.Send(Tablet, answer.Event.Release());
     PQ_LOG_D(" waiting read cookie " << ev->Get()->Cookie
@@ -788,7 +788,7 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
 //        TBlobKeyTokens* blobKeyTokens
 //) {
 //    Y_ABORT_UNLESS(rcount && rsize);
-//    return CompactionZone.GetBlobsFromBody(startOffset,
+//    return CompactionBlobEncoder.GetBlobsFromBody(startOffset,
 //                                           partNo,
 //                                           maxCount,
 //                                           maxSize,
@@ -826,7 +826,7 @@ void TPartition::GetReadRequestFromCompactedBody(const ui64 startOffset, const u
                                rcount, rsize,
                                lastOffset,
                                blobKeyTokens,
-                               CompactionZone,
+                               CompactionBlobEncoder,
                                blobs);
 }
 
@@ -849,7 +849,7 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
         ui32* rsize, ui64* insideHeadOffset, ui64 lastOffset
 ) {
     Y_ABORT_UNLESS(rcount && rsize);
-    return CompactionZone.GetBlobsFromHead(startOffset,
+    return CompactionBlobEncoder.GetBlobsFromHead(startOffset,
                                            partNo,
                                            maxCount,
                                            maxSize,
@@ -869,9 +869,9 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
         ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST, "no infinite flows allowed - count is not set or 0");
         return;
     }
-    if (read->Offset < CompactionZone.StartOffset) {
+    if (read->Offset < CompactionBlobEncoder.StartOffset) {
         TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR_SMALL_OFFSET].Increment(1);
-        read->Offset = CompactionZone.StartOffset;
+        read->Offset = CompactionBlobEncoder.StartOffset;
         if (read->PartNo > 0) {
             TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(0);
             PQ_LOG_ERROR(
@@ -879,7 +879,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
                         " partition " << Partition <<
                         " readOffset " << read->Offset <<
                         " readPartNo " << read->PartNo <<
-                        " startOffset " << CompactionZone.StartOffset);
+                        " startOffset " << CompactionBlobEncoder.StartOffset);
             ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET,
                        "client requested not from first part, and this part is lost");
             return;
@@ -993,7 +993,7 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
     userInfo.ReadScheduled = true;
     PQ_LOG_D("Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition <<
             " user " << user << " readTimeStamp for offset " << userInfo.Offset << " initiated " <<
-            " queuesize " << UpdateUserInfoTimestamp.size() << " startOffset " << CompactionZone.StartOffset <<
+            " queuesize " << UpdateUserInfoTimestamp.size() << " startOffset " << CompactionBlobEncoder.StartOffset <<
             " ReadingTimestamp " << ReadingTimestamp << " rrg " << userInfo.ReadRuleGeneration
     );
 
@@ -1001,7 +1001,7 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
         UpdateUserInfoTimestamp.push_back(std::make_pair(user, userInfo.ReadRuleGeneration));
         return;
     }
-    if (userInfo.Offset < (i64)CompactionZone.StartOffset) {
+    if (userInfo.Offset < (i64)CompactionBlobEncoder.StartOffset) {
         userInfo.ReadScheduled = false;
         auto now = ctx.Now();
         userInfo.CreateTimestamp = now - TDuration::Seconds(Max(86400, Config.GetPartitionConfig().GetLifetimeSeconds()));
@@ -1017,7 +1017,7 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
         return;
     }
 
-    if (userInfo.Offset >= (i64)BlobEncoder.EndOffset || CompactionZone.StartOffset == BlobEncoder.EndOffset) {
+    if (userInfo.Offset >= (i64)BlobEncoder.EndOffset || CompactionBlobEncoder.StartOffset == BlobEncoder.EndOffset) {
         userInfo.ReadScheduled = false;
         return;
     }
@@ -1035,7 +1035,7 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
 
     PQ_LOG_D("Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition
             << " user " << user << " send read request for offset " << userInfo.Offset << " initiated "
-            << " queuesize " << UpdateUserInfoTimestamp.size() << " startOffset " << CompactionZone.StartOffset
+            << " queuesize " << UpdateUserInfoTimestamp.size() << " startOffset " << CompactionBlobEncoder.StartOffset
             << " ReadingTimestamp " << ReadingTimestamp << " rrg " << ReadingForUserReadRuleGeneration
     );
 
@@ -1076,7 +1076,7 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
             " user " << ReadingForUser <<
             " readTimeStamp done, result " << userInfo->WriteTimestamp.MilliSeconds() <<
             " queuesize " << UpdateUserInfoTimestamp.size() <<
-            " startOffset " << CompactionZone.StartOffset
+            " startOffset " << CompactionBlobEncoder.StartOffset
     );
     Y_ABORT_UNLESS(userInfo->ReadScheduled);
     userInfo->ReadScheduled = false;
@@ -1164,7 +1164,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
                 << " blobs, size " << size << " count " << count << " last offset " << lastOffset << ", current partition end offset: " << BlobEncoder.EndOffset);
 
     if (blobs.empty() ||
-        ((info.CompactedBlobsCount > 0) && (blobs[info.CompactedBlobsCount - 1].Key == CompactionZone.DataKeysBody.back().Key))) { // read from head only when all blobs from body processed
+        ((info.CompactedBlobsCount > 0) && (blobs[info.CompactedBlobsCount - 1].Key == CompactionBlobEncoder.DataKeysBody.back().Key))) { // read from head only when all blobs from body processed
         ui64 insideHeadOffset = 0;
         info.Cached = GetReadRequestFromHead(
                 info.Offset, info.PartNo, info.Count, info.Size, info.ReadTimestampMs, &count,

@@ -16,7 +16,6 @@ namespace {
         TTestEnv env(runtime, TTestEnvOptions()
             .NChannels(4)
             .EnablePipeRetries(true)
-            .EnableSystemViews(false)
             .DSProxies(dsProxies));
 
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);

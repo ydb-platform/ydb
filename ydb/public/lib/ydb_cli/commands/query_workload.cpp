@@ -1,7 +1,9 @@
 #include "query_workload.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
+#include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
+#include <ydb/public/lib/ydb_cli/common/plan2svg.h>
 #include <ydb/public/lib/ydb_cli/common/progress_indication.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
@@ -93,6 +95,9 @@ void TCommandQueryWorkloadRun::Config(TConfig& config) {
     config.Opts->AddLongOption('q', "query", "Query to execute").RequiredArgument("[String]").StoreResult(&Query);
     config.Opts->AddLongOption('f', "file", "Path to a file containing the query text to execute. "
         "The path '-' means reading the query text from stdin.").RequiredArgument("PATH").StoreResult(&QueryFile);
+    config.Opts->AddLongOption("plan", "Query plans report file name")
+        .DefaultValue("")
+        .StoreResult(&PlanFileName);
     config.Opts->AddLongOption('t', "threads", "Number of parallel threads; 1 if not specified").DefaultValue(1).StoreResult(&Threads);
     config.Opts->AddLongOption('d', "delay", "Interval delay in seconds; 1 if not specified").DefaultValue(1).StoreResult(&IntervalSeconds);
 }
@@ -119,6 +124,9 @@ void TCommandQueryWorkloadRun::Parse(TConfig& config) {
             << "nor path to file with query text (\"--file\", \"-f\") were provided." << Endl;
         config.PrintHelpAndExit();
     }
+    if (Threads > 1 && PlanFileName) {
+        throw TMisuseException() << "The query plan report (\"--plan\") is supported with only one thread (\"--t\", \"--threads\")." << Endl;
+    }
 }
 
 int TCommandQueryWorkloadRun::Run(TConfig& config) {
@@ -139,13 +147,32 @@ int TCommandQueryWorkloadRun::Run(TConfig& config) {
                 NQuery::TQueryClient client(driver);
 
                 NQuery::TExecuteQuerySettings settings;
-                settings.StatsMode(NQuery::EStatsMode::Basic);
+
+                auto statsMode = NQuery::EStatsMode::Basic;
+                if (PlanFileName) {
+                    statsMode = NQuery::EStatsMode::Full;
+                }
+                settings.StatsMode(statsMode);
+
 
                 std::optional<TProgressIndication> progressIndication;
 
-                if (Threads > 1) {
-                    settings.StatsCollectPeriod(std::chrono::milliseconds(500));
+                if (Threads == 1) {
+                    if (statsMode == NQuery::EStatsMode::Basic) {
+                        settings.StatsCollectPeriod(std::chrono::milliseconds(500));
+                    } else {
+                        settings.StatsCollectPeriod(std::chrono::milliseconds(3000));
+                    }
                     progressIndication = TProgressIndication();
+                }
+
+                TString currentPlanFileNameStats;
+                TString currentPlanWithStatsFileName;
+                TString currentPlanWithStatsFileNameJson;
+                if (PlanFileName) {
+                    currentPlanFileNameStats = TStringBuilder() << PlanFileName << ".stats";
+                    currentPlanWithStatsFileName = TStringBuilder() << PlanFileName << ".svg";
+                    currentPlanWithStatsFileNameJson = TStringBuilder() << PlanFileName << ".json";
                 }
 
                 while (!IsInterrupted() && !ThreadTerminated.load()) {
@@ -170,6 +197,31 @@ int TCommandQueryWorkloadRun::Run(TConfig& config) {
                         if (streamPart.GetStats()) {
                             const auto& queryStats = streamPart.GetStats().value();
                             local_duration += queryStats.GetTotalDuration();
+
+                            if (PlanFileName) {
+                                TFileOutput out(currentPlanFileNameStats);
+                                out << queryStats.ToString();
+                                {
+                                    auto plan = queryStats.GetPlan();
+                                    if (plan) {
+                                        {
+                                            TPlanVisualizer pv;
+                                            TFileOutput out(currentPlanWithStatsFileName);
+                                            try {
+                                                pv.LoadPlans(*queryStats.GetPlan());
+                                                out << pv.PrintSvg();
+                                            } catch (std::exception& e) {
+                                                out << "<svg width='1024' height='256' xmlns='http://www.w3.org/2000/svg'><text>" << e.what() << "<text></svg>";
+                                            }
+                                        }
+                                        {
+                                            TFileOutput out(currentPlanWithStatsFileNameJson);
+                                            TQueryPlanPrinter queryPlanPrinter(EDataFormat::JsonBase64, true, out, 120);
+                                            queryPlanPrinter.Print(*queryStats.GetPlan());
+                                        }
+                                    }
+                                }
+                            }
 
                             if (progressIndication) {
                                 const auto& protoStats = TProtoAccessor::GetProto(queryStats);

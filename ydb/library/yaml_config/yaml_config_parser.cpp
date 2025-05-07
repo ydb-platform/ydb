@@ -665,11 +665,15 @@ namespace NKikimr::NYaml {
         auto& domainsConfig = *config.MutableDomainsConfig();
 
         if (!domainsConfig.DomainSize()) {
-            NKikimrBlobStorage::EPDiskType dtEnum;
-            Y_ENSURE_BT(TryFromString<NKikimrBlobStorage::EPDiskType>(diskType.value(), dtEnum), "incorrect enum: " << diskType.value());
-
             auto& domain = *domainsConfig.AddDomain();
             domain.SetName("Root"); // TODO: allow override
+        }
+
+        auto& domain = *domainsConfig.MutableDomain(0);
+
+        if (!domain.StoragePoolTypesSize()) {
+            NKikimrBlobStorage::EPDiskType dtEnum;
+            Y_ENSURE_BT(TryFromString<NKikimrBlobStorage::EPDiskType>(diskType.value(), dtEnum), "incorrect enum: " << diskType.value());
             auto& storagePoolType =  *domain.AddStoragePoolTypes();
             storagePoolType.SetKind(diskTypeLower.value());
             auto& poolConfig = *storagePoolType.MutablePoolConfig();
@@ -749,6 +753,13 @@ namespace NKikimr::NYaml {
             auto& domainsConfig = *config.MutableDomainsConfig();
             auto& domain = *domainsConfig.AddDomain();
             domain.SetName("Root");
+        }
+
+        auto& domainsConfig = *config.MutableDomainsConfig();
+        Y_ENSURE_BT(domainsConfig.DomainSize() == 1, "Only a single domain is currently supported");
+        auto& domain = *domainsConfig.MutableDomain(0);
+
+        if (!domain.StoragePoolTypesSize()) {
             auto& storagePoolType = *domain.AddStoragePoolTypes();
             auto& poolConfig = *storagePoolType.MutablePoolConfig();
             if (ephemeralConfig.HasFailDomainType() &&
@@ -762,10 +773,6 @@ namespace NKikimr::NYaml {
             }
         }
 
-        auto& domainsConfig = *config.MutableDomainsConfig();
-        Y_ENSURE_BT(domainsConfig.DomainSize() == 1, "Only a single domain is currently supported");
-
-        auto& domain = *domainsConfig.MutableDomain(0);
         ui32 storagePoolTypeId = 0;
         for (auto& storagePoolType : *domain.MutableStoragePoolTypes()) {
             auto& info = ctx.PoolConfigInfo[{0, storagePoolTypeId}];

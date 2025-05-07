@@ -2761,6 +2761,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
             userInfo.Generation = actual->Generation;
             userInfo.Step = actual->Step;
             userInfo.Offset = actual->Offset;
+            // тут metadata!?
             if (userInfo.Offset <= (i64)StartOffset) {
                 userInfo.AnyCommits = false;
             }
@@ -3422,7 +3423,7 @@ void TPartition::AddCmdWrite(NKikimrClient::TKeyValueRequest& request,
                              ui64 offset, ui32 gen, ui32 step, const TString& session,
                              ui64 readOffsetRewindSum,
                              ui64 readRuleGeneration,
-                             bool anyCommits)
+                             bool anyCommits, const TString& committedMetadata)
 {
     TBuffer idata;
     {
@@ -3434,7 +3435,8 @@ void TPartition::AddCmdWrite(NKikimrClient::TKeyValueRequest& request,
         userData.SetOffsetRewindSum(readOffsetRewindSum);
         userData.SetReadRuleGeneration(readRuleGeneration);
         userData.SetAnyCommits(anyCommits);
-
+        userData.SetCommittedMetadata(committedMetadata);
+        // metadata!
         TString out;
         Y_PROTOBUF_SUPPRESS_NODISCARD userData.SerializeToString(&out);
 
@@ -3495,7 +3497,7 @@ void TPartition::AddCmdWriteUserInfos(NKikimrClient::TKeyValueRequest& request)
                         userInfo->Session,
                         ui ? ui->ReadOffsetRewindSum : 0,
                         userInfo->ReadRuleGeneration,
-                        userInfo->AnyCommits);
+                        userInfo->AnyCommits, userInfo->CommittedMetadata);
         } else {
             AddCmdDeleteRange(request,
                               ikey, ikeyDeprecated);
@@ -3527,6 +3529,7 @@ TUserInfoBase& TPartition::GetOrCreatePendingUser(const TString& user,
     auto pendingUserIt = PendingUsersInfo.find(user);
     if (pendingUserIt == PendingUsersInfo.end()) {
         auto userIt = UsersInfoStorage->GetIfExists(user);
+        // тут возвращается TUserInfo* для юзера
         auto [newPendingUserIt, _] = PendingUsersInfo.emplace(user, UsersInfoStorage->CreateUserInfo(user, readRuleGeneration));
 
         if (userIt) {

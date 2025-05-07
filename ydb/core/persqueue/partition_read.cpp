@@ -152,7 +152,7 @@ bool TPartition::ProcessHasDataRequest(const THasDataReq& request, const TActorC
 
             auto now = ctx.Now();
             auto& userInfo = UsersInfoStorage->GetOrCreate(request.ClientId, ctx);
-            userInfo.UpdateReadOffset((i64)EndOffset - 1, now, now, now, true);          
+            userInfo.UpdateReadOffset((i64)EndOffset - 1, now, now, now, true);
         }
     } else if (request.Offset < EndOffset) {
         sendResponse(GetSizeLag(request.Offset), false);
@@ -252,7 +252,7 @@ void TPartition::InitUserInfoForImportantClients(const TActorContext& ctx) {
         }
         if (!userInfo) {
             userInfo = &UsersInfoStorage->Create(
-                    ctx, consumer.GetName(), 0, true, "", 0, 0, 0, 0, 0, TInstant::Zero(), {}, false
+                    ctx, consumer.GetName(), 0, true, "", 0, 0, 0, 0, 0, TInstant::Zero(), {}, false, ""
             );
         }
         if (userInfo->Offset < (i64)StartOffset)

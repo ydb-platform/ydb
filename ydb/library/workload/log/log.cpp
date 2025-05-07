@@ -497,11 +497,16 @@ void TLogWorkloadParams::Parse(NYdb::NConsoleClient::TClientCommand::TConfig& co
     }
 
     if (date_from_passed && date_to_passed) {
-        auto date_from_val = config.ParseResult->Get("date_from");
-        auto date_to_val = config.ParseResult->Get("date_to");
+        auto date_from_val = config.ParseResult->Get("date-from");
+        auto date_to_val = config.ParseResult->Get("date-to");
 
-        if (date_from_val >= date_to_val) {
-            throw yexception() << "Invalid interval [`date_from`, `date_to`)";
+        ui64 date_from, date_to;
+        if (TryFromString<ui64>(date_from_val, date_from) && TryFromString<ui64>(date_to_val, date_to)) {
+            if (date_from >= date_to) {
+                throw yexception() << "Invalid interval [`date-from`, `date-to`)";
+            }
+        } else {
+            throw yexception() << "Can't parse `date-from`, `date-to` parameters";
         }
     }
 }

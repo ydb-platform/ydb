@@ -2278,15 +2278,15 @@ void TPartition::DumpZones(const char* file, unsigned line) const
         PQ_LOG_D(file << "(" << line << ")");
     }
 
-    auto dumpZone = [](const TPartitionBlobEncoder& zone) {
-        auto dumpKeys = [](const std::deque<TDataKey>& keys, const char* prefix) {
+    auto dumpZone = [this](const TPartitionBlobEncoder& zone) {
+        auto dumpKeys = [this](const std::deque<TDataKey>& keys, const char* prefix) {
             Y_UNUSED(prefix);
             for (size_t i = 0; i < keys.size(); ++i) {
                 PQ_LOG_D(prefix << "[" << i << "]=" << keys[i].Key.ToString() <<
                          ", Size=" << keys[i].Size << ", CumulativeSize=" << keys[i].CumulativeSize);
             }
         };
-        auto dumpHead = [](const THead& head, const char* prefix) {
+        auto dumpHead = [this](const THead& head, const char* prefix) {
             Y_UNUSED(head);
             Y_UNUSED(prefix);
             PQ_LOG_D(prefix <<

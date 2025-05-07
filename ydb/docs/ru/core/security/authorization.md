@@ -32,9 +32,9 @@
 
 Подробнее про первоначальное развертывание:
 
-* [Ansible](../devops/ansible/initial-deployment.md)
-* [Kubernetes](../devops/kubernetes/initial-deployment.md)
-* [Вручную](../devops/manual/initial-deployment.md)
+* [Ansible](../devops/deployment-options/ansible/initial-deployment.md)
+* [Kubernetes](../devops/deployment-options/kubernetes/initial-deployment.md)
+* [Вручную](../devops/deployment-options/manual/initial-deployment.md)
 * [{#T}](./builtin-security.md)
 
 {% endnote %}

@@ -8,6 +8,7 @@
 #include <ydb/core/mon_alloc/profiler.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/tablet/tablet_impl.h>
+#include <ydb/core/testlib/mock_transfer_writer_factory.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/executor_pool_io.h>
@@ -177,6 +178,7 @@ namespace NActors {
             nodeAppData->EnableMvccSnapshotWithLegacyDomainRoot = app0->EnableMvccSnapshotWithLegacyDomainRoot;
             nodeAppData->IoContextFactory = app0->IoContextFactory;
             nodeAppData->SchemeOperationFactory = app0->SchemeOperationFactory;
+            nodeAppData->TransferWriterFactory = std::make_shared<NKikimr::Tests::MockTransferWriterFactory>();
             if (nodeIndex < egg.Icb.size()) {
                 nodeAppData->Icb = std::move(egg.Icb[nodeIndex]);
                 nodeAppData->InFlightLimiterRegistry.Reset(new NKikimr::NGRpcService::TInFlightLimiterRegistry(nodeAppData->Icb));

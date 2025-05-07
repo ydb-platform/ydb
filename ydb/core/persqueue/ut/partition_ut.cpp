@@ -21,6 +21,11 @@
 
 #include "make_config.h"
 
+template<>
+void Out<NKikimrPQ::TEvProposeTransactionResult_EStatus>(IOutputStream& out, NKikimrPQ::TEvProposeTransactionResult_EStatus v) {
+    out << NKikimrPQ::TEvProposeTransactionResult::EStatus_Name(v);
+}
+
 namespace NKikimr::NPQ {
 
 namespace NHelpers {
@@ -987,8 +992,8 @@ void TPartitionFixture::SendProposeTransactionRequest(ui32 partition,
     auto* body = event->Record.MutableData();
     auto* operation = body->MutableOperations()->Add();
     operation->SetPartitionId(partition);
-    operation->SetBegin(begin);
-    operation->SetEnd(end);
+    operation->SetCommitOffsetsBegin(begin);
+    operation->SetCommitOffsetsEnd(end);
     operation->SetConsumer(client);
     operation->SetPath(topic);
     body->SetImmediate(immediate);
@@ -1009,7 +1014,7 @@ void TPartitionFixture::WaitProposeTransactionResponse(const TProposeTransaction
 
     if (matcher.Status) {
         UNIT_ASSERT(event->Record.HasStatus());
-        UNIT_ASSERT(*matcher.Status == event->Record.GetStatus());
+        UNIT_ASSERT_VALUES_EQUAL(*matcher.Status, event->Record.GetStatus());
     }
 }
 

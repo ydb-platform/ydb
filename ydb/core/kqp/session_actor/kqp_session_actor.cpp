@@ -1358,7 +1358,6 @@ public:
                     }
                 }
             }
-
             request.TopicOperations = std::move(txCtx.TopicOperations);
         } else if (QueryState->ShouldAcquireLocks(tx) && (!txCtx.HasOlapTable || Settings.TableService.GetEnableOlapSink())) {
             request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();

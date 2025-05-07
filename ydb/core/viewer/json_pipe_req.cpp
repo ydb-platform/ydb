@@ -544,24 +544,29 @@ void TViewerPipeClient::RequestBSControllerPDiskUpdateStatus(const NKikimrBlobSt
     SendRequestToPipe(pipeClient, request.Release());
 }
 
-void TViewerPipeClient::RequestSchemeCacheNavigate(const TString& path) {
+THolder<NSchemeCache::TSchemeCacheNavigate> TViewerPipeClient::SchemeCacheNavigateRequestBuilder (
+        NSchemeCache::TSchemeCacheNavigate::TEntry&& entry
+) {
     THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-    NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-    entry.Path = SplitPath(path);
     entry.RedirectRequired = false;
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
-    request->ResultSet.emplace_back(entry);
+    request->ResultSet.emplace_back(std::move(entry));
+    return request;
+}
+
+void TViewerPipeClient::RequestSchemeCacheNavigate(const TString& path) {
+    NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+    entry.Path = SplitPath(path);
+
+    auto request = SchemeCacheNavigateRequestBuilder(std::move(entry));
     SendRequest(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
 }
 
 void TViewerPipeClient::RequestSchemeCacheNavigate(const TPathId& pathId) {
-    THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
     NSchemeCache::TSchemeCacheNavigate::TEntry entry;
     entry.TableId.PathId = pathId;
     entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
-    entry.RedirectRequired = false;
-    entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
-    request->ResultSet.emplace_back(entry);
+    auto request = SchemeCacheNavigateRequestBuilder(std::move(entry));
     SendRequest(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
 }
 
@@ -590,6 +595,42 @@ TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResu
     auto response = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0 /*flags*/, cookie);
     if (response.Span) {
         response.Span.Attribute("path_id", pathId.ToString());
+    }
+    return response;
+}
+
+TViewerPipeClient::TRequestResponse<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>
+    TViewerPipeClient::MakeRequestSchemeShardDescribe(TTabletId schemeShardId, const TString& path, const NKikimrSchemeOp::TDescribeOptions& options, ui64 cookie) {
+    auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvDescribeScheme>();
+    request->Record.SetSchemeshardId(schemeShardId);
+    request->Record.SetPath(path);
+    request->Record.MutableOptions()->CopyFrom(options);
+    auto pipe = ConnectTabletPipe(schemeShardId);
+    auto response = MakeRequestToPipe<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(pipe, request.release(), cookie);
+    if (response.Span) {
+        response.Span.Attribute("path", path);
+    }
+    return response;
+}
+
+TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> TViewerPipeClient::MakeRequestSchemeCacheNavigateWithToken(
+        const TString& path, bool showPrivate, ui32 access, ui64 cookie
+) {
+    NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+    entry.Path = SplitPath(path);
+    entry.ShowPrivatePath = showPrivate;
+    entry.Access = access;
+    auto request = SchemeCacheNavigateRequestBuilder(std::move(entry));
+
+    if (!Event->Get()->UserToken.empty())
+         request->UserToken = new NACLib::TUserToken(Event->Get()->UserToken);
+
+    auto response = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
+            MakeSchemeCacheID(),
+            new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0 /*flags*/, cookie
+    );
+    if (response.Span) {
+        response.Span.Attribute("path", path);
     }
     return response;
 }
@@ -774,6 +815,10 @@ TString TViewerPipeClient::GetHTTPGATEWAYTIMEOUT(TString contentType, TString re
 
 TString TViewerPipeClient::GetHTTPBADREQUEST(TString contentType, TString response) {
     return Viewer->GetHTTPBADREQUEST(GetRequest(), std::move(contentType), std::move(response));
+}
+
+TString TViewerPipeClient::GetHTTPNOTFOUND(TString, TString) {
+    return Viewer->GetHTTPNOTFOUND(GetRequest());
 }
 
 TString TViewerPipeClient::GetHTTPINTERNALERROR(TString contentType, TString response) {

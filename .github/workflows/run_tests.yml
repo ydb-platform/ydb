@@ -1,4 +1,4 @@
-name: Run tests
+name: Run-tests
 
 on:
   workflow_call:
@@ -68,10 +68,6 @@ on:
           - release-msan
           - release-tsan
         default: relwithdebinfo
-      branches:
-        description: 'Branches to test (JSON array or single branch name)'
-        required: false
-        default: '["main"]'
 
 jobs:
   prepare:
@@ -81,17 +77,27 @@ jobs:
     steps:
       - name: Set branches
         id: set-branches
+        env:
+          CALLED_BRANCHES: '${{ inputs.branches }}'
         run: |
-          INPUT_BRANCHES='${{ inputs.branches }}'
-          # Check if input is a JSON array
-          if [[ $INPUT_BRANCHES == \[* ]]; then
-            echo "branch_array=$INPUT_BRANCHES" >> $GITHUB_OUTPUT
+          # Проверяем, был ли передан параметр branches из вызывающего workflow
+          if [[ -n "$CALLED_BRANCHES" ]]; then
+            echo "Branches parameter provided from calling workflow: $CALLED_BRANCHES"
+            
+            # Проверяем, является ли вход уже JSON-массивом
+            if [[ $CALLED_BRANCHES == \[* ]]; then
+              echo "branch_array=$CALLED_BRANCHES" >> $GITHUB_OUTPUT
+            else
+              # Если это одна ветка, создаем JSON-массив с одним элементом
+              echo "branch_array=[\"$CALLED_BRANCHES\"]" >> $GITHUB_OUTPUT
+            fi
           else
-            # If it's a single branch, create a JSON array with one element
-            echo "branch_array=[\"$INPUT_BRANCHES\"]" >> $GITHUB_OUTPUT
+            # Если ветки не переданы, значит это прямой запуск workflow_dispatch
+            echo "No branches specified, using current branch: ${{ github.ref_name }}"
+            echo "branch_array=[\"${{ github.ref_name }}\"]" >> $GITHUB_OUTPUT
           fi
           
-          echo "Using branches: $(cat $GITHUB_OUTPUT | grep branch_array | cut -d= -f2)"
+          echo "Final branches to use: $(cat $GITHUB_OUTPUT | grep branch_array | cut -d= -f2)"
 
   run_tests:
     needs: prepare

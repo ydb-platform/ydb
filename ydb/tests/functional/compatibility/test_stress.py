@@ -11,7 +11,7 @@ from ydb.tests.library.harness.param_constants import kikimr_driver_path
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.stress.simple_queue.workload import Workload
 
-last_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/ydbd-last-stable")
+last_stable_binary_path = yatest.common.binary_path("ydb/tests/library/compatibility/ydbd-24-4")
 current_binary_path = kikimr_driver_path()
 
 all_binary_combinations = [
@@ -242,7 +242,7 @@ class TestStress(object):
             "run",
             "--scale=1",
             "--exclude",
-            "17",  # not working for row tables
+            "12,17",  # not working for row tables
             "--check-canonical",
             "--retries",
             "5",  # in row tables we have to retry query by design

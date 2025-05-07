@@ -295,9 +295,17 @@ struct TTestSchema {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableInitShard()->AddTables();
         tx.MutableInitShard()->SetOwnerPath(ownerPath);
+        tx.MutableInitShard()->SetOwnerPathId(pathId);
         table->SetPathId(pathId);
 
-        InitSchema(columns, pk, specials, table->MutableSchema());
+        {   // preset
+            auto* preset = table->MutableSchemaPreset();
+            preset->SetId(1);
+            preset->SetName("default");
+
+            // schema
+            InitSchema(columns, pk, specials, preset->MutableSchema());
+        }
         InitTiersAndTtl(specials, table->MutableTtlSettings());
 
         Cerr << "CreateInitShard: " << tx << "\n";
@@ -308,9 +316,11 @@ struct TTestSchema {
     }
 
     static TString CreateStandaloneTableTxBody(ui64 pathId, const std::vector<NArrow::NTest::TTestColumn>& columns,
-        const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specials = {}) {
+        const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specials = {}, const TString& path = "/Root/olap") {
         NKikimrTxColumnShard::TSchemaTxBody tx;
-        auto* table = tx.MutableEnsureTables()->AddTables();
+        auto* table = tx.MutableInitShard()->AddTables();
+        tx.MutableInitShard()->SetOwnerPath(path);
+        tx.MutableInitShard()->SetOwnerPathId(pathId);
         table->SetPathId(pathId);
 
         InitSchema(columns, pk, specials, table->MutableSchema());

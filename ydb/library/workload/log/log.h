@@ -14,7 +14,7 @@ public:
     };
 
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
-    void Parse(const NLastGetopt::TOptsParseResult& opts) override;
+    void Parse(const NLastGetopt::TOptsParseResult& opts, int wokrloadType) override;
     THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
     TString GetWorkloadName() const override;
     ui64 MinPartitions = 40;

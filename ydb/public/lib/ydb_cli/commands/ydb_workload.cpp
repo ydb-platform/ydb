@@ -361,7 +361,7 @@ void TWorkloadCommandRun::Config(TConfig& config) {
 
 void TWorkloadCommandRun::Parse(TConfig& config) {
     TWorkloadCommand::Parse(config);
-    Params.Parse(ParseResult->GetCommandLineParseResult());
+    Params.Parse(ParseResult->GetCommandLineParseResult(), Type);
 }
 
 TWorkloadCommandBase::TWorkloadCommandBase(const TString& name, NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::TWorkloadParams::ECommandType commandType, const TString& description, int type)

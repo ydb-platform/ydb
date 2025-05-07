@@ -282,6 +282,14 @@ public:
     TVector<TRow> GenerateRandomRows(ui64 count) const {
         TVector<TRow> result;
         result.reserve(count);
+        
+        Cerr << "Debug : TimestampDeviation value: " << Params.TimestampStandardDeviationMinutes << "\n";
+        if (Params.TimestampDateFrom.has_value()) {
+            Cerr << "Debug: DateFrom: " << *Params.TimestampDateFrom << "\n";
+        }
+        if (Params.TimestampDateTo.has_value()) {
+            Cerr << "Debug: DateTo: " << *Params.TimestampDateTo << "\n";
+        }
 
         for (size_t row = 0; row < count; ++row) {
             result.emplace_back();
@@ -467,10 +475,43 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
     }
 }
 
-void TLogWorkloadParams::Parse(const NLastGetopt::TOptsParseResult& parseResults) {
+void TLogWorkloadParams::Parse(const NLastGetopt::TOptsParseResult& parseResults, int workloadType) {
+    // TODO: validate only for this EType's:
+    // - Insert,
+    // - Upsert,
+    // - BulkUpsert
+    // TODO: 1) check where workloadType is being set
+    // it's used in RunWorkload and I've checked that it's correct by debug print
+    // 2) Remove debug logs
+
+    switch (static_cast<TLogGenerator::EType>(workloadType)) {
+        case TLogGenerator::EType::Insert:
+            Cerr << "Insert\n";
+            break;
+        case TLogGenerator::EType::Upsert:
+            Cerr << "Upsert\n";
+            break;
+        case TLogGenerator::EType::BulkUpsert:
+            Cerr << "BulkUpsert\n";
+            break;
+        case TLogGenerator::EType::Select:
+            Cerr << "Select\n";
+            break;
+    }
+
+    if (static_cast<TLogGenerator::EType>(workloadType) == TLogGenerator::EType::Select) {
+        Cerr << "Select: No validation\n";
+        return;
+    }
+    Cerr << "Not select: validation\n";
+
     auto timestamp_dev_passed = parseResults.Has("timestamp_deviation");
     auto date_from_passed = parseResults.Has("date-from");
     auto date_to_passed = parseResults.Has("date-to");
+
+    Cerr << "timestamp_dev_passed: " << timestamp_dev_passed << Endl;
+    Cerr << "date_from_passed: " << date_from_passed << Endl;
+    Cerr << "date_to_passed: " << date_to_passed << Endl;
 
     if (!timestamp_dev_passed && (!date_from_passed || !date_to_passed)) {
         throw yexception() << "One of parameter should be provided - timestamp_deviation or date-from and date-to";
@@ -496,6 +537,28 @@ void TLogWorkloadParams::Parse(const NLastGetopt::TOptsParseResult& parseResults
         } else {
             throw yexception() << "Can't parse `date-from`, `date-to` parameters";
         }
+    }
+    
+    // DEBUG
+    if (timestamp_dev_passed) {
+        auto timestamp_dev_val = parseResults.Get("timestamp_deviation");
+        ui64 timestamp_deviation;
+        TryFromString<ui64>(timestamp_dev_val, timestamp_deviation) && TryFromString<ui64>(timestamp_dev_val, timestamp_deviation);
+        Cerr << "timestamp_dev val: " << timestamp_deviation << "\n";
+    }
+
+    if (date_from_passed) {
+        auto date_from_val = parseResults.Get("date-from");
+        ui64 date_from;
+        TryFromString<ui64>(date_from_val, date_from) && TryFromString<ui64>(date_from_val, date_from);
+        Cerr << "date_from val: " << date_from << "\n";
+    }
+
+    if (date_from_passed) {
+        auto date_to_val = parseResults.Get("date-to");
+        ui64 date_to;
+        TryFromString<ui64>(date_to_val, date_to) && TryFromString<ui64>(date_to_val, date_to);
+        Cerr << "date_to val: " << date_to << "\n";
     }
 }
 

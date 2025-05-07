@@ -172,7 +172,7 @@ public:
     virtual ~TWorkloadParams() = default;
     virtual void ConfigureOpts(NLastGetopt::TOpts& /*opts*/, const ECommandType /*commandType*/, int /*workloadType*/) {
     };
-    virtual void Parse(const NLastGetopt::TOptsParseResult& /*parseResult*/) {};
+    virtual void Parse(const NLastGetopt::TOptsParseResult& /*parseResult*/, int /*workloadType*/) {};
     virtual THolder<IWorkloadQueryGenerator> CreateGenerator() const = 0;
     virtual TWorkloadDataInitializer::TList CreateDataInitializers() const {
         return {};

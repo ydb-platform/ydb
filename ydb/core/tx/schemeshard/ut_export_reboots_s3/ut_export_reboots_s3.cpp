@@ -520,15 +520,29 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             return ChangefeedScheme;
         }
 
-        static const TString& Request() {
-            return RequestString;
+        static const TTypedScheme& Topic() {
+            return TopicScheme;
+        }
+
+        static TString Request(EPathType pathType = EPathType::EPathTypeTable) {
+            switch (pathType) {
+            case EPathType::EPathTypeTable:
+                return RequestStringTable;
+            case EPathType::EPathTypePersQueueGroup:
+                return RequestStringTopic;
+            default:
+                Y_ABORT("not supported");
+            }
+            
         }
 
     private:
         static const char* TableName;
         static const TTypedScheme TableScheme;
         static const TTypedScheme ChangefeedScheme;
-        static const TString RequestString;
+        static const TTypedScheme TopicScheme;
+        static const TString RequestStringTable;
+        static const TString RequestStringTopic;
     };
 
     const char* TTestData::TableName = "Table";
@@ -556,12 +570,37 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         )", TableName)
     };
 
-    const TString TTestData::RequestString = R"(
+    const TTypedScheme TTestData::TopicScheme = TTypedScheme {
+        EPathTypePersQueueGroup,
+        R"(
+            Name: "Topic"
+            TotalGroupCount: 2
+            PartitionPerTablet: 1
+            PQTabletConfig {
+                PartitionConfig {
+                    LifetimeSeconds: 10
+                }
+            }
+        )"
+    };
+
+    const TString TTestData::RequestStringTable = R"(
         ExportToS3Settings {
             endpoint: "localhost:%d"
             scheme: HTTP
             items {
                 source_path: "/MyRoot/Table"
+                destination_prefix: ""
+            }
+        }
+    )";
+
+    const TString TTestData::RequestStringTopic = R"(
+        ExportToS3Settings {
+            endpoint: "localhost:%d"
+            scheme: HTTP
+            items {
+                source_path: "/MyRoot/Topic"
                 destination_prefix: ""
             }
         }
@@ -657,5 +696,23 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 UNIT_ASSERT(IsIn(namesVector, "export-1003"));
             }
         });
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnSingleTopic) {
+        RunS3({
+            TTestData::Topic()
+        }, TTestData::Request(EPathTypePersQueueGroup));
+    }
+
+    Y_UNIT_TEST(CancelOnOnSingleTopic) {
+        CancelS3({
+            TTestData::Topic()
+        }, TTestData::Request(EPathTypePersQueueGroup));
+    }
+
+    Y_UNIT_TEST(ForgetShouldSucceedOnOnSingleTopic) {
+        ForgetS3({
+            TTestData::Topic()
+        }, TTestData::Request(EPathTypePersQueueGroup));
     }
 }

@@ -4508,6 +4508,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     item.NextChangefeedIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextChangefeedIdx>(0);
                     item.Issue = rowset.GetValueOrDefault<Schema::ImportItems::Issue>(TString());
                     item.SrcPrefix = rowset.GetValueOrDefault<Schema::ImportItems::SrcPrefix>(TString());
+                    item.SrcPath = rowset.GetValueOrDefault<Schema::ImportItems::SrcPath>(TString());
                     if (rowset.HaveValue<Schema::ImportItems::EncryptionIV>()) {
                         item.ExportItemIV = NBackup::TEncryptionIV::FromBinaryString(rowset.GetValue<Schema::ImportItems::EncryptionIV>());
                     }

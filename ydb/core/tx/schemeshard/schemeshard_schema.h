@@ -1605,6 +1605,7 @@ struct Schema : NIceDb::Schema {
         struct Issue : Column<10, NScheme::NTypeIds::Utf8> {};
         struct SrcPrefix : Column<17, NScheme::NTypeIds::Utf8> {};
         struct EncryptionIV : Column<18, NScheme::NTypeIds::String> {};
+        struct SrcPath : Column<19, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<ImportId, Index>;
         using TColumns = TableColumns<
@@ -1625,7 +1626,8 @@ struct Schema : NIceDb::Schema {
             NextChangefeedIdx,
             Issue,
             SrcPrefix,
-            EncryptionIV
+            EncryptionIV,
+            SrcPath
         >;
     };
 

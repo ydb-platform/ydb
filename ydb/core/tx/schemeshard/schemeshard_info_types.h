@@ -2883,6 +2883,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TString DstPathName;
         TPathId DstPathId;
         TString SrcPrefix;
+        TString SrcPath; // Src path from schema mapping
         Ydb::Table::CreateTableRequest Scheme;
         TString CreationQuery;
         TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;

@@ -6287,6 +6287,11 @@
                 "ColumnId": 18,
                 "ColumnName": "EncryptionIV",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 19,
+                "ColumnName": "SrcPath",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -6310,7 +6315,8 @@
                     15,
                     16,
                     17,
-                    18
+                    18,
+                    19
                 ],
                 "RoomID": 0,
                 "Codec": 0,

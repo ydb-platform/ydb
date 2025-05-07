@@ -110,6 +110,7 @@ PEERDIR(
     library/cpp/digest/old_crc
     ydb/core/actorlib_impl
     ydb/core/audit
+    ydb/core/backup/common
     ydb/core/base
     ydb/core/control
     ydb/core/discovery

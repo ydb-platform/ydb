@@ -2534,20 +2534,6 @@ public:
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::OVERLOADED,
                 NYql::TIssuesIds::KIKIMR_OVERLOADED,
-                TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << " is out of space. " << getPathes() << ".",
-                getIssues());
-            return;
-        }
-        case NKikimrDataEvents::TEvWriteResult::STATUS_OUT_OF_SPACE: {
-            CA_LOG_W("Got OUT_OF_SPACE for tables."
-                << " ShardID=" << ev->Get()->Record.GetOrigin() << ","
-                << " Sink=" << this->SelfId() << "."
-                << " Ignored this error."
-                << getIssues().ToOneLineString());
-            TxManager->SetError(ev->Get()->Record.GetOrigin());
-            ReplyErrorAndDie(
-                NYql::NDqProto::StatusIds::OVERLOADED,
-                NYql::TIssuesIds::KIKIMR_OVERLOADED,
                 TStringBuilder() << "Tablet " << ev->Get()->Record.GetOrigin() << "(" << getPathes() << ")" << " is out of space.",
                 getIssues());
             return;

@@ -452,7 +452,9 @@ private:
                     // Anonymize object name in export
                     itemPrefix << std::setfill('0') << std::setw(3) << std::right << itemIndex;
                 } else {
-                    itemPrefix << exportPath;
+                    TStringBuf exportPathBuf = exportPath;
+                    exportPathBuf.SkipPrefix("/");
+                    itemPrefix << exportPathBuf;
                 }
                 destinationPrefix = itemPrefix.str();
             }

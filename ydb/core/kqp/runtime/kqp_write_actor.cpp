@@ -240,9 +240,6 @@ public:
         ShardedWriteController = CreateShardedWriteController(
             TShardedWriteControllerSettings {
                 .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
-                .MemoryLimitPerMessage = std::min(
-                    MessageSettings.InFlightMemoryLimitPerActorBytes,
-                    MessageSettings.MemoryLimitPerMessageBytes),
                 .Inconsistent = InconsistentTx,
             },
             Alloc);
@@ -986,7 +983,11 @@ public:
             }()
             << ", Size=" << serializationResult.TotalDataSize << ", Cookie=" << metadata->Cookie
             << ", OperationsCount=" << evWrite->Record.OperationsSize() << ", IsFinal=" << metadata->IsFinal
-            << ", Attempts=" << metadata->SendAttempts << ", Mode=" << static_cast<int>(Mode));
+            << ", Attempts=" << metadata->SendAttempts << ", Mode=" << static_cast<int>(Mode)
+            << ", BufferMemory=" << GetMemory());
+
+        AFL_ENSURE(Mode == EMode::WRITE || metadata->IsFinal);
+
         Send(
             PipeCacheId,
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, /* subscribe */ true),
@@ -1803,6 +1804,7 @@ public:
             }
 
             EnableStreamWrite &= settings.EnableStreamWrite;
+
             auto cookie = writeInfo.WriteTableActor->Open(
                 settings.OperationType,
                 std::move(settings.KeyColumns),

@@ -53,7 +53,7 @@ void TCommandSql::Config(TConfig& config) {
             << "\n    " << "Print progress to the terminal";
     description << "\n  " << colors.BoldColor() << "none" << colors.OldColor()
             << "\n    " << "Disables progress printing";
-    description << "\nDefault: " << colors.CyanColor() << "\"tty\"" << colors.OldColor() << ".";
+    description << "\nDefault: " << colors.CyanColor() << "\"none\"" << colors.OldColor() << ".";
 
     config.Opts->AddLongOption("progress", description.Str())
         .RequiredArgument("[String]").Hidden().DefaultValue("none").StoreResult(&Progress);

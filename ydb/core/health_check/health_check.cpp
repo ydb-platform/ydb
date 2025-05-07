@@ -2194,7 +2194,7 @@ public:
         // If not set, fall back to pDisk.GetStatusV2() for backward compatibility.
         if (pDisk.HasState()) {
             const auto& stateString = pDisk.GetState();
-            const auto *descriptor = NKikimrBlobStorage::TPDiskState::E_descriptor();
+            const auto* descriptor = NKikimrBlobStorage::TPDiskState::E_descriptor();
             auto state = descriptor->FindValueByName(stateString);
             auto stateEnum = state ? static_cast<NKikimrBlobStorage::TPDiskState::E>(state->number()) : NKikimrBlobStorage::TPDiskState::Unknown;
             ReportPDiskState(stateEnum, context);

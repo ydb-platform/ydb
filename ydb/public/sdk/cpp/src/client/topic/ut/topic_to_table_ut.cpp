@@ -171,12 +171,10 @@ protected:
     void CreateTable(const TString& path);
     void UpsertToTable(const TString& tablePath,
                       const TVector<TTableRecord>& records,
-                      ISession& session,
-                      TTransactionBase* tx);
+                      NTable::TTransaction* tx);
     void InsertToTable(const TString& tablePath,
                       const TVector<TTableRecord>& records,
-                      ISession& session,
-                      TTransactionBase* tx);
+                      NTable::TTransaction* tx);
     void DeleteFromTable(const TString& tablePath,
                       const TVector<TTableRecord>& records,
                       NTable::TTransaction* tx);
@@ -1370,8 +1368,8 @@ void TFixture::TestWriteToTopic24()
     NTable::TTransaction tx = BeginTx(tableSession);
 
     auto records = MakeTableRecords();
-    UpsertToTable("table_A", records, tx.get());
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, MakeJsonDoc(records), tx.get());
+    UpsertToTable("table_A", records, &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, MakeJsonDoc(records), &tx);
 
     CommitTx(tx, EStatus::SUCCESS);
 
@@ -2222,13 +2220,13 @@ auto TFixture::MakeJsonDoc(const TVector<TTableRecord>& records) -> TString
 
 void TFixture::UpsertToTable(const TString& tablePath,
                             const TVector<TTableRecord>& records,
-                            ISession& session,
                             NTable::TTransaction* tx)
 {
     TString query = Sprintf("DECLARE $key AS Utf8;"
                             "DECLARE $value AS Utf8;"
                             "UPSERT INTO `%s` (key, value) VALUES ($key, $value);",
                             tablePath.data());
+    NTable::TSession session = tx->GetSession();
 
     for (const auto& r : records) {
         auto params = session.GetParamsBuilder()
@@ -2244,13 +2242,13 @@ void TFixture::UpsertToTable(const TString& tablePath,
 
 void TFixture::InsertToTable(const TString& tablePath,
                             const TVector<TTableRecord>& records,
-                            ISession& session,
-                            TTransactionBase* tx)
+                            NTable::TTransaction* tx)
 {
     TString query = Sprintf("DECLARE $key AS Utf8;"
                             "DECLARE $value AS Utf8;"
                             "INSERT INTO `%s` (key, value) VALUES ($key, $value);",
                             tablePath.data());
+    NTable::TSession session = tx->GetSession();
 
     for (const auto& r : records) {
         auto params = TParamsBuilder()
@@ -2258,19 +2256,22 @@ void TFixture::InsertToTable(const TString& tablePath,
                 .AddParam("$value").Utf8(r.Value).Build()
             .Build();
 
-        session.Execute(query, tx, false, params);
+        auto result = session.ExecuteDataQuery(query,
+                                               NYdb::NTable::TTxControl::Tx(*tx),
+                                               params).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 }
 
 void TFixture::DeleteFromTable(const TString& tablePath,
                             const TVector<TTableRecord>& records,
-                            ISession& session,
-                            TTransactionBase* tx)
+                            NTable::TTransaction* tx)
 {
     TString query = Sprintf("DECLARE $key AS Utf8;"
                             "DECLARE $value AS Utf8;"
                             "DELETE FROM `%s` ON (key, value) VALUES ($key, $value);",
                             tablePath.data());
+    NTable::TSession session = tx->GetSession();
 
     for (const auto& r : records) {
         auto params = TParamsBuilder()
@@ -2278,7 +2279,10 @@ void TFixture::DeleteFromTable(const TString& tablePath,
                 .AddParam("$value").Utf8(r.Value).Build()
             .Build();
 
-        session.Execute(query, tx, false, params);
+        auto result = session.ExecuteDataQuery(query,
+                                               NYdb::NTable::TTxControl::Tx(*tx),
+                                               params).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 }
 
@@ -2794,30 +2798,19 @@ protected:
 
     void TestSinksOltpWriteToTopic5();
 
-    void TestSinksOltpWriteToTopicAndTable2();
     void TestSinksOltpWriteToTopicAndTable3();
     void TestSinksOltpWriteToTopicAndTable4();
-    void TestSinksOltpWriteToTopicAndTable5();
     void TestSinksOltpWriteToTopicAndTable6();
 
     void TestSinksOlapWriteToTopicAndTable1();
     void TestSinksOlapWriteToTopicAndTable2();
-    void TestSinksOlapWriteToTopicAndTable3();
     void TestSinksOlapWriteToTopicAndTable4();
 };
 
 class TFixtureSinksTable : public TFixtureSinks {
-protected:
-    EClientType GetClientType() const override {
-        return EClientType::Table;
-    }
 };
 
 class TFixtureSinksQuery : public TFixtureSinks {
-protected:
-    EClientType GetClientType() const override {
-        return EClientType::Query;
-    }
 };
 
 void TFixtureSinks::CreateRowTable(const TString& path)
@@ -2935,7 +2928,7 @@ Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_2, TFixtureSinks)
     NTable::TTransaction tx = BeginTx(tableSession);
 
     auto records = MakeTableRecords();
-    UpsertToTable("table_A", records, *session, tx.get());
+    UpsertToTable("table_A", records, &tx);
 
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, MakeJsonDoc(records), &tx);
 
@@ -2963,17 +2956,7 @@ Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_2, TFixtureSinks)
 }
 
 
-Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_2_Table, TFixtureSinksTable)
-{
-    TestSinksOltpWriteToTopicAndTable2();
-}
-
-Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_2_Query, TFixtureSinksQuery)
-{
-    TestSinksOltpWriteToTopicAndTable2();
-}
-
-void TFixtureSinks::TestSinksOltpWriteToTopicAndTable3()
+Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_3, TFixtureSinks)
 {
     CreateTopic("topic_A");
     CreateTopic("topic_B");
@@ -2985,8 +2968,8 @@ void TFixtureSinks::TestSinksOltpWriteToTopicAndTable3()
     NTable::TTransaction tx = BeginTx(tableSession);
 
     auto records = MakeTableRecords();
-    UpsertToTable("table_A", records, *session, tx.get());
-    UpsertToTable("table_B", records, *session, tx.get());
+    UpsertToTable("table_A", records, &tx);
+    UpsertToTable("table_B", records, &tx);
 
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, MakeJsonDoc(records), &tx);
 
@@ -3027,7 +3010,7 @@ Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_4, TFixtureSinks)
     ExecuteDataQuery(tableSession, R"(SELECT COUNT(*) FROM `table_A`)", NTable::TTxControl::Tx(tx1));
 
     auto records = MakeTableRecords();
-    UpsertToTable("table_A", records, *session, tx2.get());
+    UpsertToTable("table_A", records, &tx2);
 
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, MakeJsonDoc(records), &tx1);
     WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
@@ -3051,7 +3034,7 @@ Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_5, TFixtureSinks)
     NTable::TTransaction tx = BeginTx(tableSession);
 
     auto records = MakeTableRecords();
-    UpsertToTable("table_A", records, *session, tx.get());
+    UpsertToTable("table_A", records, &tx);
 
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, MakeJsonDoc(records), &tx);
     WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
@@ -3065,37 +3048,27 @@ Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_5, TFixtureSinks)
     CheckTabletKeys("topic_A");
 }
 
-Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_5_Table, TFixtureSinksTable)
-{
-    TestSinksOltpWriteToTopicAndTable5();
-}
-
-Y_UNIT_TEST_F(Sinks_Oltp_WriteToTopicAndTable_5_Query, TFixtureSinksQuery)
-{
-    TestSinksOltpWriteToTopicAndTable5();
-}
-
 void TFixtureSinks::TestSinksOltpWriteToTopicAndTable6()
 {
     CreateTopic("topic_A");
     CreateTopic("topic_B");
     CreateRowTable("/Root/table_A");
 
-    auto session = CreateSession();
-    auto tx = session->BeginTx();
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
 
     auto records = MakeTableRecords();
-    InsertToTable("table_A", records, *session, tx.get());
+    InsertToTable("table_A", records, &tx);
 
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, MakeJsonDoc(records), tx.get());
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, MakeJsonDoc(records), &tx);
 
-    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #1", tx.get());
-    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #2", tx.get());
-    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #3", tx.get());
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #1", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #2", &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #3", &tx);
 
-    DeleteFromTable("table_A", records, *session, tx.get());
+    DeleteFromTable("table_A", records, &tx);
 
-    session->CommitTx(*tx, EStatus::SUCCESS);
+    CommitTx(tx, EStatus::SUCCESS);
 
     {
         auto messages = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 1);
@@ -3135,8 +3108,8 @@ void TFixtureSinks::TestSinksOlapWriteToTopicAndTable1()
     NTable::TTransaction tx = BeginTx(tableSession);
 
     auto records = MakeTableRecords();
-    UpsertToTable("table_A", records, *session, tx.get());
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, MakeJsonDoc(records), tx.get());
+    UpsertToTable("table_A", records, &tx);
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, MakeJsonDoc(records), &tx);
 
     CommitTx(tx, EStatus::SUCCESS);
 
@@ -3162,8 +3135,8 @@ Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_2, TFixtureSinks)
 
     auto records = MakeTableRecords();
 
-    UpsertToTable("table_A", records, *session, tx.get());
-    UpsertToTable("table_B", records, *session, tx.get());
+    UpsertToTable("table_A", records, &tx);
+    UpsertToTable("table_B", records, &tx);
 
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, MakeJsonDoc(records), &tx);
 
@@ -3201,7 +3174,7 @@ Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_3, TFixtureSinks)
     NTable::TTransaction tx = BeginTx(tableSession);
 
     auto records = MakeTableRecords();
-    UpsertToTable("table_A", records, *session, tx.get());
+    UpsertToTable("table_A", records, &tx);
 
     WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, MakeJsonDoc(records), &tx);
     WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID);
@@ -3215,16 +3188,6 @@ Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_3, TFixtureSinks)
     CheckTabletKeys("topic_A");
 }
 
-Y_UNIT_TEST_F(Write_Random_Sized_Messages_In_Wide_Transactions, TFixture)
-{
-    // Consumes a lot of memory. Temporarily disabled
-    return;
-
-Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_3_Query, TFixtureSinksQuery)
-{
-    TestSinksOlapWriteToTopicAndTable3();
-}
-
 void TFixtureSinks::TestSinksOlapWriteToTopicAndTable4()
 {
     return; // https://github.com/ydb-platform/ydb/issues/17271
@@ -3235,25 +3198,25 @@ void TFixtureSinks::TestSinksOlapWriteToTopicAndTable4()
     CreateColumnTable("/Root/table_B");
     CreateColumnTable("/Root/table_C");
 
-    auto session = CreateSession();
-    auto tx = session->BeginTx();
+    NTable::TSession tableSession = CreateTableSession();
+    NTable::TTransaction tx = BeginTx(tableSession);
 
     auto records = MakeTableRecords();
 
-    InsertToTable("table_A", records, *session, tx.get());
-    InsertToTable("table_B", records, *session, tx.get());
-    UpsertToTable("table_C", records, *session, tx.get());
+    InsertToTable("table_A", records, &tx);
+    InsertToTable("table_B", records, &tx);
+    UpsertToTable("table_C", records, &tx);
 
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, MakeJsonDoc(records), tx.get());
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID, MakeJsonDoc(records), &tx);
 
     const size_t topicMsgCnt = 10;
     for (size_t i = 1; i <= topicMsgCnt; ++i) {
-        WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #" + std::to_string(i), tx.get());
+        WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID, "message #" + std::to_string(i), &tx);
     }
 
-    DeleteFromTable("table_B", records, *session, tx.get());
+    DeleteFromTable("table_B", records, &tx);
 
-    session->CommitTx(*tx, EStatus::SUCCESS);
+    CommitTx(tx, EStatus::SUCCESS);
 
     {
         auto messages = Read_Exactly_N_Messages_From_Topic("topic_A", TEST_CONSUMER, 1);
@@ -3282,59 +3245,6 @@ Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_4_Table, TFixtureSinksTable)
 Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_4_Query, TFixtureSinksQuery)
 {
     TestSinksOlapWriteToTopicAndTable4();
-}
-
-void TFixture::TestWriteRandomSizedMessagesInWideTransactions()
-{
-    // The test verifies the simultaneous execution of several transactions. There is a topic
-    // with PARTITIONS_COUNT partitions. In each transaction, the test writes to all the partitions.
-    // The size of the messages is random. Such that both large blobs in the body and small ones in
-    // the head of the partition are obtained. Message sizes are multiples of 500 KB. This way we
-    // will make sure that when committing transactions, the division into blocks is taken into account.
-
-    const size_t PARTITIONS_COUNT = 20;
-    const size_t TXS_COUNT = 100;
-
-    CreateTopic("topic_A", TEST_CONSUMER, PARTITIONS_COUNT);
-
-    std::vector<NTable::TSession> sessions;
-    std::vector<NTable::TTransaction> transactions;
-
-    // We open TXS_COUNT transactions and write messages to the topic.
-    for (size_t i = 0; i < TXS_COUNT; ++i) {
-        sessions.push_back(CreateTableSession());
-        auto& session = sessions.back();
-
-        transactions.push_back(BeginTx(session));
-        auto& tx = transactions.back();
-
-        for (size_t j = 0; j < PARTITIONS_COUNT; ++j) {
-            TString sourceId = TEST_MESSAGE_GROUP_ID;
-            sourceId += "_";
-            sourceId += ToString(i);
-            sourceId += "_";
-            sourceId += ToString(j);
-
-            size_t count = RandomNumber<size_t>(20) + 3;
-            WriteToTopic("topic_A", sourceId, TString(512 * 1000 * count, 'x'), &tx, j);
-
-            WaitForAcks("topic_A", sourceId);
-        }
-    }
-
-    // We are doing an asynchronous commit of transactions. They will be executed simultaneously.
-    std::vector<NTable::TAsyncCommitTransactionResult> futures;
-
-    for (size_t i = 0; i < TXS_COUNT; ++i) {
-        futures.push_back(transactions[i].Commit());
-    }
-
-    // All transactions must be completed successfully.
-    for (size_t i = 0; i < TXS_COUNT; ++i) {
-        futures[i].Wait();
-        const auto& result = futures[i].GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-    }
 }
 
 Y_UNIT_TEST_F(The_Configuration_Is_Changing_As_We_Write_To_The_Topic, TFixture)

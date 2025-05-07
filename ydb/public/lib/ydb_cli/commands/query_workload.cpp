@@ -145,7 +145,7 @@ int TCommandQueryWorkloadRun::Run(TConfig& config) {
 
                 if (Threads > 1) {
                     settings.StatsCollectPeriod(std::chrono::milliseconds(500));
-                    progressIndication = TProgressIndication(true);
+                    progressIndication = TProgressIndication();
                 }
 
                 while (!IsInterrupted() && !ThreadTerminated.load()) {
@@ -175,11 +175,10 @@ int TCommandQueryWorkloadRun::Run(TConfig& config) {
                                 const auto& protoStats = TProtoAccessor::GetProto(queryStats);
                                 for (const auto& queryPhase : protoStats.query_phases()) {
                                     for (const auto& tableAccessStats : queryPhase.table_access()) {
-                                        progressIndication->UpdateProgress({tableAccessStats.reads().rows(), tableAccessStats.reads().bytes(),
-                                            tableAccessStats.updates().rows(), tableAccessStats.updates().bytes(),
-                                            tableAccessStats.deletes().rows(), tableAccessStats.deletes().bytes()});
+                                        progressIndication->UpdateProgress({tableAccessStats.reads().rows(), tableAccessStats.reads().bytes()});
                                     }
                                 }
+                                progressIndication->SetDurationUs(protoStats.total_duration_us());
 
                                 progressIndication->Render();
                             }

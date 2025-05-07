@@ -3755,7 +3755,7 @@ TExprNode::TPtr MemberNthOverFlatMapWithOptional(const TExprNode::TPtr& node, TE
 
 } // namespace
 
-void RegisterCoSimpleCallables1(TCallableOptimizerMap& map, bool ignorePgRules) {
+void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     using namespace std::placeholders;
 
     map["SafeCast"] = std::bind(&OptimizeCast<false>, _1, _2);
@@ -6816,17 +6816,15 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map, bool ignorePgRules) 
         return node;
     };
 
-    if (!ignorePgRules) {
-        map["PgSelect"] = &ExpandPgSelect;
-        map["PgIterate"] = &ExpandPgIterate;
-        map["PgIterateAll"] = &ExpandPgIterate;
+    map["PgSelect"] = &ExpandPgSelect;
+    map["PgIterate"] = &ExpandPgIterate;
+    map["PgIterateAll"] = &ExpandPgIterate;
 
-        map["PgLike"] = &ExpandPgLike;
-        map["PgILike"] = &ExpandPgLike;
+    map["PgLike"] = &ExpandPgLike;
+    map["PgILike"] = &ExpandPgLike;
 
-        map["PgBetween"] = &ExpandPgBetween;
-        map["PgBetweenSym"] = &ExpandPgBetween;
-    }
+    map["PgBetween"] = &ExpandPgBetween;
+    map["PgBetweenSym"] = &ExpandPgBetween;
 
     map["SqlColumnOrType"] = map["SqlPlainColumnOrType"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         YQL_CLOG(DEBUG, Core) << "Decay of never inspected " << node->Content();

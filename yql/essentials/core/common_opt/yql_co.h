@@ -100,11 +100,11 @@ struct TCoCallableRules {
     // rules to be applied before execution
     TCallableOptimizerMap FinalCallables;
 
-    TCoCallableRules(bool ignorePgRules = false);
-    static const TCoCallableRules& Instance(bool ignorePgRules = false);
+    TCoCallableRules();
+    static const TCoCallableRules& Instance();
 };
 
-void RegisterCoSimpleCallables1(TCallableOptimizerMap& map, bool ignorePgRules = false);
+void RegisterCoSimpleCallables1(TCallableOptimizerMap& map);
 void RegisterCoSimpleCallables2(TCallableOptimizerMap& map);
 void RegisterCoSimpleCallables3(TCallableOptimizerMap& map);
 void RegisterCoFlowCallables1(TCallableOptimizerMap& map);

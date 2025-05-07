@@ -323,7 +323,7 @@ struct TTestSchema {
         return out;
     }
 
-    static TString AlterTableTxBody(ui64 pathId, ui32 version, std::vector<NArrow::NTest::TTestColumn>& columns,
+    static TString AlterTableTxBody(ui64 pathId, ui32 version, const std::vector<NArrow::NTest::TTestColumn>& columns,
         const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specials) {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableAlterTable();

@@ -20,7 +20,8 @@ CREATE TABLE history
     `version` Int64 NOT NULL,
     `value` Bytes NOT NULL,
     `lease` Int64 NOT NULL,
-    PRIMARY KEY (`key`, `modified`)
+    PRIMARY KEY (`key`, `modified`),
+    INDEX `revision` GLOBAL ON (`modified`)
 )
 WITH (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 23, AUTO_PARTITIONING_PARTITION_SIZE_MB = 101);
 

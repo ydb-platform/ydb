@@ -63,41 +63,51 @@ struct TPhysicalOpProps {
 };
 
 struct TConnection {
-    TConnection(TString type) : Type(type) {}
+    TConnection(TString type, bool fromSourceStage) : Type(type), FromSourceStage(fromSourceStage) {}
     virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) = 0;
     virtual ~TConnection() = default;
 
     TString Type;
+    bool FromSourceStage;
 };
 
 struct TBroadcastConnection : public TConnection {
-    TBroadcastConnection() : TConnection("Broadcast") {}
+    TBroadcastConnection(bool fromSourceStage) : TConnection("Broadcast", fromSourceStage) {}
     virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) override;
 
 };
 
 struct TMapConnection : public TConnection {
-    TMapConnection() : TConnection("Map") {}
+    TMapConnection(bool fromSourceStage) : TConnection("Map", fromSourceStage) {}
     virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) override;
 
 };
 
 struct TUnionAllConnection : public TConnection {
-    TUnionAllConnection() : TConnection("UnionAll") {}
+    TUnionAllConnection(bool fromSourceStage) : TConnection("UnionAll", fromSourceStage) {}
     virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) override;
 
 };
 
 struct TShuffleConnection : public TConnection {
-    TShuffleConnection(TVector<TInfoUnit> keys) : TConnection("Shuffle")
-    ,Keys(keys) {}
+    TShuffleConnection(TVector<TInfoUnit> keys, bool fromSourceStage) : TConnection("Shuffle", fromSourceStage)
+    ,Keys(keys)
+    {}
+
     virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) override;
 
     TVector<TInfoUnit> Keys;
 };
 
+struct TSourceConnection : public TConnection {
+    TSourceConnection() : TConnection("Source", true) {}
+    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) override;
+
+};
+
 struct TStageGraph {
     TVector<int> StageIds;
+    THashMap<int, TVector<TInfoUnit>> StageAttributes;
     THashMap<int, TVector<int>> StageInputs;
     THashMap<int, TVector<int>> StageOutputs;
     THashMap<std::pair<int,int>, std::shared_ptr<TConnection>> Connections;
@@ -108,6 +118,16 @@ struct TStageGraph {
         StageInputs[newStageId] = TVector<int>();
         StageOutputs[newStageId] = TVector<int>();
         return newStageId;
+    }
+
+    int AddSourceStage(TVector<TInfoUnit> attributes) {
+        int res = AddStage();
+        StageAttributes[res] = attributes;
+        return res;
+    }
+
+    bool IsSourceStage(int id) {
+        return StageAttributes.contains(id);
     }
 
     void Connect(int from, int to, std::shared_ptr<TConnection> conn) {
@@ -121,6 +141,8 @@ struct TStageGraph {
     std::shared_ptr<TConnection> GetConnection(int from, int to) {
         return Connections.at(std::make_pair(from,to));
     }
+
+    std::pair<TExprNode::TPtr,TExprNode::TPtr> GenerateStageInput(int & stageInputCounter, TExprNode::TPtr & node, TExprContext& ctx, int fromStage);
 
     void TopologicalSort();
 };

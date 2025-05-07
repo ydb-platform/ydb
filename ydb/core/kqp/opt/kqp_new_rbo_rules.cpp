@@ -205,11 +205,17 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprCo
     }
 
     if (input->Kind == EOperator::EmptySource || input->Kind == EOperator::Source) {
-        auto newStageId = props.StageGraph.AddStage();
-        input->Props.StageId = newStageId;
+
         TString readName;
         if (input->Kind == EOperator::Source) {
-            readName = CastOperator<TOpRead>(input)->TableName;
+            auto opRead = CastOperator<TOpRead>(input);
+            auto newStageId = props.StageGraph.AddSourceStage(opRead->GetOutputIUs());
+            input->Props.StageId = newStageId;
+            readName = opRead->TableName;
+        }
+        else {
+            auto newStageId = props.StageGraph.AddStage();
+            input->Props.StageId = newStageId;
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages source: " << readName;
 
@@ -223,10 +229,13 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprCo
         auto newStageId = props.StageGraph.AddStage();
         join->Props.StageId = newStageId;
 
+        bool isLeftSourceStage = props.StageGraph.IsSourceStage(*leftStage);
+        bool isRightSourceStage = props.StageGraph.IsSourceStage(*rightStage);
+
         // For cross-join we build a stage with map and broadcast connections
         if (join->JoinKind == "Cross") {
-            props.StageGraph.Connect(*leftStage, newStageId, std::make_shared<TMapConnection>());
-            props.StageGraph.Connect(*rightStage, newStageId, std::make_shared<TBroadcastConnection>());
+            props.StageGraph.Connect(*leftStage, newStageId, std::make_shared<TMapConnection>(isLeftSourceStage));
+            props.StageGraph.Connect(*rightStage, newStageId, std::make_shared<TBroadcastConnection>(isRightSourceStage));
         }
         
         // For inner join (we don't support other joins yet) we build a new stage
@@ -239,20 +248,32 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprCo
                 rightShuffleKeys.push_back(k.second);
             }
 
-            props.StageGraph.Connect(*leftStage, newStageId, std::make_shared<TShuffleConnection>(leftShuffleKeys));
-            props.StageGraph.Connect(*rightStage, newStageId, std::make_shared<TShuffleConnection>(rightShuffleKeys));
+            props.StageGraph.Connect(*leftStage, newStageId, std::make_shared<TShuffleConnection>(leftShuffleKeys, isLeftSourceStage));
+            props.StageGraph.Connect(*rightStage, newStageId, std::make_shared<TShuffleConnection>(rightShuffleKeys, isRightSourceStage));
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages join";
     }
     else if (input->Kind == EOperator::Filter || input->Kind == EOperator::Map) {
-        input->Props.StageId = input->Children[0]->Props.StageId;
+        auto childOp = input->Children[0];
+        auto prevStageId = *(childOp->Props.StageId);
+
+        // If the child operator is a source, it requires its own stage
+        // So we have build a new stage for current operator
+        if (childOp->Kind == EOperator::Source) {
+            auto newStageId = props.StageGraph.AddStage();
+            input->Props.StageId = newStageId;
+            props.StageGraph.Connect(prevStageId, newStageId, std::make_shared<TSourceConnection>());
+        }
+        else {
+            input->Props.StageId = prevStageId;
+        }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages rest";
     }
     else if (input->Kind == EOperator::Limit) {
         auto newStageId = props.StageGraph.AddStage();
         input->Props.StageId = newStageId;
         auto prevStageId = *(input->Children[0]->Props.StageId);
-        props.StageGraph.Connect(prevStageId, newStageId, std::make_shared<TUnionAllConnection>());
+        props.StageGraph.Connect(prevStageId, newStageId, std::make_shared<TUnionAllConnection>(props.StageGraph.IsSourceStage(prevStageId)));
     }
     else {
         Y_ENSURE(true, "Unknown operator encountered");

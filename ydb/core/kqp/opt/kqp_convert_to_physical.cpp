@@ -43,11 +43,6 @@ namespace {
         }
     }
 
-    TExprNode::TPtr GenerateStageInput(int & stageInputCounter, TExprNode::TPtr & node, TExprContext& ctx) {
-        TString inputName = "input_arg" + std::to_string(stageInputCounter++);
-        YQL_CLOG(TRACE, CoreDq) << "Created stage argument " << inputName;
-        return Build<TCoArgument>(ctx, node->Pos()).Name(inputName).Done().Ptr();
-    }
 }
 
 namespace NKikimr {
@@ -56,7 +51,8 @@ namespace NKqp {
 TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx) {
     THashMap<int, TExprNode::TPtr> stages;
     THashMap<int, TVector<TExprNode::TPtr>> stageArgs;
-    for (auto id : root.PlanProps.StageGraph.StageIds) {
+    auto & graph = root.PlanProps.StageGraph;
+    for (auto id : graph.StageIds) {
         stageArgs[id] = TVector<TExprNode::TPtr>();
     }
     
@@ -90,40 +86,16 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx) {
             auto read = TKqpOpRead(op->Node);
             auto opSource = CastOperator<TOpRead>(op);
 
-            // Build the actual read callable
-            currentStageBody = Build<TKqpReadTableRanges>(ctx, root.Node->Pos())
-                .Table(read.Table())
-                .Ranges<TCoVoid>().Build()
-                .Columns(read.Columns())
-                .Settings<TCoNameValueTupleList>().Build()
-                .ExplainPrompt<TCoNameValueTupleList>().Build()
-                .Done().Ptr();
-
-            // Add a rename to rename all columns to include aliases
-            TVector<TExprBase> items;
-            auto arg = Build<TCoArgument>(ctx, root.Node->Pos()).Name("arg").Done().Ptr();
-
-            for (auto iu : opSource->GetOutputIUs()) {
-                auto tuple = Build<TCoNameValueTuple>(ctx, root.Node->Pos())
-                    .Name().Build("_alias_" + iu.Alias + "." + iu.ColumnName)
-                    .Value<TCoMember>()
-                        .Struct(arg)
-                        .Name().Build(iu.ColumnName)
-                    .Build()
-                    .Done();
-                
-                items.push_back(tuple);
-            }
-
-            currentStageBody = Build<TCoOrderedFlatMap>(ctx, root.Node->Pos())
-                .Input(currentStageBody)
-                .Lambda<TCoLambda>()
-                    .Args({arg})
-                    .Body<TCoJust>()
-                        .Input<TCoAsStruct>()
-                            .Add(items)
-                        .Build()
-                    .Build()
+        
+            auto source = ctx.NewCallable(root.Node->Pos(), "DataSource", {ctx.NewAtom(root.Node->Pos(), "KqpReadRangesSource")});
+            currentStageBody = Build<TDqSource>(ctx, root.Node->Pos())
+                .DataSource(source)
+                .Settings<TKqpReadRangesSourceSettings>()
+                    .Table(read.Table())
+                    .Columns(read.Columns())
+                    .Settings<TCoNameValueTupleList>().Build()
+                    .RangesExpr<TCoVoid>().Build()
+                    .ExplainPrompt<TCoNameValueTupleList>().Build()
                 .Build()
                 .Done().Ptr();
 
@@ -133,8 +105,8 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx) {
         else if (op->Kind == EOperator::Filter) {
 
             if (!currentStageBody) {
-                auto stageInput = GenerateStageInput(stageInputCounter, root.Node, ctx);
-                stageArgs[opStageId].push_back(stageInput);
+                auto [stageArg, stageInput] = graph.GenerateStageInput(stageInputCounter, root.Node, ctx, *op->Children[0]->Props.StageId);
+                stageArgs[opStageId].push_back(stageArg);
                 currentStageBody = stageInput;
             }
 
@@ -183,8 +155,8 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx) {
         else if (op->Kind == EOperator::Map) {
 
             if (!currentStageBody) {
-                auto stageInput = GenerateStageInput(stageInputCounter, root.Node, ctx);
-                stageArgs[opStageId].push_back(stageInput);
+                auto [stageArg, stageInput] = graph.GenerateStageInput(stageInputCounter, root.Node, ctx, *op->Children[0]->Props.StageId);
+                stageArgs[opStageId].push_back(stageArg);
                 currentStageBody = stageInput;
             }
 
@@ -220,8 +192,8 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx) {
         }
         else if(op->Kind == EOperator::Limit) {
             if (!currentStageBody) {
-                auto stageInput = GenerateStageInput(stageInputCounter, root.Node, ctx);
-                stageArgs[opStageId].push_back(stageInput);
+                auto [stageArg, stageInput] = graph.GenerateStageInput(stageInputCounter, root.Node, ctx, *op->Children[0]->Props.StageId);
+                stageArgs[opStageId].push_back(stageArg);
                 currentStageBody = stageInput;
             }
 
@@ -236,10 +208,10 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx) {
         else if(op->Kind == EOperator::Join) {
             auto join = CastOperator<TOpJoin>(op);
 
-            auto leftInput = GenerateStageInput(stageInputCounter, root.Node, ctx);
-            stageArgs[opStageId].push_back(leftInput);
-            auto rightInput = GenerateStageInput(stageInputCounter, root.Node, ctx);
-            stageArgs[opStageId].push_back(rightInput);
+            auto [leftArg, leftInput] = graph.GenerateStageInput(stageInputCounter, root.Node, ctx, *join->GetLeftInput()->Props.StageId);
+            stageArgs[opStageId].push_back(leftArg);
+            auto [rightArg, rightInput] = graph.GenerateStageInput(stageInputCounter, root.Node, ctx, *join->GetRightInput()->Props.StageId);
+            stageArgs[opStageId].push_back(rightArg);
 
             if (join->JoinKind == "Cross") {
                 currentStageBody = Build<TDqPhyCrossJoin>(ctx, root.Node->Pos())
@@ -298,7 +270,6 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx) {
     }
 
     // We need to build up stages in a topological sort order
-    auto graph = root.PlanProps.StageGraph;
     graph.TopologicalSort();
     
 
@@ -314,23 +285,29 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx) {
 
             auto inputStage = finalizedStages.at(inputStageId);
             auto c = graph.GetConnection(inputStageId, id);
+            YQL_CLOG(TRACE, CoreDq) << "Building connection: " << inputStageId << "->" << id << ", " << c->Type;
             auto conn = c->BuildConnection(inputStage, root.Node, ctx);
-            YQL_CLOG(TRACE, CoreDq) << "Build connection: " << inputStageId << "->" << id << ", " << c->Type;
+            YQL_CLOG(TRACE, CoreDq) << "Built connection: " << inputStageId << "->" << id << ", " << c->Type;
             inputs.push_back(conn);
         }
+        TExprNode::TPtr stage;
+        if (graph.IsSourceStage(id)) {
+            stage = stages.at(id);
+        }
+        else {
+            stage = Build<TDqStage>(ctx, root.Node->Pos())
+                .Inputs()
+                    .Add(inputs)
+                    .Build()
+                .Program()
+                    .Args(stageArgs.at(id))
+                    .Body(stages.at(id))
+                    .Build()
+                .Settings().Build()
+                .Done().Ptr();
+        }
 
-        auto stage = Build<TDqStage>(ctx, root.Node->Pos())
-            .Inputs()
-                .Add(inputs)
-                .Build()
-            .Program()
-                .Args(stageArgs.at(id))
-                .Body(stages.at(id))
-                .Build()
-            .Settings().Build()
-            .Done();
-
-        finalizedStages[id] = stage.Ptr();
+        finalizedStages[id] = stage;
         YQL_CLOG(TRACE, CoreDq) << "Finalized stage " << id;
     }
 

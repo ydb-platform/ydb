@@ -57,6 +57,49 @@ void DFS(int vertex, TVector<int>& sortedStages, THashSet<int>& visited, const T
     sortedStages.push_back(vertex);
 }
 
+TExprNode::TPtr AddRenames(TExprNode::TPtr input, TExprContext& ctx, TVector<TInfoUnit> renames) {
+    TVector<TExprBase> items;
+    auto arg = Build<TCoArgument>(ctx, input->Pos()).Name("arg").Done().Ptr();
+
+    for (auto iu : renames) {
+        auto tuple = Build<TCoNameValueTuple>(ctx, input->Pos())
+            .Name().Build("_alias_" + iu.Alias + "." + iu.ColumnName)
+            .Value<TCoMember>()
+                .Struct(arg)
+                .Name().Build(iu.ColumnName)
+            .Build()
+            .Done();
+        
+        items.push_back(tuple);
+    }
+
+    return Build<TCoFlatMap>(ctx, input->Pos())
+        .Input(input)
+        .Lambda<TCoLambda>()
+            .Args({arg})
+            .Body<TCoJust>()
+                .Input<TCoAsStruct>()
+                    .Add(items)
+                .Build()
+            .Build()
+        .Build()
+        .Done().Ptr();
+}
+
+TExprNode::TPtr BuildSourceStage(TExprNode::TPtr dqsource, TExprContext& ctx) {
+    auto arg = Build<TCoArgument>(ctx, dqsource->Pos()).Name("arg").Done().Ptr();
+    return Build<TDqStage>(ctx, dqsource->Pos())
+        .Inputs()
+            .Add({dqsource})
+            .Build()
+        .Program()
+            .Args({arg})
+            .Body(arg)
+            .Build()
+        .Settings().Build()
+        .Done().Ptr();
+}
+
 }
 
 namespace NKikimr {
@@ -84,6 +127,9 @@ inline bool operator == (const TInfoUnit& lhs, const TInfoUnit& rhs) {
 }
 
 TExprNode::TPtr TBroadcastConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) {
+    if (FromSourceStage) {
+        inputStage = BuildSourceStage(inputStage, ctx);
+    }
     return Build<TDqCnBroadcast>(ctx, node->Pos())
         .Output()
             .Stage(inputStage)
@@ -93,6 +139,9 @@ TExprNode::TPtr TBroadcastConnection::BuildConnection(TExprNode::TPtr inputStage
 }
 
 TExprNode::TPtr TMapConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) {
+    if (FromSourceStage) {
+        inputStage = BuildSourceStage(inputStage, ctx);
+    }
     return Build<TDqCnMap>(ctx, node->Pos())
         .Output()
             .Stage(inputStage)
@@ -102,6 +151,9 @@ TExprNode::TPtr TMapConnection::BuildConnection(TExprNode::TPtr inputStage, TExp
 }
 
 TExprNode::TPtr TUnionAllConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) {
+    if (FromSourceStage) {
+        inputStage = BuildSourceStage(inputStage, ctx);
+    }
     return Build<TDqCnUnionAll>(ctx, node->Pos())
         .Output()
             .Stage(inputStage)
@@ -113,9 +165,18 @@ TExprNode::TPtr TUnionAllConnection::BuildConnection(TExprNode::TPtr inputStage,
 TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) {
     TVector<TCoAtom> keyColumns;
 
+    if (FromSourceStage) {
+        inputStage = BuildSourceStage(inputStage, ctx);
+    }
+
     for ( auto k : Keys ) {
-        TString fullName = "_alias_" + k.Alias + "." + k.ColumnName;
-        auto atom = Build<TCoAtom>(ctx, node->Pos()).Value(fullName).Done();
+        TString columnName;
+        if (FromSourceStage) {
+            columnName = k.ColumnName;
+        } else {
+            columnName = "_alias_" + k.Alias + "." + k.ColumnName;
+        }
+        auto atom = Build<TCoAtom>(ctx, node->Pos()).Value(columnName).Done();
         keyColumns.push_back(atom);
     }
 
@@ -128,6 +189,26 @@ TExprNode::TPtr TShuffleConnection::BuildConnection(TExprNode::TPtr inputStage, 
             .Add(keyColumns)
         .Build()
         .Done().Ptr();
+}
+
+TExprNode::TPtr TSourceConnection::BuildConnection(TExprNode::TPtr inputStage, TExprNode::TPtr & node, TExprContext& ctx) {
+    Y_UNUSED(node);
+    Y_UNUSED(ctx);
+    return inputStage;
+}
+
+std::pair<TExprNode::TPtr,TExprNode::TPtr> TStageGraph::GenerateStageInput(int & stageInputCounter, TExprNode::TPtr & node, TExprContext& ctx, int fromStage)
+{
+   TString inputName = "input_arg" + std::to_string(stageInputCounter++);
+   YQL_CLOG(TRACE, CoreDq) << "Created stage argument " << inputName;
+   auto arg = Build<TCoArgument>(ctx, node->Pos()).Name(inputName).Done().Ptr();
+   auto output = arg;
+
+   if (IsSourceStage(fromStage)) {
+       output = AddRenames(arg, ctx, StageAttributes.at(fromStage));
+   }
+
+   return std::make_pair(arg,output);
 }
 
 void TStageGraph::TopologicalSort() {

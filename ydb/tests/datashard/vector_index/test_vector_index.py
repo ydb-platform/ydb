@@ -95,6 +95,7 @@ class TestVectorIndex(VectorBase):
                             target,
                             distance,
                             vector_type.lower(),
+                            sync,
                             self.size_vector,
                             dimension["levels"],
                             dimension["claster"],

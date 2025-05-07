@@ -282,18 +282,10 @@ public:
     TVector<TRow> GenerateRandomRows(ui64 count) const {
         TVector<TRow> result;
         result.reserve(count);
-        Cerr << "Debug : TimestampDeviation value: " << Params.TimestampStandardDeviationMinutes << "\n";
-        if (Params.TimestampDateFrom.has_value()) {
-            Cerr << "Debug: DateFrom: " << *Params.TimestampDateFrom << "\n";
-        }
-        if (Params.TimestampDateTo.has_value()) {
-            Cerr << "Debug: DateTo: " << *Params.TimestampDateTo << "\n";
-        }
 
         for (size_t row = 0; row < count; ++row) {
             result.emplace_back();
             result.back().LogId = CreateGuidAsString().c_str();
-            // TODO: check if it's correct to get interval params here
             result.back().Ts = Params.TimestampDateFrom.has_value() && Params.TimestampDateTo.has_value() ? UniformInstant(*Params.TimestampDateFrom, *Params.TimestampDateTo) : RandomInstant();
             result.back().Level = RandomNumber<ui32>(10);
             result.back().ServiceName = RandomWord(false);
@@ -475,20 +467,10 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
     }
 }
 
-// void TLogWorkloadParams::Parse(NYdb::NConsoleClient::TClientCommand::TConfig& config) {
-void TLogWorkloadParams::Parse(const NLastGetopt::TOptsParseResult& opts) {
-    // TODO: should I check if it's a specific command type: run ?
-    auto timestamp_dev_passed = opts.Has("timestamp_deviation");
-    auto date_from_passed = opts.Has("date-from");
-    auto date_to_passed = opts.Has("date-to");
-
-    // auto timestamp_dev_passed = config.ParseResult->Has("timestamp_deviation");
-    // auto date_from_passed = config.ParseResult->Has("date-from");
-    // auto date_to_passed = config.ParseResult->Has("date-to");
-
-    Cerr << "timestamp_dev_passed: " << timestamp_dev_passed << Endl;
-    Cerr << "date_from_passed: " << date_from_passed << Endl;
-    Cerr << "date_to_passed: " << date_to_passed << Endl;
+void TLogWorkloadParams::Parse(const NLastGetopt::TOptsParseResult& parseResults) {
+    auto timestamp_dev_passed = parseResults.Has("timestamp_deviation");
+    auto date_from_passed = parseResults.Has("date-from");
+    auto date_to_passed = parseResults.Has("date-to");
 
     if (!timestamp_dev_passed && (!date_from_passed || !date_to_passed)) {
         throw yexception() << "One of parameter should be provided - timestamp_deviation or date-from and date-to";
@@ -503,10 +485,8 @@ void TLogWorkloadParams::Parse(const NLastGetopt::TOptsParseResult& opts) {
     }
 
     if (date_from_passed && date_to_passed) {
-        auto date_from_val = opts.Get("date-from");
-        // auto date_from_val = config.ParseResult->Get("date-from");
-        auto date_to_val = opts.Get("date-to");
-        // auto date_to_val = config.ParseResult->Get("date-to");
+        auto date_from_val = parseResults.Get("date-from");
+        auto date_to_val = parseResults.Get("date-to");
 
         ui64 date_from, date_to;
         if (TryFromString<ui64>(date_from_val, date_from) && TryFromString<ui64>(date_to_val, date_to)) {
@@ -516,28 +496,6 @@ void TLogWorkloadParams::Parse(const NLastGetopt::TOptsParseResult& opts) {
         } else {
             throw yexception() << "Can't parse `date-from`, `date-to` parameters";
         }
-    }
-
-    // DEBUG
-    if (timestamp_dev_passed) {
-        auto timestamp_dev_val = opts.Get("timestamp_deviation");
-        ui64 timestamp_deviation;
-        TryFromString<ui64>(timestamp_dev_val, timestamp_deviation) && TryFromString<ui64>(timestamp_dev_val, timestamp_deviation);
-        Cerr << "timestamp_dev val: " << timestamp_deviation << "\n";
-    }
-
-    if (date_from_passed) {
-        auto date_from_val = opts.Get("date-from");
-        ui64 date_from;
-        TryFromString<ui64>(date_from_val, date_from) && TryFromString<ui64>(date_from_val, date_from);
-        Cerr << "date_from val: " << date_from << "\n";
-    }
-
-    if (date_from_passed) {
-        auto date_to_val = opts.Get("date-to");
-        ui64 date_to;
-        TryFromString<ui64>(date_to_val, date_to) && TryFromString<ui64>(date_to_val, date_to);
-        Cerr << "date_to val: " << date_to << "\n";
     }
 }
 

@@ -14,7 +14,6 @@ public:
     };
 
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
-    // void Parse(NYdb::NConsoleClient::TClientCommand::TConfig& config) override;
     void Parse(const NLastGetopt::TOptsParseResult& opts) override;
     THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
     TString GetWorkloadName() const override;

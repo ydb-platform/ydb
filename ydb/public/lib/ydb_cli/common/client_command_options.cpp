@@ -422,7 +422,6 @@ TOptionsParseResult::TOptionsParseResult(const TClientCommandOptions* options, i
     , ParseFromCommandLineResult(&options->GetOpts(), argc, argv, throwOnParseError)
 {
     for (const auto& clientOption : ClientOptions->ClientOpts) {
-        // Cerr << clientOption->GetOpt().GetName() << "\n";
         if (const auto* optResult = ParseFromCommandLineResult.FindOptParseResult(&clientOption->GetOpt())) {
             Opts.emplace_back(clientOption, optResult);
             if (dynamic_cast<const TAuthMethodOption*>(clientOption.Get())) {
@@ -487,7 +486,7 @@ bool TOptionsParseResult::Has(char name, bool includeDefault) const {
     return result != nullptr;
 }
 
-TString TOptionsParseResult::Get(const TString& name, bool includeDefault) const {
+const TString& TOptionsParseResult::Get(const TString& name, bool includeDefault) const {
     if (const TOptionParseResult* result = FindResult(name); result && (includeDefault || result->ValueSource != EOptionValueSource::DefaultValue)) {
         return result->Values().back();
     }

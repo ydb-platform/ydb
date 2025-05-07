@@ -238,11 +238,6 @@ int TClientCommand::Process(TConfig& config) {
 void TClientCommand::SaveParseResult(TConfig& config) {
     Cerr << "ParseResult called\n";
     ParseResult = std::make_shared<TOptionsParseResult>(config.Opts, config.ArgC, (const char**)config.ArgV, config.ThrowOnOptsParseError);
-    // Cerr << "Opts: [";
-    // for (auto x: config.Opts->GetOpts().GetOpts()) {
-    //     Cerr << x->GetName() << ", ";
-    // }
-    // Cerr << "]\n";
 
     // Parse options from env and apply default parameters.
     // Parsing from profiles is only supported at high level commands and occure in ExtractParams() stage.
@@ -269,11 +264,7 @@ void TClientCommand::Prepare(TConfig& config) {
     SetCustomUsage(config);
     SaveParseResult(config);
     config.ParseResult = ParseResult.get();
-    // try {
     Parse(config);
-    // } catch (const std::exception& e) {
-        // Cerr << "Error occured during Parse() stage: " << e.what();
-    // }
 }
 
 void TClientCommand::ExtractParams(TConfig& config) {

@@ -172,8 +172,7 @@ public:
     virtual ~TWorkloadParams() = default;
     virtual void ConfigureOpts(NLastGetopt::TOpts& /*opts*/, const ECommandType /*commandType*/, int /*workloadType*/) {
     };
-    // virtual void Parse(NYdb::NConsoleClient::TClientCommand::TConfig& /*config*/) {};
-    virtual void Parse(const NLastGetopt::TOptsParseResult& /*opts*/) {};
+    virtual void Parse(const NLastGetopt::TOptsParseResult& /*parseResult*/) {};
     virtual THolder<IWorkloadQueryGenerator> CreateGenerator() const = 0;
     virtual TWorkloadDataInitializer::TList CreateDataInitializers() const {
         return {};

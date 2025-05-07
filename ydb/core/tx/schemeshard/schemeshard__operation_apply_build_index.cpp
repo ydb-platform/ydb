@@ -27,6 +27,13 @@ ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPa
     operation->MutablePartitionConfig()->MutableCompactionPolicy()->CopyFrom(table->PartitionConfig().GetCompactionPolicy());
     operation->MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(false);
     operation->MutablePartitionConfig()->SetShadowData(false);
+
+    //!!!!! Temporary fix. Don't commit it
+    auto* followerGroup = operation->MutablePartitionConfig()->MutableFollowerGroups()->Add();
+    followerGroup->SetFollowerCount(3);
+    followerGroup->SetRequireAllDataCenters(true);
+    followerGroup->SetFollowerCountPerDataCenter(true);
+        
     return CreateFinalizeBuildIndexImplTable(partId, transaction);
 }
 

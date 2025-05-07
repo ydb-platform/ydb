@@ -35,4 +35,17 @@ namespace NSQLComplete {
         return text;
     }
 
+    TString Quoted(TString content) {
+        content.prepend('`');
+        content.append('`');
+        return content;
+    }
+
+    TString Unquoted(TString content) {
+        Y_ENSURE(2 <= content.size() && content.front() == '`' && content.back() == '`');
+        content.erase(0, 1);
+        content.pop_back();
+        return content;
+    }
+
 } // namespace NSQLComplete

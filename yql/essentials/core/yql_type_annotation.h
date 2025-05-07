@@ -467,6 +467,9 @@ struct TTypeAnnotationContext: public TThrRefBase {
     EHiddenMode HiddenMode = EHiddenMode::Disable;
     EEngineType EngineType = EEngineType::Default;
 
+    // temporary flag to skip applying ExpandPg rules
+    bool IgnoreExpandPg = false;
+
     template <typename T>
     T GetRandom() const noexcept;
 

@@ -722,7 +722,8 @@ void InterceptExceptions(const TPromise<T>& promise, const F& func)
         auto guard = MakeFutureCurrentTokenGuard(promise.Impl_.Get());
         func();
     } catch (const NYT::TErrorException& ex) {
-        promise.Set(ex.Error());
+        // Create error explicitly from exception so that FromExceptionEnricher is called.
+        promise.Set(NYT::TError(ex));
     } catch (const std::exception& ex) {
         promise.Set(NYT::TError(ex));
     } catch (const NConcurrency::TFiberCanceledException&) {

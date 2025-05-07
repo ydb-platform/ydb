@@ -38,21 +38,25 @@ Functions for ASCII strings:
 
 * `String::ReverseFind(String{Flags:AutoMap}, String, [Uint64?]) -> Int64`: Returns the last position found or -1. The optional argument is the offset from the beginning of the string.
 
+* `String::AsciiStartsWithIgnoreCase(String?, String) -> Bool` Added in the version [2025.02](../../changelog/2025.02.md#string-module)
+
 * `String::HasPrefix(String?, String) -> Bool`
 
-* `String::HasPrefixIgnoreCase(String?, String) -> Bool`
+* `String::HasPrefixIgnoreCase(String?, String) -> Bool` Removed in the version [2025.02](../../changelog/2025.02.md#string-module)
 
 * `String::StartsWith(String?, String) -> Bool`
 
-* `String::StartsWithIgnoreCase(String?, String) -> Bool`
+* `String::StartsWithIgnoreCase(String?, String) -> Bool` Removed in the version [2025.02](../../changelog/2025.02.md#string-module)
+
+* `String::AsciiEndsWithIgnoreCase(String?, String) -> Bool` Added in the version [2025.02](../../changelog/2025.02.md#string-module)
 
 * `String::HasSuffix(String?, String) -> Bool`
 
-* `String::HasSuffixIgnoreCase(String?, String) -> Bool`
+* `String::HasSuffixIgnoreCase(String?, String) -> Bool` Removed in the version [2025.02](../../changelog/2025.02.md#string-module)
 
 * `String::EndsWith(String?, String) -> Bool`
 
-* `String::EndsWithIgnoreCase(String?, String) -> Bool`
+* `String::EndsWithIgnoreCase(String?, String) -> Bool` Removed in the version [2025.02](../../changelog/2025.02.md#string-module)
 
 * `String::Substring(String{Flags:AutoMap}, [Uint64?, Uint64?]) -> String`
 

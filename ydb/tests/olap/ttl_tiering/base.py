@@ -40,6 +40,7 @@ class TllTieringTestBase(object):
             config = KikimrConfigGenerator(
                 extra_feature_flags={
                     "enable_external_data_sources": True,
+                    "enable_write_portions_on_insert": True,
                     "enable_tiering_in_column_shard": True
                 },
                 column_shard_config={

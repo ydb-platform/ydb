@@ -15,12 +15,6 @@ class TllDeleteBase(TllTieringTestBase):
     days_to_freeze = 3000
 
     @classmethod
-    def portions_actualized_in_sys(self, table):
-        portions = table.get_portion_stat_by_tier()
-        logger.info(f"portions: {portions}, blobs: {table.get_blob_stat_by_tier()}")
-        return "__DEFAULT" in portions and self.row_count > portions["__DEFAULT"]["Rows"]
-
-    @classmethod
     def get_row_count_by_date(self, table_path: str, past_days: int) -> int:
         return self.ydb_client.query(f"SELECT count(*) as Rows from `{table_path}` WHERE ts < CurrentUtcTimestamp() - DateTime::IntervalFromDays({past_days})")[0].rows[0]["Rows"]
 
@@ -273,8 +267,7 @@ class TestDeleteS3Ttl(TllDeleteBase):
         logger.info(f"Rows older than {self.days_to_cool} days: {self.get_row_count_by_date(table_path, self.days_to_cool)}")
         logger.info(f"Rows older than {self.days_to_freeze} days: {self.get_row_count_by_date(table_path, self.days_to_freeze)}")
 
-        if not self.wait_for(lambda: self.portions_actualized_in_sys(self.table), 120):
-            raise Exception(".sys reports incorrect data portions")
+        assert ColumnTableHelper.portions_actualized_in_sys(self.table)
 
         stmt = f"""
             DELETE FROM `{table_path}`
@@ -382,8 +375,7 @@ class TestDeleteTtl(TllDeleteBase):
         logger.info(f"Rows older than {self.days_to_cool} days: {self.get_row_count_by_date(table_path, self.days_to_cool)}")
         logger.info(f"Rows older than {self.days_to_freeze} days: {self.get_row_count_by_date(table_path, self.days_to_freeze)}")
 
-        if not self.wait_for(lambda: self.portions_actualized_in_sys(self.table), 200):
-            raise Exception(".sys reports incorrect data portions")
+        assert ColumnTableHelper.portions_actualized_in_sys(self.table)
 
         t0 = time.time()
         stmt = f"""

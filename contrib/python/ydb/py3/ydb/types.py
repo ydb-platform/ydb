@@ -39,6 +39,19 @@ def _to_date(pb: ydb_value_pb2.Value, value: typing.Union[date, int]) -> None:
         pb.uint32_value = value
 
 
+def _from_date32(x: ydb_value_pb2.Value, table_client_settings: table.TableClientSettings) -> typing.Union[date, int]:
+    if table_client_settings is not None and table_client_settings._native_date_in_result_sets:
+        return _EPOCH.date() + timedelta(days=x.int32_value)
+    return x.int32_value
+
+
+def _to_date32(pb: ydb_value_pb2.Value, value: typing.Union[date, int]) -> None:
+    if isinstance(value, date):
+        pb.int32_value = (value - _EPOCH.date()).days
+    else:
+        pb.int32_value = value
+
+
 def _from_datetime_number(
     x: typing.Union[float, datetime], table_client_settings: table.TableClientSettings
 ) -> datetime:
@@ -62,16 +75,16 @@ def _from_uuid(pb: ydb_value_pb2.Value, value: uuid.UUID):
     pb.high_128 = struct.unpack("Q", value.bytes_le[8:16])[0]
 
 
+def _timedelta_to_microseconds(value: timedelta) -> int:
+    return (value.days * _SECONDS_IN_DAY + value.seconds) * 1000000 + value.microseconds
+
+
 def _from_interval(
     value_pb: ydb_value_pb2.Value, table_client_settings: table.TableClientSettings
 ) -> typing.Union[timedelta, int]:
     if table_client_settings is not None and table_client_settings._native_interval_in_result_sets:
         return timedelta(microseconds=value_pb.int64_value)
     return value_pb.int64_value
-
-
-def _timedelta_to_microseconds(value: timedelta) -> int:
-    return (value.days * _SECONDS_IN_DAY + value.seconds) * 1000000 + value.microseconds
 
 
 def _to_interval(pb: ydb_value_pb2.Value, value: typing.Union[timedelta, int]):
@@ -98,6 +111,25 @@ def _to_timestamp(pb: ydb_value_pb2.Value, value: typing.Union[datetime, int]):
         pb.uint64_value = _timedelta_to_microseconds(value - epoch)
     else:
         pb.uint64_value = value
+
+
+def _from_timestamp64(
+    value_pb: ydb_value_pb2.Value, table_client_settings: table.TableClientSettings
+) -> typing.Union[datetime, int]:
+    if table_client_settings is not None and table_client_settings._native_timestamp_in_result_sets:
+        return _EPOCH + timedelta(microseconds=value_pb.int64_value)
+    return value_pb.int64_value
+
+
+def _to_timestamp64(pb: ydb_value_pb2.Value, value: typing.Union[datetime, int]):
+    if isinstance(value, datetime):
+        if value.tzinfo:
+            epoch = _EPOCH_UTC
+        else:
+            epoch = _EPOCH
+        pb.int64_value = _timedelta_to_microseconds(value - epoch)
+    else:
+        pb.int64_value = value
 
 
 @enum.unique
@@ -132,9 +164,20 @@ class PrimitiveType(enum.Enum):
         _from_date,
         _to_date,
     )
+    Date32 = (
+        _apis.primitive_types.DATE32,
+        None,
+        _from_date32,
+        _to_date32,
+    )
     Datetime = (
         _apis.primitive_types.DATETIME,
         "uint32_value",
+        _from_datetime_number,
+    )
+    Datetime64 = (
+        _apis.primitive_types.DATETIME64,
+        "int64_value",
         _from_datetime_number,
     )
     Timestamp = (
@@ -143,8 +186,20 @@ class PrimitiveType(enum.Enum):
         _from_timestamp,
         _to_timestamp,
     )
+    Timestamp64 = (
+        _apis.primitive_types.TIMESTAMP64,
+        None,
+        _from_timestamp64,
+        _to_timestamp64,
+    )
     Interval = (
         _apis.primitive_types.INTERVAL,
+        None,
+        _from_interval,
+        _to_interval,
+    )
+    Interval64 = (
+        _apis.primitive_types.INTERVAL64,
         None,
         _from_interval,
         _to_interval,
@@ -354,6 +409,32 @@ class DictType(AbstractTypeBuilder):
             dict_type=_apis.ydb_value.DictType(
                 key=key_type.proto,
                 payload=payload_type.proto,
+            )
+        )
+
+    @property
+    def proto(self):
+        return self._proto
+
+    def __str__(self):
+        return self._repr
+
+
+class SetType(AbstractTypeBuilder):
+    __slots__ = ("__repr", "__proto")
+
+    def __init__(
+        self,
+        key_type: typing.Union[AbstractTypeBuilder, PrimitiveType],
+    ):
+        """
+        :param key_type: Key type builder
+        """
+        self._repr = "Set<%s>" % (str(key_type))
+        self._proto = _apis.ydb_value.Type(
+            dict_type=_apis.ydb_value.DictType(
+                key=key_type.proto,
+                payload=_apis.ydb_value.Type(void_type=struct_pb2.NULL_VALUE),
             )
         )
 

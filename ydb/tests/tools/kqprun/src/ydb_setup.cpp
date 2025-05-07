@@ -540,6 +540,7 @@ private:
         request->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
         request->SetDatabase(database);
         request->SetPoolId(query.PoolId);
+        request->MutableYdbParameters()->insert(query.Params.begin(), query.Params.end());
 
         if (query.Timeout) {
             request->SetTimeoutMs(query.Timeout.MilliSeconds());

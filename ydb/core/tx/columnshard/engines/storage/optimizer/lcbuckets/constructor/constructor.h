@@ -7,8 +7,8 @@ namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
 class ILevelConstructor {
 private:
-    virtual std::shared_ptr<IPortionsLevel> DoBuildLevel(
-        const std::shared_ptr<IPortionsLevel>& nextLevel, const ui32 indexLevel, const TLevelCounters& counters) const = 0;
+    virtual std::shared_ptr<IPortionsLevel> DoBuildLevel(const std::shared_ptr<IPortionsLevel>& nextLevel, const ui32 indexLevel,
+        const std::shared_ptr<TSimplePortionsGroupInfo>& portionsInfo, const TLevelCounters& counters) const = 0;
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& json) = 0;
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TCompactionLevelConstructorContainer& proto) = 0;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TCompactionLevelConstructorContainer& proto) const = 0;
@@ -27,9 +27,9 @@ public:
         return IsEqualToSameClass(item);
     }
 
-    std::shared_ptr<IPortionsLevel> BuildLevel(
-        const std::shared_ptr<IPortionsLevel>& nextLevel, const ui32 indexLevel, const TLevelCounters& counters) const {
-        return DoBuildLevel(nextLevel, indexLevel, counters);
+    std::shared_ptr<IPortionsLevel> BuildLevel(const std::shared_ptr<IPortionsLevel>& nextLevel, const ui32 indexLevel,
+        const std::shared_ptr<TSimplePortionsGroupInfo>& portionsInfo, const TLevelCounters& counters) const {
+        return DoBuildLevel(nextLevel, indexLevel, portionsInfo, counters);
     }
 
     TConclusionStatus DeserializeFromJson(const NJson::TJsonValue& json) {

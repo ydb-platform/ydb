@@ -61,11 +61,12 @@ directory require at least one of the following TLS backends:
 - `quictls
   <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1w+quic>`_
 - GnuTLS >= 3.7.5
-- BoringSSL (commit 294ab9730c570213b496cfc2fc14b3c0bfcd4bcc);
+- BoringSSL (commit 23018360710de333b3343e63cbb3bd2dceb3287d);
   or aws-lc >= 1.39.0
 - Picotls (commit bbcdbe6dc31ec5d4b72a7beece4daf58098bad42)
 - wolfSSL >= 5.5.0
 - LibreSSL >= v3.9.2
+- OpenSSL >= 3.5.0 (experimental)
 
 Before building from git
 ------------------------
@@ -114,7 +115,7 @@ Build with BoringSSL
 
    $ git clone https://boringssl.googlesource.com/boringssl
    $ cd boringssl
-   $ git checkout 294ab9730c570213b496cfc2fc14b3c0bfcd4bcc
+   $ git checkout 23018360710de333b3343e63cbb3bd2dceb3287d
    $ cmake -B build -DCMAKE_POSITION_INDEPENDENT_CODE=ON
    $ make -j$(nproc) -C build
    $ cd ..
@@ -141,7 +142,7 @@ Build with aws-lc
 
 .. code-block:: shell
 
-   $ git clone --depth 1 -b v1.46.1 https://github.com/aws/aws-lc
+   $ git clone --depth 1 -b v1.49.1 https://github.com/aws/aws-lc
    $ cd aws-lc
    $ cmake -B build -DDISABLE_GO=ON
    $ make -j$(nproc) -C build
@@ -276,11 +277,30 @@ available crypto helper libraries are:
 - libngtcp2_crypto_boringssl: Use BoringSSL and aws-lc as TLS backend
 - libngtcp2_crypto_picotls: Use Picotls as TLS backend
 - libngtcp2_crypto_wolfssl: Use wolfSSL as TLS backend
+- libngtcp2_crypto_ossl: Use OpenSSL as TLS backend (experimental)
 
 Because BoringSSL and Picotls are an unversioned product, we only
 tested their particular revision.  See Requirements section above.
 
 We use Picotls with OpenSSL as crypto backend.
+
+libngtcp2_crypto_ossl has some restrictions for its use because
+OpenSSL QUIC TLS API requires us to keep crypto data in tact until it
+says that they are no longer used.  It also requires us to keep
+transport parameter buffer.  This extra book keeping is just done for
+a couple of TLS messages exchanged during handshake and a couple of
+session tickets after handshake.  If you absolutely need to use
+OpenSSL backend, your application must make sure that:
+
+- Keep `ngtcp2_conn` alive until ``SSL`` object is freed by
+  ``SSL_free``; or
+- Call ``SSL_set_app_data(ssl, NULL)`` before calling ``SSL_free``
+
+If you cannot make sure neither of them, it is a good time to migrate
+your application to the other alternative (e.g., wolfSSL, aws-lc).
+
+libngtcp2_crypto_quictls and libngtcp2_crypto_ossl cannot be built at
+the same time.
 
 The examples directory contains client and server that are linked to
 those crypto helper libraries and TLS backends.  They are only built
@@ -296,6 +316,8 @@ if their corresponding crypto helper library is built:
 - ptlsserver: Picotls server
 - wsslclient: wolfSSL client
 - wsslserver: wolfSSL server
+- osslclient: OpenSSL client
+- osslserver: OpenSSL server
 
 QUIC protocol extensions
 -------------------------

@@ -1420,16 +1420,6 @@ private:
             return;
         }
 
-        if (connection.Maybe<TKqpCnMapShard>()) {
-            connectionProto.MutableMapShard();
-            return;
-        }
-
-        if (connection.Maybe<TKqpCnShuffleShard>()) {
-            connectionProto.MutableShuffleShard();
-            return;
-        }
-
         if (auto maybeMerge = connection.Maybe<TDqCnMerge>()) {
             auto& mergeProto = *connectionProto.MutableMerge();
             for (const auto& sortColumn : maybeMerge.Cast().SortColumns()) {

@@ -331,6 +331,8 @@ void UpdateReplicationProgress(TReplicationProgress* progress, const TReplicatio
     auto progressTimestamp = NullTimestamp;
     auto updateTimestamp = NullTimestamp;
 
+    segments.reserve(progress->Segments.size() + update.Segments.size());
+
     auto append = [&] (TUnversionedOwningRow key) {
         auto timestamp = std::max(progressTimestamp, updateTimestamp);
         if (segments.empty() || segments.back().Timestamp != timestamp) {

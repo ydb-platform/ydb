@@ -99,20 +99,28 @@ ui64 GetBatchDataSize(const std::shared_ptr<arrow::RecordBatch>& batch) {
     if (!batch) {
         return 0;
     }
-    ui64 bytes = 0;
-    for (auto& column : batch->columns()) {
-        bytes += GetArrayDataSize(column);
-    }
-    return bytes;
+    return GetBatchDataSize(batch->columns());
 }
 
 ui64 GetBatchMemorySize(const std::shared_ptr<arrow::RecordBatch>& batch) {
     if (!batch) {
         return 0;
     }
+    return GetBatchMemorySize(batch->columns());
+}
+
+ui64 GetBatchDataSize(const std::vector<std::shared_ptr<arrow::Array>>& columns) {
     ui64 bytes = 0;
-    for (auto& column : batch->column_data()) {
-        bytes += GetArrayMemorySize(column);
+    for (auto& column : columns) {
+        bytes += GetArrayDataSize(column);
+    }
+    return bytes;
+}
+
+ui64 GetBatchMemorySize(const std::vector<std::shared_ptr<arrow::Array>>& columns) {
+    ui64 bytes = 0;
+    for (auto& column : columns) {
+        bytes += GetArrayMemorySize(column->data());
     }
     return bytes;
 }

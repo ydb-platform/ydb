@@ -31,6 +31,7 @@ class GlobalIndexSettings;
 class VectorIndexSettings;
 class KMeansTreeSettings;
 class PartitioningSettings;
+class ReadReplicasSettings;
 class DateTypeColumnModeSettings;
 class TtlSettings;
 class TtlTier;
@@ -200,11 +201,33 @@ struct TExplicitPartitions {
     void SerializeTo(Ydb::Table::ExplicitPartitions& proto) const;
 };
 
+//! Represents table read replicas settings
+class TReadReplicasSettings {
+public:
+    enum class EMode {
+        PerAz = 0,
+        AnyAz = 1
+    };
+
+    TReadReplicasSettings(EMode mode, uint64_t readReplicasCount);
+
+    EMode GetMode() const;
+    uint64_t GetReadReplicasCount() const;
+
+    static std::optional<TReadReplicasSettings> FromProto(const Ydb::Table::ReadReplicasSettings& proto);
+    void SerializeTo(Ydb::Table::ReadReplicasSettings& proto) const;
+
+private:
+    EMode Mode_;
+    uint64_t ReadReplicasCount_;
+};
+
 struct TGlobalIndexSettings {
     using TUniformOrExplicitPartitions = std::variant<std::monostate, uint64_t, TExplicitPartitions>;
 
     TPartitioningSettings PartitioningSettings;
     TUniformOrExplicitPartitions Partitions;
+    std::optional<TReadReplicasSettings> ReadReplicasSettings;
 
     static TGlobalIndexSettings FromProto(const Ydb::Table::GlobalIndexSettings& proto);
 
@@ -628,24 +651,6 @@ public:
 private:
     class TImpl;
     std::shared_ptr<TImpl> Impl_;
-};
-
-//! Represents table read replicas settings
-class TReadReplicasSettings {
-public:
-    enum class EMode {
-        PerAz = 0,
-        AnyAz = 1
-    };
-
-    TReadReplicasSettings(EMode mode, uint64_t readReplicasCount);
-
-    EMode GetMode() const;
-    uint64_t GetReadReplicasCount() const;
-
-private:
-    EMode Mode_;
-    uint64_t ReadReplicasCount_;
 };
 
 enum class EStoreType {
@@ -2063,6 +2068,8 @@ private:
     uint64_t TxId_;
 };
 
+using TVirtualTimestamp = TReadTableSnapshot;
+
 template<typename TPart>
 class TSimpleStreamPart : public TStreamPartStatus {
 public:
@@ -2117,6 +2124,10 @@ public:
     const std::string& GetDiagnostics() const { return *Diagnostics_; }
     std::string&& ExtractDiagnostics() { return std::move(*Diagnostics_); }
 
+    bool HasVirtualTimestamp() const { return Vt_.has_value(); }
+    const TVirtualTimestamp& GetVirtualTimestamp() const { return *Vt_; }
+    TVirtualTimestamp&& ExtractVirtualTimestamp() { return std::move(*Vt_); }
+
     TScanQueryPart(TStatus&& status)
         : TStreamPartStatus(std::move(status))
     {}
@@ -2127,17 +2138,20 @@ public:
         , Diagnostics_(diagnostics)
     {}
 
-    TScanQueryPart(TStatus&& status, TResultSet&& resultSet, const std::optional<TQueryStats>& queryStats, const std::optional<std::string>& diagnostics)
+    TScanQueryPart(TStatus&& status, TResultSet&& resultSet, const std::optional<TQueryStats>& queryStats,
+        const std::optional<std::string>& diagnostics, std::optional<TVirtualTimestamp>&& vt)
         : TStreamPartStatus(std::move(status))
         , ResultSet_(std::move(resultSet))
         , QueryStats_(queryStats)
         , Diagnostics_(diagnostics)
+        , Vt_(std::move(vt))
     {}
 
 private:
     std::optional<TResultSet> ResultSet_;
     std::optional<TQueryStats> QueryStats_;
     std::optional<std::string> Diagnostics_;
+    std::optional<TVirtualTimestamp> Vt_;
 };
 
 using TAsyncScanQueryPart = NThreading::TFuture<TScanQueryPart>;

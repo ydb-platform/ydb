@@ -13,6 +13,10 @@ tasks.compileJava.configure {
 tasks.compileTestJava.configure {
     dependsOn({{ taskvar }})
 }
+{%-     if current_target.use_annotation_processor|select('startsWith', 'contrib/java/org/projectlombok/lombok')|length %}
+tasks.getByName("delombok").mustRunAfter({{ taskvar }})
+{%-     endif -%}
+
 {%-     if with_kotlin -%}
 {#-         Check main target codegen -#}
 {%-         if varprefix == "codegen" %}

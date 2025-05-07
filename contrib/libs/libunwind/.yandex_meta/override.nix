@@ -1,11 +1,11 @@
 pkgs: attrs: with pkgs; with attrs; rec {
-  version = "20.1.2";
+  version = "20.1.3";
 
   src = fetchFromGitHub {
     owner = "llvm";
     repo = "llvm-project";
     rev = "llvmorg-${version}";
-    hash = "sha256-t30Jh8ckp5qD6XDxtvnSaYiAWbEi6L6hAWh6tN8JjtY=";
+    hash = "sha256-sOl90iRBlD+DGJs72JrP9cJz6XmWs/5PL+uW4nt6LA0=";
   };
 
   patches = [];

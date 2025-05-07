@@ -223,9 +223,6 @@ struct nghttp3_stream {
       uint64_t unsent_bytes;
       /* outq_idx is an index into outq where next write is made. */
       size_t outq_idx;
-      /* outq_offset is write offset relative to the element at outq_idx
-         in outq. */
-      uint64_t outq_offset;
       /* ack_base is the number of bytes acknowledged by a remote
          endpoint where the first element in outq is positioned at. */
       uint64_t ack_base;

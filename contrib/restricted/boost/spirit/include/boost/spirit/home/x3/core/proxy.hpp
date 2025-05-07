@@ -1,5 +1,7 @@
 /*=============================================================================
     Copyright (c) 2001-2014 Joel de Guzman
+    Copyright (c) 2017 wanghan02
+    Copyright (c) 2024 Nana Sakisaka
 
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -7,6 +9,7 @@
 #if !defined(BOOST_SPIRIT_X3_PROXY_FEBRUARY_1_2013_0211PM)
 #define BOOST_SPIRIT_X3_PROXY_FEBRUARY_1_2013_0211PM
 
+#include <boost/spirit/home/x3/support/expectation.hpp>
 #include <boost/spirit/home/x3/core/parser.hpp>
 #include <boost/spirit/home/x3/core/detail/parse_into_container.hpp>
 #include <boost/spirit/home/x3/support/traits/attribute_category.hpp>
@@ -29,7 +32,7 @@ namespace boost { namespace spirit { namespace x3
           , Context const& context, RuleContext& rcontext, Attribute& attr, Category) const
         {
             this->subject.parse(first, last, context, rcontext, attr);
-            return true;
+            return !has_expectation_failure(context);
         }
 
         // Main entry point.

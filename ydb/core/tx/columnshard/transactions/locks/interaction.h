@@ -1,10 +1,11 @@
 #pragma once
 #include <ydb/core/formats/arrow/process_columns.h>
-#include <ydb/library/formats/arrow/replace_key.h>
+#include <ydb/core/formats/arrow/rows/view.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/accessor/validator.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/library/formats/arrow/replace_key.h>
 
 #include <util/generic/hash.h>
 
@@ -211,14 +212,14 @@ public:
 class TIntervalPoint {
 private:
     i32 IncludeState = 0;
-    std::optional<NArrow::TReplaceKey> PrimaryKey;
+    std::optional<NArrow::TSimpleRow> PrimaryKey;
 
-    TIntervalPoint(const NArrow::TReplaceKey& primaryKey, const int includeState)
+    TIntervalPoint(const NArrow::TSimpleRow& primaryKey, const int includeState)
         : IncludeState(includeState)
         , PrimaryKey(primaryKey) {
     }
 
-    TIntervalPoint(const std::shared_ptr<NArrow::TReplaceKey>& primaryKey, const int includeState)
+    TIntervalPoint(const std::shared_ptr<NArrow::TSimpleRow>& primaryKey, const int includeState)
         : IncludeState(includeState) {
         if (primaryKey) {
             PrimaryKey = *primaryKey;
@@ -226,7 +227,7 @@ private:
     }
 
 public:
-    static TIntervalPoint Equal(const NArrow::TReplaceKey& replaceKey) {
+    static TIntervalPoint Equal(const NArrow::TSimpleRow& replaceKey) {
         return TIntervalPoint(replaceKey, 0);
     }
     static TIntervalPoint From(const TPredicateContainer& container, const std::shared_ptr<arrow::Schema>& pkSchema);
@@ -253,10 +254,10 @@ public:
         } else if (PrimaryKey && !item.PrimaryKey) {
             return false;
         } else if (IncludeState == item.IncludeState) {
-            if (PrimaryKey->Size() != item.PrimaryKey->Size()) {
+            if (PrimaryKey->GetColumnsCount() != item.PrimaryKey->GetColumnsCount()) {
                 return false;
             }
-            return *PrimaryKey == *item.PrimaryKey;
+            return PrimaryKey->CompareNotNull(*item.PrimaryKey) == std::partial_ordering::equivalent;
         } else {
             return false;
         }
@@ -274,7 +275,7 @@ public:
         } else if (PrimaryKey && !point.PrimaryKey) {
             return 0 < point.IncludeState;
         } else {
-            const ui32 sizeMin = std::min<ui32>(PrimaryKey->Size(), point.PrimaryKey->Size());
+            const ui32 sizeMin = std::min<ui32>(PrimaryKey->GetColumnsCount(), point.PrimaryKey->GetColumnsCount());
             const std::partial_ordering compareResult = PrimaryKey->ComparePartNotNull(*point.PrimaryKey, sizeMin);
             if (compareResult == std::partial_ordering::less) {
                 return true;
@@ -282,9 +283,9 @@ public:
                 return false;
             } else {
                 AFL_VERIFY(compareResult == std::partial_ordering::equivalent);
-                if (PrimaryKey->Size() == point.PrimaryKey->Size()) {
+                if (PrimaryKey->GetColumnsCount() == point.PrimaryKey->GetColumnsCount()) {
                     return IncludeState < point.IncludeState;
-                } else if (PrimaryKey->Size() < point.PrimaryKey->Size()) {
+                } else if (PrimaryKey->GetColumnsCount() < point.PrimaryKey->GetColumnsCount()) {
                     if (IncludeState <= 1) {
                         return true;
                     } else {
@@ -356,7 +357,7 @@ public:
             if (it == IntervalsInfo.end()) {
                 return affectedTxIds;
             }
-            auto rKey = NArrow::TReplaceKey::FromBatch(writtenPrimaryKeys, writtenPrimaryKeys->schema(), i);
+            NArrow::TSimpleRow rKey(writtenPrimaryKeys, i);
             auto pkIntervalPoint = TIntervalPoint::Equal(rKey);
             while (it != IntervalsInfo.end() && it->first < pkIntervalPoint) {
                 ++it;
@@ -384,7 +385,7 @@ public:
                 return affectedTxIds;
             }
             while (i < writtenPrimaryKeys->num_rows()) {
-                auto rKey = NArrow::TReplaceKey::FromBatch(writtenPrimaryKeys, writtenPrimaryKeys->schema(), i);
+                NArrow::TSimpleRow rKey(writtenPrimaryKeys, i);
                 if (TIntervalPoint::Equal(rKey) < it->first) {
                     ++i;
                 } else {

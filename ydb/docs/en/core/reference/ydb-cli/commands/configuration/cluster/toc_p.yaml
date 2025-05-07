@@ -1,0 +1,7 @@
+items:
+  - name: Generate dynamic configuration
+    href: generate.md
+  - name: Fetch current dynamic configuration
+    href: fetch.md
+  - name: Replace dynamic configuration
+    href: replace.md

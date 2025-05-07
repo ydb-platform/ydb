@@ -164,11 +164,6 @@
             ]
         },
         {
-            "Name": "TKqlLookupTable",
-            "Base": "TKqlLookupTableBase",
-            "Match": {"Type": "Callable", "Name": "KqlLookupTable"}
-        },
-        {
             "Name": "TKqlLookupIndexBase",
             "Base": "TKqlLookupTableBase",
             "Match": {"Type": "CallableBase"},
@@ -460,16 +455,6 @@
             "Children": [
                 {"Index": 0, "Name": "Output", "Type": "TDqOutput"}
             ]
-        },
-        {
-            "Name": "TKqpCnMapShard",
-            "Base": "TKqpConnection",
-            "Match": {"Type": "Callable", "Name": "KqpCnMapShard"}
-        },
-        {
-            "Name": "TKqpCnShuffleShard",
-            "Base": "TDqConnection",
-            "Match": {"Type": "Callable", "Name": "KqpCnShuffleShard"}
         },
         {
             "Name": "TKqpCnStreamLookup",

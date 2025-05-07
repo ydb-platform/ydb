@@ -13,16 +13,16 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 template<bool Embedded>
-void NativeToUnboxed(const ui64 value, NUdf::TUnboxedValue& result)
+void NativeToUnboxed(const ui64 value, NUdf::TUnboxedValuePod& result)
 {
     result = NUdf::TUnboxedValuePod(value);
 }
 
 template<bool Embedded>
-void NativeToUnboxed(const std::string& value, NUdf::TUnboxedValue& result)
+void NativeToUnboxed(const std::string& value, NUdf::TUnboxedValuePod& result)
 {
     if constexpr (Embedded) {
-        result = NUdf::TUnboxedValue::Embedded(value);
+        result = NUdf::TUnboxedValuePod::Embedded(value);
     } else {
         result = NUdf::TUnboxedValuePod(NUdf::TStringValue(value));
     }

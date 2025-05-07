@@ -78,7 +78,8 @@ void TZeroLevelConstructor::DoSerializeToProto(NKikimrSchemeOp::TCompactionLevel
 }
 
 std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::NLCBuckets::IPortionsLevel> TZeroLevelConstructor::DoBuildLevel(
-    const std::shared_ptr<IPortionsLevel>& nextLevel, const ui32 indexLevel, const TLevelCounters& counters) const {
+    const std::shared_ptr<IPortionsLevel>& nextLevel, const ui32 indexLevel, const std::shared_ptr<TSimplePortionsGroupInfo>& /*portionsInfo*/,
+    const TLevelCounters& counters) const {
     return std::make_shared<TZeroLevelPortions>(indexLevel, nextLevel, counters, PortionsLiveDuration.value_or(TDuration::Max()),
         ExpectedBlobsSize.value_or((ui64)1 << 20), PortionsCountAvailable.value_or(10), PortionsCountLimit);
 }

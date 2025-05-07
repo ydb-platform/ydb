@@ -80,4 +80,9 @@ void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
     const std::shared_ptr<arrow::ChunkedArray>& original, arrow::MemoryPool* pool = arrow::default_memory_pool());
 [[nodiscard]] std::shared_ptr<arrow::Array> ReallocateArray(const std::shared_ptr<arrow::Array>& arr, arrow::MemoryPool* pool = arrow::default_memory_pool());
 
+std::vector<std::shared_ptr<arrow::Field>> BuildFakeFields(const std::vector<std::shared_ptr<arrow::Array>>& columns);
+
+std::shared_ptr<arrow::Schema> BuildFakeSchema(const std::vector<std::shared_ptr<arrow::Array>>& columns);
+
+
 }

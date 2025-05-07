@@ -155,7 +155,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             const ui32 deletionsCount = IIndexInfo::CalcDeletions(b, false);
             auto constructor = TWritePortionInfoWithBlobsConstructor::BuildByBlobs(slice.GroupChunksByBlobs(groups),
                 dataWithSecondary.GetSecondaryInplaceData(), pathId, resultFiltered->GetVersion(), resultFiltered->GetSnapshot(),
-                SaverContext.GetStoragesManager());
+                SaverContext.GetStoragesManager(), EPortionType::Compacted);
 
             NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultFiltered->GetIndexInfo().GetReplaceKey()));
             NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());

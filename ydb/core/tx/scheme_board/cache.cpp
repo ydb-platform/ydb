@@ -1623,6 +1623,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 Kind = TNavigate::KindBackupCollection;
                 FillInfo(Kind, BackupCollectionInfo, std::move(*pathDesc.MutableBackupCollectionDescription()));
                 break;
+            case NKikimrSchemeOp::EPathTypeSysView:
             case NKikimrSchemeOp::EPathTypeInvalid:
                 Y_DEBUG_ABORT("Invalid path type");
                 break;
@@ -1702,6 +1703,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     case NKikimrSchemeOp::EPathTypeBackupCollection:
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindBackupCollection);
                         break;
+                    case NKikimrSchemeOp::EPathTypeSysView:
                     case NKikimrSchemeOp::EPathTypeTableIndex:
                     case NKikimrSchemeOp::EPathTypeInvalid:
                         Y_DEBUG_ABORT("Invalid path type");

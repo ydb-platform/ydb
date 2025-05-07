@@ -183,6 +183,8 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableSnapshotIsolationRW = false;
     bool AllowMultiBroadcasts = false;
     bool DefaultEnableShuffleElimination = false;
+    bool FilterPushdownOverJoinOptionalSide = false;
+    THashSet<TString> YqlCoreOptimizerFlags;
 
     void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;

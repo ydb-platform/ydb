@@ -75,10 +75,10 @@ private:
         };
         Stuff->Client->RetryQuery(std::move(callback)).Subscribe([my = this->SelfId(), stuff = TSharedStuff::TWeakPtr(Stuff)](const auto& future) {
             if (const auto lock = stuff.lock()) {
-                if (const auto res = future.GetValueSync(); res.IsSuccess())
-                    lock->ActorSystem->Send(my, new NEtcd::TEvQueryResult(res.GetResultSets()));
+                if (const auto res = future.GetValue(); res.IsSuccess())
+                    lock->ActorSystem->Send(my, new TEvQueryResult(res.GetResultSets()));
                 else
-                    lock->ActorSystem->Send(my, new NEtcd::TEvQueryError(res.GetIssues()));
+                    lock->ActorSystem->Send(my, new TEvQueryError(res.GetIssues()));
             }
         });
 
@@ -182,10 +182,10 @@ private:
         };
         Stuff->Client->RetryQuery(std::move(callback)).Subscribe([my = this->SelfId(), stuff = TSharedStuff::TWeakPtr(Stuff)](const auto& future) {
             if (const auto lock = stuff.lock()) {
-                if (const auto res = future.GetValueSync(); res.IsSuccess())
-                    lock->ActorSystem->Send(my, new NEtcd::TEvQueryResult(res.GetResultSets()));
+                if (const auto res = future.GetValue(); res.IsSuccess())
+                    lock->ActorSystem->Send(my, new TEvQueryResult(res.GetResultSets()));
                 else
-                    lock->ActorSystem->Send(my, new NEtcd::TEvQueryError(res.GetIssues()));
+                    lock->ActorSystem->Send(my, new TEvQueryError(res.GetIssues()));
             }
         });
     }
@@ -599,10 +599,10 @@ private:
         NYdb::TParamsBuilder params;
         const auto& revName = AddParam("Revision", params, Revision);
 
-        sql << "$Leases = select 0L as `lease` union all select `id` as `lease` from `leases` where unwrap(interval('PT1S') * `ttl` + `updated`) > CurrentUtcDatetime(`id`);" << std::endl;
-        sql << "$Victims = select `key`, `value`, `created`, `modified`, `version`, `lease` from `current` as h left only join $Leases as l using(`lease`);" << std::endl;
+        sql << "$Leases = select `id` as `lease` from `leases` where unwrap(interval('PT1S') * `ttl` + `updated`) <= CurrentUtcDatetime(`id`);" << std::endl;
+        sql << "$Victims = select `key`, `value`, `created`, `modified`, `version`, `lease` from `current` view `lease` as h left semi join $Leases as l using(`lease`);" << std::endl;
 
-        sql << "insert into `content`" << std::endl;
+        sql << "insert into `history`" << std::endl;
         sql << "select `key`, `created`, " << revName << " as `modified`, 0L as `version`, `value`, `lease` from $Victims;" << std::endl;
         sql << "delete from `current` on select `key` from $Victims;" << std::endl;
 
@@ -612,14 +612,14 @@ private:
             sql << "select count(*) from $Victims;" << std::endl;
         }
 
-        sql << "delete from `leases` where `id` not in $Leases;" << std::endl;
+        sql << "delete from `leases` where `id` in $Leases;" << std::endl;
 
         Stuff->Client->ExecuteQuery(sql.str(), TTxControl::BeginTx().CommitTx(), params.Build()).Subscribe([my = this->SelfId(), stuff = TSharedStuff::TWeakPtr(Stuff)](const auto& future) {
             if (const auto lock = stuff.lock()) {
-                if (const auto res = future.GetValueSync(); res.IsSuccess())
-                    lock->ActorSystem->Send(my, new NEtcd::TEvQueryResult(res.GetResultSets()));
+                if (const auto res = future.GetValue(); res.IsSuccess())
+                    lock->ActorSystem->Send(my, new TEvQueryResult(res.GetResultSets()));
                 else
-                    lock->ActorSystem->Send(my, new NEtcd::TEvQueryError(res.GetIssues()));
+                    lock->ActorSystem->Send(my, new TEvQueryError(res.GetIssues()));
             }
         });
     }

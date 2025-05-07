@@ -577,6 +577,7 @@ public:
     void AddShardLock(const TLockInfo::TPtr& lock, TIntrusiveList<TTableLocks, TTableLocksReadListTag>& readTables);
     void AddWriteLock(const TLockInfo::TPtr& lock, TIntrusiveList<TTableLocks, TTableLocksWriteListTag>& writeTables);
 
+    TLockInfo::TPtr GetLock(ui64 lockTxId) const;
     TLockInfo::TPtr GetLock(ui64 lockTxId, const TRowVersion& at) const;
 
     ui64 LocksCount() const { return Locks.size(); }
@@ -916,14 +917,19 @@ public:
     ui64 LocksCount() const { return Locker.LocksCount(); }
     ui64 BrokenLocksCount() const { return Locker.BrokenLocksCount(); }
 
-    TLockInfo::TPtr GetRawLock(ui64 lockTxId, const TRowVersion& at = TRowVersion::Max()) const {
+    TLockInfo::TPtr GetRawLock(ui64 lockTxId) const {
+        return Locker.GetLock(lockTxId);
+    }
+
+    TLockInfo::TPtr GetRawLock(ui64 lockTxId, const TRowVersion& at) const {
         return Locker.GetLock(lockTxId, at);
     }
 
     bool IsBroken(ui64 lockTxId, const TRowVersion& at = TRowVersion::Max()) const {
-        TLockInfo::TPtr txLock = Locker.GetLock(lockTxId, at);
-        if (txLock)
+        TLockInfo::TPtr txLock = Locker.GetLock(lockTxId);
+        if (txLock) {
             return txLock->IsBroken(at);
+        }
         return true;
     }
 

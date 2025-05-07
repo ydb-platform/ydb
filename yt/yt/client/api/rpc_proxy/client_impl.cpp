@@ -1760,6 +1760,7 @@ TFuture<NApi::TMultiTablePartitions> TClient::PartitionTables(
     req->set_enable_cookies(options.EnableCookies);
 
     req->set_use_new_slicing_implementation_in_ordered_pool(options.UseNewSlicingImplementationInOrderedPool);
+    req->set_use_new_slicing_implementation_in_unordered_pool(options.UseNewSlicingImplementationInUnorderedPool);
 
     ToProto(req->mutable_transactional_options(), options);
 

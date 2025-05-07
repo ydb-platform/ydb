@@ -8,6 +8,7 @@ import string
 import logging
 import six
 import enum
+import re
 from functools import cmp_to_key
 from concurrent import futures
 
@@ -389,7 +390,9 @@ class BaseSuiteRunner(object):
         query_id = next(self.query_id)
         query_name = "query_%d" % query_id
         if self.plan:
-            query_plan = json.loads(self.explain(statement.text))
+            json_deser = self.explain(statement.text)
+            json_deser = re.sub(r'precompute_\d+_\d+', 'precompute', json_deser)
+            query_plan = json.loads(json_deser)
             if 'SimplifiedPlan' in query_plan:
                 del query_plan['SimplifiedPlan']
             if 'Plan' in query_plan:

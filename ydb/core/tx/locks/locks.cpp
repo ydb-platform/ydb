@@ -652,12 +652,18 @@ void TLockLocker::AddWriteLock(const TLockInfo::TPtr& lock, TIntrusiveList<TTabl
     }
 }
 
-TLockInfo::TPtr TLockLocker::GetLock(ui64 lockTxId, const TRowVersion& at) const {
+TLockInfo::TPtr TLockLocker::GetLock(ui64 lockTxId) const {
     auto it = Locks.find(lockTxId);
     if (it != Locks.end()) {
-        TLockInfo::TPtr lock = it->second;
-        if (!lock->IsBroken(at))
-            return lock;
+        return it->second;
+    }
+    return nullptr;
+}
+
+TLockInfo::TPtr TLockLocker::GetLock(ui64 lockTxId, const TRowVersion& at) const {
+    auto lock = GetLock(lockTxId);
+    if (lock && !lock->IsBroken(at)) {
+        return lock;
     }
     return nullptr;
 }

@@ -5,7 +5,6 @@ import pytest
 import random
 
 import logging
-import time
 import yatest.common
 
 from ydb.tests.olap.lib.utils import get_external_param
@@ -122,13 +121,6 @@ class TestLogScenario(object):
                                   f"(timestamp >= CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours + 1})) AND " +
                                   f"(timestamp <= CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours}))")
 
-    def check_insert(self, duration: int):
-        prev_count: int = self.get_row_count()
-        time.sleep(duration)
-        current_count: int = self.get_row_count()
-        logging.info(f'check insert: {current_count} {prev_count}')
-        assert current_count != prev_count
-
     @pytest.mark.parametrize('timestamp_deviation', [3 * 60, 365 * 24 * 60 * 2])  # [3 hours, 2 years]
     def test(self, timestamp_deviation: int):
         """As per https://github.com/ydb-platform/ydb/issues/13531"""
@@ -143,6 +135,8 @@ class TestLogScenario(object):
 
         assert self.get_row_count() != 0
 
+        prev_count: int = self.get_row_count()
+
         threads: list[TestThread] = []
         threads.append(TestThread(target=ydb_workload.bulk_upsert, args=[wait_time, 10, 500, True]))
         threads.append(TestThread(target=ydb_workload.insert, args=[wait_time, 10, 500, True]))
@@ -150,10 +144,13 @@ class TestLogScenario(object):
 
         for _ in range(10):
             threads.append(TestThread(target=self.aggregation_query, args=[datetime.timedelta(seconds=int(wait_time))]))
-        threads.append(TestThread(target=self.check_insert, args=[wait_time + 10]))
 
         for thread in threads:
             thread.start()
 
         for thread in threads:
             thread.join()
+
+        current_count: int = self.get_row_count()
+        logging.info(f'check insert: {current_count} {prev_count}')
+        assert current_count != prev_count

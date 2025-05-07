@@ -121,7 +121,7 @@ public:
         ObtainResources();
         Spent->Alter(true); // resume measurement
         
-        for (auto& loaded : msg->Loaded) {
+        for (auto& loaded : msg->Pages) {
             partPages.emplace(pageId, TPinnedPageRef(loaded.Page).GetData());
             PageRefs.emplace_back(std::move(loaded.Page));
         }

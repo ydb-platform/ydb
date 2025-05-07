@@ -26,14 +26,13 @@ namespace {
 TDuration MeasureGeneratorTime(IComputationGraph& graph, const IDataSampler& sampler)
 {
     const auto devnullStream = sampler.MakeStream(graph.GetHolderFactory());
-    const auto devnullStart = TInstant::Now();
+    const auto devnullStart = GetThreadCPUTime();
     {
         NUdf::TUnboxedValue columns[2];
         while (devnullStream->WideFetch(columns, 2) == NUdf::EFetchStatus::Ok) {
         }
     }
-    const auto devnullTime = TInstant::Now() - devnullStart;
-    return devnullTime;
+    return GetThreadCPUTimeDelta(devnullStart);
 }
 
 template<bool LLVM, bool Spilling>
@@ -90,11 +89,11 @@ TRunResult RunTestOverGraph(const TRunParams& params, const bool needsVerificati
         // Compute node implementation
 
         Cerr << "Compute graph result" << Endl;
-        const auto graphTimeStart = TInstant::Now();
+        const auto graphTimeStart = GetThreadCPUTime();
         size_t lineCount = CountWideStreamOutputs<2>(computeGraphPtr->GetValue());
         Cerr << lineCount << Endl;
 
-        return TInstant::Now() - graphTimeStart;
+        return GetThreadCPUTimeDelta(graphTimeStart);
     };
 
     auto measureRefTime = [&](auto& computeGraphPtr, IDataSampler& sampler) {
@@ -102,10 +101,10 @@ TRunResult RunTestOverGraph(const TRunParams& params, const bool needsVerificati
 
         Cerr << "Compute reference result" << Endl;
         auto referenceStream = sampler.MakeStream(computeGraphPtr->GetHolderFactory());
-        const auto cppTimeStart = TInstant::Now();
+        const auto cppTimeStart = GetThreadCPUTime();
         sampler.ComputeReferenceResult(*referenceStream);
 
-        return TInstant::Now() - cppTimeStart;
+        return GetThreadCPUTimeDelta(cppTimeStart);
     };
 
     auto graphRun1 = BuildGraph(setup, spillerFactory, *sampler);
@@ -177,14 +176,14 @@ void RunTestCombineLastSimple(const TRunParams& params, TTestResultCollector& pr
 
     Cerr << "======== " << __func__ << ", keys: " << params.NumKeys << ", llvm: " << LLVM << ", spilling: " << Spilling << Endl;
 
-    if (params.NumAttempts <= 1 && !params.MeasureReferenceMemory) {
-        finalResult = RunTestOverGraph<LLVM, Spilling>(params, true, false);
+    if (params.NumAttempts <= 1 && !params.MeasureReferenceMemory && !params.AlwaysSubprocess) {
+        finalResult = RunTestOverGraph<LLVM, Spilling>(params, params.EnableVerification, false);
     }
     else {
         for (int i = 1; i <= params.NumAttempts; ++i) {
             Cerr << "------ Run " << i << " of " << params.NumAttempts << Endl;
 
-            const bool needsVerification = (i == 1);
+            const bool needsVerification = (i == 1) && params.EnableVerification;
             TRunResult runResult = RunForked([&]() {
                 return RunTestOverGraph<LLVM, Spilling>(params, needsVerification, false);
             });

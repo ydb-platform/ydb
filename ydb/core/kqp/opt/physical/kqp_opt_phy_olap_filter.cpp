@@ -700,9 +700,11 @@ TFilterOpsLevels PredicatePushdown(const TExprBase& predicate, const TExprNode& 
     return YqlApplyPushdown(predicate, argument, ctx);
 }
 
-std::pair<TVector<TOLAPPredicateNode>, TVector<TOLAPPredicateNode>> SplitForPartialPushdown(const TOLAPPredicateNode& predicateTree)
+std::pair<TVector<TOLAPPredicateNode>, TVector<TOLAPPredicateNode>> SplitForPartialPushdown(const TOLAPPredicateNode& predicateTree, bool allowApply)
 {
-    if (predicateTree.CanBePushed) {
+    bool canBePushed =  (predicateTree.CanBePushed || predicateTree.CanBePushedApply && allowApply);
+
+    if (canBePushed) {
         return {{predicateTree}, {}};
     }
 
@@ -717,7 +719,8 @@ std::pair<TVector<TOLAPPredicateNode>, TVector<TOLAPPredicateNode>> SplitForPart
     TVector<TOLAPPredicateNode> pushable;
     TVector<TOLAPPredicateNode> remaining;
     for (const auto& predicate : predicateTree.Children) {
-        if (predicate.CanBePushed && !isFoundNotStrictOp) {
+        canBePushed =  (predicate.CanBePushed || predicate.CanBePushedApply && allowApply);
+        if (canBePushed && !isFoundNotStrictOp) {
             pushable.emplace_back(predicate);
         } else {
             if (!IsStrict(predicate.ExprNode)) {
@@ -768,7 +771,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     CollectPredicates(predicate, predicateTree, &lambdaArg, read.Process().Body(), false);
     YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
 
-    auto [pushable, remaining] = SplitForPartialPushdown(predicateTree);
+    auto [pushable, remaining] = SplitForPartialPushdown(predicateTree, false);
     TVector<TFilterOpsLevels> pushedPredicates;
     for (const auto& p: pushable) {
         pushedPredicates.emplace_back(PredicatePushdown(TExprBase(p.ExprNode), lambdaArg, ctx, node.Pos()));
@@ -795,10 +798,19 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             TOLAPPredicateNode predicateTree;
             predicateTree.ExprNode = predicate.Ptr();
             CollectPredicates(predicate, predicateTree, &lambdaArg, read.Process().Body(), true);
+
             YQL_ENSURE(predicateTree.IsValid(), "Collected OLAP predicates are invalid");
-            auto [pushableWithApply, remaining] = SplitForPartialPushdown(predicateTree);
-            for (const auto& p: pushableWithApply) {
-               pushedPredicates.emplace_back(PredicatePushdown(TExprBase(p.ExprNode), lambdaArg, ctx, node.Pos()));
+            auto [pushable, remaining] = SplitForPartialPushdown(predicateTree, true);
+            for (const auto& p: pushable) {
+                if (p.CanBePushed) {
+                    auto pred = PredicatePushdown(TExprBase(p.ExprNode), lambdaArg, ctx, node.Pos());
+                    pushedPredicates.emplace_back(pred);
+                }
+                else {
+                    auto expr = YqlApplyPushdown(TExprBase(p.ExprNode), lambdaArg, ctx);
+                    TFilterOpsLevels pred(expr);
+                    pushedPredicates.emplace_back(pred);
+                }
             }
             remainingAfterApply.insert(remainingAfterApply.end(), remaining.begin(), remaining.end());
         }

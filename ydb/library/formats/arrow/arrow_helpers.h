@@ -63,6 +63,7 @@ std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(
 std::vector<std::unique_ptr<arrow::ArrayBuilder>> MakeBuilders(
     const std::shared_ptr<arrow::Schema>& schema, size_t reserve = 0, const std::map<std::string, ui64>& sizeByColumn = {});
 std::vector<std::shared_ptr<arrow::Array>> Finish(std::vector<std::unique_ptr<arrow::ArrayBuilder>>&& builders);
+std::vector<std::shared_ptr<arrow::Array>> FinishBuilders(std::vector<std::unique_ptr<arrow::ArrayBuilder>>&& builders);
 std::shared_ptr<arrow::Array> FinishBuilder(std::unique_ptr<arrow::ArrayBuilder>&& builders);
 
 std::shared_ptr<arrow::UInt64Array> MakeUI64Array(const ui64 value, const i64 size);

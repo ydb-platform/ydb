@@ -232,6 +232,24 @@ public:
     }
 };
 
+class TEraseMetaFromChunksV0: public NYDBTest::ILocalDBModifier {
+public:
+    virtual void Apply(NTabletFlatExecutor::TTransactionContext& txc) const override {
+        using namespace NColumnShard;
+        NIceDb::TNiceDb db(txc.DB);
+        auto rowset = db.Table<Schema::IndexColumns>().Select();
+        UNIT_ASSERT(rowset.IsReady());
+
+        while (!rowset.EndOfSet()) {
+            NKikimrTxColumnShard::TIndexColumnMeta metaProto;
+            UNIT_ASSERT(metaProto.ParseFromString(rowset.GetValue<Schema::IndexColumns::Metadata>()));
+            metaProto.ClearPortionMeta();
+            db.Table<Schema::IndexColumns>().Key(rowset.GetKey()).Update<Schema::IndexColumns::Metadata>(metaProto.SerializeAsString());
+            UNIT_ASSERT(rowset.Next());
+        }
+    }
+};
+
 template <class TLocalDBModifier>
 class TPrepareLocalDBController: public NKikimr::NYDBTest::NColumnShard::TController {
 private:
@@ -358,6 +376,19 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         };
         TLocalNormalizerChecker checker;
         TestNormalizerImpl<TTablesCleaner>(checker);
+    }
+
+    Y_UNIT_TEST(ChunksV0MetaNormalizer) {
+        class TLocalNormalizerChecker: public TNormalizerChecker {
+        public:
+            virtual void CorrectConfigurationOnStart(NKikimrConfig::TColumnShardConfig& columnShardConfig) const override {
+                auto* repair = columnShardConfig.MutableRepairs()->Add();
+                repair->SetClassName("RestoreV0ChunksMeta");
+                repair->SetDescription("Restoring PortionMeta in IndexColumns");
+            }
+        };
+        TLocalNormalizerChecker checker;
+        TestNormalizerImpl<TEraseMetaFromChunksV0>(checker);
     }
 }
 

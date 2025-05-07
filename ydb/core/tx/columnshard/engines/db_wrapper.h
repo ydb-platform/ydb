@@ -55,7 +55,8 @@ public:
     virtual void WritePortion(const NOlap::TPortionInfo& portion) = 0;
     virtual void ErasePortion(const NOlap::TPortionInfo& portion) = 0;
     virtual bool LoadPortions(const std::optional<TInternalPathId> pathId,
-        const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) = 0;
+        const std::function<void(std::unique_ptr<NOlap::TPortionInfoConstructor>&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>&
+            callback) = 0;
 
     virtual void WriteIndex(const TPortionInfo& portion, const TIndexChunk& row) = 0;
     virtual void EraseIndex(const TPortionInfo& portion, const TIndexChunk& row) = 0;
@@ -85,7 +86,7 @@ public:
 
     void WritePortion(const NOlap::TPortionInfo& portion) override;
     void ErasePortion(const NOlap::TPortionInfo& portion) override;
-    bool LoadPortions(const std::optional<TInternalPathId> pathId, const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) override;
+    bool LoadPortions(const std::optional<TInternalPathId> pathId, const std::function<void(std::unique_ptr<NOlap::TPortionInfoConstructor>&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) override;
 
     void WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) override;
     void WriteColumns(const NOlap::TPortionInfo& portion, const NKikimrTxColumnShard::TIndexPortionAccessor& proto) override;

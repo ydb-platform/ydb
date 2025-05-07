@@ -24,6 +24,13 @@ def copy_clang_rt_profile(cmd, build_root, arch):
         if arg.startswith('-resource-dir='):
             resource_dir = arg[len('-resource-dir=') :]
 
+    if not profile_rt_lib:
+        print("Error: No clang runtime profile library found in command arguments, probably clang coverage is not enabled for this module", file=sys.stderr)
+        sys.exit(1)
+    if not resource_dir:
+        print("Error: No resource directory specified in command arguments", file=sys.stderr)
+        sys.exit(1)
+
     profile_rt_path = os.path.join(build_root, profile_rt_lib)
     profile_name = os.path.basename(profile_rt_path)
 

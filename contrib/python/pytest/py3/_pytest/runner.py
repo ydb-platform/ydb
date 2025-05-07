@@ -1,4 +1,5 @@
 """Basic collect and runtest protocol implementations."""
+
 import bdb
 import dataclasses
 import os
@@ -6,8 +7,10 @@ import sys
 from typing import Callable
 from typing import cast
 from typing import Dict
+from typing import final
 from typing import Generic
 from typing import List
+from typing import Literal
 from typing import Optional
 from typing import Tuple
 from typing import Type
@@ -23,10 +26,10 @@ from _pytest import timing
 from _pytest._code.code import ExceptionChainRepr
 from _pytest._code.code import ExceptionInfo
 from _pytest._code.code import TerminalRepr
-from _pytest.compat import final
 from _pytest.config.argparsing import Parser
 from _pytest.deprecated import check_ispytest
 from _pytest.nodes import Collector
+from _pytest.nodes import Directory
 from _pytest.nodes import Item
 from _pytest.nodes import Node
 from _pytest.outcomes import Exit
@@ -34,12 +37,11 @@ from _pytest.outcomes import OutcomeException
 from _pytest.outcomes import Skipped
 from _pytest.outcomes import TEST_OUTCOME
 
+
 if sys.version_info[:2] < (3, 11):
     from exceptiongroup import BaseExceptionGroup
 
 if TYPE_CHECKING:
-    from typing_extensions import Literal
-
     from _pytest.main import Session
     from _pytest.terminal import TerminalReporter
 
@@ -93,8 +95,7 @@ def pytest_terminal_summary(terminalreporter: "TerminalReporter") -> None:
         if verbose < 2 and rep.duration < durations_min:
             tr.write_line("")
             tr.write_line(
-                "(%s durations < %gs hidden.  Use -vv to show these durations.)"
-                % (len(dlist) - i, durations_min)
+                f"({len(dlist) - i} durations < {durations_min:g}s hidden.  Use -vv to show these durations.)"
             )
             break
         tr.write_line(f"{rep.duration:02.2f}s {rep.when:<8} {rep.nodeid}")
@@ -184,7 +185,7 @@ def pytest_runtest_teardown(item: Item, nextitem: Optional[Item]) -> None:
 
 
 def _update_current_test_var(
-    item: Item, when: Optional["Literal['setup', 'call', 'teardown']"]
+    item: Item, when: Optional[Literal["setup", "call", "teardown"]]
 ) -> None:
     """Update :envvar:`PYTEST_CURRENT_TEST` to reflect the current item and stage.
 
@@ -217,7 +218,7 @@ def pytest_report_teststatus(report: BaseReport) -> Optional[Tuple[str, str, str
 
 
 def call_and_report(
-    item: Item, when: "Literal['setup', 'call', 'teardown']", log: bool = True, **kwds
+    item: Item, when: Literal["setup", "call", "teardown"], log: bool = True, **kwds
 ) -> TestReport:
     call = call_runtest_hook(item, when, **kwds)
     hook = item.ihook
@@ -245,7 +246,7 @@ def check_interactive_exception(call: "CallInfo[object]", report: BaseReport) ->
 
 
 def call_runtest_hook(
-    item: Item, when: "Literal['setup', 'call', 'teardown']", **kwds
+    item: Item, when: Literal["setup", "call", "teardown"], **kwds
 ) -> "CallInfo[None]":
     if when == "setup":
         ihook: Callable[..., None] = item.ihook.pytest_runtest_setup
@@ -281,7 +282,7 @@ class CallInfo(Generic[TResult]):
     #: The call duration, in seconds.
     duration: float
     #: The context of invocation: "collect", "setup", "call" or "teardown".
-    when: "Literal['collect', 'setup', 'call', 'teardown']"
+    when: Literal["collect", "setup", "call", "teardown"]
 
     def __init__(
         self,
@@ -290,7 +291,7 @@ class CallInfo(Generic[TResult]):
         start: float,
         stop: float,
         duration: float,
-        when: "Literal['collect', 'setup', 'call', 'teardown']",
+        when: Literal["collect", "setup", "call", "teardown"],
         *,
         _ispytest: bool = False,
     ) -> None:
@@ -318,8 +319,8 @@ class CallInfo(Generic[TResult]):
     @classmethod
     def from_call(
         cls,
-        func: "Callable[[], TResult]",
-        when: "Literal['collect', 'setup', 'call', 'teardown']",
+        func: Callable[[], TResult],
+        when: Literal["collect", "setup", "call", "teardown"],
         reraise: Optional[
             Union[Type[BaseException], Tuple[Type[BaseException], ...]]
         ] = None,
@@ -369,7 +370,23 @@ def pytest_runtest_makereport(item: Item, call: CallInfo[None]) -> TestReport:
 
 
 def pytest_make_collect_report(collector: Collector) -> CollectReport:
-    call = CallInfo.from_call(lambda: list(collector.collect()), "collect")
+    def collect() -> List[Union[Item, Collector]]:
+        # Before collecting, if this is a Directory, load the conftests.
+        # If a conftest import fails to load, it is considered a collection
+        # error of the Directory collector. This is why it's done inside of the
+        # CallInfo wrapper.
+        #
+        # Note: initial conftests are loaded early, not here.
+        if isinstance(collector, Directory):
+            collector.config.pluginmanager._loadconftestmodules(
+                collector.path,
+                collector.config.getoption("importmode"),
+                rootpath=collector.config.rootpath,
+            )
+
+        return list(collector.collect())
+
+    call = CallInfo.from_call(collect, "collect")
     longrepr: Union[None, Tuple[str, int, str], str, TerminalRepr] = None
     if not call.excinfo:
         outcome: Literal["passed", "skipped", "failed"] = "passed"

@@ -143,41 +143,41 @@ blob_storage_config: # configuration of static blobstorage group.
       rings:                       # in mirror-3-dc must have exactly 3 rings: one in every availability zone.
       - fail_domains:
         - vdisk_locations:
-          - node_id: "ydb-node-zone-a-1.local"
+          - node_id: 1
             pdisk_category: SSD
             path: /dev/disk/by-partlabel/kikimr_nvme_01
         - vdisk_locations:
-          - node_id: "ydb-node-zone-a-2.local"
+          - node_id: 2
             pdisk_category: SSD
             path: /dev/disk/by-partlabel/kikimr_nvme_01
         - vdisk_locations:
-          - node_id: "ydb-node-zone-a-3.local"
-            pdisk_category: SSD
-            path: /dev/disk/by-partlabel/kikimr_nvme_01
-      - fail_domains:
-        - vdisk_locations:
-          - node_id: "ydb-node-zone-b-1.local"
-            pdisk_category: SSD
-            path: /dev/disk/by-partlabel/kikimr_nvme_01
-        - vdisk_locations:
-          - node_id: "ydb-node-zone-b-2.local"
-            pdisk_category: SSD
-            path: /dev/disk/by-partlabel/kikimr_nvme_01
-        - vdisk_locations:
-          - node_id: "ydb-node-zone-b-3.local"
+          - node_id: 3
             pdisk_category: SSD
             path: /dev/disk/by-partlabel/kikimr_nvme_01
       - fail_domains:
         - vdisk_locations:
-          - node_id: "ydb-node-zone-c-1.local"
+          - node_id: 4
             pdisk_category: SSD
             path: /dev/disk/by-partlabel/kikimr_nvme_01
         - vdisk_locations:
-          - node_id: "ydb-node-zone-c-2.local"
+          - node_id: 5
             pdisk_category: SSD
             path: /dev/disk/by-partlabel/kikimr_nvme_01
         - vdisk_locations:
-          - node_id: "ydb-node-zone-c-3.local"
+          - node_id: 6
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/kikimr_nvme_01
+      - fail_domains:
+        - vdisk_locations:
+          - node_id: 7
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/kikimr_nvme_01
+        - vdisk_locations:
+          - node_id: 8
+            pdisk_category: SSD
+            path: /dev/disk/by-partlabel/kikimr_nvme_01
+        - vdisk_locations:
+          - node_id: 9
             pdisk_category: SSD
             path: /dev/disk/by-partlabel/kikimr_nvme_01
 channel_profile_config:

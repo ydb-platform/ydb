@@ -51,6 +51,7 @@ PY_SRCS(
     _markupbase.py
     _osx_support.py
     _py_abc.py
+    _pydatetime.py
     _pydecimal.py
     _pyio.py
     _pylong.py

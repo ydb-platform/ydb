@@ -201,18 +201,18 @@ TString ToString(const TLogicalType& logicalType)
 {
     switch (logicalType.GetMetatype()) {
         case ELogicalMetatype::Simple:
-            return CamelCaseToUnderscoreCase(ToString(logicalType.AsSimpleTypeRef().GetElement()));
+            return ToString(logicalType.AsSimpleTypeRef().GetElement());
         case ELogicalMetatype::Decimal:
-            return Format("decimal(%v,%v)",
+            return Format("Decimal(%v,%v)",
                 logicalType.AsDecimalTypeRef().GetPrecision(),
                 logicalType.AsDecimalTypeRef().GetScale());
         case ELogicalMetatype::Optional:
-            return Format("optional<%v>", *logicalType.AsOptionalTypeRef().GetElement());
+            return Format("Optional<%v>", *logicalType.AsOptionalTypeRef().GetElement());
         case ELogicalMetatype::List:
-            return Format("list<%v>", *logicalType.AsListTypeRef().GetElement());
+            return Format("List<%v>", *logicalType.AsListTypeRef().GetElement());
         case ELogicalMetatype::Struct: {
             TStringStream out;
-            out << "struct<";
+            out << "Struct<";
             bool first = true;
             for (const auto& structItem : logicalType.AsStructTypeRef().GetFields()) {
                 if (first) {
@@ -227,7 +227,7 @@ TString ToString(const TLogicalType& logicalType)
         }
         case ELogicalMetatype::Tuple: {
             TStringStream out;
-            out << "tuple<";
+            out << "Tuple<";
             bool first = true;
             for (const auto& element : logicalType.AsTupleTypeRef().GetElements()) {
                 if (first) {
@@ -242,7 +242,7 @@ TString ToString(const TLogicalType& logicalType)
         }
         case ELogicalMetatype::VariantTuple: {
             TStringStream out;
-            out << "variant<";
+            out << "Variant<";
             bool first = true;
             for (const auto& element : logicalType.AsVariantTupleTypeRef().GetElements()) {
                 if (first) {
@@ -257,7 +257,7 @@ TString ToString(const TLogicalType& logicalType)
         }
         case ELogicalMetatype::VariantStruct: {
             TStringStream out;
-            out << "named_variant<";
+            out << "NamedVariant<";
             bool first = true;
             for (const auto& field : logicalType.AsVariantStructTypeRef().GetFields()) {
                 if (first) {
@@ -274,13 +274,13 @@ TString ToString(const TLogicalType& logicalType)
         case ELogicalMetatype::Dict: {
             const auto& dictType = logicalType.AsDictTypeRef();
             TStringStream out;
-            out << "dict<" << ToString(*dictType.GetKey()) << ';' << ToString(*dictType.GetValue()) << '>';
+            out << "Dict<" << ToString(*dictType.GetKey()) << ';' << ToString(*dictType.GetValue()) << '>';
             return out.Str();
         }
         case ELogicalMetatype::Tagged: {
             const auto& taggedType = logicalType.AsTaggedTypeRef();
             TStringStream out;
-            out << "tagged<\"" << ToString(taggedType.GetTag()) << "\";" << ToString(*taggedType.GetElement()) << '>';
+            out << "Tagged<\"" << ToString(taggedType.GetTag()) << "\";" << ToString(*taggedType.GetElement()) << '>';
             return out.Str();
         }
     }

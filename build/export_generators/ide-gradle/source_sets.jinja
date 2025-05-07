@@ -1,46 +1,39 @@
 {#- empty string #}
 sourceSets {
-{%- set target_jar_source_set = target.jar_source_set|reject('startsWith', 'src/main/java:')|unique -%}
-{%- set target_jar_resource_set = target.jar_resource_set|reject('startsWith', 'src/main/resources:')|unique -%}
-{%- if proto_template or target_jar_source_set|length or target_jar_resource_set|length %}
     main {
-        {#-
-            Default by Gradle:
+        java.srcDir("src/main/java")
+        resources.srcDir("src/main/resources")
 
-            java.srcDir("src/main/java")
-            resources.srcDir("src/main/resources")
-
-        #}
-{%-     if target_jar_source_set|length -%}
-{%-         for source_set in target_jar_source_set -%}
-{%-             set srcdir_glob = split(source_set, ':') -%}
-{%-             set srcdir = srcdir_glob[0] %}
+{%- set target_jar_source_set = target.jar_source_set|reject('startsWith', 'src/main/java:')|unique -%}
+{%- if target_jar_source_set|length -%}
+{%-     for source_set in target_jar_source_set -%}
+{%-         set srcdir_glob = split(source_set, ':') -%}
+{%-         set srcdir = srcdir_glob[0] %}
         java.srcDir({{ PatchRoots(srcdir) }})
-{%-         endfor -%}
-{%-     endif %}
-{%-     if target_jar_resource_set|length -%}
-{%-         for resource_set in target_jar_resource_set -%}
-{%-             set resdir_glob = split(resource_set, ':') -%}
-{%-             set resdir = resdir_glob[0] %}
-        resources.srcDir({{ PatchRoots(resdir) }})
-{%-         endfor -%}
-{%-     endif -%}
-{%-     if proto_template %}
-        java.srcDir("$buildDir/generated/source/proto/main/java")
-{%-         if target.proto_grpc %}
-        java.srcDir("$buildDir/generated/source/proto/main/grpc")
-{%-         endif %}
-{%-     endif %}
-    }
+{%-     endfor -%}
 {%- endif %}
+
+{%- set target_jar_resource_set = target.jar_resource_set|reject('startsWith', 'src/main/resources:')|unique -%}
+{%- if target_jar_resource_set|length -%}
+{%-     for resource_set in target_jar_resource_set -%}
+{%-         set resdir_glob = split(resource_set, ':') -%}
+{%-         set resdir = resdir_glob[0] %}
+        resources.srcDir({{ PatchRoots(resdir) }})
+{%-     endfor -%}
+{%- endif -%}
+
+{%- if proto_template %}
+        java.srcDir("$buildDir/generated/source/proto/main/java")
+{%-     if target.proto_grpc %}
+        java.srcDir("$buildDir/generated/source/proto/main/grpc")
+{%-     endif %}
+{%- endif %}
+    }
+
     test {
-        {#-
-            Default by Gradle:
+        java.srcDir("src/test/java")
+        resources.srcDir("src/test/resources")
 
-            java.srcDir("src/test/java")
-            resources.srcDir("src/test/resources")
-
-        #}
 {%- if proto_template %}
         java.srcDir("$buildDir/generated/source/proto/test/java")
 {%-     if target.proto_grpc %}
@@ -82,5 +75,9 @@ sourceSets {
 }
 
 tasks.withType<Jar>() {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+tasks.withType<Copy>() {
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
 }

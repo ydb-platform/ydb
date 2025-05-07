@@ -38,7 +38,7 @@
 {%-             else %}
     {{ apiFunc }}({{ classpath }})
 {%-             endif -%}
-{%-             if library.excludes.consumer|length -%} {
+{%-             if library.excludes.consumer|length and not build_contribs -%} {
 {%-                 for exclude in library.excludes.consumer if exclude.classpath -%}
 {%-                     set classpath = exclude.classpath|replace('"','') -%}
 {%-                     set classpath_parts = split(classpath, ':') -%}

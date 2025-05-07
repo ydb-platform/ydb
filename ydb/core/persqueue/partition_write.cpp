@@ -1370,51 +1370,51 @@ std::pair<TKey, ui32> TPartition::GetNewFastWriteKey(bool headCleared)
     return GetNewFastWriteKeyImpl(headCleared, headSize);
 }
 
-std::pair<TKey, ui32> TPartition::GetNewWriteKeyImpl(bool headCleared, bool needCompaction, ui32 headSize)
-{
-    TKey key = BlobEncoder.KeyForWrite(TKeyPrefix::TypeData, Partition, needCompaction);
+//std::pair<TKey, ui32> TPartition::GetNewWriteKeyImpl(bool headCleared, bool needCompaction, ui32 headSize)
+//{
+//    TKey key = BlobEncoder.KeyForWrite(TKeyPrefix::TypeData, Partition, needCompaction);
+//
+//    if (BlobEncoder.NewHead.PackedSize > 0) {
+//        BlobEncoder.DataKeysHead[TotalLevels - 1].AddKey(key, BlobEncoder.NewHead.PackedSize);
+//    }
+//    Y_ABORT_UNLESS(headSize + BlobEncoder.NewHead.PackedSize <= 3 * MaxSizeCheck);
+//
+//    std::pair<TKey, ui32> res;
+//
+//    if (needCompaction) { //compact all
+//        for (ui32 i = 0; i < TotalLevels; ++i) {
+//            BlobEncoder.DataKeysHead[i].Clear();
+//        }
+//        if (!headCleared) { //compacted blob must contain both head and NewHead
+//            key = TKey::ForBody(TKeyPrefix::TypeData, Partition, BlobEncoder.Head.Offset, BlobEncoder.Head.PartNo, BlobEncoder.NewHead.GetCount() + BlobEncoder.Head.GetCount(),
+//                                BlobEncoder.Head.GetInternalPartsCount() +  BlobEncoder.NewHead.GetInternalPartsCount());
+//        } //otherwise KV blob is not from head (!key.HasSuffix()) and contains only new data from NewHead
+//        res = std::make_pair(key, headSize + BlobEncoder.NewHead.PackedSize);
+//    } else {
+//        res = BlobEncoder.Compact(key, headCleared);
+//        Y_ABORT_UNLESS(res.first.HasSuffix());//may compact some KV blobs from head, but new KV blob is from head too
+//        Y_ABORT_UNLESS(res.second >= BlobEncoder.NewHead.PackedSize); //at least new data must be writed
+//    }
+//    Y_ABORT_UNLESS(res.second <= MaxBlobSize);
+//    return res;
+//}
 
-    if (BlobEncoder.NewHead.PackedSize > 0) {
-        BlobEncoder.DataKeysHead[TotalLevels - 1].AddKey(key, BlobEncoder.NewHead.PackedSize);
-    }
-    Y_ABORT_UNLESS(headSize + BlobEncoder.NewHead.PackedSize <= 3 * MaxSizeCheck);
-
-    std::pair<TKey, ui32> res;
-
-    if (needCompaction) { //compact all
-        for (ui32 i = 0; i < TotalLevels; ++i) {
-            BlobEncoder.DataKeysHead[i].Clear();
-        }
-        if (!headCleared) { //compacted blob must contain both head and NewHead
-            key = TKey::ForBody(TKeyPrefix::TypeData, Partition, BlobEncoder.Head.Offset, BlobEncoder.Head.PartNo, BlobEncoder.NewHead.GetCount() + BlobEncoder.Head.GetCount(),
-                                BlobEncoder.Head.GetInternalPartsCount() +  BlobEncoder.NewHead.GetInternalPartsCount());
-        } //otherwise KV blob is not from head (!key.HasSuffix()) and contains only new data from NewHead
-        res = std::make_pair(key, headSize + BlobEncoder.NewHead.PackedSize);
-    } else {
-        res = BlobEncoder.Compact(key, headCleared);
-        Y_ABORT_UNLESS(res.first.HasSuffix());//may compact some KV blobs from head, but new KV blob is from head too
-        Y_ABORT_UNLESS(res.second >= BlobEncoder.NewHead.PackedSize); //at least new data must be writed
-    }
-    Y_ABORT_UNLESS(res.second <= MaxBlobSize);
-    return res;
-}
-
-std::pair<TKey, ui32> TPartition::GetNewWriteKey(bool headCleared) {
-    bool needCompaction = false;
-    ui32 headSize = headCleared ? 0 : BlobEncoder.Head.PackedSize;
-    if (headSize + BlobEncoder.NewHead.PackedSize > 0 &&
-        headSize + BlobEncoder.NewHead.PackedSize >= Min<ui32>(MaxBlobSize, Config.GetPartitionConfig().GetLowWatermark())) {
-        needCompaction = true;
-    }
-
-    if (BlobEncoder.PartitionedBlob.IsInited()) { //has active partitioned blob - compaction is forbiden, head and newHead will be compacted when this partitioned blob is finished
-        needCompaction = false;
-    }
-
-    Y_ABORT_UNLESS(BlobEncoder.NewHead.PackedSize > 0 || needCompaction); //smthing must be here
-
-    return GetNewWriteKeyImpl(headCleared, needCompaction, headSize);
-}
+//std::pair<TKey, ui32> TPartition::GetNewWriteKey(bool headCleared) {
+//    bool needCompaction = false;
+//    ui32 headSize = headCleared ? 0 : BlobEncoder.Head.PackedSize;
+//    if (headSize + BlobEncoder.NewHead.PackedSize > 0 &&
+//        headSize + BlobEncoder.NewHead.PackedSize >= Min<ui32>(MaxBlobSize, Config.GetPartitionConfig().GetLowWatermark())) {
+//        needCompaction = true;
+//    }
+//
+//    if (BlobEncoder.PartitionedBlob.IsInited()) { //has active partitioned blob - compaction is forbiden, head and newHead will be compacted when this partitioned blob is finished
+//        needCompaction = false;
+//    }
+//
+//    Y_ABORT_UNLESS(BlobEncoder.NewHead.PackedSize > 0 || needCompaction); //smthing must be here
+//
+//    return GetNewWriteKeyImpl(headCleared, needCompaction, headSize);
+//}
 
 void TPartition::AddNewFastWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
 {
@@ -1446,7 +1446,7 @@ void TPartition::AddNewFastWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TE
 }
 
 void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::AddNewWriteBlob");
+    PQ_LOG_T("TPartition::AddNewWriteBlob.");
 
     const auto& key = res.first;
 

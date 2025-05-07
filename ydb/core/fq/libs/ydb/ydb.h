@@ -159,6 +159,11 @@ TSettings GetClientSettings(const NConfig::TYdbStorageConfig& config,
         auto cert = StripString(TFileInput(config.GetCertificateFile()).ReadAll());
         settings.SslCredentials(NYdb::TSslCredentials(true, cert));
     }
+    if constexpr (std::is_same_v<TSettings, NYdb::NTable::TClientSettings>) {
+        auto maxActiveSessions = config.GetTableClientMaxActiveSessions();
+        settings.SessionPoolSettings(NYdb::NTable::TSessionPoolSettings()
+            .MaxActiveSessions(maxActiveSessions ? maxActiveSessions : 50));    // 50 - default in TSessionPoolSettings
+    }
 
     return settings;
 }

@@ -358,6 +358,28 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
         columnToProto(column, columnIt, columnProto);
     }
 
+    if (streamLookup.HasIndex()) {
+        settings->MutableIndex()->CopyFrom(streamLookup.GetIndex());
+
+        // stageInfo.Meta contains only main table info, so we need to find index table info by id
+        const auto& indexInfo = stageInfo.Meta.Tx.Body->GetTableConstInfoById()->Map.at(MakeTableId(streamLookup.GetIndex()));
+        for (const auto& indexKeyColumn : streamLookup.GetIndexKeyColumns()) {
+            auto columnIt = indexInfo->Columns.find(indexKeyColumn);
+            YQL_ENSURE(columnIt != indexInfo->Columns.end(), "Unknown column: " << indexKeyColumn);
+
+            auto* columnProto = settings->AddIndexKeyColumns();
+            columnToProto(indexKeyColumn, columnIt, columnProto);
+        }
+
+        for (const auto& indexColumn : streamLookup.GetIndexColumns()) {
+            auto columnIt = indexInfo->Columns.find(indexColumn);
+            YQL_ENSURE(columnIt != indexInfo->Columns.end(), "Unknown column: " << indexColumn);
+
+            auto* columnProto = settings->AddIndexColumns();
+            columnToProto(indexColumn, columnIt, columnProto);
+        }
+    }
+
     settings->SetLookupStrategy(streamLookup.GetLookupStrategy());
     settings->SetKeepRowsOrder(streamLookup.GetKeepRowsOrder());
     settings->SetAllowNullKeysPrefixSize(streamLookup.GetAllowNullKeysPrefixSize());

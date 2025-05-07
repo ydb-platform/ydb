@@ -199,6 +199,10 @@ TPreparedQueryHolder::TPreparedQueryHolder(NKikimrKqp::TPreparedQuery* proto,
             for (const auto& input : stage.GetInputs()) {
                 if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup) {
                     tablesSet.insert(input.GetStreamLookup().GetTable().GetPath());
+
+                    if (input.GetStreamLookup().HasIndex()) {
+                        tablesSet.insert(input.GetStreamLookup().GetIndex().GetPath());
+                    }
                 }
 
                 if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kSequencer) {
@@ -286,6 +290,13 @@ void TPreparedQueryHolder::FillTables(const google::protobuf::RepeatedPtrField< 
                 auto& info = GetInfo(MakeTableId(input.GetStreamLookup().GetTable()));
                 for (auto& column : input.GetStreamLookup().GetColumns()) {
                     info->AddColumn(column);
+                }
+
+                if (input.GetStreamLookup().HasIndex()) {
+                    auto& indexInfo = GetInfo(MakeTableId(input.GetStreamLookup().GetIndex()));
+                    for (auto& column : input.GetStreamLookup().GetIndexColumns()) {
+                        indexInfo->AddColumn(column);
+                    }
                 }
             }
 

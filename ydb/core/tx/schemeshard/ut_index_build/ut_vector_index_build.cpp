@@ -118,7 +118,8 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             meteringMessages << event->Get()->MeteringJson;
         });
 
-        TestBuildVectorIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", "embedding");
+        const TString userSID = "user@builtin";
+        TestBuildVectorIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", "embedding", userSID);
         ui64 buildIndexId = txId;
 
         auto listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB");
@@ -173,7 +174,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         )");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
-        TestBuildVectorIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index2", "embedding");
+        TestBuildVectorIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index2", "embedding", userSID);
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 
         // CommonDB
@@ -216,7 +217,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             billRecords.push_back(event->Get()->MeteringJson);
         });
 
-        TestBuildVectorIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/CommonDB", "/MyRoot/CommonDB/Table", "index1", "embedding");
+        TestBuildVectorIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/CommonDB", "/MyRoot/CommonDB/Table", "index1", "embedding", userSID);
         buildIndexId = txId;
 
         listing = TestListBuildIndex(runtime, tenantSchemeShard, "/MyRoot/CommonDB");
@@ -287,11 +288,12 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             return modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexBuild;
         });
 
+        const TString userSID = "user@builtin";
         const ui64 buildIndexTx = ++txId;
         TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", TBuildIndexConfig{
             "by_embedding", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, { "embedding" }, { "covered" },
             { globalIndexSettings, globalIndexSettings }, std::move(kmeansTreeSettings)
-        });
+        }, userSID);
 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
 

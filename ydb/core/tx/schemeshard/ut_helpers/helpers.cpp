@@ -1805,9 +1805,12 @@ namespace NSchemeShardUT_Private {
         return std::make_unique<TEvIndexBuilder::TEvCreateRequest>(id, dbName, std::move(settings));
     }
 
-    void AsyncBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TBuildIndexConfig &cfg) {
+    void AsyncBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName, const TString &src, const TBuildIndexConfig &cfg, const TString &userSID) {
         auto sender = runtime.AllocateEdgeActor();
         auto request = CreateBuildIndexRequest(id, dbName, src, cfg);
+        if (userSID) {
+            request->Record.SetUserSID(userSID);
+        }
 
         ForwardToTablet(runtime, schemeShard, sender, request);
     }
@@ -1820,19 +1823,19 @@ namespace NSchemeShardUT_Private {
     }
 
     void AsyncBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
-                       const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns)
+                       const TString &src, const TString &name, TVector<TString> columns, TVector<TString> dataColumns, const TString &userSID)
     {
         AsyncBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
             name, NKikimrSchemeOp::EIndexTypeGlobal, columns, dataColumns
-        });
+        }, userSID);
     }
 
     void AsyncBuildVectorIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
-                              const TString &src, const TString &name, TString column, TVector<TString> dataColumns)
+                              const TString &src, const TString &name, TString column, TVector<TString> dataColumns, const TString &userSID)
     {
         AsyncBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
             name, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {column}, std::move(dataColumns)
-        });
+        }, userSID);
     }
 
     void TestBuildColumn(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
@@ -1844,7 +1847,7 @@ namespace NSchemeShardUT_Private {
         TEvIndexBuilder::TEvCreateResponse* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
         UNIT_ASSERT(event);
 
-        Cerr << "BUILDINDEX RESPONSE CREATE: " << event->ToString() << Endl;
+        Cerr << "BUILDCOLUMN RESPONSE CREATE: " << event->ToString() << Endl;
         UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), expectedStatus,
                             "status mismatch"
                                 << " got " << Ydb::StatusIds::StatusCode_Name(event->Record.GetStatus())
@@ -1853,9 +1856,9 @@ namespace NSchemeShardUT_Private {
     }
 
     void TestBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
-                       const TString &src, const TBuildIndexConfig& cfg, Ydb::StatusIds::StatusCode expectedStatus)
+                       const TString &src, const TBuildIndexConfig& cfg, const TString &userSID, Ydb::StatusIds::StatusCode expectedStatus)
     {
-        AsyncBuildIndex(runtime, id, schemeShard, dbName, src, cfg);
+        AsyncBuildIndex(runtime, id, schemeShard, dbName, src, cfg, userSID);
 
         TAutoPtr<IEventHandle> handle;
         TEvIndexBuilder::TEvCreateResponse* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
@@ -1870,21 +1873,21 @@ namespace NSchemeShardUT_Private {
     }
 
     void TestBuildIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
-                       const TString &src, const TString &name, TVector<TString> columns,
+                       const TString &src, const TString &name, TVector<TString> columns, const TString &userSID,
                        Ydb::StatusIds::StatusCode expectedStatus)
     {
         TestBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
             name, NKikimrSchemeOp::EIndexTypeGlobal, columns, {}
-        }, expectedStatus);
+        }, userSID, expectedStatus);
     }
 
     void TestBuildVectorIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
-                              const TString &src, const TString &name, TString column,
+                              const TString &src, const TString &name, TString column, const TString &userSID,
                               Ydb::StatusIds::StatusCode expectedStatus)
     {
         TestBuildIndex(runtime, id, schemeShard, dbName, src, TBuildIndexConfig{
             name, NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {column}, {}
-        }, expectedStatus);
+        }, userSID, expectedStatus);
     }
 
     TEvIndexBuilder::TEvCancelRequest* CreateCancelBuildIndexRequest(

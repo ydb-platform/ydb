@@ -145,7 +145,7 @@ private:
             return NextMessageOffset;
         }
 
-        const TVector<TSchemaColumn> GetColumns() const override {
+        const TVector<TSchemaColumn>& GetColumns() const override {
             return Columns;
         }
 

@@ -30,6 +30,7 @@ target_link_libraries(ydb-services-ydb-backup_ut PUBLIC
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-services-ydb
+  contrib-libs-fmt
   core-testlib-default
   ydb-core-util
   core-wrappers-ut_helpers
@@ -61,6 +62,8 @@ target_link_options(ydb-services-ydb-backup_ut PRIVATE
 )
 
 target_sources(ydb-services-ydb-backup_ut PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/services/ydb/backup_ut/backup_path_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ydb/backup_ut/encrypted_backup_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/services/ydb/backup_ut/ydb_backup_ut.cpp
 )
 

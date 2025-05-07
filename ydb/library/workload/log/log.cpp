@@ -428,18 +428,17 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
                 .DefaultValue(RowsCnt).StoreResult(&RowsCnt);
             opts.AddLongOption("timestamp_deviation", "Standard deviation. For each timestamp, a random variable with a specified standard deviation in minutes is added.")
                 // .DefaultValue(TimestampStandardDeviationMinutes)
-                .Optional()
                 .StoreResult(&TimestampStandardDeviationMinutes);
             // TODO: maybe it shoudn't be optional
             
             opts.AddLongOption("date-from", "Left boundary of the interval to generate "
                 "timestamp uniformly from specified interval. Presents as seconds since epoch. Once this option passed, 'date-to' "
                 "should be passed as well. This option is mutually exclusive with 'timestamp_deviation'")
-                .Optional().StoreResult(&TimestampDateFrom);
+                .StoreResult(&TimestampDateFrom);
             opts.AddLongOption("date-to", "Right boundary of the interval to generate "
                 "timestamp uniformly from specified interval. Presents as seconds since epoch. Once this option passed, 'date-from' "
                 "should be passed as well. This option is mutually exclusive with 'timestamp_deviation'")
-                .Optional().StoreResult(&TimestampDateTo);
+                .StoreResult(&TimestampDateTo);
 
             // opts.MutuallyExclusive("timestamp_deviation", "date-from");
             // opts.MutuallyExclusive("timestamp_deviation", "date-to");

@@ -940,7 +940,7 @@ void TestDrop(bool reboots) {
     ui64 planStep = 1000000000; // greater then delays
     ui64 txId = 100;
 
-    SetupSchema(runtime, sender, TTestSchema::InitShardTxBody(tableId, testYdbSchema, testYdbPk),
+    SetupSchema(runtime, sender, TTestSchema::CreateInitShardTxBody(tableId, testYdbSchema, testYdbPk),
                               NOlap::TSnapshot(++planStep, ++txId));
     //
 
@@ -1009,7 +1009,7 @@ void TestDropWriteRace() {
     NLongTxService::TLongTxId longTxId;
     UNIT_ASSERT(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1"));
 
-    SetupSchema(runtime, sender, TTestSchema::InitShardTxBody(tableId, testYdbSchema, testYdbPk),
+    SetupSchema(runtime, sender, TTestSchema::CreateInitShardTxBody(tableId, testYdbSchema, testYdbPk),
                               NOlap::TSnapshot(++planStep, ++txId));
     TString data = MakeTestBlob({0, 100}, testYdbSchema);
     UNIT_ASSERT(data.size() < NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
@@ -1050,7 +1050,7 @@ void TestCompaction(std::optional<ui32> numWrites = {}) {
     ui64 planStep = 100;
     ui64 txId = 100;
 
-    SetupSchema(runtime, sender, TTestSchema::InitShardTxBody(tableId, testYdbSchema, testYdbPk),
+    SetupSchema(runtime, sender, TTestSchema::CreateInitShardTxBody(tableId, testYdbSchema, testYdbPk),
                               NOlap::TSnapshot(++planStep, ++txId));
     // Set tiering
 

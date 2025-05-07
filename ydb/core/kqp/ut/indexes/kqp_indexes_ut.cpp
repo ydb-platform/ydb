@@ -5424,10 +5424,13 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         CompareYson(R"([[[2]]])", FormatResultSetYson(result.GetResultSet(2)));
     }
 
-    Y_UNIT_TEST(UpdateIndexSubsetPk) {
+    Y_UNIT_TEST_TWIN(UpdateIndexSubsetPk, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
 
         auto db = kikimr.GetTableClient();
@@ -5467,7 +5470,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         AssertTableStats(result, "/Root/TestTable", {
-            .ExpectedReads = 0,
+            .ExpectedReads = UseSink ? 0 : 1,
             .ExpectedUpdates = 1
         });
 
@@ -5805,10 +5808,19 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             });
         }
     }
-    Y_UNIT_TEST(UpdateOnReadColumns) {
+    Y_UNIT_TEST_TWIN(UpdateOnReadColumns, UseSink) {
+        auto getKikimr = []() {
+            NKikimrConfig::TAppConfig appConfig;
+            appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+            auto setting = NKikimrKqp::TKqpSetting();
+            auto serverSettings = TKikimrSettings()
+                .SetKqpSettings({setting})
+                .SetAppConfig(appConfig);
+            return TKikimrRunner(serverSettings);
+        };
         {
             // Check that keys from non involved index are not in read columns
-            TKikimrRunner kikimr;
+            TKikimrRunner kikimr = getKikimr();
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
             CreateSampleTablesWithIndex(session);
@@ -5821,11 +5833,11 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
             auto table = plan["tables"][0];
             UNIT_ASSERT_VALUES_EQUAL(table["name"], "/Root/SecondaryKeys");
-            UNIT_ASSERT(!table.Has("reads"));
+            UNIT_ASSERT(UseSink ? !table.Has("reads") : table.Has("reads"));
         }
         {
             // Check that keys from involved index are in read columns
-            TKikimrRunner kikimr;
+            TKikimrRunner kikimr = getKikimr();
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
             CreateSampleTablesWithIndex(session);
@@ -5845,7 +5857,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
         {
             // Check that all keys from involved index are in read columns
-            TKikimrRunner kikimr;
+            TKikimrRunner kikimr = getKikimr();
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
             CreateSampleTablesWithIndex(session);
@@ -5865,7 +5877,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
         {
             // Check that data colomns from involved index are in read columns
-            TKikimrRunner kikimr;
+            TKikimrRunner kikimr = getKikimr();
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
             CreateSampleTablesWithIndex(session);
@@ -5885,7 +5897,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
         {
             // Check that data colomns not from involved index aren't in read columns
-            TKikimrRunner kikimr;
+            TKikimrRunner kikimr = getKikimr();
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
             CreateSampleTablesWithIndex(session);
@@ -5898,7 +5910,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
             auto table = plan["tables"][0];
             UNIT_ASSERT_VALUES_EQUAL(table["name"], "/Root/SecondaryWithDataColumns");
-            UNIT_ASSERT(!table.Has("reads"));
+            UNIT_ASSERT(UseSink ? !table.Has("reads") : table.Has("reads"));
         }
     }
 

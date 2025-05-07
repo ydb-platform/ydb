@@ -2279,9 +2279,12 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableTableDatetime64(true);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
             .SetWithSampleTables(false)
+            .SetFeatureFlags(featureFlags)
             .SetEnableTempTables(true);
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetQueryClient();

@@ -718,8 +718,8 @@ private:
     std::deque<TString> DeletedKeys;
     std::deque<TBlobKeyTokenPtr> DefferedKeysForDeletion;
 
-    TPartitionBlobEncoder CompactionZone;
-    TPartitionBlobEncoder BlobEncoder;
+    TPartitionBlobEncoder CompactionBlobEncoder; // Compaction zone
+    TPartitionBlobEncoder BlobEncoder;           // FastWrite zone
 
     std::deque<std::pair<ui64, ui64>> GapOffsets;
     ui64 GapSize;

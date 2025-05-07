@@ -489,8 +489,8 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             }
             FormHeadAndProceed();
 
-            if (GetContext().StartOffset && *GetContext().StartOffset !=  Partition()->CompactionZone.StartOffset) {
-                PQ_LOG_ERROR("StartOffset from meta and blobs are different: " << *GetContext().StartOffset << " != " << Partition()->CompactionZone.StartOffset);
+            if (GetContext().StartOffset && *GetContext().StartOffset !=  Partition()->CompactionBlobEncoder.StartOffset) {
+                PQ_LOG_ERROR("StartOffset from meta and blobs are different: " << *GetContext().StartOffset << " != " << Partition()->CompactionBlobEncoder.StartOffset);
                 return PoisonPill(ctx);
             }
             if (GetContext().EndOffset && *GetContext().EndOffset !=  Partition()->BlobEncoder.EndOffset) {
@@ -662,7 +662,7 @@ void TInitDataRangeStep::FormHeadAndProceed() {
     auto keys = std::move(dataKeysBody);
     dataKeysBody.clear();
 
-    auto& cz = Partition()->CompactionZone; // Compaction zone
+    auto& cz = Partition()->CompactionBlobEncoder; // Compaction zone
     auto& fwz = Partition()->BlobEncoder;   // FastWrite zone
 
     cz.BodySize = 0;
@@ -939,7 +939,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
 
     for (ui32 i = 0; i < TotalLevels; ++i) {
         BlobEncoder.DataKeysHead.emplace_back(CompactLevelBorder[i]);
-        CompactionZone.DataKeysHead.emplace_back(CompactLevelBorder[i]);
+        CompactionBlobEncoder.DataKeysHead.emplace_back(CompactLevelBorder[i]);
     }
 
     if (Config.HasOffloadConfig() && !OffloadActor && !IsSupportive()) {

@@ -59,7 +59,7 @@ auto GetStepAndTxId(const E& event)
 bool TPartition::LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const {
     return !IsActive() &&
         (static_cast<ui64>(std::max<i64>(userInfo.Offset, 0)) == BlobEncoder.EndOffset ||
-         CompactionZone.StartOffset == BlobEncoder.EndOffset);
+         CompactionBlobEncoder.StartOffset == BlobEncoder.EndOffset);
 }
 
 struct TMirrorerInfo {
@@ -201,7 +201,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , WriteInflightSize(0)
     , Tablet(tablet)
     , BlobCache(blobCache)
-    , CompactionZone(partition)
+    , CompactionBlobEncoder(partition)
     , BlobEncoder(partition)
     , GapSize(0)
     , IsServerless(isServerless)
@@ -310,7 +310,7 @@ ui64 TPartition::ImportantClientsMinOffset() const {
         }
 
         const TUserInfo* userInfo = UsersInfoStorage->GetIfExists(consumer.GetName());
-        ui64 curOffset = CompactionZone.StartOffset;
+        ui64 curOffset = CompactionBlobEncoder.StartOffset;
         if (userInfo && userInfo->Offset >= 0) //-1 means no offset
             curOffset = userInfo->Offset;
         minOffset = Min<ui64>(minOffset, curOffset);
@@ -370,7 +370,7 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     TKeyPrefix ikey(TKeyPrefix::TypeMeta, Partition);
 
     NKikimrPQ::TPartitionMeta meta;
-    meta.SetStartOffset(CompactionZone.StartOffset);
+    meta.SetStartOffset(CompactionBlobEncoder.StartOffset);
     meta.SetEndOffset(Max(BlobEncoder.NewHead.GetNextOffset(), BlobEncoder.EndOffset));
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
     meta.SetEndWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
@@ -399,7 +399,7 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
 //{
 //    PQ_LOG_T("Have " << request->Record.CmdDeleteRangeSize() << " items to delete old stuff");
 //
-//    bool haveChanges = SourceIdStorage.DropOldSourceIds(request, ctx.Now(), CompactionZone.StartOffset, Partition,
+//    bool haveChanges = SourceIdStorage.DropOldSourceIds(request, ctx.Now(), CompactionBlobEncoder.StartOffset, Partition,
 //                                                        Config.GetPartitionConfig());
 //    if (haveChanges) {
 //        SourceIdStorage.MarkOwnersForDeletedSourceId(Owners);
@@ -416,7 +416,7 @@ bool TPartition::CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& 
 
     PQ_LOG_T("Have " << request->Record.CmdDeleteRangeSize() << " items to delete old stuff");
 
-    haveChanges |= SourceIdStorage.DropOldSourceIds(request, ctx.Now(), CompactionZone.StartOffset, Partition,
+    haveChanges |= SourceIdStorage.DropOldSourceIds(request, ctx.Now(), CompactionBlobEncoder.StartOffset, Partition,
                                                     Config.GetPartitionConfig());
     if (haveChanges) {
         SourceIdStorage.MarkOwnersForDeletedSourceId(Owners);
@@ -429,7 +429,7 @@ bool TPartition::CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& 
 }
 
 bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorContext& ctx) {
-    if (CompactionZone.StartOffset == BlobEncoder.EndOffset || CompactionZone.DataKeysBody.size() <= 1) {
+    if (CompactionBlobEncoder.StartOffset == BlobEncoder.EndOffset || CompactionBlobEncoder.DataKeysBody.size() <= 1) {
         return false;
     }
     if (Config.GetEnableCompactification()) {
@@ -444,8 +444,8 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
     const ui64 importantConsumerMinOffset = ImportantClientsMinOffset();
 
     bool hasDrop = false;
-    while (CompactionZone.DataKeysBody.size() > 1) {
-        auto& nextKey = CompactionZone.DataKeysBody[1].Key;
+    while (CompactionBlobEncoder.DataKeysBody.size() > 1) {
+        auto& nextKey = CompactionBlobEncoder.DataKeysBody[1].Key;
         if (importantConsumerMinOffset < nextKey.GetOffset()) {
             // The first message in the next blob was not read by an important consumer.
             // We also save the current blob, since not all messages from it could be read.
@@ -456,9 +456,9 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
             break;
         }
 
-        auto& firstKey = CompactionZone.DataKeysBody.front();
+        auto& firstKey = CompactionBlobEncoder.DataKeysBody.front();
         if (hasStorageLimit) {
-            const auto bodySize = CompactionZone.BodySize - firstKey.Size;
+            const auto bodySize = CompactionBlobEncoder.BodySize - firstKey.Size;
             if (bodySize < partConfig.GetStorageLimitBytes()) {
                 break;
             }
@@ -468,8 +468,8 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
             }
         }
 
-        CompactionZone.BodySize -= firstKey.Size;
-        CompactionZone.DataKeysBody.pop_front();
+        CompactionBlobEncoder.BodySize -= firstKey.Size;
+        CompactionBlobEncoder.DataKeysBody.pop_front();
 
         if (!GapOffsets.empty() && nextKey.GetOffset() == GapOffsets.front().second) {
             GapSize -= GapOffsets.front().second - GapOffsets.front().first;
@@ -479,17 +479,17 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
         hasDrop = true;
     }
 
-    Y_ABORT_UNLESS(!CompactionZone.DataKeysBody.empty());
+    Y_ABORT_UNLESS(!CompactionBlobEncoder.DataKeysBody.empty());
 
     if (!hasDrop) {
         return false;
     }
 
-    const auto& lastKey = CompactionZone.DataKeysBody.front().Key;
+    const auto& lastKey = CompactionBlobEncoder.DataKeysBody.front().Key;
 
-    CompactionZone.StartOffset = lastKey.GetOffset();
+    CompactionBlobEncoder.StartOffset = lastKey.GetOffset();
     if (lastKey.GetPartNo() > 0) {
-        ++CompactionZone.StartOffset;
+        ++CompactionBlobEncoder.StartOffset;
     }
 
     Y_UNUSED(request);
@@ -962,7 +962,7 @@ void TPartition::LogAndCollectError(NKikimrServices::EServiceKikimr service, con
 const TPartitionBlobEncoder& TPartition::GetPartitionZone(ui64 offset) const
 {
     if (BlobEncoder.DataKeysBody.empty()) {
-        return CompactionZone;
+        return CompactionBlobEncoder;
     }
 
     const auto required = std::make_tuple(offset, 0);
@@ -970,7 +970,7 @@ const TPartitionBlobEncoder& TPartition::GetPartitionZone(ui64 offset) const
     const auto fastWriteStart = std::make_tuple(key.GetOffset(), key.GetPartNo());
 
     if (required < fastWriteStart) {
-        return CompactionZone;
+        return CompactionBlobEncoder;
     }
 
     return BlobEncoder;
@@ -983,8 +983,8 @@ const std::deque<TDataKey>& GetContainer(const TPartitionBlobEncoder& zone, ui64
 
 //zero means no such record
 TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
-    if (offset < CompactionZone.StartOffset) {
-        offset = CompactionZone.StartOffset;
+    if (offset < CompactionBlobEncoder.StartOffset) {
+        offset = CompactionBlobEncoder.StartOffset;
     }
     if (offset >= BlobEncoder.EndOffset) {
         return TInstant::Zero();
@@ -2306,7 +2306,7 @@ void TPartition::DumpZones(const char* file, unsigned line) const
 
     PQ_LOG_D("=== DumpPartitionZones ===");
     PQ_LOG_D("--- Compaction -----------");
-    dumpZone(CompactionZone);
+    dumpZone(CompactionBlobEncoder);
     PQ_LOG_D("--- FastWrite ------------");
     dumpZone(BlobEncoder);
     PQ_LOG_D("==========================");
@@ -2683,9 +2683,9 @@ void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
                 continue; // this is stale request, answer ok for it
             }
 
-            if (operation.GetCommitOffsetsEnd() <= CompactionZone.StartOffset) {
+            if (operation.GetCommitOffsetsEnd() <= CompactionBlobEncoder.StartOffset) {
                 userInfo.AnyCommits = false;
-                userInfo.Offset = CompactionZone.StartOffset;
+                userInfo.Offset = CompactionBlobEncoder.StartOffset;
             } else if (operation.GetCommitOffsetsEnd() > BlobEncoder.EndOffset) {
                 userInfo.AnyCommits = true;
                 userInfo.Offset = BlobEncoder.EndOffset;
@@ -2824,7 +2824,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
             userInfo.Generation = actual->Generation;
             userInfo.Step = actual->Step;
             userInfo.Offset = actual->Offset;
-            if (userInfo.Offset <= (i64)CompactionZone.StartOffset) {
+            if (userInfo.Offset <= (i64)CompactionBlobEncoder.StartOffset) {
                 userInfo.AnyCommits = false;
             }
             userInfo.ReadRuleGeneration = actual->ReadRuleGeneration;
@@ -2837,8 +2837,8 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
                 }
                 userInfo.SetImportant(actual->Important);
             }
-            if (userInfo.Important && userInfo.Offset < (i64)CompactionZone.StartOffset) {
-                userInfo.Offset = CompactionZone.StartOffset;
+            if (userInfo.Important && userInfo.Offset < (i64)CompactionBlobEncoder.StartOffset) {
+                userInfo.Offset = CompactionBlobEncoder.StartOffset;
             }
 
             if (offsetHasChanged && !userInfo.UpdateTimestampFromCache()) {
@@ -3340,7 +3340,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         userInfo.AnyCommits = false;
 
         if (userInfo.Important) {
-            userInfo.Offset = CompactionZone.StartOffset;
+            userInfo.Offset = CompactionBlobEncoder.StartOffset;
         }
     } else {
         if (createSession || dropSession) {

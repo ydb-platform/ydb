@@ -395,22 +395,6 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
 }
 
-//bool TPartition::CleanUpFastWrite(TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
-//{
-//    PQ_LOG_T("Have " << request->Record.CmdDeleteRangeSize() << " items to delete old stuff");
-//
-//    bool haveChanges = SourceIdStorage.DropOldSourceIds(request, ctx.Now(), CompactionBlobEncoder.StartOffset, Partition,
-//                                                        Config.GetPartitionConfig());
-//    if (haveChanges) {
-//        SourceIdStorage.MarkOwnersForDeletedSourceId(Owners);
-//    }
-//
-//    PQ_LOG_T("Have " << request->Record.CmdDeleteRangeSize() << " items to delete all stuff. "
-//            << "Delete command " << request->ToString());
-//
-//    return haveChanges;
-//}
-
 bool TPartition::CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& ctx) {
     bool haveChanges = CleanUpBlobs(request, ctx);
 
@@ -456,7 +440,7 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
             break;
         }
 
-        auto& firstKey = CompactionBlobEncoder.DataKeysBody.front();
+        const auto& firstKey = CompactionBlobEncoder.DataKeysBody.front();
         if (hasStorageLimit) {
             const auto bodySize = CompactionBlobEncoder.BodySize - firstKey.Size;
             if (bodySize < partConfig.GetStorageLimitBytes()) {
@@ -959,7 +943,7 @@ void TPartition::LogAndCollectError(NKikimrServices::EServiceKikimr service, con
     LogAndCollectError(error, ctx);
 }
 
-const TPartitionBlobEncoder& TPartition::GetPartitionZone(ui64 offset) const
+const TPartitionBlobEncoder& TPartition::GetBlobEncoder(ui64 offset) const
 {
     if (BlobEncoder.DataKeysBody.empty()) {
         return CompactionBlobEncoder;
@@ -991,7 +975,7 @@ TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
     }
 
     const std::deque<TDataKey>& container =
-        GetContainer(GetPartitionZone(offset), offset);
+        GetContainer(GetBlobEncoder(offset), offset);
     Y_ABORT_UNLESS(!container.empty());
 
     auto it = std::upper_bound(container.begin(), container.end(), offset,
@@ -2208,7 +2192,7 @@ void TPartition::RunPersist() {
         WriteInfosApplied.clear();
         //Done with counters.
 
-        //// иногда во время отладки хочется посмотреть что записывается на диск
+        //// for debugging purposes
         //DumpKeyValueRequest(PersistRequest->Record);
 
         PersistRequestSpan.Attribute("bytes", static_cast<i64>(PersistRequest->Record.ByteSizeLong()));

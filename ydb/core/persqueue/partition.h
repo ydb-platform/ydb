@@ -284,7 +284,6 @@ private:
 
     TInstant GetWriteTimeEstimate(ui64 offset) const;
     bool CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
-    //bool CleanUpFastWrite(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
 
     // Removes blobs that are no longer required. Blobs are no longer required if the storage time of all messages
     // stored in this blob has expired and they have been read by all important consumers.
@@ -296,8 +295,6 @@ private:
     std::pair<TInstant, TInstant> GetTime(const TUserInfo& userInfo, ui64 offset) const;
     ui32 NextChannel(bool isHead, ui32 blobSize);
     ui64 GetSizeLag(i64 offset);
-    //std::pair<TKey, ui32> GetNewWriteKey(bool headCleared);
-    //std::pair<TKey, ui32> GetNewWriteKeyImpl(bool headCleared, bool needCompaction, ui32 headSize);
     std::pair<TKey, ui32> GetNewFastWriteKey(bool headCleared);
     std::pair<TKey, ui32> GetNewFastWriteKeyImpl(bool headCleared, ui32 headSize);
     std::pair<TKey, ui32> GetNewCompactionWriteKey(bool headCleared);
@@ -305,9 +302,6 @@ private:
     THashMap<TString, TOwnerInfo>::iterator DropOwner(THashMap<TString, TOwnerInfo>::iterator& it,
                                                       const TActorContext& ctx);
     // will return rcount and rsize also
-    //TVector<TRequestedBlob> GetReadRequestFromBody(const ui64 startOffset, const ui16 partNo, const ui32 maxCount,
-    //                                               const ui32 maxSize, ui32* rcount, ui32* rsize, ui64 lastOffset,
-    //                                               TBlobKeyTokens* blobKeyTokens);
     void GetReadRequestFromCompactedBody(const ui64 startOffset, const ui16 partNo, const ui32 maxCount,
                                          const ui32 maxSize, ui32* rcount, ui32* rsize, ui64 lastOffset,
                                          TBlobKeyTokens* blobKeyTokens,
@@ -1046,7 +1040,7 @@ private:
 
     void DumpZones(const char* file = nullptr, unsigned line = 0) const;
 
-    const TPartitionBlobEncoder& GetPartitionZone(ui64 offset) const;
+    const TPartitionBlobEncoder& GetBlobEncoder(ui64 offset) const;
     ui64 GetCumulativeSizeLimit() const;
 };
 

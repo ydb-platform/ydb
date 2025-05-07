@@ -152,6 +152,20 @@ protected:
         return importSettings;
     }
 
+    NYdb::NImport::TListObjectsInS3ExportSettings MakeListObjectsInS3ExportSettings(const TString& prefix) {
+        NYdb::NImport::TListObjectsInS3ExportSettings listSettings;
+        listSettings
+            .Endpoint(TStringBuilder() << "localhost:" << S3Port)
+            .Bucket("test_bucket")
+            .Scheme(NYdb::ES3Scheme::HTTP)
+            .AccessKey("test_key")
+            .SecretKey("test_secret");
+        if (prefix) {
+            listSettings.Prefix(prefix);
+        }
+        return listSettings;
+    }
+
     void ValidateS3FileList(const TSet<TString>& paths, const TString& prefix = {}) {
         TSet<TString> keys;
         for (const auto& [key, _] : S3Mock().GetData()) {
@@ -176,6 +190,20 @@ protected:
             UNIT_ASSERT_C(!res.IsSuccess(), "Describe path \"" << path << "\" succeeded, but test expects that there is no such path");
             UNIT_ASSERT_C(res.GetStatus() == NYdb::EStatus::SCHEME_ERROR, "Wrong status for describe path \"" << path << "\": " << res.GetStatus());
         }
+    }
+
+    void ValidateListObjectInS3Export(const TSet<std::pair<TString /*prefix*/, TString /*path*/>>& paths, const TString& exportPrefix) {
+        NYdb::NImport::TListObjectsInS3ExportSettings listSettings = MakeListObjectsInS3ExportSettings(exportPrefix);
+        auto res = YdbImportClient().ListObjectsInS3Export(listSettings).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), "Status: " << res.GetStatus() << ". Issues: " << res.GetIssues().ToString());
+
+        TSet<std::pair<TString, TString>> pathsInResponse;
+        for (const auto& item : res.GetItems()) {
+            bool inserted = pathsInResponse.emplace(item.Prefix, item.Path).second;
+            UNIT_ASSERT_C(inserted, "Duplicate item: {" << item.Prefix << ", " << item.Path << "}. Listing result: " << res);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(pathsInResponse, paths, "Listing result: " << res);
     }
 
     TString DebugListDir(const TString& path) { // Debug listing for specified dir

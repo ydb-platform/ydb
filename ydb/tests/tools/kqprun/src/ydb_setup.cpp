@@ -703,6 +703,10 @@ TRequestResult TYdbSetup::GetScriptExecutionOperationRequest(const TString& data
             meta.Plan = deserializedMeta.exec_stats().query_plan();
         }
         meta.TotalDuration = TDuration::MicroSeconds(deserializedMeta.exec_stats().total_duration_us());
+
+        for (const auto& resultSetMeta : deserializedMeta.result_sets_meta()) {
+            Cerr << "------------------------- TYdbSetup::GetScriptExecutionOperationRequest, number rows: " << resultSetMeta.number_rows() << ", finished: " << resultSetMeta.finished() << "\n";
+        }
     }
 
     return TRequestResult(scriptExecutionOperation->Get()->Status, scriptExecutionOperation->Get()->Issues);

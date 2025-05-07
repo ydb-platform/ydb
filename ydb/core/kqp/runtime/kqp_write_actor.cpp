@@ -329,6 +329,7 @@ public:
     }
 
     void Write(TWriteToken token, IDataBatchPtr&& data) {
+        // Cerr << "----------------------------- TKqpTableWriteActor::Write, token: " << token << "\n";
         YQL_ENSURE(!Closed);
         YQL_ENSURE(ShardedWriteController);
         CA_LOG_D("Write: token=" << token);
@@ -378,6 +379,7 @@ public:
     }
 
     STFUNC(StateProcessing) {
+        // Cerr << "----------------------------- TKqpBufferWriteActor::StateProcessing, GOT EVENT!\n";
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(NKikimr::NEvents::TDataEvents::TEvWriteResult, Handle);
@@ -544,6 +546,7 @@ public:
     }
 
     void Handle(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+        // Cerr << "----------------------------- TKqpTableWriteActor::Handle(TEvWriteResult), status: " << NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus()) << "\n";
         auto getIssues = [&ev]() {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
@@ -802,6 +805,7 @@ public:
     }
 
     void ProcessWriteCompletedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
+        // Cerr << "----------------------------- TKqpBufferWriteActor::ProcessWriteCompletedShard, Mode: " << static_cast<int>(Mode) << "\n";
         CA_LOG_D("Got completed result TxId=" << ev->Get()->Record.GetTxId()
             << ", TabletId=" << ev->Get()->Record.GetOrigin()
             << ", Cookie=" << ev->Cookie
@@ -829,6 +833,7 @@ public:
         }
 
         if (Mode == EMode::COMMIT) {
+            // Cerr << "----------------------------- TKqpBufferWriteActor::ProcessWriteCompletedShard, Mode == EMode::COMMIT\n";
             Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), 0);
             return;
         }
@@ -837,6 +842,7 @@ public:
         const auto result = ShardedWriteController->OnMessageAcknowledged(
                 ev->Get()->Record.GetOrigin(), ev->Cookie);
         if (result && result->IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
+            // Cerr << "----------------------------- TKqpBufferWriteActor::ProcessWriteCompletedShard, result && result->IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT\n";
             Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize);
         } else if (result) {
             AFL_ENSURE(Mode == EMode::WRITE);
@@ -884,6 +890,7 @@ public:
 
     bool Flush() {
         for (const auto& shardInfo : ShardedWriteController->GetPendingShards()) {
+            // Cerr << "----------------------------- TKqpBufferWriteActor::Flush, shardId: " << shardInfo.ShardId << "\n";
             if (!SendDataToShard(shardInfo.ShardId)) {
                 return false;
             }
@@ -892,6 +899,7 @@ public:
     }
 
     bool SendDataToShard(const ui64 shardId) {
+        // Cerr << "----------------------------- TKqpBufferWriteActor::SendDataToShard, shardId: " << shardId << ", InconsistentTx: " << InconsistentTx << "\n";
         YQL_ENSURE(Mode != EMode::COMMIT);
 
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
@@ -987,6 +995,7 @@ public:
             << ", Size=" << serializationResult.TotalDataSize << ", Cookie=" << metadata->Cookie
             << ", OperationsCount=" << evWrite->Record.OperationsSize() << ", IsFinal=" << metadata->IsFinal
             << ", Attempts=" << metadata->SendAttempts << ", Mode=" << static_cast<int>(Mode));
+        // Cerr << "----------------------------- TKqpBufferWriteActor::SendDataToShard, shardId: " << shardId << " SEND EXECUTED!\n";
         Send(
             PipeCacheId,
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, /* subscribe */ true),
@@ -1907,6 +1916,7 @@ public:
             return false;
         }
 
+        // Cerr << "----------------------------- TKqpBufferWriteActor::ProcessWrite, outOfMemory: " << outOfMemory << ", needToFlush: " << needToFlush << ", State: " << static_cast<int>(State) << "\n";
         if (needToFlush) {
             CA_LOG_D("Flush data");
             for (auto& [_, info] : WriteInfos) {
@@ -2408,6 +2418,7 @@ public:
     }
 
     void RollbackAndDie(NWilson::TTraceId traceId) {
+        // Cerr << "----------------------------- TKqpBufferWriteActor::RollbackAndDie\n";
         Rollback(std::move(traceId));
         Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
         PassAway();
@@ -2665,6 +2676,7 @@ public:
         NKikimrPQ::TEvProposeTransactionResult& event = ev->Get()->Record;
 
         if (State != EState::COMMITTING) {
+            // Cerr << "----------------------------- TKqpBufferWriteActor::ProcessCompletedTopic, ignore\n";
             CA_LOG_D("Ignored completed event.");
             return;
         }
@@ -2673,6 +2685,7 @@ public:
               ", topic tablet: " << event.GetOrigin() <<
               ", status: " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(event.GetStatus()));
 
+        // Cerr << "----------------------------- TKqpBufferWriteActor::ProcessCompletedTopic, do OnCommitted\n";
         OnCommitted(event.GetOrigin(), 0);
     }
 
@@ -2704,6 +2717,7 @@ public:
 
     void ProcessWriteCompletedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
         if (State != EState::COMMITTING) {
+            // Cerr << "----------------------------- TKqpBufferWriteActor::ProcessWriteCompletedShard, ignore\n";
             CA_LOG_D("Ignored write completed event.");
             return;
         }
@@ -2719,6 +2733,7 @@ public:
                 return builder;
             }());
 
+        // Cerr << "----------------------------- TKqpBufferWriteActor::ProcessWriteCompletedShard, do OnCommitted\n";
         OnCommitted(ev->Get()->Record.GetOrigin(), 0);
     }
 
@@ -2753,9 +2768,11 @@ public:
 
     void OnCommitted(ui64 shardId, ui64) override {
         if (State != EState::COMMITTING) {
+            // Cerr << "----------------------------- TKqpBufferWriteActor::OnCommitted, skip\n";
             return;
         }
         if (TxManager->ConsumeCommitResult(shardId)) {
+            // Cerr << "----------------------------- TKqpBufferWriteActor::OnCommitted, finish\n";
             CA_LOG_D("Committed TxId=" << TxId.value_or(0));
             OnOperationFinished(Counters->BufferActorCommitLatencyHistogram);
             State = EState::FINISHED;
@@ -2774,6 +2791,7 @@ public:
     }
 
     void OnFlushed() {
+        // Cerr << "----------------------------- TKqpBufferWriteActor::OnFlushed\n";
         YQL_ENSURE(State == EState::FLUSHING);
         UpdateTracingState("Write", BufferWriteActorSpan.GetTraceId());
         OnOperationFinished(Counters->BufferActorFlushLatencyHistogram);

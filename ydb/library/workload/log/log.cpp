@@ -287,7 +287,7 @@ public:
             result.emplace_back();
             result.back().LogId = CreateGuidAsString().c_str();
             // TODO: check if it's correct to get interval params here
-            result.back().Ts = Params.TimestampDateFrom.has_value() ? UniformInstant(*Params.TimestampDateFrom, *Params.TimestampDateTo) : RandomInstant();
+            result.back().Ts = Params.TimestampDateFrom.has_value() && Params.TimestampDateTo.has_value() ? UniformInstant(*Params.TimestampDateFrom, *Params.TimestampDateTo) : RandomInstant();
             result.back().Level = RandomNumber<ui32>(10);
             result.back().ServiceName = RandomWord(false);
             result.back().Component = RandomWord(true);
@@ -427,9 +427,7 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
             opts.AddLongOption("rows", "Number of rows to upsert")
                 .DefaultValue(RowsCnt).StoreResult(&RowsCnt);
             opts.AddLongOption("timestamp_deviation", "Standard deviation. For each timestamp, a random variable with a specified standard deviation in minutes is added.")
-                // .DefaultValue(TimestampStandardDeviationMinutes)
                 .StoreResult(&TimestampStandardDeviationMinutes);
-            // TODO: maybe it shoudn't be optional
             
             opts.AddLongOption("date-from", "Left boundary of the interval to generate "
                 "timestamp uniformly from specified interval. Presents as seconds since epoch. Once this option passed, 'date-to' "
@@ -439,9 +437,6 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
                 "timestamp uniformly from specified interval. Presents as seconds since epoch. Once this option passed, 'date-from' "
                 "should be passed as well. This option is mutually exclusive with 'timestamp_deviation'")
                 .StoreResult(&TimestampDateTo);
-
-            // opts.MutuallyExclusive("timestamp_deviation", "date-from");
-            // opts.MutuallyExclusive("timestamp_deviation", "date-to");
     
             opts.AddLongOption("timestamp_subtract", "Value in seconds to subtract from timestamp. For each timestamp, this value in seconds is subtracted")
                 .DefaultValue(0).StoreResult(&TimestampSubtract);

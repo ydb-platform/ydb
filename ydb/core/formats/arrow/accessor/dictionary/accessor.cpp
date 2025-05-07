@@ -15,43 +15,18 @@ namespace NKikimr::NArrow::NAccessor {
 IChunkedArray::TLocalDataAddress TDictionaryArray::DoGetLocalData(
     const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {
     std::unique_ptr<arrow::ArrayBuilder> builderVariants = NArrow::MakeBuilder(ArrayVariants->type());
-    AFL_VERIFY(SwitchType(ArrayVariants->type()->id(), [&](const auto& type) {
-        using TWrap = std::decay_t<decltype(type)>;
-        using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
-        const auto* arrVariantsImpl = static_cast<const TArray*>(ArrayVariants.get());
-
-        using TBuilder = typename arrow::TypeTraits<typename TWrap::T>::BuilderType;
-        auto* builder = static_cast<TBuilder*>(builderVariants.get());
-        if constexpr (arrow::has_string_view<typename TWrap::T>()) {
-            AFL_VERIFY(SwitchType(ArrayRecords->type()->id(), [&](const auto& type) {
-                using TRecordsWrap = std::decay_t<decltype(type)>;
-                using TRecordsArray = typename arrow::TypeTraits<typename TRecordsWrap::T>::ArrayType;
-                const auto* arrRecordsImpl = static_cast<const TRecordsArray*>(ArrayRecords.get());
-                if constexpr (NDictionary::TConstructor::IsIndexType<typename TRecordsWrap::T>()) {
+    AFL_VERIFY(SwitchType(ArrayVariants->type()->id(), [&](const auto typeVariant) {
+        const auto* arrVariantsImpl = typeVariant.CastArray(ArrayVariants.get());
+        auto* builder = typeVariant.CastBuilder(builderVariants.get());
+        if constexpr (typeVariant.IsAppropriate) {
+            AFL_VERIFY(SwitchType(ArrayRecords->type()->id(), [&](const auto type) {
+                const auto* arrRecordsImpl = type.CastArray(ArrayRecords.get());
+                if constexpr (type.IsIndexType()) {
                     for (ui32 i = 0; i < arrRecordsImpl->length(); ++i) {
                         if (arrRecordsImpl->IsNull(i)) {
                             TStatusValidator::Validate(builder->AppendNull());
                         } else {
-                            TStatusValidator::Validate(builder->Append(arrVariantsImpl->GetView(arrRecordsImpl->Value(i))));
-                        }
-                    }
-                    return true;
-                }
-                return false;
-            }));
-            return true;
-        }
-        if constexpr (arrow::has_c_type<typename TWrap::T>()) {
-            AFL_VERIFY(SwitchType(ArrayRecords->type()->id(), [&](const auto& type) {
-                using TRecordsWrap = std::decay_t<decltype(type)>;
-                using TRecordsArray = typename arrow::TypeTraits<typename TRecordsWrap::T>::ArrayType;
-                if constexpr (NDictionary::TConstructor::IsIndexType<typename TRecordsWrap::T>()) {
-                    const auto* arrRecordsImpl = static_cast<const TRecordsArray*>(ArrayRecords.get());
-                    for (ui32 i = 0; i < arrRecordsImpl->length(); ++i) {
-                        if (arrRecordsImpl->IsNull(i)) {
-                            TStatusValidator::Validate(builder->AppendNull());
-                        } else {
-                            TStatusValidator::Validate(builder->Append(arrVariantsImpl->Value(arrRecordsImpl->Value(i))));
+                            TStatusValidator::Validate(builder->Append(typeVariant.GetValue(*arrVariantsImpl, arrRecordsImpl->Value(i))));
                         }
                     }
                     return true;
@@ -96,10 +71,10 @@ std::shared_ptr<IChunkedArray> TDictionaryArray::DoISlice(const ui32 offset, con
 
 ui32 TDictionaryArray::GetIndexImpl(const ui32 index) const {
     std::optional<ui32> result;
-    AFL_VERIFY(SwitchType(ArrayRecords->type()->id(), [&](const auto& type) {
+    AFL_VERIFY(SwitchType(ArrayRecords->type()->id(), [&](const auto type) {
         using TWrap = std::decay_t<decltype(type)>;
         using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
-        if constexpr (NDictionary::TConstructor::IsIndexType<typename TWrap::T>()) {
+        if constexpr (type.IsIndexType()) {
             const auto* arr = static_cast<const TArray*>(ArrayRecords.get());
             result = arr->Value(index);
             return true;

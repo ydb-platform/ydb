@@ -34,10 +34,6 @@ private:
 
 public:
     static std::shared_ptr<arrow::DataType> GetTypeByVariantsCount(const ui32 count);
-    template <class T>
-    static constexpr bool IsIndexType() { 
-        return std::is_same_v<arrow::UInt32Type, T> || std::is_same_v<arrow::UInt16Type, T> || std::is_same_v<arrow::UInt8Type, T>;
-    }
 
     TConstructor()
         : TBase(IChunkedArray::EType::Dictionary) {

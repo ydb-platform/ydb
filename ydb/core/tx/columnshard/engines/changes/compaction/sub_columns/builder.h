@@ -123,6 +123,7 @@ private:
                 case NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray:
                 case NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray:
                 case NArrow::NAccessor::IChunkedArray::EType::ChunkedArray:
+                case NArrow::NAccessor::IChunkedArray::EType::Dictionary:
                     AFL_VERIFY(false);
             }
         }

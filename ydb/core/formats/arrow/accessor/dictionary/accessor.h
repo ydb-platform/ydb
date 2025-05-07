@@ -48,6 +48,10 @@ protected:
     }
 
 public:
+    static EType GetTypeStatic() {
+        return EType::Dictionary;
+    }
+
     virtual void Reallocate() override {
         ArrayVariants = NArrow::ReallocateArray(ArrayVariants);
         ArrayRecords = NArrow::ReallocateArray(ArrayRecords);

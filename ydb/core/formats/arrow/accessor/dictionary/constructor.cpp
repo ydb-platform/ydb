@@ -119,21 +119,18 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
     std::unique_ptr<arrow::ArrayBuilder> builderVariants = NArrow::MakeBuilder(originalArray->GetDataType());
     std::vector<i32> records;
     std::vector<i32> remap;
-    AFL_VERIFY(SwitchType(chunked->type()->id(), [&](const auto& type) {
-        using TWrap = std::decay_t<decltype(type)>;
-        using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
-        using TBuilder = typename arrow::TypeTraits<typename TWrap::T>::BuilderType;
-        if constexpr (arrow::has_string_view<typename TWrap::T>()) {
-            std::map<arrow::util::string_view, ui32> indexByValue;
+    AFL_VERIFY(SwitchType(chunked->type()->id(), [&](const auto type) {
+        if constexpr (type.IsAppropriate) {
+            std::map<typename decltype(type)::ValueType, ui32> indexByValue;
             for (ui32 chunk = 0; chunk < (ui32)chunked->num_chunks(); ++chunk) {
                 auto chunkArr = chunked->chunk(chunk);
-                auto typedArray = static_pointer_cast<TArray>(chunkArr);
+                auto typedArray = type.CastArray(chunkArr);
                 for (ui32 pos = 0; pos < typedArray->length(); ++pos) {
                     if (typedArray->IsNull(pos)) {
                         records.emplace_back(-1);
                         continue;
                     }
-                    auto sv = typedArray->GetView(pos);
+                    auto sv = type.GetValue(*typedArray, pos);
                     auto it = indexByValue.find(sv);
                     if (it == indexByValue.end()) {
                         it = indexByValue.emplace(sv, indexByValue.size()).first;
@@ -142,41 +139,7 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
                 }
             }
             {
-                auto* builder = static_cast<TBuilder*>(builderVariants.get());
-                for (auto&& i : indexByValue) {
-                    TStatusValidator::Validate(builder->Append(i.first));
-                }
-            }
-            auto recordsType = GetTypeByVariantsCount(indexByValue.size());
-            builderRecords = NArrow::MakeBuilder(recordsType);
-            remap.resize(indexByValue.size(), -1);
-            ui32 idx = 0;
-            for (auto&& i : indexByValue) {
-                remap[i.second] = idx++;
-            }
-            return true;
-        }
-        if constexpr (arrow::has_c_type<typename TWrap::T>() && !std::is_base_of_v<arrow::HalfFloatType, typename TWrap::T>) {
-            using CType = typename arrow::TypeTraits<typename TWrap::T>::CType;
-            std::map<CType, ui32> indexByValue;
-            for (ui32 chunk = 0; chunk < (ui32)chunked->num_chunks(); ++chunk) {
-                auto chunkArr = chunked->chunk(chunk);
-                auto typedArray = static_pointer_cast<TArray>(chunkArr);
-                for (ui32 pos = 0; pos < typedArray->length(); ++pos) {
-                    if (typedArray->IsNull(pos)) {
-                        records.emplace_back(-1);
-                        continue;
-                    }
-                    const CType val = typedArray->Value(pos);
-                    auto it = indexByValue.find(val);
-                    if (it == indexByValue.end()) {
-                        it = indexByValue.emplace(val, indexByValue.size()).first;
-                    }
-                    records.emplace_back(it->second);
-                }
-            }
-            {
-                auto* builder = static_cast<TBuilder*>(builderVariants.get());
+                auto* builder = type.CastBuilder(builderVariants.get());
                 for (auto&& i : indexByValue) {
                     TStatusValidator::Validate(builder->Append(i.first));
                 }
@@ -194,12 +157,10 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
         return false;
     }));
     AFL_VERIFY(records.size() == originalArray->GetRecordsCount());
-    AFL_VERIFY(SwitchType(builderRecords->type()->id(), [&](const auto& type) {
-        using TWrap = std::decay_t<decltype(type)>;
-        using TBuilder = typename arrow::TypeTraits<typename TWrap::T>::BuilderType;
-        auto* builder = static_cast<TBuilder*>(builderRecords.get());
-        if constexpr (TConstructor::IsIndexType<typename TWrap::T>()) {
-            using CType = typename arrow::TypeTraits<typename TWrap::T>::CType;
+    AFL_VERIFY(SwitchType(builderRecords->type()->id(), [&](const auto type) {
+        auto* builder = type.CastBuilder(builderRecords.get());
+        if constexpr (type.IsIndexType()) {
+            using CType = typename decltype(type)::ValueType;
             for (auto&& r : records) {
                 if (r < 0) {
                     TStatusValidator::Validate(builder->AppendNull());

@@ -75,4 +75,26 @@ Y_UNIT_TEST_SUITE(DictionaryArrayAccessor) {
             AFL_VERIFY(PrepareToCompare(slice->GetRecords()->ToString()) == R"([])");
         }
     }
+
+    Y_UNIT_TEST(Serialization) {
+        TTrivialArray::TPlainBuilder builder;
+        builder.AddRecord(0, "abc");
+        builder.AddRecord(1, "abcd");
+        builder.AddRecord(2, "abcd");
+        builder.AddRecord(4, "abc");
+        builder.AddRecord(6, "ab");
+        builder.AddRecord(8, "");
+        auto arr = builder.Finish(10);
+        TChunkConstructionData info(
+            arr->GetRecordsCount(), nullptr, arr->GetDataType(), NSerialization::TSerializerContainer::GetDefaultSerializer());
+        auto dict = std::static_pointer_cast<TDictionaryArray>(NDictionary::TConstructor().Construct(arr, info).DetachResult());
+        auto dictParsed = std::static_pointer_cast<TDictionaryArray>(
+            NDictionary::TConstructor().DeserializeFromString(NDictionary::TConstructor().SerializeToString(dict, info), info).DetachResult());
+        Cerr << PrepareToCompare(dictParsed->GetChunkedArray()->ToString()) << Endl;
+        Cerr << PrepareToCompare(dictParsed->GetRecords()->ToString()) << Endl;
+        Cerr << PrepareToCompare(dictParsed->GetVariants()->ToString()) << Endl;
+        AFL_VERIFY(PrepareToCompare(dictParsed->GetChunkedArray()->ToString()) == R"([["abc","abcd","abcd",null,"abc",null,"ab",null,"",null]])");
+        AFL_VERIFY(PrepareToCompare(dictParsed->GetRecords()->ToString()) == R"([2,3,3,null,2,null,1,null,0,null])");
+        AFL_VERIFY(PrepareToCompare(dictParsed->GetVariants()->ToString()) == R"(["","ab","abc","abcd"])");
+    }
 };

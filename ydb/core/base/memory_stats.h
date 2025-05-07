@@ -26,7 +26,7 @@ ADD_MEMORY(TargetUtilization)
 class TMemoryStatsAggregator {
     using TMemoryStats = NKikimrMemory::TMemoryStats;
 
-    TMemoryStats Aggregated;    
+    TMemoryStats Aggregated;
     TMap<TString, TMemoryStats> PerHost;
 
 public:
@@ -46,7 +46,9 @@ public:
 
         hostMemoryStats.SetMemTotal(memoryStats.GetMemTotal());
         hostMemoryStats.SetMemAvailable(memoryStats.GetMemAvailable());
-        hostMemoryStats.SetHardLimit(memoryStats.GetHardLimit());
+        if (memoryStats.HasHardLimit()) {
+            hostMemoryStats.SetHardLimit(memoryStats.GetHardLimit());
+        }
         hostMemoryStats.SetSoftLimit(memoryStats.GetSoftLimit());
         hostMemoryStats.SetTargetUtilization(memoryStats.GetTargetUtilization());
     }

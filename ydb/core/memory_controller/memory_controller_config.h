@@ -7,7 +7,7 @@
 namespace NKikimr::NMemory {
 
 namespace {
-    
+
 ui64 GetPercent(float percent, ui64 value) {
     return static_cast<ui64>(static_cast<double>(value) * (percent / 100.0));
 }
@@ -47,7 +47,7 @@ ui64 GetPercent(float percent, ui64 value) {
 
 };
 
-inline ui64 GetHardLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const TProcessMemoryInfo& info, bool& hasMemTotalHardLimit) {
+inline std::optional<ui64> GetHardLimitBytes(const NKikimrConfig::TMemoryControllerConfig& config, const TProcessMemoryInfo& info, bool& hasMemTotalHardLimit) {
     if (config.HasHardLimitBytes()) {
         ui64 hardLimitBytes = config.GetHardLimitBytes();
         if (info.CGroupLimit.has_value()) {
@@ -65,7 +65,7 @@ inline ui64 GetHardLimitBytes(const NKikimrConfig::TMemoryControllerConfig& conf
         hasMemTotalHardLimit = true;
         return info.MemTotal.value();
     }
-    return 2_GB; // fallback
+    return {};
 }
 
 GET_LIMIT(SoftLimit)

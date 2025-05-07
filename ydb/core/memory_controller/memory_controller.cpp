@@ -175,7 +175,8 @@ private:
         auto processMemoryInfo = ProcessMemoryInfoProvider->Get();
 
         bool hasMemTotalHardLimit = false;
-        ui64 hardLimitBytes = GetHardLimitBytes(Config, processMemoryInfo, hasMemTotalHardLimit);
+        std::optional<ui64> hardLimitBytesCalculated = GetHardLimitBytes(Config, processMemoryInfo, hasMemTotalHardLimit);
+        ui64 hardLimitBytes = hardLimitBytesCalculated.value_or(2_GB);
         ui64 softLimitBytes = GetSoftLimitBytes(Config, hardLimitBytes);
         ui64 targetUtilizationBytes = GetTargetUtilizationBytes(Config, hardLimitBytes);
         ui64 activitiesLimitBytes = ResourceBrokerSelfConfig.LimitBytes
@@ -256,7 +257,9 @@ private:
         if (processMemoryInfo.MemAvailable.has_value()) memoryStats.SetMemAvailable(processMemoryInfo.MemAvailable.value());
         memoryStats.SetAllocatedMemory(processMemoryInfo.AllocatedMemory);
         memoryStats.SetAllocatorCachesMemory(processMemoryInfo.AllocatorCachesMemory);
-        memoryStats.SetHardLimit(hardLimitBytes);
+        if (hardLimitBytesCalculated) {
+            memoryStats.SetHardLimit(hardLimitBytes);
+        }
         memoryStats.SetSoftLimit(softLimitBytes);
         memoryStats.SetTargetUtilization(targetUtilizationBytes);
         if (hasMemTotalHardLimit) memoryStats.SetExternalConsumption(externalConsumption);

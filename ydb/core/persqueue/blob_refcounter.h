@@ -17,6 +17,7 @@ struct TBlobKeyToken {
 };
 
 using TBlobKeyTokenPtr = std::shared_ptr<TBlobKeyToken>;
+using TBlobKeyTokenCreator = std::function<TBlobKeyTokenPtr (const TString&)>;
 
 // It is used for synchronization between deleting and reading blocks. You cannot delete the blocks that the client
 // reads from. The keys are placed in the collection for the duration of the reading.

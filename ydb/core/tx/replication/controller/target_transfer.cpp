@@ -17,7 +17,8 @@ void TTargetTransfer::UpdateConfig(const NKikimrReplication::TReplicationConfig&
     Config = std::make_shared<TTargetTransfer::TTransferConfig>(
         GetConfig()->GetSrcPath(),
         GetConfig()->GetDstPath(),
-        t.GetTransformLambda());
+        t.GetTransformLambda(),
+        cfg.GetTransferSpecific().GetRunAsUser());
 }
 
 void TTargetTransfer::Progress(const TActorContext& ctx) {
@@ -55,14 +56,19 @@ TString TTargetTransfer::GetStreamPath() const {
     return CanonizePath(GetSrcPath());
 }
 
-TTargetTransfer::TTransferConfig::TTransferConfig(const TString& srcPath, const TString& dstPath, const TString& transformLambda)
+TTargetTransfer::TTransferConfig::TTransferConfig(const TString& srcPath, const TString& dstPath, const TString& transformLambda, const TString& runAsUser)
     : TConfigBase(ETargetKind::Transfer, srcPath, dstPath)
     , TransformLambda(transformLambda)
+    , RunAsUser(runAsUser)
 {
 }
 
 const TString& TTargetTransfer::TTransferConfig::GetTransformLambda() const {
     return TransformLambda;
+}
+
+const TString& TTargetTransfer::TTransferConfig::GetRunAsUser() const {
+    return RunAsUser;
 }
 
 }

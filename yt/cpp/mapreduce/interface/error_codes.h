@@ -392,9 +392,10 @@ namespace NChunkPools {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-    constexpr int DataSliceLimitExceeded             = 2000;
-    constexpr int MaxDataWeightPerJobExceeded        = 2001;
-    constexpr int MaxPrimaryDataWeightPerJobExceeded = 2002;
+    constexpr int DataSliceLimitExceeded              = 2000;
+    constexpr int MaxDataWeightPerJobExceeded         = 2001;
+    constexpr int MaxPrimaryDataWeightPerJobExceeded  = 2002;
+    constexpr int MaxCompressedDataSizePerJobExceeded = 2003;
 
 ////////////////////////////////////////////////////////////////////////////////
 

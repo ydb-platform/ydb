@@ -68,7 +68,7 @@ namespace NKikimr::NStLog {
         const auto component = [&]{ using namespace NKikimrServices; using namespace NActorsServices; return (COMP); }(); \
         if (IS_CTX_LOG_PRIORITY_ENABLED(ctx, priority, component, 0ull)) { \
             STLOG_STREAM(__stream, __VA_ARGS__); \
-            ::NActors::MemLogAdapter(ctx, priority, component, __stream.Str(), ::NKikimr::NStLog::OutputLogJson); \
+            ::NActors::MemLogAdapter(ctx, priority, component, nullptr, 0, __stream.Str(), ::NKikimr::NStLog::OutputLogJson); \
         }; \
     } while (false)
 

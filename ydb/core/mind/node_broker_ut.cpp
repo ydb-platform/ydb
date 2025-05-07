@@ -4460,6 +4460,58 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         SubscribeToNodesUpdates(runtime, sender, pipe, cachedVersion, seqNo);
         CheckNodesUpdate(runtime, { NODE3 }, seqNo, GetEpoch(runtime, sender));
     }
+
+    void TestNNodesSubscribers(size_t n)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 3);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        ui64 cachedVersion = 0;
+        ui64 seqNo = 0;
+
+        // Subscribe to nodes update and check initial update
+        for (size_t i = 0; i < n; ++i) {
+            TActorId sender = runtime.AllocateEdgeActor();
+            TActorId pipe = runtime.ConnectToPipe(MakeNodeBrokerID(), sender, 0, GetPipeConfigWithRetries());
+
+            SubscribeToNodesUpdates(runtime, sender, pipe, cachedVersion, seqNo);
+            CheckNodesUpdate(runtime, {}, seqNo, GetEpoch(runtime, sender));
+        }
+
+        // Register node
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE1);
+
+        // Check updates after registration
+        for (size_t i = 0; i < n; ++i) {
+            CheckNodesUpdate(runtime, { NODE1 }, seqNo, GetEpoch(runtime, sender));
+        }
+
+        // Register node
+        CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, NODE2);
+
+        // Check updates after registration
+        for (size_t i = 0; i < n; ++i) {
+            CheckNodesUpdate(runtime, { NODE2 }, seqNo, GetEpoch(runtime, sender));
+        }
+    }
+
+    Y_UNIT_TEST(Test999NodesSubscribers)
+    {
+        TestNNodesSubscribers(999);
+    }
+
+    Y_UNIT_TEST(Test1000NodesSubscribers)
+    {
+        TestNNodesSubscribers(1000);
+    }
+
+    Y_UNIT_TEST(Test1001NodesSubscribers)
+    {
+        TestNNodesSubscribers(1001);
+    }
 }
 
 Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {

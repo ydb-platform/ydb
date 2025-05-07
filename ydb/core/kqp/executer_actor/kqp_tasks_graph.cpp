@@ -235,85 +235,6 @@ void BuildKqpTaskGraphResultChannels(TKqpTasksGraph& tasksGraph, const TKqpPhyTx
     }
 }
 
-void BuildMapShardChannels(TKqpTasksGraph& graph, const TStageInfo& stageInfo, ui32 inputIndex,
-    const TStageInfo& inputStageInfo, ui32 outputIndex, bool enableSpilling, const TChannelLogFunc& logFunc)
-{
-    YQL_ENSURE(stageInfo.Tasks.size() == inputStageInfo.Tasks.size());
-
-    THashMap<ui64, ui64> shardToTaskMap;
-    for (auto& taskId : stageInfo.Tasks) {
-        auto& task = graph.GetTask(taskId);
-        auto result = shardToTaskMap.insert(std::make_pair(task.Meta.ShardId, taskId));
-        YQL_ENSURE(result.second);
-    }
-
-    for (auto& originTaskId : inputStageInfo.Tasks) {
-        auto& originTask = graph.GetTask(originTaskId);
-
-        auto targetTaskId = shardToTaskMap.FindPtr(originTask.Meta.ShardId);
-        YQL_ENSURE(targetTaskId);
-        auto& targetTask = graph.GetTask(*targetTaskId);
-
-        auto& channel = graph.AddChannel();
-        channel.SrcTask = originTask.Id;
-        channel.SrcOutputIndex = outputIndex;
-        channel.DstTask = targetTask.Id;
-        channel.DstInputIndex = inputIndex;
-        channel.InMemory = !enableSpilling || inputStageInfo.OutputsCount == 1;
-
-        auto& taskInput = targetTask.Inputs[inputIndex];
-        taskInput.Channels.push_back(channel.Id);
-
-        auto& taskOutput = originTask.Outputs[outputIndex];
-        taskOutput.Type = TTaskOutputType::Map;
-        taskOutput.Channels.push_back(channel.Id);
-
-        logFunc(channel.Id, originTask.Id, targetTask.Id, "MapShard/Map", !channel.InMemory);
-    }
-}
-
-void BuildShuffleShardChannels(TKqpTasksGraph& graph, const TStageInfo& stageInfo, ui32 inputIndex,
-    const TStageInfo& inputStageInfo, ui32 outputIndex, bool enableSpilling,
-    const TChannelLogFunc& logFunc)
-{
-    YQL_ENSURE(stageInfo.Meta.ShardKey);
-    THashMap<ui64, const TKeyDesc::TPartitionInfo*> partitionsMap;
-    for (auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
-        partitionsMap[partition.ShardId] = &partition;
-    }
-
-    const auto& tableInfo = stageInfo.Meta.TableConstInfo;
-
-    for (auto& originTaskId : inputStageInfo.Tasks) {
-        auto& originTask = graph.GetTask(originTaskId);
-        auto& taskOutput = originTask.Outputs[outputIndex];
-        taskOutput.Type = TKqpTaskOutputType::ShardRangePartition;
-        taskOutput.KeyColumns = tableInfo->KeyColumns;
-
-        for (auto& targetTaskId : stageInfo.Tasks) {
-            auto& targetTask = graph.GetTask(targetTaskId);
-
-            auto targetPartition = partitionsMap.FindPtr(targetTask.Meta.ShardId);
-            YQL_ENSURE(targetPartition);
-
-            auto& channel = graph.AddChannel();
-            channel.SrcTask = originTask.Id;
-            channel.SrcOutputIndex = outputIndex;
-            channel.DstTask = targetTask.Id;
-            channel.DstInputIndex = inputIndex;
-            channel.InMemory = !enableSpilling || inputStageInfo.OutputsCount == 1;
-
-            taskOutput.Meta.ShardPartitions.insert(std::make_pair(channel.Id, *targetPartition));
-            taskOutput.Channels.push_back(channel.Id);
-
-            auto& taskInput = targetTask.Inputs[inputIndex];
-            taskInput.Channels.push_back(channel.Id);
-
-            logFunc(channel.Id, originTask.Id, targetTask.Id, "ShuffleShard/ShardRangePartition", !channel.InMemory);
-        }
-    }
-}
-
 void BuildSequencerChannels(TKqpTasksGraph& graph, const TStageInfo& stageInfo, ui32 inputIndex,
     const TStageInfo& inputStageInfo, ui32 outputIndex,
     const NKqpProto::TKqpPhyCnSequencer& sequencer, bool enableSpilling, const TChannelLogFunc& logFunc)
@@ -619,13 +540,6 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
                 break;
             case NKqpProto::TKqpPhyConnection::kMap:
                 BuildMapChannels(tasksGraph, stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log);
-                break;
-            case NKqpProto::TKqpPhyConnection::kMapShard:
-                BuildMapShardChannels(tasksGraph, stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log);
-                break;
-            case NKqpProto::TKqpPhyConnection::kShuffleShard:
-                BuildShuffleShardChannels(tasksGraph, stageInfo, inputIdx, inputStageInfo, outputIdx,
-                    enableSpilling, log);
                 break;
             case NKqpProto::TKqpPhyConnection::kMerge: {
                 TVector<TSortColumn> sortColumns;

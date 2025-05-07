@@ -6,10 +6,11 @@
 
 #include <util/generic/vector.h>
 #include <util/generic/string.h>
+#include <util/generic/maybe.h>
 
 namespace NSQLComplete {
 
-    using NThreading::TFuture;
+    using NThreading::TFuture; // TODO(YQL-19747): remove
 
     struct TIndentifier {
         TString Indentifier;
@@ -48,14 +49,21 @@ namespace NSQLComplete {
         TFunctionName,
         THintName>;
 
+    struct TNameConstraints {
+        TMaybe<TPragmaName::TConstraints> Pragma;
+        TMaybe<TTypeName::TConstraints> Type;
+        TMaybe<TFunctionName::TConstraints> Function;
+        TMaybe<THintName::TConstraints> Hint;
+
+        TGenericName Qualified(TGenericName unqualified) const;
+        TGenericName Unqualified(TGenericName qualified) const;
+        TVector<TGenericName> Qualified(TVector<TGenericName> unqualified) const;
+        TVector<TGenericName> Unqualified(TVector<TGenericName> qualified) const;
+    };
+
     struct TNameRequest {
         TVector<TString> Keywords;
-        struct {
-            std::optional<TPragmaName::TConstraints> Pragma;
-            std::optional<TTypeName::TConstraints> Type;
-            std::optional<TFunctionName::TConstraints> Function;
-            std::optional<THintName::TConstraints> Hint;
-        } Constraints;
+        TNameConstraints Constraints;
         TString Prefix = "";
         size_t Limit = 128;
 
@@ -79,5 +87,7 @@ namespace NSQLComplete {
         virtual TFuture<TNameResponse> Lookup(TNameRequest request) const = 0;
         virtual ~INameService() = default;
     };
+
+    TString NormalizeName(TStringBuf name);
 
 } // namespace NSQLComplete

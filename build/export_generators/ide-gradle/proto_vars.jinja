@@ -1,8 +1,5 @@
-{%- set publish = target.publish -%}
-{%- set with_kotlin = target.with_kotlin -%}
-{%- set kotlin_version = target.kotlin_version -%}
+{%- include "[generator]/common_vars.jinja" -%}
+
 {%- set prepareProtosTask = target.proto_files|length or target.runs|length or target.custom_runs|length -%}
 {%- set libraries = target.consumer|selectattr('type', 'eq', 'library') -%}
 {%- set extractLibrariesProtosTask = libraries|length -%}
-
-{%- include "[generator]/jdk.jinja" -%}

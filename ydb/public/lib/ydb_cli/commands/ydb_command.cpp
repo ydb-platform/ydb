@@ -3,6 +3,8 @@
 
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 
+#include <util/system/info.h>
+
 namespace NYdb {
 namespace NConsoleClient {
 
@@ -25,12 +27,35 @@ TDriverConfig TYdbCommand::CreateDriverConfig(TConfig& config) {
         .SetDatabase(config.Database)
         .SetCredentialsProviderFactory(config.GetSingletonCredentialsProviderFactory());
 
-    if (config.EnableSsl)
+    if (config.EnableSsl) {
         driverConfig.UseSecureConnection(config.CaCerts);
-    if (config.IsNetworkIntensive)
-        driverConfig.SetNetworkThreadsNum(16);
-    if (config.SkipDiscovery)
+    }
+
+    if (config.IsNetworkIntensive) {
+        size_t cpuCount = NSystemInfo::CachedNumberOfCpus();
+        size_t networkThreadNum;
+        if (cpuCount >= 64) {
+            // doubtfully there is a reason to have more. Even this is too much.
+            networkThreadNum = 32;
+        } else if (cpuCount >= 32 && cpuCount < 64) {
+            // leave the half of CPUs to the client's logic
+            networkThreadNum = cpuCount / 2;
+        } else if (cpuCount >= 16 && cpuCount < 32) {
+            // Originally here we had a constant value 16.
+            // To not break things this heuristic tries to use this constant as well.
+            networkThreadNum = 16;
+        } else {
+            networkThreadNum = std::min(2UL, cpuCount / 2);
+        }
+
+        driverConfig.SetNetworkThreadsNum(networkThreadNum);
+        driverConfig.SetUsePerChannelTcpConnection(true);
+    }
+
+    if (config.SkipDiscovery) {
         driverConfig.SetDiscoveryMode(EDiscoveryMode::Off);
+    }
+
     driverConfig.UseClientCertificate(config.ClientCert, config.ClientCertPrivateKey);
 
     return driverConfig;

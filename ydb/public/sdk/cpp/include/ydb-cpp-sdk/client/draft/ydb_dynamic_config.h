@@ -176,6 +176,54 @@ private:
 
 using TAsyncFetchStartupConfigResult = NThreading::TFuture<TFetchStartupConfigResult>;
 
+struct TGetConfigurationVersionResult : public TStatus {
+    TGetConfigurationVersionResult(TStatus&& status, uint32_t v1Nodes, std::vector<uint32_t>&& v1NodesList, 
+                                   uint32_t v2Nodes, std::vector<uint32_t>&& v2NodesList, 
+                                   uint32_t unknownNodes, std::vector<uint32_t>&& unknownNodesList)
+        : TStatus(std::move(status))
+        , V1Nodes_(v1Nodes)
+        , V1NodesList_(std::move(v1NodesList))
+        , V2Nodes_(v2Nodes)
+        , V2NodesList_(std::move(v2NodesList))
+        , UnknownNodes_(unknownNodes)
+        , UnknownNodesList_(std::move(unknownNodesList))
+    {}
+
+    uint32_t GetV1Nodes() const {
+        return V1Nodes_;
+    }
+
+    const std::vector<uint32_t>& GetV1NodesList() const {
+        return V1NodesList_;
+    }
+
+    uint32_t GetV2Nodes() const {
+        return V2Nodes_;
+    }
+
+    const std::vector<uint32_t>& GetV2NodesList() const {
+        return V2NodesList_;
+    }
+
+    uint32_t GetUnknownNodes() const {
+        return UnknownNodes_;
+    }
+
+    const std::vector<uint32_t>& GetUnknownNodesList() const {
+        return UnknownNodesList_;
+    }
+
+private:
+    uint32_t V1Nodes_;
+    std::vector<uint32_t> V1NodesList_;
+    uint32_t V2Nodes_;
+    std::vector<uint32_t> V2NodesList_;
+    uint32_t UnknownNodes_;
+    std::vector<uint32_t> UnknownNodesList_;
+};
+
+using TAsyncGetConfigurationVersionResult = NThreading::TFuture<TGetConfigurationVersionResult>;
+
 struct TDynamicConfigClientSettings : public TCommonClientSettingsBase<TDynamicConfigClientSettings> {
     using TSelf = TDynamicConfigClientSettings;
 };
@@ -257,6 +305,13 @@ public:
 
     // Fetch startup config
     TAsyncFetchStartupConfigResult FetchStartupConfig(const TClusterConfigSettings& settings = {});
+
+    // Get configuration version on nodes
+    TAsyncGetConfigurationVersionResult GetConfigurationVersion(
+        bool listV1Nodes,
+        bool listV2Nodes,
+        bool listUnknownNodes,
+        const TClusterConfigSettings& settings = {});
 
 private:
     std::shared_ptr<TImpl> Impl_;

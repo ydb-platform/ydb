@@ -365,6 +365,52 @@ public:
 
         return promise.GetFuture();
     }
+
+    TAsyncGetConfigurationVersionResult GetConfigurationVersion(bool listV1Nodes, bool listV2Nodes, bool listUnknownNodes, const TClusterConfigSettings& settings = {}) {
+        auto request = MakeOperationRequest<Ydb::DynamicConfig::GetConfigurationVersionRequest>(settings);
+        request.set_list_v1_nodes(listV1Nodes);
+        request.set_list_v2_nodes(listV2Nodes);
+        request.set_list_unknown_nodes(listUnknownNodes);
+
+        auto promise = NThreading::NewPromise<TGetConfigurationVersionResult>();
+
+        auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
+            uint32_t v1Nodes = 0;
+            uint32_t v2Nodes = 0;
+            uint32_t unknownNodes = 0;
+            std::vector<uint32_t> v1NodesList;
+            std::vector<uint32_t> v2NodesList;
+            std::vector<uint32_t> unknownNodesList;
+
+            if (Ydb::DynamicConfig::GetConfigurationVersionResult result; any && any->UnpackTo(&result)) {
+                v1Nodes = result.v1_nodes();
+                v2Nodes = result.v2_nodes();
+                unknownNodes = result.unknown_nodes();
+                for (auto& node : result.v1_nodes_list()) {
+                    v1NodesList.push_back(node);
+                }
+                for (auto& node : result.v2_nodes_list()) {
+                    v2NodesList.push_back(node);
+                }
+                for (auto& node : result.unknown_nodes_list()) {
+                    unknownNodesList.push_back(node);
+                }
+            }
+
+            TGetConfigurationVersionResult val(TStatus(std::move(status)), v1Nodes, std::move(v1NodesList), v2Nodes, std::move(v2NodesList), unknownNodes, std::move(unknownNodesList));
+            promise.SetValue(std::move(val));
+        };
+
+        Connections_->RunDeferred<Ydb::DynamicConfig::V1::DynamicConfigService, Ydb::DynamicConfig::GetConfigurationVersionRequest, Ydb::DynamicConfig::GetConfigurationVersionResponse>(
+            std::move(request),
+            extractor,
+            &Ydb::DynamicConfig::V1::DynamicConfigService::Stub::AsyncGetConfigurationVersion,
+            DbDriverState_,
+            INITIAL_DEFERRED_CALL_DELAY,
+            TRpcRequestSettings::Make(settings));
+
+        return promise.GetFuture();
+    }
 };
 
 TDynamicConfigClient::TDynamicConfigClient(const TDriver& driver)
@@ -462,6 +508,14 @@ TAsyncVerboseResolveConfigResult TDynamicConfigClient::VerboseResolveConfig(
 
 TAsyncFetchStartupConfigResult TDynamicConfigClient::FetchStartupConfig(const TClusterConfigSettings& settings) {
     return Impl_->FetchStartupConfig(settings);
+}
+
+TAsyncGetConfigurationVersionResult TDynamicConfigClient::GetConfigurationVersion(
+    bool listV1Nodes,
+    bool listV2Nodes,
+    bool listUnknownNodes,
+    const TClusterConfigSettings& settings) {
+    return Impl_->GetConfigurationVersion(listV1Nodes, listV2Nodes, listUnknownNodes, settings);
 }
 
 } // namespace NYdb::NDynamicConfig

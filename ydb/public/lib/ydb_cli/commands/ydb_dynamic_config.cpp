@@ -8,6 +8,7 @@
 
 #include <util/folder/path.h>
 #include <util/string/hex.h>
+#include <algorithm>
 
 using namespace NKikimr;
 
@@ -49,6 +50,7 @@ TCommandConfig::TCommandConfig(
     AddCommand(std::make_unique<TCommandConfigReplace>(useLegacyApi, allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandConfigResolve>());
     AddCommand(std::make_unique<TCommandGenerateDynamicConfig>(allowEmptyDatabase));
+    AddCommand(std::make_unique<TCommandVersionDynamicConfig>(allowEmptyDatabase));
 }
 
 TCommandConfig::TCommandConfig(
@@ -827,5 +829,63 @@ int TCommandGenerateDynamicConfig::Run(TConfig& config) {
 
     return EXIT_SUCCESS;
 }
+
+TCommandVersionDynamicConfig::TCommandVersionDynamicConfig(bool allowEmptyDatabase)
+    : TYdbReadOnlyCommand("version", {}, "Show configuration version on nodes")
+    , AllowEmptyDatabase(allowEmptyDatabase)
+{
+}
+
+void TCommandVersionDynamicConfig::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.Opts->AddLongOption("list-V1-nodes", "List nodes with V1 configuration")
+        .StoreTrue(&ListV1Nodes);
+    config.Opts->AddLongOption("list-V2-nodes", "List nodes with V2 configuration")
+        .StoreTrue(&ListV2Nodes);
+    config.Opts->AddLongOption("list-unknown-nodes", "List nodes with unknown configuration")
+        .StoreTrue(&ListUnknownNodes);
+    config.SetFreeArgsNum(0);
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
+}
+
+int TCommandVersionDynamicConfig::Run(TConfig& config) {
+    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
+    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+
+    auto result = client.GetConfigurationVersion(ListV1Nodes, ListV2Nodes, ListUnknownNodes).GetValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+
+    auto copySortAndPrintNodeList = [&](bool shouldPrint, const TString& header, const auto& list_getter) {
+        if (shouldPrint) {
+            const auto& proto_list = list_getter();
+            std::vector<std::decay_t<decltype(*proto_list.begin())>> nodes_vector(
+                proto_list.begin(), proto_list.end()
+            );
+            std::sort(nodes_vector.begin(), nodes_vector.end());
+
+            Cout << header << Endl;
+            bool first = true;
+            for (const auto& node : nodes_vector) {
+                if (!first) {
+                    Cout << ", ";
+                }
+                Cout << node;
+                first = false;
+            }
+            Cout << Endl;
+        }
+    };
+
+#define PRINT_NODE_VERSION_INFO(type) \
+    Cout << #type " nodes: " << result.Get##type##Nodes() << Endl; \
+    copySortAndPrintNodeList(List##type##Nodes, #type " nodes list: ", [&]() { return result.Get##type##NodesList(); })
+
+    PRINT_NODE_VERSION_INFO(V1);
+    PRINT_NODE_VERSION_INFO(V2);
+    PRINT_NODE_VERSION_INFO(Unknown);
+
+    return EXIT_SUCCESS;
+}
+
 
 } // namespace NYdb::NConsoleClient::NDynamicConfig

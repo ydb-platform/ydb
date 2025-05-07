@@ -26,6 +26,8 @@ void TTester::Setup(TTestActorRuntime& runtime) {
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
     runtime.SetLogPriority(NKikimrServices::S3_WRAPPER, NLog::PRI_DEBUG);
 
+    NOlap::TSchemaCachesManager::DropCaches();
+
     ui32 domainId = 0;
     ui32 planResolution = 500;
 
@@ -503,20 +505,18 @@ namespace NKikimr::NColumnShard {
         return planStep;
     }
 
-    NTxUT::TPlanStep SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId,
-                 const TestTableDescription& table, TString codec) {
+    NTxUT::TPlanStep SetupSchema(
+        TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId, const TestTableDescription& table, TString codec, const ui64 txId) {
         using namespace NTxUT;
-        const ui64 txId = 10;
         TString txBody;
         auto specials = TTestSchema::TTableSpecials().WithCodec(codec);
         if (table.InStore) {
-            txBody = TTestSchema::CreateTableTxBody(pathId, table.Schema, table.Pk, specials);
+            txBody = TTestSchema::CreateInitShardTxBody(pathId, table.Schema, table.Pk, specials);
         } else {
             txBody = TTestSchema::CreateStandaloneTableTxBody(pathId, table.Schema, table.Pk, specials);
         }
         return SetupSchema(runtime, sender, txBody, txId);
     }
-
 
     NTxUT::TPlanStep PrepareTablet(TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize) {
         using namespace NTxUT;

@@ -370,4 +370,5 @@ message TTableServiceConfig {
     optional bool AllowMultiBroadcasts = 79 [default = false];
 
     optional bool DefaultEnableShuffleElimination = 80 [default = false];
+    optional bool FilterPushdownOverJoinOptionalSide = 81 [ default = true ];
 };

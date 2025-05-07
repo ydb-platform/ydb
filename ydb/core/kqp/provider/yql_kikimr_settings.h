@@ -179,6 +179,10 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     ui64 DefaultEnableSpillingNodes = 0;
     bool EnableAntlr4Parser = false;
     bool EnableSnapshotIsolationRW = false;
+    bool AllowMultiBroadcasts = false;
+    bool DefaultEnableShuffleElimination = false;
+    bool FilterPushdownOverJoinOptionalSide = false;
+    THashSet<TString> YqlCoreOptimizerFlags;
 
     void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;

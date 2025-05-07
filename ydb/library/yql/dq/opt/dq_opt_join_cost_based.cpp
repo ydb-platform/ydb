@@ -30,13 +30,13 @@ bool DqCollectJoinRelationsWithStats(
 
         auto stats = typesCtx.GetStats(joinArg.Raw());
 
-        if (!stats) {
-            YQL_CLOG(TRACE, CoreDq) << "Didn't find statistics for scope " << input.Scope().Cast<TCoAtom>().StringValue() << "\n";
+        auto scope = input.Scope();
+        if (!scope.Maybe<TCoAtom>()){
             return false;
         }
 
-        auto scope = input.Scope();
-        if (!scope.Maybe<TCoAtom>()){
+        if (!stats) {
+            YQL_CLOG(TRACE, CoreDq) << "Didn't find statistics for scope " << input.Scope().Cast<TCoAtom>().StringValue() << "\n";
             return false;
         }
 

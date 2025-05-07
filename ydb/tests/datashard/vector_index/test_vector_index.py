@@ -81,7 +81,7 @@ class TestVectorIndex(VectorBase):
             for sync in self.sync:
                 for target in self.targets.keys():
                     for distance in self.targets[target].keys():
-                        table_name_distance = f"{table_name}_{distance}_{target}"
+                        table_name_distance = f"{table_name}_{distance}_{target}_{sync}_level_{dimension["levels"]}"
                         dml.create_table(table_name_distance, pk_types, all_types, index, ttl, unique, sync)
                         self.vectors = []
                         self.upsert(table_name_distance, all_types, pk_types, index, ttl, vector_type)

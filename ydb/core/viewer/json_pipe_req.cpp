@@ -913,6 +913,8 @@ void TViewerPipeClient::InitConfig(const TCgiParameters& params) {
     Proto2JsonConfig.MapAsObject = true;
     Proto2JsonConfig.ConvertAny = true;
     Proto2JsonConfig.WriteNanAsString = true;
+    Proto2JsonConfig.DoubleNDigits = 17;
+    Proto2JsonConfig.FloatNDigits = 9;
     Timeout = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("timeout"), Timeout.MilliSeconds()));
     UseCache = FromStringWithDefault<bool>(params.Get("use_cache"), UseCache);
 }
@@ -986,8 +988,8 @@ TString TViewerPipeClient::GetHTTPOKJSON(TString response, TInstant lastModified
 }
 
 TString TViewerPipeClient::GetHTTPOKJSON(const NJson::TJsonValue& response, TInstant lastModified) {
-    constexpr ui32 doubleNDigits = std::numeric_limits<double>::max_digits10;
-    constexpr ui32 floatNDigits = std::numeric_limits<float>::max_digits10;
+    constexpr ui32 doubleNDigits = 17;
+    constexpr ui32 floatNDigits = 9;
     constexpr EFloatToStringMode floatMode = EFloatToStringMode::PREC_NDIGITS;
     TStringStream content;
     NJson::WriteJson(&content, &response, {

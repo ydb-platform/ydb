@@ -2,7 +2,7 @@
 
 {{ ydb-short-name }} Open-Source Database (`ydbd`) — исполняемый файл для запуска узла [кластера {{ ydb-short-name }}](../concepts/glossary.md#cluster). Распространяется под [лицензией Apache 2.0](https://github.com/ydb-platform/ydb/blob/main/LICENSE).
 
-См. также [{#T}](ydb-enterprise-database.md).
+См. также [{#T}](yandex-enterprise-database.md).
 
 ## Linux
 

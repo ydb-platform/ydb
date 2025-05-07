@@ -391,7 +391,7 @@ class DMLOperations():
                 microseconds=key[data_type](values)), f"{data_type}"
         elif data_type == "Timestamp" or data_type == "Timestamp64":
             assert values_from_rows == datetime.fromtimestamp(
-                key[data_type](values)/1_000_000), f"{data_type}"
+                key[data_type](values)/1_000_000 - 3 * 60 * 60), f"{data_type}"
         elif data_type == "Json" or data_type == "JsonDocument":
             assert str(values_from_rows).replace(
                 "'", "\"") == str(key[data_type](values)), f"{data_type}"

@@ -1,6 +1,5 @@
 #include "partition_blob_encoder.h"
 #include "partition_util.h"
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 

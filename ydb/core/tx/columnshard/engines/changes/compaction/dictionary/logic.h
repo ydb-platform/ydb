@@ -87,8 +87,12 @@ public:
     }
 
     void MoveToPosition(const ui32 globalPosition) {
+        if (GlobalPosition == globalPosition) {
+            AFL_VERIFY(GlobalPosition == 0)("old", GlobalPosition);
+            return;
+        }
         AFL_VERIFY(Input);
-        AFL_VERIFY(GlobalPosition < globalPosition);
+        AFL_VERIFY(GlobalPosition < globalPosition)("old", GlobalPosition)("new", globalPosition)("count", Input->GetRecordsCount());
         if (CurrentChunk->GetAddress().Contains(globalPosition)) {
             ChunkPosition = CurrentChunk->GetAddress().GetLocalIndex(globalPosition);
             GlobalPosition = globalPosition;

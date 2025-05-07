@@ -395,21 +395,21 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
     write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
 }
 
-bool TPartition::CleanUpFastWrite(TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
-{
-    PQ_LOG_T("Have " << request->Record.CmdDeleteRangeSize() << " items to delete old stuff");
-
-    bool haveChanges = SourceIdStorage.DropOldSourceIds(request, ctx.Now(), CompactionZone.StartOffset, Partition,
-                                                        Config.GetPartitionConfig());
-    if (haveChanges) {
-        SourceIdStorage.MarkOwnersForDeletedSourceId(Owners);
-    }
-
-    PQ_LOG_T("Have " << request->Record.CmdDeleteRangeSize() << " items to delete all stuff. "
-            << "Delete command " << request->ToString());
-
-    return haveChanges;
-}
+//bool TPartition::CleanUpFastWrite(TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
+//{
+//    PQ_LOG_T("Have " << request->Record.CmdDeleteRangeSize() << " items to delete old stuff");
+//
+//    bool haveChanges = SourceIdStorage.DropOldSourceIds(request, ctx.Now(), CompactionZone.StartOffset, Partition,
+//                                                        Config.GetPartitionConfig());
+//    if (haveChanges) {
+//        SourceIdStorage.MarkOwnersForDeletedSourceId(Owners);
+//    }
+//
+//    PQ_LOG_T("Have " << request->Record.CmdDeleteRangeSize() << " items to delete all stuff. "
+//            << "Delete command " << request->ToString());
+//
+//    return haveChanges;
+//}
 
 bool TPartition::CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& ctx) {
     bool haveChanges = CleanUpBlobs(request, ctx);
@@ -2138,7 +2138,6 @@ void TPartition::RunPersist() {
         WriteTimestampEstimate = now;
     }
 
-    //HaveDrop = CleanUpFastWrite(PersistRequest.Get(), ctx);
     HaveDrop = CleanUp(PersistRequest.Get(), ctx);
     bool haveChanges = HaveDrop;
     if (DiskIsFull) {
@@ -2209,8 +2208,8 @@ void TPartition::RunPersist() {
         WriteInfosApplied.clear();
         //Done with counters.
 
-        // иногда во время отладки хочется посмотреть что записывается на диск
-        DumpKeyValueRequest(PersistRequest->Record);
+        //// иногда во время отладки хочется посмотреть что записывается на диск
+        //DumpKeyValueRequest(PersistRequest->Record);
 
         PersistRequestSpan.Attribute("bytes", static_cast<i64>(PersistRequest->Record.ByteSizeLong()));
         ctx.Send(HaveWriteMsg ? BlobCache : Tablet, PersistRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
@@ -2271,47 +2270,47 @@ void TPartition::DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& requ
     PQ_LOG_D("===========================");
 }
 
-//void TPartition::DumpZones(const char* file, unsigned line) const
-//{
-//    DBGTRACE("TPartition::DumpZones");
-//
-//    if (file) {
-//        DBGTRACE_LOG(file << "(" << line << ")");
-//    }
-//
-//    auto dumpZone = [](const TPartitionBlobEncoder& zone) {
-//        auto dumpKeys = [](const std::deque<TDataKey>& keys, const char* prefix) {
-//            Y_UNUSED(prefix);
-//            for (size_t i = 0; i < keys.size(); ++i) {
-//                DBGTRACE_LOG(prefix << "[" << i << "]=" << keys[i].Key.ToString() <<
-//                             ", Size=" << keys[i].Size << ", CumulativeSize=" << keys[i].CumulativeSize);
-//            }
-//        };
-//        auto dumpHead = [](const THead& head, const char* prefix) {
-//            Y_UNUSED(head);
-//            Y_UNUSED(prefix);
-//            DBGTRACE_LOG(prefix <<
-//                         ": Offset=" << head.Offset << ", PartNo=" << head.PartNo <<
-//                         ", PackedSize=" << head.PackedSize <<
-//                         ", Batches.size=" << head.GetBatches().size());
-//        };
-//
-//        DBGTRACE_LOG("StartOffset=" << zone.StartOffset << ", EndOffset=" << zone.EndOffset);
-//        DBGTRACE_LOG("CompactedKeys.size=" << zone.CompactedKeys.size());
-//        DBGTRACE_LOG("BodySize=" << zone.BodySize);
-//        dumpKeys(zone.DataKeysBody, "Body");
-//        dumpKeys(zone.HeadKeys, "Head");
-//        dumpHead(zone.Head, "Head");
-//        dumpHead(zone.NewHead, "NewHead");
-//    };
-//
-//    DBGTRACE_LOG("=== DumpPartitionZones ===");
-//    DBGTRACE_LOG("--- Compaction -----------");
-//    dumpZone(CompactionZone);
-//    DBGTRACE_LOG("--- FastWrite ------------");
-//    dumpZone(BlobEncoder);
-//    DBGTRACE_LOG("==========================");
-//}
+void TPartition::DumpZones(const char* file, unsigned line) const
+{
+    PQ_LOG_D("TPartition::DumpZones");
+
+    if (file) {
+        PQ_LOG_D(file << "(" << line << ")");
+    }
+
+    auto dumpZone = [](const TPartitionBlobEncoder& zone) {
+        auto dumpKeys = [](const std::deque<TDataKey>& keys, const char* prefix) {
+            Y_UNUSED(prefix);
+            for (size_t i = 0; i < keys.size(); ++i) {
+                PQ_LOG_D(prefix << "[" << i << "]=" << keys[i].Key.ToString() <<
+                         ", Size=" << keys[i].Size << ", CumulativeSize=" << keys[i].CumulativeSize);
+            }
+        };
+        auto dumpHead = [](const THead& head, const char* prefix) {
+            Y_UNUSED(head);
+            Y_UNUSED(prefix);
+            PQ_LOG_D(prefix <<
+                     ": Offset=" << head.Offset << ", PartNo=" << head.PartNo <<
+                     ", PackedSize=" << head.PackedSize <<
+                     ", Batches.size=" << head.GetBatches().size());
+        };
+
+        PQ_LOG_D("StartOffset=" << zone.StartOffset << ", EndOffset=" << zone.EndOffset);
+        PQ_LOG_D("CompactedKeys.size=" << zone.CompactedKeys.size());
+        PQ_LOG_D("BodySize=" << zone.BodySize);
+        dumpKeys(zone.DataKeysBody, "Body");
+        dumpKeys(zone.HeadKeys, "Head");
+        dumpHead(zone.Head, "Head");
+        dumpHead(zone.NewHead, "NewHead");
+    };
+
+    PQ_LOG_D("=== DumpPartitionZones ===");
+    PQ_LOG_D("--- Compaction -----------");
+    dumpZone(CompactionZone);
+    PQ_LOG_D("--- FastWrite ------------");
+    dumpZone(BlobEncoder);
+    PQ_LOG_D("==========================");
+}
 
 TBlobKeyTokenPtr TPartition::MakeBlobKeyToken(const TString& key)
 {

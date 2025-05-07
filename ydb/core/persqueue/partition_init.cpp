@@ -662,8 +662,8 @@ void TInitDataRangeStep::FormHeadAndProceed() {
     auto keys = std::move(dataKeysBody);
     dataKeysBody.clear();
 
-    auto& cz = Partition()->CompactionZone;
-    auto& fwz = Partition()->BlobEncoder;
+    auto& cz = Partition()->CompactionZone; // Compaction zone
+    auto& fwz = Partition()->BlobEncoder;   // FastWrite zone
 
     cz.BodySize = 0;
 
@@ -718,18 +718,6 @@ void TInitDataRangeStep::FormHeadAndProceed() {
 
         fwz.Head.Offset = endOffset;
     }
-
-    //while (dataKeysBody.size() > 0 && dataKeysBody.back().Key.HasSuffix()) {
-    //    DBGTRACE_LOG("key: " << dataKeysBody.back().Key.ToString());
-    //    Y_ABORT_UNLESS(dataKeysBody.back().Key.GetOffset() + dataKeysBody.back().Key.GetCount() == head.Offset); //no gaps in head allowed
-    //    headKeys.push_front(dataKeysBody.back());
-    //    head.Offset = dataKeysBody.back().Key.GetOffset();
-    //    head.PartNo = dataKeysBody.back().Key.GetPartNo();
-    //    dataKeysBody.pop_back();
-    //}
-    //for (const auto& p : dataKeysBody) {
-    //    Y_ABORT_UNLESS(!p.Key.HasSuffix());
-    //}
 
     Y_ABORT_UNLESS(fwz.HeadKeys.empty() || fwz.Head.Offset == fwz.HeadKeys.front().Key.GetOffset() && fwz.Head.PartNo == fwz.HeadKeys.front().Key.GetPartNo());
     Y_ABORT_UNLESS(fwz.Head.Offset < endOffset || fwz.Head.Offset == endOffset && fwz.HeadKeys.empty());

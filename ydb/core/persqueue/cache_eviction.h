@@ -106,7 +106,6 @@ namespace NKikimr::NPQ {
             for (auto& blob : Blobs) {
                 if (blob.Value.empty()) {
                     // add reading command
-                    //auto key = TKey::ForBody(TKeyPrefix::TypeData, Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount);
                     const auto& key = blob.Key;
                     auto read = request->Record.AddCmdRead();
                     read->SetKey(key.Data(), key.Size());

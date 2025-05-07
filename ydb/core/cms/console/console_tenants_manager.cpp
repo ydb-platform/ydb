@@ -625,6 +625,7 @@ public:
             Tenant->UserToken.GetSanitizedToken(),
             Tenant->Path
         );
+
         ctx.Send(MakeTxProxyID(), request.Release());
     }
 
@@ -649,6 +650,13 @@ public:
         BLOG_TRACE("TSubdomainManip(" << Tenant->Path << ") send subdomain drop cmd: "
                     << request->ToString());
 
+        AuditLogBeginRemoveDatabase(
+            Tenant->PeerName,
+            Tenant->UserToken.GetUserSID(),
+            Tenant->UserToken.GetSanitizedToken(),
+            Tenant->Path
+        );
+            
         ctx.Send(MakeTxProxyID(), request.Release());
     }
 
@@ -700,6 +708,26 @@ public:
                      const TActorContext &ctx)
     {
         BLOG_D("TSubdomainManip(" << Tenant->Path << ") reply with " << resp->ToString());
+
+        using TAuditFunc = decltype(AuditLogEndConfigureDatabase);
+        auto audit = [&](TAuditFunc auditFunc, bool success) {
+            auditFunc(
+                Tenant->PeerName,
+                Tenant->UserToken.GetUserSID(),
+                Tenant->UserToken.GetSanitizedToken(),
+                Tenant->Path,
+                success ? "" : resp->GetReason(),
+                success
+            );
+        };
+
+        bool isSuccess = (typeid(*resp) != typeid(TTenantsManager::TEvPrivate::TEvSubdomainFailed));
+        if (Action == GET_KEY) {
+            audit(AuditLogEndConfigureDatabase, isSuccess);
+        } else if (Action == REMOVE) {
+            audit(AuditLogEndRemoveDatabase, isSuccess);
+        }
+
         ctx.Send(OwnerId, resp);
         Die(ctx);
     }
@@ -848,45 +876,15 @@ public:
 
         if (Action == REMOVE) {
             switch (rec.GetStatus()) {
-            case NKikimrScheme::EStatus::StatusPathDoesNotExist: {
-                AuditLogEndRemoveDatabase(
-                    Tenant->PeerName,
-                    Tenant->UserToken.GetUserSID(),
-                    Tenant->UserToken.GetSanitizedToken(),
-                    Tenant->Path,
-                    "Path does not exist",
-                    false
-                );
-        
+            case NKikimrScheme::EStatus::StatusPathDoesNotExist:
                 ActionFinished(ctx);
                 break;
-            }
-            case NKikimrScheme::EStatus::StatusSuccess: {
-                AuditLogEndRemoveDatabase(
-                    Tenant->PeerName,
-                    Tenant->UserToken.GetUserSID(),
-                    Tenant->UserToken.GetSanitizedToken(),
-                    Tenant->Path,
-                    "",
-                    true
-                );
-
+            case NKikimrScheme::EStatus::StatusSuccess:
                 DropSubdomain(ctx);
                 break;
-            }
-            default: {
-                AuditLogEndRemoveDatabase(
-                    Tenant->PeerName,
-                    Tenant->UserToken.GetUserSID(),
-                    Tenant->UserToken.GetSanitizedToken(),
-                    Tenant->Path,
-                    rec.GetReason(),
-                    false
-                );
-
+            default:
                 ReplyAndDie(new TTenantsManager::TEvPrivate::TEvSubdomainFailed(Tenant, rec.GetReason()), ctx);
                 break;
-            }
             }
 
             return;
@@ -898,15 +896,6 @@ public:
                         << NKikimrScheme::EStatus_Name(rec.GetStatus()) <<
                         " reason is <" << rec.GetReason() << ">" <<
                         " while resolving subdomain " << Tenant->Path);
-
-            AuditLogEndConfigureDatabase(
-                Tenant->PeerName,
-                Tenant->UserToken.GetUserSID(),
-                Tenant->UserToken.GetSanitizedToken(),
-                Tenant->Path,
-                rec.GetReason(),
-                false
-            );
 
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvSubdomainFailed(Tenant, rec.GetReason()), ctx);
             return;
@@ -921,15 +910,6 @@ public:
                         << NKikimrSchemeOp::EPathType_Name(pathType)
                         << " but expected " << NKikimrSchemeOp::EPathType_Name(expectedPathType));
 
-            AuditLogEndConfigureDatabase(
-                Tenant->PeerName,
-                Tenant->UserToken.GetUserSID(),
-                Tenant->UserToken.GetSanitizedToken(),
-                Tenant->Path,
-                "Path has invalid path type",
-                false
-            );
-
             ReplyAndDie(new TTenantsManager::TEvPrivate::TEvSubdomainFailed(Tenant, "bad path type"), ctx);
             return;
         }
@@ -937,15 +917,6 @@ public:
         const auto &key = rec.GetPathDescription().GetDomainDescription().GetDomainKey();
         SchemeshardId = key.GetSchemeShard();
         PathId = key.GetPathId();
-
-        AuditLogEndConfigureDatabase(
-            Tenant->PeerName,
-            Tenant->UserToken.GetUserSID(),
-            Tenant->UserToken.GetSanitizedToken(),
-            Tenant->Path,
-            "",
-            true
-        );
 
         ReplyAndDie(ctx);
     }

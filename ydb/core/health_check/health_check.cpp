@@ -2131,17 +2131,7 @@ public:
     ui32 ParsePDiskStatusOrUnknown(const TString& statusString) {
         static const auto* descriptor = NKikimrBlobStorage::EDriveStatus_descriptor();
         const auto* valueDescriptor = descriptor->FindValueByName(statusString);
-        return valueDescriptor ? valueDescriptor->number() : NKikimrBlobStorage::EDriveStatus::UNKNOWN;
-    }
-
-    bool TryParsePDiskStatus(const TString& statusString, ui32& statusNumber) {
-        static const auto *descriptor = NKikimrBlobStorage::EDriveStatus_descriptor();
-        const auto* valueDescriptor = descriptor->FindValueByName(statusString);
-        if (!valueDescriptor) {
-            return false;
-        }
-        statusNumber = valueDescriptor->number();
-        return true;
+        return valueDescriptor ? valueDescriptor->number() : NKikimrBlobStorage::UNKNOWN;
     }
 
     void ReportPDiskState(NKikimrBlobStorage::TPDiskState::E stateEnum, TSelfCheckContext& context) {

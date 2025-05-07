@@ -70,6 +70,10 @@ namespace NInterconnect {
         : TAddress(addr.data(), port)
     {}
 
+    TAddress::TAddress(sockaddr addr) {
+        Addr.Generic = addr;
+    }
+
     TAddress::TAddress(in_addr addr, ui16 port) {
         Addr.Ipv4.sin_family = AF_INET;
         Addr.Ipv4.sin_port = htons(port);

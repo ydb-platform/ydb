@@ -104,9 +104,20 @@ namespace NActors {
             NInterconnect::TAddress address;
             const int r = Listener->Accept(address);
             if (r >= 0) {
-                LOG_ERROR_IC("ICL04", "Accepted from: %s", address.ToString().data());
                 auto socket = MakeIntrusive<NInterconnect::TStreamSocket>(static_cast<SOCKET>(r));
-                NInterconnect::NRdma::TRdmaCtx* rdmaCtx = NInterconnect::NRdma::NLinkMgr::GetCtx(address.GetV6CompatAddr());
+                LOG_ERROR_IC("ICL04", "Accepted from: %s", address.ToString().data());
+                NInterconnect::NRdma::TRdmaCtx* rdmaCtx = nullptr;
+                auto sockname = socket->GetSockName();
+                switch (sockname.index()) {
+                    case 0:
+                        Cerr << "AAAAA: " << std::get<0>(sockname).ToString() << Endl;
+                        rdmaCtx = NInterconnect::NRdma::NLinkMgr::GetCtx(std::get<0>(sockname).GetV6CompatAddr());
+                        //rdmaCtx = NInterconnect::NRdma::NLinkMgr::GetCtx(address.GetV6CompatAddr());
+                        break;
+                    case 1:
+                        LOG_ERROR_IC("ICL04", "Unable to get local address for socket: %d. Rdma will not be used", (int)(*socket));
+                        break; 
+                }
                 ctx.Register(CreateIncomingHandshakeActor(ProxyCommonCtx, std::move(socket), rdmaCtx));
                 continue;
             } else if (-r != EAGAIN && -r != EWOULDBLOCK) {

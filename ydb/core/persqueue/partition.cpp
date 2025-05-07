@@ -22,7 +22,6 @@
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
-#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace {
 
@@ -2272,47 +2271,47 @@ void TPartition::DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& requ
     PQ_LOG_D("===========================");
 }
 
-void TPartition::DumpZones(const char* file, unsigned line) const
-{
-    DBGTRACE("TPartition::DumpZones");
-
-    if (file) {
-        DBGTRACE_LOG(file << "(" << line << ")");
-    }
-
-    auto dumpZone = [](const TPartitionBlobEncoder& zone) {
-        auto dumpKeys = [](const std::deque<TDataKey>& keys, const char* prefix) {
-            Y_UNUSED(prefix);
-            for (size_t i = 0; i < keys.size(); ++i) {
-                DBGTRACE_LOG(prefix << "[" << i << "]=" << keys[i].Key.ToString() <<
-                             ", Size=" << keys[i].Size << ", CumulativeSize=" << keys[i].CumulativeSize);
-            }
-        };
-        auto dumpHead = [](const THead& head, const char* prefix) {
-            Y_UNUSED(head);
-            Y_UNUSED(prefix);
-            DBGTRACE_LOG(prefix <<
-                         ": Offset=" << head.Offset << ", PartNo=" << head.PartNo <<
-                         ", PackedSize=" << head.PackedSize <<
-                         ", Batches.size=" << head.GetBatches().size());
-        };
-
-        DBGTRACE_LOG("StartOffset=" << zone.StartOffset << ", EndOffset=" << zone.EndOffset);
-        DBGTRACE_LOG("CompactedKeys.size=" << zone.CompactedKeys.size());
-        DBGTRACE_LOG("BodySize=" << zone.BodySize);
-        dumpKeys(zone.DataKeysBody, "Body");
-        dumpKeys(zone.HeadKeys, "Head");
-        dumpHead(zone.Head, "Head");
-        dumpHead(zone.NewHead, "NewHead");
-    };
-
-    DBGTRACE_LOG("=== DumpPartitionZones ===");
-    DBGTRACE_LOG("--- Compaction -----------");
-    dumpZone(CompactionZone);
-    DBGTRACE_LOG("--- FastWrite ------------");
-    dumpZone(BlobEncoder);
-    DBGTRACE_LOG("==========================");
-}
+//void TPartition::DumpZones(const char* file, unsigned line) const
+//{
+//    DBGTRACE("TPartition::DumpZones");
+//
+//    if (file) {
+//        DBGTRACE_LOG(file << "(" << line << ")");
+//    }
+//
+//    auto dumpZone = [](const TPartitionBlobEncoder& zone) {
+//        auto dumpKeys = [](const std::deque<TDataKey>& keys, const char* prefix) {
+//            Y_UNUSED(prefix);
+//            for (size_t i = 0; i < keys.size(); ++i) {
+//                DBGTRACE_LOG(prefix << "[" << i << "]=" << keys[i].Key.ToString() <<
+//                             ", Size=" << keys[i].Size << ", CumulativeSize=" << keys[i].CumulativeSize);
+//            }
+//        };
+//        auto dumpHead = [](const THead& head, const char* prefix) {
+//            Y_UNUSED(head);
+//            Y_UNUSED(prefix);
+//            DBGTRACE_LOG(prefix <<
+//                         ": Offset=" << head.Offset << ", PartNo=" << head.PartNo <<
+//                         ", PackedSize=" << head.PackedSize <<
+//                         ", Batches.size=" << head.GetBatches().size());
+//        };
+//
+//        DBGTRACE_LOG("StartOffset=" << zone.StartOffset << ", EndOffset=" << zone.EndOffset);
+//        DBGTRACE_LOG("CompactedKeys.size=" << zone.CompactedKeys.size());
+//        DBGTRACE_LOG("BodySize=" << zone.BodySize);
+//        dumpKeys(zone.DataKeysBody, "Body");
+//        dumpKeys(zone.HeadKeys, "Head");
+//        dumpHead(zone.Head, "Head");
+//        dumpHead(zone.NewHead, "NewHead");
+//    };
+//
+//    DBGTRACE_LOG("=== DumpPartitionZones ===");
+//    DBGTRACE_LOG("--- Compaction -----------");
+//    dumpZone(CompactionZone);
+//    DBGTRACE_LOG("--- FastWrite ------------");
+//    dumpZone(BlobEncoder);
+//    DBGTRACE_LOG("==========================");
+//}
 
 TBlobKeyTokenPtr TPartition::MakeBlobKeyToken(const TString& key)
 {

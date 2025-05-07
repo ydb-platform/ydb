@@ -589,7 +589,7 @@ TReadAnswer TReadInfo::FormAnswer(
     Y_ABORT_UNLESS(blobs.size() == Blobs.size());
     response->Check();
     bool needStop = false;
-#if 1
+
     auto readAnswer = AddBlobsFromBody(blobs,
                                        0, CompactedBlobsCount,
                                        userInfo,
@@ -606,102 +606,6 @@ TReadAnswer TReadInfo::FormAnswer(
     if (readAnswer) {
         return std::move(*readAnswer);
     }
-#else
-    for (ui32 pos = 0; pos < blobs.size() && !needStop; ++pos) {
-        Y_ABORT_UNLESS(Blobs[pos].Offset == blobs[pos].Offset, "Mismatch %" PRIu64 " vs %" PRIu64, Blobs[pos].Offset, blobs[pos].Offset);
-        Y_ABORT_UNLESS(Blobs[pos].Count == blobs[pos].Count, "Mismatch %" PRIu32 " vs %" PRIu32, Blobs[pos].Count, blobs[pos].Count);
-
-        ui64 offset = blobs[pos].Offset;
-        ui32 count = blobs[pos].Count;
-        ui16 partNo = blobs[pos].PartNo;
-        ui16 internalPartsCount = blobs[pos].InternalPartsCount;
-        const TString& blobValue = blobs[pos].Value;
-
-        if (blobValue.empty()) { // this is ok. Means that someone requested too much data or retention race
-            PQ_LOG_D( "Not full answer here!");
-            ui64 answerSize = answer->Response->ByteSize();
-            if (userInfo && Destination != 0) {
-                userInfo->ReadDone(ctx, ctx.Now(), answerSize, cnt, ClientDC,
-                        tablet, IsExternalRead, endOffset);
-            }
-            readResult->SetSizeLag(sizeLag - size);
-            RealReadOffset = realReadOffset;
-            LastOffset = Offset - 1;
-            SizeEstimate = answerSize;
-            readResult->SetSizeEstimate(SizeEstimate);
-            readResult->SetLastOffset(LastOffset);
-            readResult->SetStartOffset(startOffset);
-            readResult->SetEndOffset(endOffset);
-            return {answerSize, std::move(answer)};
-        }
-        Y_ABORT_UNLESS(blobValue.size() == blobs[pos].Size, "value for offset %" PRIu64 " count %u size must be %u, but got %u",
-                                                        offset, count, blobs[pos].Size, (ui32)blobValue.size());
-
-        if (offset > Offset || (offset == Offset && partNo > PartNo)) { // got gap
-            Offset = offset;
-            PartNo = partNo;
-        }
-        Y_ABORT_UNLESS(offset <= Offset);
-        Y_ABORT_UNLESS(offset < Offset || partNo <= PartNo);
-        auto key = TKey::ForBody(TKeyPrefix::TypeData, TPartitionId(0), offset, partNo, count, internalPartsCount);
-        ui64 firstHeaderOffset = GetFirstHeaderOffset(key, blobValue);
-        for (TBlobIterator it(key, blobValue); it.IsValid() && !needStop; it.Next()) {
-            TBatch batch = it.GetBatch();
-            auto& header = batch.Header;
-            batch.Unpack();
-            ui64 trueOffset = blobs[pos].Key.GetOffset() + (header.GetOffset() - firstHeaderOffset);
-
-            ui32 pos = 0;
-            if (trueOffset > Offset || trueOffset == Offset && header.GetPartNo() >= PartNo) {
-                pos = 0;
-            } else {
-                ui64 trueSearchOffset = Offset - blobs[pos].Key.GetOffset() + firstHeaderOffset;
-                pos = batch.FindPos(trueSearchOffset, PartNo);
-            }
-            offset += header.GetCount();
-
-            if (pos == Max<ui32>()) // this batch does not contain data to read, skip it
-                continue;
-
-
-            PQ_LOG_D("FormAnswer processing batch offset " << (offset - header.GetCount()) <<  " totakecount " << count << " count " << header.GetCount()
-                    << " size " << header.GetPayloadSize() << " from pos " << pos << " cbcount " << batch.Blobs.size());
-
-            for (size_t i = pos; i < batch.Blobs.size(); ++i) {
-                if (0 < LastOffset && LastOffset <= Offset) {
-                    needStop = true;
-                    break;
-                }
-
-                TClientBlob &res = batch.Blobs[i];
-                VERIFY_RESULT_BLOB(res, i);
-
-                Y_ABORT_UNLESS(PartNo == res.GetPartNo(), "pos %" PRIu32 " i %" PRIu64 " Offset %" PRIu64 " PartNo %" PRIu16 " offset %" PRIu64 " partNo %" PRIu16,
-                         pos, i, Offset, PartNo, offset, res.GetPartNo());
-
-                if (userInfo) {
-                    userInfo->AddTimestampToCache(
-                                                  Offset, res.WriteTimestamp, res.CreateTimestamp,
-                                                  Destination != 0, ctx.Now()
-                                              );
-                }
-
-                AddResultBlob(readResult, res, Offset);
-                if (res.IsLastPart()) {
-                    PartNo = 0;
-                    ++Offset;
-                } else {
-                    ++PartNo;
-                }
-
-                if (updateUsage(res)) {
-                    needStop = true;
-                    break;
-                }
-            }
-        }
-    }
-#endif
 
     if (!needStop && cnt < Count && size < Size) { // body blobs are fully processed and need to take more data
         if (CachedOffset > Offset) {
@@ -783,21 +687,6 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
     OnReadRequestFinished(res->Destination, answer.Size, res->User, ctx);
 }
 
-//TVector<TRequestedBlob> TPartition::GetReadRequestFromBody(
-//        const ui64 startOffset, const ui16 partNo, const ui32 maxCount, const ui32 maxSize, ui32* rcount, ui32* rsize, ui64 lastOffset,
-//        TBlobKeyTokens* blobKeyTokens
-//) {
-//    Y_ABORT_UNLESS(rcount && rsize);
-//    return CompactionBlobEncoder.GetBlobsFromBody(startOffset,
-//                                           partNo,
-//                                           maxCount,
-//                                           maxSize,
-//                                           *rcount,
-//                                           *rsize,
-//                                           lastOffset,
-//                                           blobKeyTokens);
-//}
-
 void CollectReadRequestFromBody(const ui64 startOffset, const ui16 partNo, const ui32 maxCount,
                                 const ui32 maxSize, ui32* rcount, ui32* rsize, ui64 lastOffset,
                                 TBlobKeyTokens* blobKeyTokens,
@@ -850,14 +739,14 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
 ) {
     Y_ABORT_UNLESS(rcount && rsize);
     return CompactionBlobEncoder.GetBlobsFromHead(startOffset,
-                                           partNo,
-                                           maxCount,
-                                           maxSize,
-                                           readTimestampMs,
-                                           *rcount,
-                                           *rsize,
-                                           *insideHeadOffset,
-                                           lastOffset);
+                                                  partNo,
+                                                  maxCount,
+                                                  maxSize,
+                                                  readTimestampMs,
+                                                  *rcount,
+                                                  *rsize,
+                                                  *insideHeadOffset,
+                                                  lastOffset);
 }
 
 void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
@@ -1152,12 +1041,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
     GetReadRequestFromFastWriteBody(info.Offset, info.PartNo, info.Count, info.Size, &count, &size, info.LastOffset,
                                     &info.BlobKeyTokens, blobs);
 
-    //TVector<TRequestedBlob> blobs = GetReadRequestFromBody(
-    //        info.Offset, info.PartNo, info.Count, info.Size, &count, &size, info.LastOffset,
-    //        &info.BlobKeyTokens
-    //);
     info.Blobs = blobs;
-    //ui64 lastOffset = info.Offset + Min(count, info.Count);
     ui64 lastOffset = blobs.empty() ? info.Offset : blobs.back().Key.GetOffset();
 
     PQ_LOG_D("read cookie " << cookie << " added " << info.Blobs.size()

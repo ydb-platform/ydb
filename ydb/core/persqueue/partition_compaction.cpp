@@ -141,12 +141,16 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
     return true;
 }
 
-// вынести в настройки
-const size_t BodyKeysCountLimit = 100;
+size_t TPartition::GetBodyKeysCountLimit() const
+{
+    // Settings will be made later.
+    return 300;
+}
 
 ui64 TPartition::GetCumulativeSizeLimit() const
 {
-    return 3 * MaxBlobSize;
+    // Settings will be made later.
+    return MaxBlobSize;
 }
 
 void TPartition::TryRunCompaction()
@@ -170,7 +174,7 @@ void TPartition::TryRunCompaction()
     }
 
     if ((cumulativeSize < GetCumulativeSizeLimit()) &&
-        (BlobEncoder.DataKeysBody.size() < BodyKeysCountLimit)) {
+        (BlobEncoder.DataKeysBody.size() < GetBodyKeysCountLimit())) {
         PQ_LOG_D("need more data for compaction. " <<
                  "CumulativeSize=" << BlobEncoder.DataKeysBody.back().CumulativeSize <<
                  ", Count=" << BlobEncoder.DataKeysBody.size());
@@ -194,12 +198,12 @@ void TPartition::Handle(TEvPQ::TEvRunCompaction::TPtr& ev)
     const auto& front = BlobEncoder.DataKeysBody.front();
 
     auto blobs = BlobEncoder.GetBlobsFromBody(front.Key.GetOffset(), front.Key.GetPartNo(),
-                                           BodyKeysCountLimit,
-                                           Min(cumulativeSize, GetCumulativeSizeLimit()),
-                                           count,
-                                           size,
-                                           0, // lastOffset
-                                           &tokens);
+                                              GetBodyKeysCountLimit(),
+                                              Min(cumulativeSize, GetCumulativeSizeLimit()),
+                                              count,
+                                              size,
+                                              0, // lastOffset
+                                              &tokens);
     CompactionBlobsCount = blobs.size();
     auto request = MakeHolder<TEvPQ::TEvBlobRequest>(ERequestCookie::ReadBlobsForCompaction,
                                                      Partition,
@@ -232,31 +236,11 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     Y_ABORT_UNLESS(CompactionBlobEncoder.NewHead.GetBatches().empty());
 
     for (const auto& requestedBlob : blobs) {
-        //DBGTRACE_LOG("Key=" << requestedBlob.Key.ToString() <<
-        //             ", Size=" << requestedBlob.Value.size() << " (" << requestedBlob.Size << ")" <<
-        //             ", Offset=" << requestedBlob.Offset <<
-        //             ", PartNo=" << requestedBlob.PartNo <<
-        //             ", Count=" << requestedBlob.Count <<
-        //             ", InternalPartsCount=" << requestedBlob.InternalPartsCount);
-
         for (TBlobIterator it(requestedBlob.Key, requestedBlob.Value); it.IsValid(); it.Next()) {
             TBatch batch = it.GetBatch();
             batch.Unpack();
 
-            //DBGTRACE_LOG(batch.GetOffset() <<
-            //             ", " << batch.GetPartNo() <<
-            //             ", " << batch.GetCount() <<
-            //             ", " << batch.GetInternalPartsCount() <<
-            //             ", " << batch.Blobs.size());
-
             for (const auto& blob : batch.Blobs) {
-                //DBGTRACE_LOG(blob.SourceId <<
-                //             ", " << blob.SeqNo <<
-                //             ", " << blob.Data.size() <<
-                //             ", " << blob.CreateTimestamp <<
-                //             ", " << blob.WriteTimestamp <<
-                //             ", " << blob.UncompressedSize);
-
                 TWriteMsg msg{Max<ui64>(), Nothing(), TEvPQ::TEvWrite::TMsg{
                     .SourceId = blob.SourceId,
                     .SeqNo = blob.SeqNo,
@@ -337,7 +321,7 @@ void TPartition::BlobsForCompactionWereWrite()
     CompactionInProgress = false;
     CompactionBlobsCount = 0;
 
-    ProcessTxsAndUserActs(ctx); // надо удалить старые ключи
+    ProcessTxsAndUserActs(ctx); // Now you can delete unnecessary keys.
     TryRunCompaction();
 }
 
@@ -446,10 +430,6 @@ void TPartition::AddNewCompactionWriteBlob(std::pair<TKey, ui32>& res, TEvKeyVal
         write->SetStorageChannel(channel);
         write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
     }
-
-    ////Need to clear all compacted blobs
-    //const TKey& k = CompactionBlobEncoder.CompactedKeys.empty() ? key : CompactionBlobEncoder.CompactedKeys.front().first;
-    //ClearOldHead(k.GetOffset(), k.GetPartNo()); // schedule to delete the keys from the head
 
     if (!key.IsHead()) {
         if (!CompactionBlobEncoder.DataKeysBody.empty() && CompactionBlobEncoder.CompactedKeys.empty()) {

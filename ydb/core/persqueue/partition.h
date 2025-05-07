@@ -1041,6 +1041,8 @@ private:
     void DumpZones(const char* file = nullptr, unsigned line = 0) const;
 
     const TPartitionBlobEncoder& GetBlobEncoder(ui64 offset) const;
+
+    size_t GetBodyKeysCountLimit() const;
     ui64 GetCumulativeSizeLimit() const;
 };
 

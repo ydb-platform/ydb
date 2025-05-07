@@ -154,7 +154,6 @@ int TCommandQueryWorkloadRun::Run(TConfig& config) {
                 }
                 settings.StatsMode(statsMode);
 
-
                 std::optional<TProgressIndication> progressIndication;
 
                 if (Threads == 1) {

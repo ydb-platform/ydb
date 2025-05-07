@@ -154,7 +154,19 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
     }
     tmp.clear();
     tmp.insert(table.Keys.begin(), table.Keys.end());
-    tmp.insert(index.KeyColumns.begin(), index.KeyColumns.end() - (isSecondaryIndex ? 0 : 1));
+    if (isSecondaryIndex) {
+        tmp.insert(index.KeyColumns.begin(), index.KeyColumns.end());
+    } else {
+        // Vector indexes allow to add all columns both to index & data
+        // But data columns are meaningless with vector indexes if they don't contain vector column
+        if (index.DataColumns.size() > 0) {
+            auto vectorColumn = *(index.KeyColumns.end()-1);
+            if (!Contains(index.DataColumns, vectorColumn)) {
+                explain = TStringBuilder() << "vector index data columns should always contain vector column";
+                return false;
+            }
+        }
+    }
     if (const auto* broken = IsContains(index.DataColumns, tmp, true)) {
         explain = TStringBuilder()
                   << "the same column can't be used as key and data column for one index, for example " << *broken;

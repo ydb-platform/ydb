@@ -476,9 +476,6 @@ bool TOptionsParseResult::Has(const TString& name, bool includeDefault) const {
     if (!includeDefault && result && result->ValueSource == EOptionValueSource::DefaultValue) {
         result = nullptr;
     }
-    if (result == nullptr) {
-        return ParseFromCommandLineResult.FindLongOptParseResult(name);
-    }
     return result != nullptr;
 }
 
@@ -487,18 +484,12 @@ bool TOptionsParseResult::Has(char name, bool includeDefault) const {
     if (!includeDefault && result && result->ValueSource == EOptionValueSource::DefaultValue) {
         result = nullptr;
     }
-    if (result == nullptr) {
-        return ParseFromCommandLineResult.FindCharOptParseResult(name);
-    }
     return result != nullptr;
 }
 
 TString TOptionsParseResult::Get(const TString& name, bool includeDefault) const {
     if (const TOptionParseResult* result = FindResult(name); result && (includeDefault || result->ValueSource != EOptionValueSource::DefaultValue)) {
         return result->Values().back();
-    }
-    if (auto opt = ParseFromCommandLineResult.FindLongOptParseResult(name)) {
-        return opt->Back();
     }
     throw yexception() << "No \"" << name << "\" option";
 }

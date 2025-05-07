@@ -399,7 +399,7 @@ public:
     bool Has(const TString& name, bool includeDefault = false) const;
     bool Has(char name, bool includeDefault = false) const;
 
-    TString Get(const TString& name, bool includeDefault = true) const;
+    const TString& Get(const TString& name, bool includeDefault = true) const;
 
     const NLastGetopt::TOptsParseResult& GetCommandLineParseResult() const {
         return ParseFromCommandLineResult;

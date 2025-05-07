@@ -469,6 +469,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
 
     // temporary flag to skip applying ExpandPg rules
     bool IgnoreExpandPg = false;
+    
     template <typename T>
     T GetRandom() const noexcept;
 

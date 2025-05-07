@@ -225,3 +225,6 @@ private:
         
         Y_UNREACHABLE();
     }
+};
+
+} // namespace NKikimr::NRawSocket

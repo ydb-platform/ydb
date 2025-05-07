@@ -856,6 +856,8 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             .Build()
         .Done();
 
+    (void)pushedOriginalFormLambda;
+
     auto newProcessLambda = Build<TCoLambda>(ctx, node.Pos())
         .Args({"olap_filter_row"})
         .Body<TExprApplier>()
@@ -885,7 +887,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         .Settings(read.Settings())
         .ExplainPrompt(read.ExplainPrompt())
         .Process(newProcessLambda)
-        .ProcessOriginalForm(pushedOriginalFormLambda)
+        .ProcessOriginalForm(lambda)//pushedOriginalFormLambda)
         .Done();
 
 #ifdef ENABLE_COLUMNS_PRUNING

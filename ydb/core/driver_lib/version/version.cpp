@@ -566,7 +566,7 @@ bool TCompatibilityInfo::CompleteFromTag(NKikimrConfig::TCurrentCompatibilityInf
                 if (version->HasPatch()) {
                     Y_ABORT_UNLESS(version->GetPatch() == versionFromTag.GetPatch());
                 } else {
-                    version->SetMinor(versionFromTag.GetMinor());
+                    version->SetPatch(versionFromTag.GetPatch());
                 }
             }
 

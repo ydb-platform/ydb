@@ -12,12 +12,16 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(v1-complete-core INTERFACE)
+add_library(v1-complete-core)
 
 
-target_link_libraries(v1-complete-core INTERFACE
+target_link_libraries(v1-complete-core PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+)
+
+target_sources(v1-complete-core PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/core/input.cpp
 )
 

@@ -23,6 +23,7 @@ target_link_libraries(ydbd PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  contrib-libs-tcmalloc
   version_definition
   run
   ydb-core-protos
@@ -66,7 +67,6 @@ target_link_libraries(ydbd PUBLIC
 
 target_allocator(ydbd
   cpp-malloc-tcmalloc
-  contrib-libs-tcmalloc
 )
 
 target_link_options(ydbd PRIVATE

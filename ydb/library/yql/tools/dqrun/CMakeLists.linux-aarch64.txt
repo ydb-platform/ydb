@@ -25,6 +25,7 @@ target_link_libraries(dqrun PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  contrib-libs-tcmalloc
   tools-dqrun-lib
   yt-codec-codegen
   yt-comp_nodes-llvm16
@@ -41,7 +42,6 @@ target_link_libraries(dqrun PUBLIC
 
 target_allocator(dqrun
   cpp-malloc-tcmalloc
-  contrib-libs-tcmalloc
 )
 
 target_link_options(dqrun PRIVATE

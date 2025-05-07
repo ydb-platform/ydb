@@ -1966,9 +1966,14 @@ void TPersQueue::HandleSetClientOffsetRequest(const ui64 responseCookie, NWilson
             TStringBuilder() << "negative offset in SetClientOffset request: " << ToString(req).data());
     } else {
         InitResponseBuilder(responseCookie, 1, COUNTER_LATENCY_PQ_SET_OFFSET);
+        // THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(
+        //     responseCookie, cmd.GetClientId(), cmd.GetOffset(), cmd.HasSessionId() ? cmd.GetSessionId() : "", 0, 0, 0,
+        //     TActorId{}, TEvPQ::TEvSetClientInfo::ESCI_OFFSET, 0, cmd.GetStrict()
+        // );
+        // ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
         THolder<TEvPQ::TEvSetClientInfo> event = MakeHolder<TEvPQ::TEvSetClientInfo>(
             responseCookie, cmd.GetClientId(), cmd.GetOffset(), cmd.HasSessionId() ? cmd.GetSessionId() : "", 0, 0, 0,
-            TActorId{}, TEvPQ::TEvSetClientInfo::ESCI_OFFSET, 0, cmd.GetStrict()
+            TActorId{}, TEvPQ::TEvSetClientInfo::ESCI_OFFSET, 0, cmd.GetStrict(), cmd.HasCommittedMetadata() ? cmd.GetCommittedMetadata() : ""
         );
         ctx.Send(partActor, event.Release(), 0, 0, std::move(traceId));
     }

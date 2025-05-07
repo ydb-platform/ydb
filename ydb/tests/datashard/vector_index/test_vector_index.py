@@ -1,6 +1,6 @@
 import pytest
 
-from ydb.tests.datashard.lib.vectore_base import VectoreBase
+from ydb.tests.datashard.lib.vector_base import VectorBase
 from ydb.tests.datashard.lib.dml_operations import DMLOperations
 from ydb.tests.datashard.lib.create_table import create_vector_index_sql_request
 from ydb.tests.datashard.lib.types_of_variables import (
@@ -20,7 +20,7 @@ from ydb.tests.datashard.lib.types_of_variables import (
 )
 
 
-class TestVectorIndex(VectoreBase):
+class TestVectorIndex(VectorBase):
     @pytest.mark.parametrize(
         "table_name, pk_types, all_types, index, ttl, unique, sync, vector_type",
         [

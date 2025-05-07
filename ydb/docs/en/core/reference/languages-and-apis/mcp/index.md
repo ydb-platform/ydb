@@ -1,12 +1,13 @@
 # {{ ydb-short-name }} Model Context Protocol Server
 
-[{{ ydb-short-name }} Model Context Protocol (MCP) server](https://github.com/ydb-platform/ydb-mcp) allows you to work with {{ ydb-short-name }} databases from any [Large Language Model (LLM)](https://en.wikipedia.org/wiki/Large_language_model) that supports [MCP](https://github.com/modelcontextprotocol/servers) using any of the [MCP clients](https://modelcontextprotocol.io/clients). This integration enables AI-powered database operations and natural language interactions with your {{ ydb-short-name }} instances.
+[{{ ydb-short-name }} Model Context Protocol (MCP) server](https://github.com/ydb-platform/ydb-mcp) allows you to work with {{ ydb-short-name }} databases from any [Large Language Model (LLM)](https://en.wikipedia.org/wiki/Large_language_model) that supports [MCP](https://modelcontextprotocol.io/introduction) using any of the [MCP clients](https://modelcontextprotocol.io/clients). This integration enables AI-powered database operations and natural language interactions with your {{ ydb-short-name }} instances.
 
 ## Getting Started
 
 ### Prerequisites
 
-{{ ydb-short-name }} MCP server is a Python application that is typically co-hosted with the MCP client. There are multiple options for installing and running the {{ ydb-short-name }} MCP server explained below, but all of them require a pre-installed Python 3.10+ environment.
+1. Install an [MCP client](https://modelcontextprotocol.io/clients) that supports MCP tools (most do). The configuration examples below use a common format supported by several popular MCP clients (Claude Desktop, Cursor, etc.), but you may need to adjust the format to meet your client's requirements.
+2. The {{ ydb-short-name }} MCP server is a Python application that is typically co-hosted with the MCP client. There are several options for installing and running the {{ ydb-short-name }} MCP server, explained below, but all require a pre-installed Python 3.10+ environment.
 
 ### Anonymous Authentication
 
@@ -175,6 +176,22 @@ Ask your LLM questions regarding the data stored in {{ ydb-short-name }} using t
     * `path`: {{ ydb-short-name }} path to describe
 
 * `ydb_status`: Get the current status of the {{ ydb-short-name }} connection
+
+## Command-line flags and environment variables
+
+| Argument              | Environment variable | Default                  | Description                                                                                 |
+| --------------------- | -------------------- | ------------------------ | ------------------------------------------------------------------------------------------- |
+| `--ydb-endpoint`      | `YDB_ENDPOINT`       | —                        | {{ ydb-short-name }} endpoint consisting of protocol, hostname, port, and database name     |
+| `--ydb-login`         | `YDB_LOGIN`          | —                        | {{ ydb-short-name }} login                                                                  |
+| `--ydb-password`      | `YDB_PASSWORD`       | —                        | {{ ydb-short-name }} password                                                               |
+| `--ydb-auth-mode`     | `YDB_AUTH_MODE`      | `anonymous`              | {{ ydb-short-name }} authentication mode; choices: `anonymous`, `login-password`            |
+| `--log-level`         | —                    | `INFO`                   | Logging level; choices: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`                     |
+
+{% note info %}
+
+Command-line arguments override the corresponding environment variables.
+
+{% endnote %}
 
 ## Learn More
 

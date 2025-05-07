@@ -368,7 +368,10 @@ void TWorkloadCommandRun::Parse(TConfig& config) {
     Cerr << "____timestamp_dev_passed: " << timestamp_dev_passed << Endl;
     Cerr << "____date_from_passed: " << date_from_passed << Endl;
     Cerr << "____date_to_passed: " << date_to_passed << Endl;
-    Params.Parse(config);
+
+    Params.Parse(ParseResult->GetCommandLineParseResult());
+    
+    // Params.Parse(config);
 }
 
 TWorkloadCommandBase::TWorkloadCommandBase(const TString& name, NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::TWorkloadParams::ECommandType commandType, const TString& description, int type)

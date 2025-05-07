@@ -6,7 +6,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 #include <ydb/library/accessor/accessor.h>
 #include <library/cpp/getopt/last_getopt.h>
-#include <ydb/public/lib/ydb_cli/common/command.h>
 
 #include <list>
 #include <string>
@@ -173,7 +172,8 @@ public:
     virtual ~TWorkloadParams() = default;
     virtual void ConfigureOpts(NLastGetopt::TOpts& /*opts*/, const ECommandType /*commandType*/, int /*workloadType*/) {
     };
-    virtual void Parse(NYdb::NConsoleClient::TClientCommand::TConfig& /*config*/) {};
+    // virtual void Parse(NYdb::NConsoleClient::TClientCommand::TConfig& /*config*/) {};
+    virtual void Parse(const NLastGetopt::TOptsParseResult& /*opts*/) {};
     virtual THolder<IWorkloadQueryGenerator> CreateGenerator() const = 0;
     virtual TWorkloadDataInitializer::TList CreateDataInitializers() const {
         return {};

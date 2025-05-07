@@ -2761,7 +2761,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
             userInfo.Generation = actual->Generation;
             userInfo.Step = actual->Step;
             userInfo.Offset = actual->Offset;
-            // тут metadata!?
+            userInfo.CommittedMetadata = actual->CommittedMetadata;
             if (userInfo.Offset <= (i64)StartOffset) {
                 userInfo.AnyCommits = false;
             }
@@ -3245,8 +3245,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
 {
     const TString& user = act.ClientId;
     ui64 offset = act.Offset;
-    TString committedMetadata = act.CommittedMetadata; // тут константная ссылка?
-    // вот тут metadata!
+    const TString& committedMetadata = act.CommittedMetadata ? act.CommittedMetadata : userInfo.CommittedMetadata; // тут константная ссылка?
     const TString& session = act.SessionId;
     ui32 generation = act.Generation;
     ui32 step = act.Step;
@@ -3287,7 +3286,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
     } else {
         if (createSession || dropSession) {
             offset = userInfo.Offset;
-            committedMetadata = userInfo.CommittedMetadata;
+            // committedMetadata = userInfo.CommittedMetadata;
 
             auto *ui = UsersInfoStorage->GetIfExists(userInfo.User);
             auto ts = ui ? GetTime(*ui, userInfo.Offset) : std::make_pair<TInstant, TInstant>(TInstant::Zero(), TInstant::Zero());
@@ -3441,7 +3440,7 @@ void TPartition::AddCmdWrite(NKikimrClient::TKeyValueRequest& request,
         userData.SetReadRuleGeneration(readRuleGeneration);
         userData.SetAnyCommits(anyCommits);
         userData.SetCommittedMetadata(committedMetadata);
-        // metadata!
+
         TString out;
         Y_PROTOBUF_SUPPRESS_NODISCARD userData.SerializeToString(&out);
 
@@ -3534,7 +3533,6 @@ TUserInfoBase& TPartition::GetOrCreatePendingUser(const TString& user,
     auto pendingUserIt = PendingUsersInfo.find(user);
     if (pendingUserIt == PendingUsersInfo.end()) {
         auto userIt = UsersInfoStorage->GetIfExists(user);
-        // тут возвращается TUserInfo* для юзера
         auto [newPendingUserIt, _] = PendingUsersInfo.emplace(user, UsersInfoStorage->CreateUserInfo(user, readRuleGeneration));
 
         if (userIt) {
@@ -3546,7 +3544,6 @@ TUserInfoBase& TPartition::GetOrCreatePendingUser(const TString& user,
             newPendingUserIt->second.Step = userIt->Step;
             newPendingUserIt->second.Offset = userIt->Offset;
             newPendingUserIt->second.CommittedMetadata = userIt->CommittedMetadata;
-            // metadata?
             newPendingUserIt->second.ReadRuleGeneration = userIt->ReadRuleGeneration;
             newPendingUserIt->second.Important = userIt->Important;
             newPendingUserIt->second.ReadFromTimestamp = userIt->ReadFromTimestamp;

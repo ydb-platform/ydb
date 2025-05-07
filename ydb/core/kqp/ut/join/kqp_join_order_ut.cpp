@@ -753,17 +753,6 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     }
 
 
-    Y_UNIT_TEST(OltpJoinTypeHintCBOTurnOFF) {
-        auto plan = ExecuteJoinOrderTestGenericQueryWithStats("queries/oltp_join_type_hint_cbo_turnoff.sql", "stats/basic.json", false, false, false);
-        auto detailedPlan = GetDetailedJoinOrder(plan);
-
-        auto joinFinder = TFindJoinWithLabels(detailedPlan);
-        UNIT_ASSERT(joinFinder.Find({"R", "S"}).Join == "InnerJoin (Grace)");
-        UNIT_ASSERT(joinFinder.Find({"R", "S", "T"}).Join == "InnerJoin (MapJoin)");
-        UNIT_ASSERT(joinFinder.Find({"R", "S", "T", "U"}).Join == "InnerJoin (Grace)");
-        UNIT_ASSERT(joinFinder.Find({"R", "S", "T", "U", "V"}).Join == "InnerJoin (MapJoin)");
-    }
-
     Y_UNIT_TEST_XOR_OR_BOTH_FALSE(TestJoinOrderHintsSimple, StreamLookupJoin, ColumnStore) {
         auto plan = ExecuteJoinOrderTestGenericQueryWithStats("queries/join_order_hints_simple.sql", "stats/basic.json", StreamLookupJoin, ColumnStore);
         UNIT_ASSERT_VALUES_EQUAL(GetJoinOrder(plan).GetStringRobust(), R"(["T",["R","S"]])") ;

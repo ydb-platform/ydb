@@ -1783,6 +1783,9 @@ namespace NSchemeShardUT_Private {
                 if (cfg.GlobalIndexSettings.size() > 1) {
                     cfg.GlobalIndexSettings[1].SerializeTo(*settings.mutable_posting_table_settings());
                 }
+                if (cfg.GlobalIndexSettings.size() > 2) {
+                    cfg.GlobalIndexSettings[2].SerializeTo(*settings.mutable_prefix_table_settings());
+                }
             }
         } break;
         default:

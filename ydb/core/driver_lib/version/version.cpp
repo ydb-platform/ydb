@@ -695,7 +695,6 @@ void PrintVersion(IOutputStream& out, const NKikimrConfig::TYdbVersion& version,
         out << version.GetYear() << '-' << version.GetMajor();
         if (version.HasMinor()) {
             out << "-" << version.GetMinor();
-            return;
         } else if (printSuffix) {
             out << "-*";
             return;
@@ -703,7 +702,6 @@ void PrintVersion(IOutputStream& out, const NKikimrConfig::TYdbVersion& version,
 
         if (version.HasPatch()) {
             out << "-" << version.GetPatch();
-            return;
         } else if (printSuffix) {
             out << "-*";
             return;

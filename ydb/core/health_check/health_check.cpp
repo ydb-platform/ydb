@@ -2163,7 +2163,7 @@ public:
             case E::Timeout:
             case E::NodeDisconnected:
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::RED,
-                                    TStringBuilder() << "PDisk state is " << stateStr,
+                                    TStringBuilder() << "PDisk state is " << E::E_Name(stateEnum),
                                     ETags::PDiskState);
                 break;
         }

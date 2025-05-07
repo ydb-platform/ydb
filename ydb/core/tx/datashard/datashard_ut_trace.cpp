@@ -313,7 +313,7 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
                 ExpectedSpan("DataExecuter",
                     "WaitForTableResolve",
                     ExpectedSpan("ComputeActor",
-                        Repeat(("TKqpForwardWriteActor"), 1)),
+                        Repeat(("ForwardWriteActor"), 1)),
                     "RunTasks",
                     ExpectedSpan(
                         "Commit",

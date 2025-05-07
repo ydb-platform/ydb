@@ -443,6 +443,12 @@ private:
             return TStatus::Error;
         }
 
+        auto op = GetTableOp(node);
+        if (op == TYdbOperation::FillTable) {
+            node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+            return TStatus::Ok;
+        }
+
         auto table = SessionCtx->Tables().EnsureTableExists(TString(node.DataSink().Cluster()),
             TString(node.Table().Value()), node.Pos(), ctx);
 
@@ -508,7 +514,6 @@ private:
             }
         }
 
-        auto op = GetTableOp(node);
         if (NPgTypeAnn::IsPgInsert(node, op)) {
             TExprNode::TPtr newInput;
             auto ok = NCommon::RenamePgSelectColumns(node.Input().Cast<TCoPgSelect>(), newInput, TColumnOrder(table->Metadata->ColumnOrder), ctx, Types);

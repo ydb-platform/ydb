@@ -70,15 +70,12 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath, TClien
     Rx.set_complete_on_empty(true);
     Rx.set_word_break_characters(NSQLComplete::WordBreakCharacters);
     Rx.set_completion_callback([this](const std::string& prefix, int& contextLen) {
-        return YQLCompleter->Apply(Rx.get_state().text(), prefix, contextLen);
+        return YQLCompleter->ApplyHeavy(Rx.get_state().text(), prefix, contextLen);
     });
-    // Rx.set_hint_callback([this](const std::string& prefix, int& contextLen, TColor&) {
-    //     replxx::Replxx::hints_t hints;
-    //     for (auto& candidate : YQLCompleter->Apply(prefix, contextLen)) {
-    //         hints.emplace_back(std::move(candidate.text()));
-    //     }
-    //     return hints;
-    // });
+    Rx.set_hint_callback([this](const std::string& prefix, int& contextLen, TColor&) {
+        return YQLCompleter->ApplyLight(Rx.get_state().text(), prefix, contextLen);
+    });
+
     Rx.set_highlighter_callback([this](const auto& text, auto& colors) {
         YQLHighlighter->Apply(text, colors);
     });

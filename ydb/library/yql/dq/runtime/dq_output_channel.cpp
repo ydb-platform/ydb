@@ -102,7 +102,7 @@ public:
 
     // Try to split data before push to fulfill ChunkSizeLimit
     void DoPushSafe(NUdf::TUnboxedValue* values, ui32 width) {
-        YQL_ENSURE(GetFillLevel() == NoLimit);
+        YQL_ENSURE(GetFillLevel() != HardLimit);
 
         if (Finished) {
             return;

@@ -4,7 +4,12 @@ ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 FORK_SUBTESTS()
 SPLIT_FACTOR(75)
 
-SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
 
 TEST_SRCS(
     test_vector_index.py

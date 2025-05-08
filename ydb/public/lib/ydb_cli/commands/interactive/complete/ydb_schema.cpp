@@ -2,9 +2,11 @@
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 
+#include <yql/essentials/sql/v1/complete/name/object/simple/schema.h>
+
 namespace NYdb::NConsoleClient {
 
-    class TYDBSchema: public NSQLComplete::ISchema {
+    class TYDBSchema: public NSQLComplete::ISimpleSchema {
     public:
         explicit TYDBSchema(TDriver driver, TString database)
             : Driver_(std::move(driver))
@@ -12,70 +14,58 @@ namespace NYdb::NConsoleClient {
         {
         }
 
-        NThreading::TFuture<NSQLComplete::TListResponse> List(const NSQLComplete::TListRequest& request) const override {
-            auto [head, tail] = ParsePath(request.Path);
-            return List(head)
-                .Apply([nameHint = ToLowerUTF8(tail), request](auto f) {
-                    NSQLComplete::TListResponse response;
+        NSQLComplete::TSplittedPath Split(TStringBuf path) const override {
+            size_t pos = path.find_last_of('/');
+            if (pos == TString::npos) {
+                return {"", path};
+            }
 
-                    response.Entries = f.ExtractValue();
+            TStringBuf head, tail;
+            TStringBuf(path).SplitAt(pos + 1, head, tail);
+            return {head, tail};
+        }
 
-                    EraseIf(response.Entries, [&](const NSQLComplete::TFolderEntry& entry) {
-                        return !entry.Name.StartsWith(nameHint);
-                    });
-
-                    EraseIf(response.Entries, [types = std::move(request.Filter.Types)](
-                                                  const NSQLComplete::TFolderEntry& entry) {
-                        return types && !types->contains(entry.Type);
-                    });
-
-                    response.Entries.crop(request.Limit);
-
-                    response.NameHintLength = nameHint.length();
-                    return response;
-                });
+        NThreading::TFuture<TVector<NSQLComplete::TFolderEntry>> List(TString folder) const override {
+            return NScheme::TSchemeClient(Driver_)
+                .ListDirectory(Qualified(std::move(folder)))
+                .Apply([](auto f) { return Convert(f.ExtractValue()); });
         }
 
     private:
-        NThreading::TFuture<TVector<NSQLComplete::TFolderEntry>> List(TStringBuf head) const {
-            auto path = TString(head);
-            if (!head.StartsWith('/')) {
-                path.prepend("/");
-                path.prepend(Database_);
+        TString Qualified(TString folder) const {
+            if (!folder.StartsWith('/')) {
+                folder.prepend('/');
+                folder.prepend(Database_);
+            }
+            return folder;
+        }
+
+        static TVector<NSQLComplete::TFolderEntry> Convert(NScheme::TListDirectoryResult result) {
+            if (!result.IsSuccess()) {
+                // TODO(YQL-19747): Use Swallowing and Logging NameServices
+                // ythrow yexception()
+                //     << "ListDirectory('" << path << "') failed: "
+                //     << result.GetIssues().ToOneLineString();
+                return {};
             }
 
-            return NScheme::TSchemeClient(Driver_)
-                .ListDirectory(path)
-                .Apply([path](NScheme::TAsyncListDirectoryResult f) {
-                    NScheme::TListDirectoryResult result = f.ExtractValue();
+            return Convert(result.GetChildren());
+        }
 
-                    if (!result.IsSuccess()) {
-                        result.Out(Cerr);
-                        return TVector<NSQLComplete::TFolderEntry>{};
-                        // TODO(YQL-19747): Use Swallowing and Logging NameServices
-                        // ythrow yexception()
-                        //     << "ListDirectory('" << path << "') failed: "
-                        //     << result.GetIssues().ToOneLineString();
-                    }
+        static TVector<NSQLComplete::TFolderEntry> Convert(const std::vector<NScheme::TSchemeEntry>& children) {
+            TVector<NSQLComplete::TFolderEntry> entries;
+            entries.reserve(children.size());
+            for (size_t i = 0; i < children.size(); ++i) {
+                entries.emplace_back(Convert(children[i]));
+            }
+            return entries;
+        }
 
-                    const std::vector<NScheme::TSchemeEntry>& children = result.GetChildren();
-
-                    TVector<NSQLComplete::TFolderEntry> entries;
-                    entries.reserve(children.size());
-
-                    for (size_t i = 0; i < children.size(); ++i) {
-                        const auto& child = children[i];
-
-                        NSQLComplete::TFolderEntry entry = {
-                            .Type = Convert(child.Type),
-                            .Name = TString(child.Name),
-                        };
-
-                        entries.emplace_back(std::move(entry));
-                    }
-
-                    return entries;
-                });
+        static NSQLComplete::TFolderEntry Convert(const NScheme::TSchemeEntry& entry) {
+            return {
+                .Type = Convert(entry.Type),
+                .Name = TString(entry.Name),
+            };
         }
 
         static TString Convert(NScheme::ESchemeEntryType type) {
@@ -118,22 +108,11 @@ namespace NYdb::NConsoleClient {
             }
         }
 
-        static std::tuple<TStringBuf, TStringBuf> ParsePath(TString path Y_LIFETIME_BOUND) {
-            size_t pos = path.find_last_of('/');
-            if (pos == TString::npos) {
-                return {"", path};
-            }
-
-            TStringBuf head, tail;
-            TStringBuf(path).SplitAt(pos + 1, head, tail);
-            return {head, tail};
-        }
-
         TDriver Driver_;
         TString Database_;
     };
 
-    NSQLComplete::ISchema::TPtr MakeYDBSchema(TDriver driver, TString database) {
+    NSQLComplete::ISimpleSchema::TPtr MakeYDBSchema(TDriver driver, TString database) {
         return new TYDBSchema(std::move(driver), std::move(database));
     }
 

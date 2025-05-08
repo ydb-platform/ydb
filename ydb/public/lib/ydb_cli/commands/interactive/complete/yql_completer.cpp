@@ -89,11 +89,14 @@ namespace NYdb::NConsoleClient {
 
         NSQLComplete::IRanking::TPtr ranking = NSQLComplete::MakeDefaultRanking();
 
-        NSQLComplete::INameService::TPtr service = NSQLComplete::MakeUnionNameService({
-                                                                                          NSQLComplete::MakeStaticNameService(std::move(names), ranking),
-                                                                                          NSQLComplete::MakeSchemaNameService(
-                                                                                              MakeYDBSchema(std::move(driver), std::move(database))),
-                                                                                      }, ranking);
+        TVector<NSQLComplete::INameService::TPtr> services = {
+            NSQLComplete::MakeStaticNameService(std::move(names), ranking),
+            NSQLComplete::MakeSchemaNameService(
+                NSQLComplete::MakeSimpleSchema(
+                    MakeYDBSchema(std::move(driver), std::move(database)))),
+        };
+
+        auto service = NSQLComplete::MakeUnionNameService(std::move(services), ranking);
 
         return IYQLCompleter::TPtr(new TYQLCompleter(
             NSQLComplete::MakeSqlCompletionEngine(std::move(lexer), std::move(service)),

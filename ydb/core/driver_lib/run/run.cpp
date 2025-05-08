@@ -1284,6 +1284,8 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     appDataInitializers.AddAppDataInitializer(new TYamlConfigInitializer(runConfig));
 
     appDataInitializers.Initialize(AppData.Get());
+
+    NKikimr::NMiniKQL::InitializeGlobalPagedBufferCounters(AppData->Counters);
 }
 
 void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)

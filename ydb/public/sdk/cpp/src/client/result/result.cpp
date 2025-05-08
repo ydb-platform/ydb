@@ -84,8 +84,37 @@ const std::vector<TColumn>& TResultSet::GetColumnsMeta() const {
     return Impl_->ColumnsMeta_;
 }
 
+TResultSet::EType TResultSet::GetType() const {
+    return TResultSet::EType(Impl_->ProtoResultSet_.type());
+}
+
+const TString& TResultSet::GetArrowBatch() const {
+    return Impl_->ProtoResultSet_.data();
+}
+
+const TString& TResultSet::GetArrowSchema() const {
+    return Impl_->ProtoResultSet_.arrow_batch_settings().schema();
+}
+
 const Ydb::ResultSet& TResultSet::GetProto() const {
     return Impl_->ProtoResultSet_;
+}
+
+IOutputStream& operator<<(IOutputStream& out, const TResultSet::EType& type) {
+    out << "TResultSet::EType::";
+    switch (type) {
+        case TResultSet::EType::Unspecified:
+            out << "Unspecified";
+            break;
+        case TResultSet::EType::Message:
+            out << "Message";
+            break;
+        case TResultSet::EType::Arrow:
+            out << "Arrow";
+            break;
+    }
+
+    return out;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

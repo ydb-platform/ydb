@@ -8,6 +8,7 @@ SRCS(
     kqp_lwtrace_probes.h
     kqp_resolve.cpp
     kqp_resolve.h
+    kqp_row_builder.cpp
     kqp_ru_calc.cpp
     kqp_script_executions.cpp
     kqp_timeouts.cpp

@@ -8,13 +8,10 @@ from ydb.tests.datashard.lib.types_of_variables import (
     format_sql_value,
     pk_types,
     non_pk_types,
-    index_first,
-    index_second,
     ttl_types,
     index_first_sync,
     index_second_sync,
     index_three_sync,
-    index_three_sync_not_Bool,
     index_four_sync,
     index_zero_sync,
 )
@@ -22,34 +19,144 @@ from ydb.tests.datashard.lib.types_of_variables import (
 
 class TestVectorIndex(VectorBase):
     @pytest.mark.parametrize(
-        "table_name, pk_types, all_types, index, ttl, unique, sync, vector_type",
+        "table_name, pk_types, all_types, index, vector_type, sync, dimension",
         [
-            ("table_index_4_UNIQUE_SYNC_float", pk_types, {}, index_four_sync, "", "UNIQUE", "SYNC", "Float"),
-            ("table_index_3_UNIQUE_SYNC_float", pk_types, {}, index_three_sync_not_Bool, "", "UNIQUE", "SYNC", "Float"),
-            ("table_index_2_UNIQUE_SYNC_float", pk_types, {}, index_second_sync, "", "UNIQUE", "SYNC", "Float"),
-            ("table_index_1_UNIQUE_SYNC_float", pk_types, {}, index_first_sync, "", "UNIQUE", "SYNC", "Float"),
-            ("table_index_0_UNIQUE_SYNC_float", pk_types, {}, index_zero_sync, "", "UNIQUE", "SYNC", "Float"),
-            ("table_index_4__SYNC_float", pk_types, {}, index_four_sync, "", "", "SYNC", "Float"),
-            ("table_index_3__SYNC_float", pk_types, {}, index_three_sync, "", "", "SYNC", "Float"),
-            ("table_index_2__SYNC_float", pk_types, {}, index_second_sync, "", "", "SYNC", "Float"),
-            ("table_index_1__SYNC_float", pk_types, {}, index_first_sync, "", "", "SYNC", "Float"),
-            ("table_index_0__SYNC_float", pk_types, {}, index_zero_sync, "", "", "SYNC", "Float"),
-            ("table_index_1__ASYNC_float", pk_types, {}, index_second, "", "", "ASYNC", "Float"),
-            ("table_index_0__ASYNC_float", pk_types, {}, index_first, "", "", "ASYNC", "Float"),
-            ("table_all_types_float", pk_types, {**pk_types, **non_pk_types}, {}, "", "", "", "Float"),
-            ("table_index_4_UNIQUE_SYNC", pk_types, {}, index_four_sync, "", "UNIQUE", "SYNC", "Uint8"),
-            ("table_index_3_UNIQUE_SYNC", pk_types, {}, index_three_sync_not_Bool, "", "UNIQUE", "SYNC", "Uint8"),
-            ("table_index_2_UNIQUE_SYNC", pk_types, {}, index_second_sync, "", "UNIQUE", "SYNC", "Uint8"),
-            ("table_index_1_UNIQUE_SYNC", pk_types, {}, index_first_sync, "", "UNIQUE", "SYNC", "Uint8"),
-            ("table_index_0_UNIQUE_SYNC", pk_types, {}, index_zero_sync, "", "UNIQUE", "SYNC", "Uint8"),
-            ("table_index_4__SYNC", pk_types, {}, index_four_sync, "", "", "SYNC", "Uint8"),
-            ("table_index_3__SYNC", pk_types, {}, index_three_sync, "", "", "SYNC", "Uint8"),
-            ("table_index_2__SYNC", pk_types, {}, index_second_sync, "", "", "SYNC", "Uint8"),
-            ("table_index_1__SYNC", pk_types, {}, index_first_sync, "", "", "SYNC", "Uint8"),
-            ("table_index_0__SYNC", pk_types, {}, index_zero_sync, "", "", "SYNC", "Uint8"),
-            ("table_index_1__ASYNC", pk_types, {}, index_second, "", "", "ASYNC", "Uint8"),
-            ("table_index_0__ASYNC", pk_types, {}, index_first, "", "", "ASYNC", "Uint8"),
-            ("table_all_types", pk_types, {**pk_types, **non_pk_types}, {}, "", "", "", "Uint8"),
+            ("table_index_4_float", pk_types, {}, index_four_sync, "Float", "", {"levels": 1, "claster": 100}),
+            ("table_index_3_float", pk_types, {}, index_three_sync, "Float", "", {"levels": 1, "claster": 100}),
+            ("table_index_2_float", pk_types, {}, index_second_sync, "Float", "", {"levels": 1, "claster": 100}),
+            ("table_index_1_float", pk_types, {}, index_first_sync, "Float", "", {"levels": 1, "claster": 100}),
+            ("table_index_0_float", pk_types, {}, index_zero_sync, "Float", "", {"levels": 1, "claster": 100}),
+            (
+                "table_all_types_float",
+                pk_types,
+                {**pk_types, **non_pk_types},
+                {},
+                "Float",
+                "",
+                {"levels": 1, "claster": 100},
+            ),
+            ("table_index_4", pk_types, {}, index_four_sync, "Uint8", "", {"levels": 1, "claster": 100}),
+            ("table_index_3", pk_types, {}, index_three_sync, "Uint8", "", {"levels": 1, "claster": 100}),
+            ("table_index_2", pk_types, {}, index_second_sync, "Uint8", "", {"levels": 1, "claster": 100}),
+            ("table_index_1", pk_types, {}, index_first_sync, "Uint8", "", {"levels": 1, "claster": 100}),
+            ("table_index_0", pk_types, {}, index_zero_sync, "Uint8", "", {"levels": 1, "claster": 100}),
+            ("table_all_types", pk_types, {**pk_types, **non_pk_types}, {}, "Uint8", "", {"levels": 1, "claster": 100}),
+            ("table_index_4", pk_types, {}, index_four_sync, "Int8", "", {"levels": 1, "claster": 100}),
+            ("table_index_3", pk_types, {}, index_three_sync, "Int8", "", {"levels": 1, "claster": 100}),
+            ("table_index_2", pk_types, {}, index_second_sync, "Int8", "", {"levels": 1, "claster": 100}),
+            ("table_index_1", pk_types, {}, index_first_sync, "Int8", "", {"levels": 1, "claster": 100}),
+            ("table_index_0", pk_types, {}, index_zero_sync, "Int8", "", {"levels": 1, "claster": 100}),
+            ("table_all_types", pk_types, {**pk_types, **non_pk_types}, {}, "Int8", "", {"levels": 1, "claster": 100}),
+            ("table_index_4_float", pk_types, {}, index_four_sync, "Float", "", {"levels": 2, "claster": 50}),
+            ("table_index_3_float", pk_types, {}, index_three_sync, "Float", "", {"levels": 2, "claster": 50}),
+            ("table_index_2_float", pk_types, {}, index_second_sync, "Float", "", {"levels": 2, "claster": 50}),
+            ("table_index_1_float", pk_types, {}, index_first_sync, "Float", "", {"levels": 2, "claster": 50}),
+            ("table_index_0_float", pk_types, {}, index_zero_sync, "Float", "", {"levels": 2, "claster": 50}),
+            (
+                "table_all_types_float",
+                pk_types,
+                {**pk_types, **non_pk_types},
+                {},
+                "Float",
+                "",
+                {"levels": 2, "claster": 50},
+            ),
+            ("table_index_4", pk_types, {}, index_four_sync, "Uint8", "", {"levels": 2, "claster": 50}),
+            ("table_index_4", pk_types, {}, index_three_sync, "Uint8", "", {"levels": 2, "claster": 50}),
+            ("table_index_2", pk_types, {}, index_second_sync, "Uint8", "", {"levels": 2, "claster": 50}),
+            ("table_index_1", pk_types, {}, index_first_sync, "Uint8", "", {"levels": 2, "claster": 50}),
+            ("table_index_0", pk_types, {}, index_zero_sync, "Uint8", "", {"levels": 2, "claster": 50}),
+            ("table_all_types", pk_types, {**pk_types, **non_pk_types}, {}, "Uint8", "", {"levels": 2, "claster": 50}),
+            ("table_index_4", pk_types, {}, index_four_sync, "Int8", "", {"levels": 2, "claster": 50}),
+            ("table_index_4", pk_types, {}, index_three_sync, "Int8", "", {"levels": 2, "claster": 50}),
+            ("table_index_2", pk_types, {}, index_second_sync, "Int8", "", {"levels": 2, "claster": 50}),
+            ("table_index_1", pk_types, {}, index_first_sync, "Int8", "", {"levels": 2, "claster": 50}),
+            ("table_index_0", pk_types, {}, index_zero_sync, "Int8", "", {"levels": 2, "claster": 50}),
+            ("table_all_types", pk_types, {**pk_types, **non_pk_types}, {}, "Int8", "", {"levels": 2, "claster": 50}),
+            ("table_index_4_float", pk_types, {}, index_four_sync, "Float", "SYNC", {"levels": 1, "claster": 100}),
+            ("table_index_3_float", pk_types, {}, index_three_sync, "Float", "SYNC", {"levels": 1, "claster": 100}),
+            ("table_index_2_float", pk_types, {}, index_second_sync, "Float", "SYNC", {"levels": 1, "claster": 100}),
+            ("table_index_1_float", pk_types, {}, index_first_sync, "Float", "SYNC", {"levels": 1, "claster": 100}),
+            ("table_index_0_float", pk_types, {}, index_zero_sync, "Float", "SYNC", {"levels": 1, "claster": 100}),
+            (
+                "table_all_types_float",
+                pk_types,
+                {**pk_types, **non_pk_types},
+                {},
+                "Float",
+                "SYNC",
+                {"levels": 1, "claster": 100},
+            ),
+            ("table_index_4", pk_types, {}, index_four_sync, "Uint8", "SYNC", {"levels": 1, "claster": 100}),
+            ("table_index_3", pk_types, {}, index_three_sync, "Uint8", "SYNC", {"levels": 1, "claster": 100}),
+            ("table_index_2", pk_types, {}, index_second_sync, "Uint8", "SYNC", {"levels": 1, "claster": 100}),
+            ("table_index_1", pk_types, {}, index_first_sync, "Uint8", "SYNC", {"levels": 1, "claster": 100}),
+            ("table_index_0", pk_types, {}, index_zero_sync, "Uint8", "SYNC", {"levels": 1, "claster": 100}),
+            (
+                "table_all_types",
+                pk_types,
+                {**pk_types, **non_pk_types},
+                {},
+                "Uint8",
+                "SYNC",
+                {"levels": 1, "claster": 100},
+            ),
+            ("table_index_4", pk_types, {}, index_four_sync, "Int8", "SYNC", {"levels": 1, "claster": 100}),
+            ("table_index_3", pk_types, {}, index_three_sync, "Int8", "SYNC", {"levels": 1, "claster": 100}),
+            ("table_index_2", pk_types, {}, index_second_sync, "Int8", "SYNC", {"levels": 1, "claster": 100}),
+            ("table_index_1", pk_types, {}, index_first_sync, "Int8", "SYNC", {"levels": 1, "claster": 100}),
+            ("table_index_0", pk_types, {}, index_zero_sync, "Int8", "SYNC", {"levels": 1, "claster": 100}),
+            (
+                "table_all_types",
+                pk_types,
+                {**pk_types, **non_pk_types},
+                {},
+                "Int8",
+                "SYNC",
+                {"levels": 1, "claster": 100},
+            ),
+            ("table_index_4_float", pk_types, {}, index_four_sync, "Float", "SYNC", {"levels": 2, "claster": 50}),
+            ("table_index_3_float", pk_types, {}, index_three_sync, "Float", "SYNC", {"levels": 2, "claster": 50}),
+            ("table_index_2_float", pk_types, {}, index_second_sync, "Float", "SYNC", {"levels": 2, "claster": 50}),
+            ("table_index_1_float", pk_types, {}, index_first_sync, "Float", "SYNC", {"levels": 2, "claster": 50}),
+            ("table_index_0_float", pk_types, {}, index_zero_sync, "Float", "SYNC", {"levels": 2, "claster": 50}),
+            (
+                "table_all_types_float",
+                pk_types,
+                {**pk_types, **non_pk_types},
+                {},
+                "Float",
+                "SYNC",
+                {"levels": 2, "claster": 50},
+            ),
+            ("table_index_4", pk_types, {}, index_four_sync, "Uint8", "SYNC", {"levels": 2, "claster": 50}),
+            ("table_index_4", pk_types, {}, index_three_sync, "Uint8", "SYNC", {"levels": 2, "claster": 50}),
+            ("table_index_2", pk_types, {}, index_second_sync, "Uint8", "SYNC", {"levels": 2, "claster": 50}),
+            ("table_index_1", pk_types, {}, index_first_sync, "Uint8", "SYNC", {"levels": 2, "claster": 50}),
+            ("table_index_0", pk_types, {}, index_zero_sync, "Uint8", "SYNC", {"levels": 2, "claster": 50}),
+            (
+                "table_all_types",
+                pk_types,
+                {**pk_types, **non_pk_types},
+                {},
+                "Uint8",
+                "SYNC",
+                {"levels": 2, "claster": 50},
+            ),
+            ("table_index_4", pk_types, {}, index_four_sync, "Int8", "SYNC", {"levels": 2, "claster": 50}),
+            ("table_index_4", pk_types, {}, index_three_sync, "Int8", "SYNC", {"levels": 2, "claster": 50}),
+            ("table_index_2", pk_types, {}, index_second_sync, "Int8", "SYNC", {"levels": 2, "claster": 50}),
+            ("table_index_1", pk_types, {}, index_first_sync, "Int8", "SYNC", {"levels": 2, "claster": 50}),
+            ("table_index_0", pk_types, {}, index_zero_sync, "Int8", "SYNC", {"levels": 2, "claster": 50}),
+            (
+                "table_all_types",
+                pk_types,
+                {**pk_types, **non_pk_types},
+                {},
+                "Int8",
+                "SYNC",
+                {"levels": 2, "claster": 50},
+            ),
         ],
     )
     def test_vector_index(
@@ -58,13 +165,12 @@ class TestVectorIndex(VectorBase):
         pk_types: dict[str, str],
         all_types: dict[str, str],
         index: dict[str, str],
-        ttl: str,
-        unique: str,
-        sync: str,
         vector_type: str,
+        sync: str,
+        dimension: dict[str, str],
     ):
         self.size_vector = 10
-        self.knn_type = {"Float": "ToBinaryStringFloat", "Uint8": "ToBinaryStringUint8"}
+        self.knn_type = {"Float": "ToBinaryStringFloat", "Uint8": "ToBinaryStringUint8", "Int8": "ToBinaryStringInt8"}
         self.targets = {
             "similarity": {"inner_product": "Knn::InnerProductSimilarity", "cosine": "Knn::CosineSimilarity"},
             "distance": {
@@ -75,45 +181,41 @@ class TestVectorIndex(VectorBase):
         }
         dml = DMLOperations(self)
         all_types["String"] = lambda i: f"String {i}"
-        self.sync = ["", "SYNC"]
-        dimensions = [{"levels": 1, "claster": 100}, {"levels": 2, "claster": 50}]
-        for dimension in dimensions:
-            for sync in self.sync:
-                for target in self.targets.keys():
-                    for distance in self.targets[target].keys():
-                        table_name_distance = f"{table_name}_{distance}_{target}_{sync}_level_{dimension["levels"]}"
-                        dml.create_table(table_name_distance, pk_types, all_types, index, ttl, unique, sync)
-                        self.vectors = []
-                        self.upsert(table_name_distance, all_types, pk_types, index, ttl, vector_type)
-                        cover = []
-                        for type_name in all_types.keys():
-                            if type_name != "String":
-                                cover.append("col_" + cleanup_type_name(type_name))
-                        sql_create_vector_index = create_vector_index_sql_request(
-                            table_name_distance,
-                            "col_String",
-                            target,
-                            distance,
-                            vector_type.lower(),
-                            sync,
-                            self.size_vector,
-                            dimension["levels"],
-                            dimension["claster"],
-                            cover,
-                        )
-                        print(sql_create_vector_index)
-                        dml.query(sql_create_vector_index)
-                        self.select(
-                            table_name_distance,
-                            "col_String",
-                            vector_type,
-                            pk_types,
-                            all_types,
-                            index,
-                            ttl,
-                            self.targets[target][distance],
-                            dml,
-                        )
+        for target in self.targets.keys():
+            for distance in self.targets[target].keys():
+                table_name_distance = f"{table_name}_{distance}_{target}_{sync}_level_{dimension["levels"]}"
+                dml.create_table(table_name_distance, pk_types, all_types, index, "", "", "")
+                self.vectors = []
+                self.upsert(table_name_distance, all_types, pk_types, index, "", vector_type)
+                cover = []
+                for type_name in all_types.keys():
+                    if type_name != "String":
+                        cover.append("col_" + cleanup_type_name(type_name))
+                sql_create_vector_index = create_vector_index_sql_request(
+                    table_name_distance,
+                    "col_String",
+                    target,
+                    distance,
+                    vector_type.lower(),
+                    sync,
+                    self.size_vector,
+                    dimension["levels"],
+                    dimension["claster"],
+                    cover,
+                )
+                print(sql_create_vector_index)
+                dml.query(sql_create_vector_index)
+                self.select(
+                    table_name_distance,
+                    "col_String",
+                    vector_type,
+                    pk_types,
+                    all_types,
+                    index,
+                    "",
+                    self.targets[target][distance],
+                    dml,
+                )
 
     def get_vector(self, type, numb):
         if type == "Float":

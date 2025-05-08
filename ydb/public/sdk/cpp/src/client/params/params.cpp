@@ -130,7 +130,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 TParamValueBuilder::TParamValueBuilder(TParamsBuilder& owner, Ydb::Type& typeProto, Ydb::Value& valueProto)
-    : TValueBuilderBase(typeProto, valueProto)
+    : TValueBuilderBase<TParamValueBuilder, StackAllocatedValueHolder>(StackAllocatedValueHolder(), typeProto, valueProto)
     , Owner_(owner)
     , Finished_(false) {}
 

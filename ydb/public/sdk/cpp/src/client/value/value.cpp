@@ -2066,59 +2066,8 @@ void TValueParser::CloseTagged() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TValueHolder {
-public:
-    virtual Ydb::Value& Value() = 0;
-    virtual Ydb::Value* ValuePtr() = 0;
-    virtual ~TValueHolder() = default;
-};
-
-class StackAllocatedValueHolder : public TValueHolder {
-public:
-    Ydb::Value& Value() override {
-        return ProtoValue_;
-    }
-
-    Ydb::Value* ValuePtr() override {
-        return &ProtoValue_;
-    }
-
-private:
-    Ydb::Value ProtoValue_;
-};
-
-class ArenaAllocatedValueHolder : public TValueHolder {
-public:
-    ArenaAllocatedValueHolder(google::protobuf::Arena* arena)
-        // value is created lazily on first access
-        : ArenaAllocatedValue_(nullptr)
-        , Arena_(arena) {
-            Y_ASSERT(arena != nullptr);
-        }
-
-    Ydb::Value& Value() override {
-        createValueIfAbsent();
-        return *ArenaAllocatedValue_;
-    }
-
-    Ydb::Value* ValuePtr() override {
-        createValueIfAbsent();
-        return ArenaAllocatedValue_;
-    }
-
-private:
-    void createValueIfAbsent() {
-        if (ArenaAllocatedValue_ == nullptr) {
-            ArenaAllocatedValue_ = google::protobuf::Arena::CreateMessage<Ydb::Value>(Arena_);
-        }
-    }
-
-private:
-    Ydb::Value* ArenaAllocatedValue_;
-    google::protobuf::Arena* Arena_;
-};
-
 // TODO: if TValueArenaBuilderImpl implemented, we can avoid copying Ydb::Value in TCsvParser::BuildListOnArena when FieldToValue is called
+template<typename ValueHolder>
 class TValueBuilderImpl {
     using ETypeKind = TTypeParser::ETypeKind;
     using TMembersMap = std::map<std::string, size_t>;
@@ -2142,31 +2091,24 @@ class TValueBuilderImpl {
     };
 
 public:
-    TValueBuilderImpl()
+    TValueBuilderImpl(ValueHolder holder)
         : TypeBuilder_()
-        , ValueHolder_(std::make_unique<StackAllocatedValueHolder>())
+        , ValueHolder_(std::move(holder))
     {
-        PushPath(ValueHolder_->Value());
+        PushPath(ValueHolder_.Value());
     }
 
-    TValueBuilderImpl(google::protobuf::Arena* arena)
+    TValueBuilderImpl(ValueHolder holder, const TType& type)
         : TypeBuilder_()
-        , ValueHolder_(std::make_unique<ArenaAllocatedValueHolder>(arena))
+        , ValueHolder_(std::move(holder))
     {
-        PushPath(ValueHolder_->Value());
-    }
-
-    TValueBuilderImpl(const TType& type)
-        : TypeBuilder_()
-        , ValueHolder_(std::make_unique<StackAllocatedValueHolder>())
-    {
-        PushPath(ValueHolder_->Value());
+        PushPath(ValueHolder_.Value());
         GetType().CopyFrom(type.GetProto());
     }
 
-    TValueBuilderImpl(Ydb::Type& type, Ydb::Value& value)
+    TValueBuilderImpl(ValueHolder holder, Ydb::Type& type, Ydb::Value& value)
         : TypeBuilder_(type)
-        , ValueHolder_(std::make_unique<StackAllocatedValueHolder>())
+        , ValueHolder_(std::move(holder))
     {
         PushPath(value);
     }
@@ -2182,14 +2124,14 @@ public:
         CheckValue();
 
         Ydb::Value value;
-        value.Swap(&ValueHolder_->Value());
+        value.Swap(&ValueHolder_.Value());
 
         return TValue(TypeBuilder_.Build(), std::move(value));
     }
 
     TArenaAllocatedValue BuildArenaAllocatedValue() {
         CheckValue();
-        return TArenaAllocatedValue(TypeBuilder_.Build(), ValueHolder_->ValuePtr());
+        return TArenaAllocatedValue(TypeBuilder_.Build(), ValueHolder_.ValuePtr());
     }
 
     void Bool(bool value) {
@@ -2902,7 +2844,7 @@ private:
     //TTypeBuilder TypeBuilder_;
     TTypeBuilder::TImpl TypeBuilder_;
     // Ydb::Value ProtoValue_;
-    std::unique_ptr<TValueHolder> ValueHolder_;
+    ValueHolder ValueHolder_;
     std::map<const Ydb::StructType*, TMembersMap> StructsMap_;
 
     TStackVec<TProtoPosition, 8> Path_;
@@ -2911,217 +2853,211 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template<typename TDerived>
-TValueBuilderBase<TDerived>::TValueBuilderBase(TValueBuilderBase&&) = default;
+template<typename TDerived, typename ValueHolder>
+TValueBuilderBase<TDerived, ValueHolder>::TValueBuilderBase(TValueBuilderBase&&) = default;
 
-template<typename TDerived>
-TValueBuilderBase<TDerived>::~TValueBuilderBase() = default;
+template<typename TDerived, typename ValueHolder>
+TValueBuilderBase<TDerived, ValueHolder>::~TValueBuilderBase() = default;
 
-template<typename TDerived>
-TValueBuilderBase<TDerived>::TValueBuilderBase()
-    : Impl_(new TValueBuilderImpl()) {}
+template<typename TDerived, typename ValueHolder>
+TValueBuilderBase<TDerived, ValueHolder>::TValueBuilderBase(ValueHolder holder)
+    : Impl_(new TValueBuilderImpl(std::move(holder))) {}
 
+template<typename TDerived, typename ValueHolder>
+TValueBuilderBase<TDerived, ValueHolder>::TValueBuilderBase(ValueHolder holder, const TType& type)
+    : Impl_(new TValueBuilderImpl(std::move(holder), type)) {}
 
-template<typename TDerived>
-TValueBuilderBase<TDerived>::TValueBuilderBase(google::protobuf::Arena* arena)
-    : Impl_(new TValueBuilderImpl(arena)) {}
+template<typename TDerived, typename ValueHolder>
+TValueBuilderBase<TDerived, ValueHolder>::TValueBuilderBase(ValueHolder holder, Ydb::Type& type, Ydb::Value& value)
+    : Impl_(new TValueBuilderImpl(std::move(holder), type, value)) {}
 
-
-template<typename TDerived>
-TValueBuilderBase<TDerived>::TValueBuilderBase(const TType& type)
-    : Impl_(new TValueBuilderImpl(type)) {}
-
-template<typename TDerived>
-TValueBuilderBase<TDerived>::TValueBuilderBase(Ydb::Type& type, Ydb::Value& value)
-    : Impl_(new TValueBuilderImpl(type, value)) {}
-
-template<typename TDerived>
-void TValueBuilderBase<TDerived>::CheckValue() {
+template<typename TDerived, typename ValueHolder>
+void TValueBuilderBase<TDerived, ValueHolder>::CheckValue() {
     return Impl_->CheckValue();
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Bool(bool value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::Bool(bool value) {
     Impl_->Bool(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Int8(i8 value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::Int8(i8 value) {
     Impl_->Int8(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Uint8(ui8 value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::Uint8(ui8 value) {
     Impl_->Uint8(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Int16(i16 value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::Int16(i16 value) {
     Impl_->Int16(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Uint16(ui16 value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::Uint16(ui16 value) {
     Impl_->Uint16(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Int32(i32 value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::Int32(i32 value) {
     Impl_->Int32(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Uint32(ui32 value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::Uint32(ui32 value) {
     Impl_->Uint32(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Int64(int64_t value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::Int64(int64_t value) {
     Impl_->Int64(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Uint64(uint64_t value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::Uint64(uint64_t value) {
     Impl_->Uint64(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Float(float value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::Float(float value) {
     Impl_->Float(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Double(double value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::Double(double value) {
     Impl_->Double(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Date(const TInstant& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::Date(const TInstant& value) {
     Impl_->Date(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Datetime(const TInstant& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::Datetime(const TInstant& value) {
     Impl_->Datetime(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Timestamp(const TInstant& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::Timestamp(const TInstant& value) {
     Impl_->Timestamp(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Interval(int64_t value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::Interval(int64_t value) {
     Impl_->Interval(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Date32(const i32 value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::Date32(const i32 value) {
     Impl_->Date32(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Datetime64(const int64_t value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::Datetime64(const int64_t value) {
     Impl_->Datetime64(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Timestamp64(const int64_t value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::Timestamp64(const int64_t value) {
     Impl_->Timestamp64(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Interval64(const int64_t value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::Interval64(const int64_t value) {
     Impl_->Interval64(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::TzDate(const std::string& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::TzDate(const std::string& value) {
     Impl_->TzDate(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::TzDatetime(const std::string& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::TzDatetime(const std::string& value) {
     Impl_->TzDatetime(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::TzTimestamp(const std::string& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::TzTimestamp(const std::string& value) {
     Impl_->TzTimestamp(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::String(const std::string& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::String(const std::string& value) {
     Impl_->String(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Utf8(const std::string& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::Utf8(const std::string& value) {
     Impl_->Utf8(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Yson(const std::string& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::Yson(const std::string& value) {
     Impl_->Yson(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Json(const std::string& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::Json(const std::string& value) {
     Impl_->Json(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Uuid(const TUuidValue& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::Uuid(const TUuidValue& value) {
     Impl_->Uuid(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::JsonDocument(const std::string& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::JsonDocument(const std::string& value) {
     Impl_->JsonDocument(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::DyNumber(const std::string& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::DyNumber(const std::string& value) {
     Impl_->DyNumber(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Decimal(const TDecimalValue& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::Decimal(const TDecimalValue& value) {
     Impl_->Decimal(value);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::Pg(const TPgValue& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::Pg(const TPgValue& value) {
     Impl_->Pg(value);
     return static_cast<TDerived&>(*this);
 }
@@ -3142,357 +3078,357 @@ TDerived& TValueBuilderBase<TDerived>::Pg(const TPgValue& value) {
     Impl_->EndOptional(); \
     return static_cast<TDerived&>(*this);
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalBool(const std::optional<bool>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalBool(const std::optional<bool>& value) {
     SET_OPT_VALUE_MAYBE(Bool);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalInt8(const std::optional<i8>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalInt8(const std::optional<i8>& value) {
     SET_OPT_VALUE_MAYBE(Int8);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalUint8(const std::optional<ui8>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalUint8(const std::optional<ui8>& value) {
     SET_OPT_VALUE_MAYBE(Uint8);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalInt16(const std::optional<i16>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalInt16(const std::optional<i16>& value) {
     SET_OPT_VALUE_MAYBE(Int16);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalUint16(const std::optional<ui16>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalUint16(const std::optional<ui16>& value) {
     SET_OPT_VALUE_MAYBE(Uint16);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalInt32(const std::optional<i32>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalInt32(const std::optional<i32>& value) {
     SET_OPT_VALUE_MAYBE(Int32);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalUint32(const std::optional<ui32>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalUint32(const std::optional<ui32>& value) {
     SET_OPT_VALUE_MAYBE(Uint32);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalInt64(const std::optional<int64_t>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalInt64(const std::optional<int64_t>& value) {
     SET_OPT_VALUE_MAYBE(Int64);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalUint64(const std::optional<uint64_t>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalUint64(const std::optional<uint64_t>& value) {
     SET_OPT_VALUE_MAYBE(Uint64);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalFloat(const std::optional<float>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalFloat(const std::optional<float>& value) {
     SET_OPT_VALUE_MAYBE(Float);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalDouble(const std::optional<double>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalDouble(const std::optional<double>& value) {
     SET_OPT_VALUE_MAYBE(Double);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalDate(const std::optional<TInstant>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalDate(const std::optional<TInstant>& value) {
     SET_OPT_VALUE_MAYBE(Date);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalDatetime(const std::optional<TInstant>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalDatetime(const std::optional<TInstant>& value) {
     SET_OPT_VALUE_MAYBE(Datetime);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalTimestamp(const std::optional<TInstant>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalTimestamp(const std::optional<TInstant>& value) {
     SET_OPT_VALUE_MAYBE(Timestamp);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalInterval(const std::optional<int64_t>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalInterval(const std::optional<int64_t>& value) {
     SET_OPT_VALUE_MAYBE(Interval);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalDate32(const std::optional<i32>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalDate32(const std::optional<i32>& value) {
     SET_OPT_VALUE_MAYBE(Date32);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalDatetime64(const std::optional<int64_t>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalDatetime64(const std::optional<int64_t>& value) {
     SET_OPT_VALUE_MAYBE(Datetime64);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalTimestamp64(const std::optional<int64_t>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalTimestamp64(const std::optional<int64_t>& value) {
     SET_OPT_VALUE_MAYBE(Timestamp64);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalInterval64(const std::optional<int64_t>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalInterval64(const std::optional<int64_t>& value) {
     SET_OPT_VALUE_MAYBE(Interval64);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalTzDate(const std::optional<std::string>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalTzDate(const std::optional<std::string>& value) {
     SET_OPT_VALUE_MAYBE(TzDate);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalTzDatetime(const std::optional<std::string>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalTzDatetime(const std::optional<std::string>& value) {
     SET_OPT_VALUE_MAYBE(TzDatetime);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalTzTimestamp(const std::optional<std::string>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalTzTimestamp(const std::optional<std::string>& value) {
     SET_OPT_VALUE_MAYBE(TzTimestamp);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalString(const std::optional<std::string>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalString(const std::optional<std::string>& value) {
     SET_OPT_VALUE_MAYBE(String);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalUtf8(const std::optional<std::string>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalUtf8(const std::optional<std::string>& value) {
     SET_OPT_VALUE_MAYBE(Utf8);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalYson(const std::optional<std::string>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalYson(const std::optional<std::string>& value) {
     SET_OPT_VALUE_MAYBE(Yson);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalJson(const std::optional<std::string>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalJson(const std::optional<std::string>& value) {
     SET_OPT_VALUE_MAYBE(Json);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalUuid(const std::optional<TUuidValue>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalUuid(const std::optional<TUuidValue>& value) {
     SET_OPT_VALUE_MAYBE(Uuid);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalJsonDocument(const std::optional<std::string>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalJsonDocument(const std::optional<std::string>& value) {
     SET_OPT_VALUE_MAYBE(JsonDocument);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::OptionalDyNumber(const std::optional<std::string>& value) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::OptionalDyNumber(const std::optional<std::string>& value) {
     SET_OPT_VALUE_MAYBE(DyNumber);
 }
 
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::BeginOptional() {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::BeginOptional() {
     Impl_->BeginOptional();
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::EndOptional() {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::EndOptional() {
     Impl_->EndOptional();
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::EmptyOptional(const TType& itemType) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::EmptyOptional(const TType& itemType) {
     Impl_->EmptyOptional(itemType);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::EmptyOptional(EPrimitiveType itemType) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::EmptyOptional(EPrimitiveType itemType) {
     Impl_->EmptyOptional(itemType);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::EmptyOptional() {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::EmptyOptional() {
     Impl_->EmptyOptional();
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::BeginList() {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::BeginList() {
     Impl_->BeginList();
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::EndList() {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::EndList() {
     Impl_->EndList();
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::AddListItem() {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::AddListItem() {
     Impl_->AddListItem();
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::AddListItem(const TValue& itemValue) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::AddListItem(const TValue& itemValue) {
     Impl_->AddListItem(itemValue);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::AddListItem(TValue&& itemValue) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::AddListItem(TValue&& itemValue) {
     Impl_->AddListItem(std::move(itemValue));
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::EmptyList(const TType& itemType) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::EmptyList(const TType& itemType) {
     Impl_->EmptyList(itemType);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::EmptyList() {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::EmptyList() {
     Impl_->EmptyList();
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::BeginStruct() {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::BeginStruct() {
     Impl_->BeginStruct();
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::AddMember(const std::string& memberName) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::AddMember(const std::string& memberName) {
     Impl_->AddMember(memberName);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::AddMember(const std::string& memberName, const TValue& memberValue) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::AddMember(const std::string& memberName, const TValue& memberValue) {
     Impl_->AddMember(memberName, memberValue);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::AddMember(const std::string& memberName, TValue&& memberValue) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::AddMember(const std::string& memberName, TValue&& memberValue) {
     Impl_->AddMember(memberName, std::move(memberValue));
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::EndStruct() {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::EndStruct() {
     Impl_->EndStruct();
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::BeginTuple() {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::BeginTuple() {
     Impl_->BeginTuple();
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::AddElement() {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::AddElement() {
     Impl_->AddElement();
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::AddElement(const TValue& elementValue) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::AddElement(const TValue& elementValue) {
     Impl_->AddElement(elementValue);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::EndTuple() {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::EndTuple() {
     Impl_->EndTuple();
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::BeginDict() {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::BeginDict() {
     Impl_->BeginDict();
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::AddDictItem() {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::AddDictItem() {
     Impl_->AddDictItem();
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::DictKey() {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::DictKey() {
     Impl_->DictKey();
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::DictKey(const TValue& keyValue) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::DictKey(const TValue& keyValue) {
     Impl_->DictKey(keyValue);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::DictPayload() {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::DictPayload() {
     Impl_->DictPayload();
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::DictPayload(const TValue& payloadValue) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::DictPayload(const TValue& payloadValue) {
     Impl_->DictPayload(payloadValue);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::EndDict() {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::EndDict() {
     Impl_->EndDict();
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::EmptyDict(const TType& keyType, const TType& payloadType) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::EmptyDict(const TType& keyType, const TType& payloadType) {
     Impl_->EmptyDict(keyType, payloadType);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::EmptyDict() {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::EmptyDict() {
     Impl_->EmptyDict();
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::BeginTagged(const std::string& tag) {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::BeginTagged(const std::string& tag) {
     Impl_->BeginTagged(tag);
     return static_cast<TDerived&>(*this);
 }
 
-template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::EndTagged() {
+template<typename TDerived, typename ValueHolder>
+TDerived& TValueBuilderBase<TDerived, ValueHolder>::EndTagged() {
     Impl_->EndTagged();
     return static_cast<TDerived&>(*this);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template class TValueBuilderBase<TValueBuilder>;
-template class TValueBuilderBase<TParamValueBuilder>;
-template class TValueBuilderBase<TArenaAllocatedValueBuilder>;
+template class TValueBuilderBase<TValueBuilder, StackAllocatedValueHolder>;
+template class TValueBuilderBase<TParamValueBuilder, StackAllocatedValueHolder>;
+template class TValueBuilderBase<TArenaAllocatedValueBuilder, ArenaAllocatedValueHolder>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TValueBuilder::TValueBuilder()
-    : TValueBuilderBase() {}
+    : TValueBuilderBase<TValueBuilder, StackAllocatedValueHolder>(StackAllocatedValueHolder()) {}
 
 TValueBuilder::TValueBuilder(const TType& type)
-    : TValueBuilderBase(type) {}
+    : TValueBuilderBase<TValueBuilder, StackAllocatedValueHolder>(StackAllocatedValueHolder(), type) {}
 
 TValue TValueBuilder::Build() {
     return Impl_->BuildStackAllocatedValue();
@@ -3501,7 +3437,7 @@ TValue TValueBuilder::Build() {
 ////////////////////////////////////////////////////////////////////////////////
 
 TArenaAllocatedValueBuilder::TArenaAllocatedValueBuilder(google::protobuf::Arena* arena)
-    : TValueBuilderBase(arena) {}
+    : TValueBuilderBase<TArenaAllocatedValueBuilder, ArenaAllocatedValueHolder>(ArenaAllocatedValueHolder(arena)) {}
 
 TArenaAllocatedValue TArenaAllocatedValueBuilder::BuildArenaAllocatedValue() {
     return Impl_->BuildArenaAllocatedValue();

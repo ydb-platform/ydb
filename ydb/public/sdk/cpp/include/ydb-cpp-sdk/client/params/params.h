@@ -60,7 +60,7 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
-class TParamValueBuilder : public TValueBuilderBase<TParamValueBuilder> {
+class TParamValueBuilder : public TValueBuilderBase<TParamValueBuilder, StackAllocatedValueHolder> {
     friend class TParamsBuilder;
 public:
     TParamsBuilder& Build();

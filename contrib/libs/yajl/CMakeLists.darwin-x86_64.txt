@@ -25,15 +25,15 @@ target_link_libraries(contrib-libs-yajl PUBLIC
 )
 
 target_sources(contrib-libs-yajl PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/yajl.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/yajl_buf.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/yajl_gen.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/yajl_parser.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/yajl_version.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/yajl_alloc.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/yajl_encode.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/yajl_lex.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/yajl_tree.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/src/yajl.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/src/yajl_buf.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/src/yajl_gen.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/src/yajl_parser.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/src/yajl_version.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/src/yajl_alloc.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/src/yajl_encode.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/src/yajl_lex.c
+  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/src/yajl_tree.c
   ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/yajl_parser.cpp
 )
 

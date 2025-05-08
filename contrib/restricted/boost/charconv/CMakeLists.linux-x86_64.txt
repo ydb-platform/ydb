@@ -12,29 +12,22 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(contrib-libs-yajl)
+add_library(restricted-boost-charconv INTERFACE)
 
 
-target_compile_options(contrib-libs-yajl PRIVATE
+target_compile_options(restricted-boost-charconv INTERFACE
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 
-target_link_libraries(contrib-libs-yajl PUBLIC
-  contrib-libs-linux-headers
-  contrib-libs-cxxsupp
-  yutil
+target_include_directories(restricted-boost-charconv INTERFACE
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/charconv/include
 )
 
-target_sources(contrib-libs-yajl PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/src/yajl.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/src/yajl_buf.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/src/yajl_gen.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/src/yajl_parser.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/src/yajl_version.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/src/yajl_alloc.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/src/yajl_encode.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/src/yajl_lex.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/src/yajl_tree.c
-  ${PROJECT_SOURCE_DIR}/contrib/libs/yajl/yajl_parser.cpp
+target_link_libraries(restricted-boost-charconv INTERFACE
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  restricted-boost-assert
+  restricted-boost-config
+  restricted-boost-core
 )
 

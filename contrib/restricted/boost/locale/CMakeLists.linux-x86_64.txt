@@ -34,50 +34,49 @@ target_link_libraries(restricted-boost-locale PUBLIC
   contrib-libs-cxxsupp
   contrib-libs-icu
   restricted-boost-assert
+  restricted-boost-charconv
   restricted-boost-config
   restricted-boost-core
   restricted-boost-iterator
   restricted-boost-predef
   restricted-boost-thread
-  restricted-boost-utility
 )
 
 target_sources(restricted-boost-locale PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/posix/codecvt.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/posix/collate.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/posix/converter.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/posix/numeric.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/posix/posix_backend.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/encoding/codepage.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/icu/boundary.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/icu/codecvt.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/icu/collator.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/icu/conversion.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/icu/date_time.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/icu/formatter.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/icu/formatters_cache.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/icu/icu_backend.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/icu/numeric.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/icu/time_zone.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/shared/date_time.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/shared/format.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/shared/formatting.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/shared/generator.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/shared/iconv_codecvt.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/shared/ids.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/shared/localization_backend.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/shared/message.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/shared/mo_lambda.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/std/codecvt.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/std/collate.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/std/converter.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/std/numeric.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/std/std_backend.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/util/codecvt_converter.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/util/default_locale.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/util/encoding.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/util/gregorian.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/util/info.cpp
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/boost/locale/util/locale_data.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/posix/codecvt.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/posix/collate.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/posix/converter.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/posix/numeric.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/posix/posix_backend.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/encoding/codepage.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/icu/boundary.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/icu/codecvt.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/icu/collator.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/icu/conversion.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/icu/date_time.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/icu/formatter.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/icu/formatters_cache.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/icu/icu_backend.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/icu/numeric.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/shared/date_time.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/shared/format.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/shared/formatting.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/shared/generator.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/shared/iconv_codecvt.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/shared/ids.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/shared/localization_backend.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/shared/message.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/shared/mo_lambda.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/std/codecvt.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/std/collate.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/std/converter.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/std/numeric.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/std/std_backend.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/util/codecvt_converter.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/util/default_locale.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/util/encoding.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/util/gregorian.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/util/info.cpp
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/boost/locale/src/util/locale_data.cpp
 )
 

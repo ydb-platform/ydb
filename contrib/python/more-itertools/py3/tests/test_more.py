@@ -1,5 +1,4 @@
 import cmath
-import warnings
 
 from collections import Counter, abc
 from collections.abc import Set
@@ -29,7 +28,6 @@ from statistics import mean
 from string import ascii_letters
 from sys import version_info
 from time import sleep
-from traceback import format_exc
 from unittest import skipIf, TestCase
 
 import more_itertools as mi
@@ -615,24 +613,12 @@ class OneTests(TestCase):
         it = iter(['item'])
         self.assertEqual(mi.one(it), 'item')
 
-    def test_too_short(self):
+    def test_too_short_new(self):
         it = iter([])
-        for too_short, exc_type in [
-            (None, ValueError),
-            (IndexError, IndexError),
-        ]:
-            with self.subTest(too_short=too_short):
-                try:
-                    mi.one(it, too_short=too_short)
-                except exc_type:
-                    formatted_exc = format_exc()
-                    self.assertIn('StopIteration', formatted_exc)
-                    self.assertIn(
-                        'The above exception was the direct cause',
-                        formatted_exc,
-                    )
-                else:
-                    self.fail()
+        self.assertRaises(ValueError, lambda: mi.one(it))
+        self.assertRaises(
+            OverflowError, lambda: mi.one(it, too_short=OverflowError)
+        )
 
     def test_too_long(self):
         it = count()
@@ -1908,14 +1894,10 @@ class StaggerTest(TestCase):
 class ZipEqualTest(TestCase):
     @skipIf(version_info[:2] < (3, 10), 'zip_equal deprecated for 3.10+')
     def test_deprecation(self):
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter('always')
+        with self.assertWarns(DeprecationWarning):
             self.assertEqual(
                 list(mi.zip_equal([1, 2], [3, 4])), [(1, 3), (2, 4)]
             )
-
-        (warning,) = caught
-        assert warning.category == DeprecationWarning
 
     def test_equal(self):
         lists = [0, 1, 2], [2, 3, 4]
@@ -4137,7 +4119,7 @@ class FilterExceptTests(TestCase):
             list(mi.filter_except(int, iterable))
 
     def test_raise(self):
-        iterable = ['0', '1' '2', 'three', None]
+        iterable = ['0', '12', 'three', None]
         with self.assertRaises(TypeError):
             list(mi.filter_except(int, iterable, ValueError))
 
@@ -4169,7 +4151,7 @@ class MapExceptTests(TestCase):
             list(mi.map_except(int, iterable))
 
     def test_raise(self):
-        iterable = ['0', '1' '2', 'three', None]
+        iterable = ['0', '12', 'three', None]
         with self.assertRaises(TypeError):
             list(mi.map_except(int, iterable, ValueError))
 
@@ -4322,7 +4304,6 @@ class SampleTests(TestCase):
         self.assertTrue(difference_in_means < 4.4)
 
     def test_error_cases(self):
-
         # weights and counts are mutally exclusive
         with self.assertRaises(TypeError):
             mi.sample(

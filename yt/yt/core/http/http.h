@@ -142,7 +142,7 @@ DEFINE_ENUM(EMethod,
 #undef XX
 
 #define XX(num, name, string) ((name) (num))
-DEFINE_ENUM_WITH_UNDERLYING_TYPE(EStatusCode, int,
+DEFINE_ENUM(EStatusCode,
     YT_HTTP_STATUS_MAP(XX)
 );
 #undef XX

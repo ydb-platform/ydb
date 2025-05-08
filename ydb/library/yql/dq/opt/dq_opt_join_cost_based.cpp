@@ -544,7 +544,12 @@ TExprBase DqOptimizeEquiJoinWithCosts(
         YQL_CLOG(TRACE, CoreDq) << str.str();
     }
 
+    TInstant startTime = TInstant::Now();
     joinTree = opt.JoinSearch(joinTree, hints);
+    TInstant endTime = TInstant::Now();
+    TDuration duration = endTime - startTime;
+
+    YQL_CLOG(TRACE, CoreDq) << "CBO took " << duration.MilliSeconds() << "ms to work";
 
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
         std::stringstream str;

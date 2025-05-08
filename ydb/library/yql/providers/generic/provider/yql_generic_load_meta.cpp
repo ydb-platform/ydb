@@ -364,14 +364,23 @@ namespace NYql {
                 .Name().Value(tableName).Build()
             .Done();
 
-            return Build<TGenReadTable>(ctx, read.Pos())
+            auto builder = Build<TGenReadTable>(ctx, read.Pos())
                 .World(read.World())
                 .DataSource(read.DataSource())
                 .Table(table)
                 .Columns<TCoVoid>().Build()
                 .FilterPredicate(emptyPredicate)
-            .Done().Ptr();
+                .Listify<TCoVoid>().Build();
             // clang-format on
+
+            if (read.FreeArgs().Count() > 4) {
+                for (auto& child: read.FreeArgs().Get(4).Ref().Children()) {
+                    if (child.Get()->ChildrenSize() == 1 && child.Get()->Head().IsAtom("listify")) {
+                       builder.Listify(child.Get()->HeadPtr());
+                    }
+                }
+            }
+            return builder.Done().Ptr();
         }
 
         TIssues FillDescribeTableRequest(NConnector::NApi::TDescribeTableRequest& request,

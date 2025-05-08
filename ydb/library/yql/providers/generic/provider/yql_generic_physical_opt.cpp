@@ -50,6 +50,8 @@ namespace NYql {
                 AddHandler(0, &TCoNarrowMap::Match, HNDL(ReadZeroColumns));
                 AddHandler(0, &TCoFlatMap::Match, HNDL(PushFilterToReadTable));
                 AddHandler(0, &TCoFlatMap::Match, HNDL(PushFilterToDqSourceWrap));
+                AddHandler(0, &TDqSourceWrap::Match, HNDL(ValidateDqGenWrap<TDqSourceWrap>));
+                AddHandler(0, &TDqSource::Match, HNDL(ValidateDqGenWrap<TDqSource>));
 #undef HNDL
             }
 
@@ -197,6 +199,21 @@ namespace NYql {
                         .Build()
                     .Done();
                 // clang-format on
+            }
+
+            template <class TDqWrap>
+            TMaybeNode<TExprBase> ValidateDqGenWrap(TExprBase node, TExprContext& ctx) const {
+                auto dqWrap = node.Cast<TDqWrap>();
+                auto maybeGenericSourceSettings = dqWrap.Settings().template Maybe<TGenSourceSettings>();
+                if (!maybeGenericSourceSettings) {
+                    return node;
+                }
+                auto genericSourceSettings = maybeGenericSourceSettings.Cast();
+                if (genericSourceSettings.Listify().template Maybe<TCoAtom>()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "WITH Listify is only supported with streamlookup JOIN"));
+                    return {};
+                }
+                return node;
             }
 
         private:

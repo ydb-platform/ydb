@@ -1,6 +1,6 @@
 <tmp_path>/program.sql:<main>: Warning: Type annotation
 
-    <tmp_path>/program.sql:<main>:14:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    <tmp_path>/program.sql:<main>:14:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
     	select AsList({100u:100}, $d1, $d2, $d3, $d4);
 	^
         <tmp_path>/program.sql:<main>:14:8: Warning: At function: AsList
@@ -12,7 +12,7 @@
                 <tmp_path>/program.sql:<main>:6:7: Warning: Consider using explicit CAST or BITCAST to convert from Uint32 to Int32
                 	$d1 = ToDict([(1, 1u)]);
 	      ^
-    <tmp_path>/program.sql:<main>:15:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    <tmp_path>/program.sql:<main>:15:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
     	select AsList({100}, $s1, $s2);
 	^
         <tmp_path>/program.sql:<main>:15:8: Warning: At function: AsList

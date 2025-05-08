@@ -9,6 +9,7 @@ PEERDIR(
     contrib/restricted/patched/replxx
     yql/essentials/sql/v1/complete
     yql/essentials/sql/v1/complete/name/object
+    yql/essentials/sql/v1/complete/name/object/simple
     yql/essentials/sql/v1/complete/name/service/schema
     yql/essentials/sql/v1/complete/name/service/static
     yql/essentials/sql/v1/complete/name/service/union

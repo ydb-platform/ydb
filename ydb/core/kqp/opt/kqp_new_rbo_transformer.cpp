@@ -68,16 +68,55 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
     }
 
     auto result = GetSetting(setItem->Tail(), "result");
+    auto finalType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
     TExprNode::TPtr resultExpr = filterExpr;
 
     for (auto resultItem : result->Child(1)->Children()) {
-        auto variable = Build<TCoAtom>(ctx, node->Pos()).Value(resultItem->Child(0)->Content()).Done();
+        auto column = resultItem->Child(0);
+        auto columnName = column->Content();
+        auto variable = Build<TCoAtom>(ctx, node->Pos()).Value(columnName).Done();
+
+        const auto expectedTypeNode = finalType->FindItemType(columnName);
+        Y_ENSURE(expectedTypeNode);
+        const auto expectedType = expectedTypeNode->Cast<TPgExprType>();
+        const auto actualTypeNode = resultItem->GetTypeAnn();
+
+        YQL_CLOG(TRACE, CoreDq) << "Actual type for column: " << columnName << " is: " << *actualTypeNode;
+
+        ui32 actualPgTypeId;
+        bool convertToPg;
+        Y_ENSURE(ExtractPgType(actualTypeNode, actualPgTypeId, convertToPg, node->Pos(), ctx));
+
+        auto needPgCast = (expectedType->GetId() != actualPgTypeId);
+        auto lambda = TCoLambda(ctx.DeepCopyLambda(*(resultItem->Child(2))));
+
+        if (convertToPg) {
+            Y_ENSURE(!needPgCast, TStringBuilder()
+                 << "Conversion to PG type is different at typization (" << expectedType->GetId()
+                 << ") and optimization (" << actualPgTypeId << ") stages.");
+
+            auto toPg = ctx.NewCallable(node->Pos(), "ToPg", {lambda.Body().Ptr()});
+
+            lambda = Build<TCoLambda>(ctx, node->Pos())
+                .Args(lambda.Args())
+                .Body(toPg)
+                .Done();
+        }
+        else if (needPgCast) {
+            auto pgType = ctx.NewCallable(node->Pos(), "PgType", {ctx.NewAtom(node->Pos(), NPg::LookupType(expectedType->GetId()).Name)});
+            auto pgCast = ctx.NewCallable(node->Pos(), "PgCast", {lambda.Body().Ptr(), pgType});
+
+            lambda = Build<TCoLambda>(ctx, node->Pos())
+                .Args(lambda.Args())
+                .Body(pgCast)
+                .Done();
+        }
 
         resultElements.push_back(Build<TKqpOpMapElement>(ctx, node->Pos())
             .Input(resultExpr)
             .Variable(variable)
-            .Lambda(ctx.DeepCopyLambda(*(resultItem->Child(2))))
+            .Lambda(lambda)
             .Done().Ptr());
     }
 

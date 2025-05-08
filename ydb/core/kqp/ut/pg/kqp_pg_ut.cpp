@@ -1196,7 +1196,7 @@ Y_UNIT_TEST_SUITE(KqpPg) {
 
     Y_UNIT_TEST(NewRBO2) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        //appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

@@ -14,6 +14,11 @@ using namespace NKikimr::NMiniKQL;
 using namespace NYql;
 using namespace NYql::NDq;
 
+template<>
+void Out<NYql::NDq::TDqFillLevel>(IOutputStream& os, const NYql::NDq::TDqFillLevel l) {
+    os << static_cast<ui32>(l);
+}
+
 namespace {
 
 // #define DEBUG_LOGS
@@ -183,7 +188,7 @@ void TestSingleRead(TTestContext& ctx) {
 
     for (i32 i = 0; i < 10; ++i) {
         auto row = ctx.CreateRow(i);
-        UNIT_ASSERT(!ch->IsFull());
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, ch->GetFillLevel());
         PushRow(ctx, std::move(row), ch);
     }
 
@@ -221,7 +226,7 @@ void TestPartialRead(TTestContext& ctx) {
 
     for (i32 i = 0; i < 9; ++i) {
         auto row = ctx.CreateRow(i);
-        UNIT_ASSERT(!ch->IsFull());
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, ch->GetFillLevel());
         PushRow(ctx, std::move(row), ch);
     }
 
@@ -269,20 +274,21 @@ void TestOverflow(TTestContext& ctx) {
 
     for (i32 i = 0; i < 8; ++i) {
         auto row = ctx.CreateRow(i);
-        UNIT_ASSERT(!ch->IsFull());
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, ch->GetFillLevel());
         PushRow(ctx, std::move(row), ch);
     }
 
     UNIT_ASSERT_VALUES_EQUAL(8, ch->GetPushStats().Rows);
     UNIT_ASSERT_VALUES_EQUAL(0, ch->GetPopStats().Rows);
 
-    UNIT_ASSERT(ch->IsFull());
+    UNIT_ASSERT_VALUES_EQUAL(HardLimit, ch->GetFillLevel());
     try {
         auto row = ctx.CreateRow(100'500);
         PushRow(ctx, std::move(row), ch);
         UNIT_FAIL("");
     } catch (yexception& e) {
-        UNIT_ASSERT(TString(e.what()).Contains("requirement !IsFull() failed"));
+        Cerr << e.what() << Endl;
+        UNIT_ASSERT(TString(e.what()).Contains("requirement GetFillLevel() != HardLimit failed"));
     }
 }
 
@@ -297,7 +303,7 @@ void TestPopAll(TTestContext& ctx) {
 
     for (i32 i = 0; i < 50; ++i) {
         auto row = ctx.CreateRow(i);
-        UNIT_ASSERT(!ch->IsFull());
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, ch->GetFillLevel());
         PushRow(ctx, std::move(row), ch);
     }
 
@@ -328,13 +334,13 @@ void TestBigRow(TTestContext& ctx) {
 
     {
         auto row = ctx.CreateRow(1);
-        UNIT_ASSERT(!ch->IsFull());
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, ch->GetFillLevel());
         PushRow(ctx, std::move(row), ch);
     }
     {
         for (ui32 i = 2; i < 10; ++i) {
             auto row = ctx.CreateBigRow(i, 10_MB);
-            UNIT_ASSERT(!ch->IsFull());
+            UNIT_ASSERT_VALUES_EQUAL(NoLimit, ch->GetFillLevel());
             PushRow(ctx, std::move(row), ch);
         }
     }
@@ -418,7 +424,7 @@ void TestSpillWithMockStorage(TTestContext& ctx) {
 
     for (i32 i = 0; i < 35; ++i) {
         auto row = ctx.CreateRow(i);
-        UNIT_ASSERT(!ch->IsFull());
+        UNIT_ASSERT_VALUES_UNEQUAL(HardLimit, ch->GetFillLevel());
         PushRow(ctx, std::move(row), ch);
     }
 
@@ -449,7 +455,7 @@ void TestSpillWithMockStorage(TTestContext& ctx) {
 
         for (i32 i = 100; i < 105; ++i) {
             auto row = ctx.CreateRow(i);
-            UNIT_ASSERT(!ch->IsFull());
+            UNIT_ASSERT_VALUES_EQUAL(NoLimit, ch->GetFillLevel());
             PushRow(ctx, std::move(row), ch);
         }
 
@@ -482,7 +488,7 @@ void TestOverflowWithMockStorage(TTestContext& ctx) {
 
     for (i32 i = 0; i < 42; ++i) {
         auto row = ctx.CreateRow(i);
-        UNIT_ASSERT(!ch->IsFull());
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, ch->GetFillLevel());
         PushRow(ctx, std::move(row), ch);
     }
 
@@ -510,7 +516,7 @@ void TestChunkSizeLimit(TTestContext& ctx) {
 
     for (i32 i = 0; i < 10; ++i) {
         auto row = ctx.CreateRow(i);
-        UNIT_ASSERT(!ch->IsFull());
+        UNIT_ASSERT_VALUES_EQUAL(NoLimit, ch->GetFillLevel());
         PushRow(ctx, std::move(row), ch);
     }
 

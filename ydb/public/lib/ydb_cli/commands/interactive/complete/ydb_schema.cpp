@@ -1,12 +1,12 @@
-#include "ydb_schema_gateway.h"
+#include "ydb_schema.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 
 namespace NYdb::NConsoleClient {
 
-    class TYDBSchemaGateway: public NSQLComplete::ISchemaGateway {
+    class TYDBSchema: public NSQLComplete::ISchema {
     public:
-        explicit TYDBSchemaGateway(TDriver driver, TString database)
+        explicit TYDBSchema(TDriver driver, TString database)
             : Driver_(std::move(driver))
             , Database_(std::move(database))
         {
@@ -38,14 +38,21 @@ namespace NYdb::NConsoleClient {
 
     private:
         NThreading::TFuture<TVector<NSQLComplete::TFolderEntry>> List(TStringBuf head) const {
-            std::string path = Database_ + "/" + std::string(head);
+            auto path = TString(head);
+            if (!head.StartsWith('/')) {
+                path.prepend("/");
+                path.prepend(Database_);
+            }
+
             return NScheme::TSchemeClient(Driver_)
                 .ListDirectory(path)
                 .Apply([path](NScheme::TAsyncListDirectoryResult f) {
                     NScheme::TListDirectoryResult result = f.ExtractValue();
 
                     if (!result.IsSuccess()) {
+                        result.Out(Cerr);
                         return TVector<NSQLComplete::TFolderEntry>{};
+                        // TODO(YQL-19747): Use Swallowing and Logging NameServices
                         // ythrow yexception()
                         //     << "ListDirectory('" << path << "') failed: "
                         //     << result.GetIssues().ToOneLineString();
@@ -106,7 +113,6 @@ namespace NYdb::NConsoleClient {
                 case NScheme::ESchemeEntryType::ResourcePool:
                     return "ResourcePool";
                 case NScheme::ESchemeEntryType::Unknown:
-                    return "Unknown";
                 default:
                     return "Unknown";
             }
@@ -127,9 +133,8 @@ namespace NYdb::NConsoleClient {
         TString Database_;
     };
 
-    NSQLComplete::ISchemaGateway::TPtr MakeYDBSchemaGateway(TDriver driver, TString database) {
-        return NSQLComplete::ISchemaGateway::TPtr(
-            new TYDBSchemaGateway(std::move(driver), std::move(database)));
+    NSQLComplete::ISchema::TPtr MakeYDBSchema(TDriver driver, TString database) {
+        return new TYDBSchema(std::move(driver), std::move(database));
     }
 
 } // namespace NYdb::NConsoleClient

@@ -1,6 +1,6 @@
 #include "line_reader.h"
 
-#include <ydb/public/lib/ydb_cli/commands/interactive/complete/ydb_schema_gateway.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/complete/ydb_schema.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/complete/yql_completer.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/yql_highlighter.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>

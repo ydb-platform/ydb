@@ -277,10 +277,10 @@ void TGranuleMeta::InsertPortionOnComplete(const TPortionDataAccessor& portion, 
     DataAccessorsManager->AddPortion(portion);
 }
 
-void TGranuleMeta::InsertPortionOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TPortionDataAccessor& portion) const {
+void TGranuleMeta::InsertPortionOnExecute(NTabletFlatExecutor::TTransactionContext& txc, const TPortionDataAccessor& portion, const ui64 firstPKColumnId) const {
     AFL_VERIFY(!InsertedPortions.contains(portion.GetPortionInfo().GetInsertWriteIdVerified()));
     TDbWrapper wrapper(txc.DB, nullptr);
-    portion.SaveToDatabase(wrapper, 0, false);
+    portion.SaveToDatabase(wrapper, firstPKColumnId, false);
 }
 
 void TGranuleMeta::CommitPortionOnExecute(
@@ -306,11 +306,11 @@ void TGranuleMeta::CommitPortionOnComplete(const TInsertWriteId insertWriteId, I
 }
 
 void TGranuleMeta::CommitImmediateOnExecute(
-    NTabletFlatExecutor::TTransactionContext& txc, const TSnapshot& snapshot, const TPortionDataAccessor& portion) const {
+    NTabletFlatExecutor::TTransactionContext& txc, const TSnapshot& snapshot, const TPortionDataAccessor& portion, const ui64 firstPKColumnId) const {
     AFL_VERIFY(!InsertedPortions.contains(portion.GetPortionInfo().GetInsertWriteIdVerified()));
     portion.MutablePortionInfo().SetCommitSnapshot(snapshot);
     TDbWrapper wrapper(txc.DB, nullptr);
-    portion.SaveToDatabase(wrapper, 0, false);
+    portion.SaveToDatabase(wrapper, firstPKColumnId, false);
 }
 
 void TGranuleMeta::CommitImmediateOnComplete(const std::shared_ptr<TPortionInfo> /*portion*/, IColumnEngine& /*engine*/) {

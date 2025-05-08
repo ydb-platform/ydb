@@ -29,6 +29,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
     }
     AFL_VERIFY(!!PackBehaviour);
     auto& granule = index.MutableGranuleVerified(Pack.GetPathId());
+    const ui64 firstPKColumnId = Self->TablesManager.GetIndexInfo(*CommitSnapshot).GetPKFirstColumnId();
     for (auto&& portion : Pack.MutablePortions()) {
         if (PackBehaviour == EOperationBehaviour::NoTxWrite) {
             static TAtomicCounter Counter = 0;
@@ -39,9 +40,9 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
         InsertWriteIds.emplace_back(portion.GetPortionInfoConstructor()->GetPortionConstructor().GetInsertWriteIdVerified());
         portion.Finalize(Self, txc);
         if (PackBehaviour == EOperationBehaviour::NoTxWrite) {
-            granule.CommitImmediateOnExecute(txc, *CommitSnapshot, portion.GetPortionInfo());
+            granule.CommitImmediateOnExecute(txc, *CommitSnapshot, portion.GetPortionInfo(), firstPKColumnId);
         } else {
-            granule.InsertPortionOnExecute(txc, portion.GetPortionInfo());
+            granule.InsertPortionOnExecute(txc, portion.GetPortionInfo(), firstPKColumnId);
         }
     }
 

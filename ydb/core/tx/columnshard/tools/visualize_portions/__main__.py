@@ -31,7 +31,7 @@ class Portion:
     @staticmethod
     def GetPk(detailsPk: str, pk0Type: FirstPkColumnType):
         # Use only the 1st PK column currently
-        pk0 = detailsPk.split(';')[0]
+        pk0 = detailsPk.split(',')[0]
         if (pk0Type == FirstPkColumnType.Integer):
             return int(pk0)
         if (pk0Type == FirstPkColumnType.Timestamp):
@@ -92,7 +92,6 @@ class Portions:
         self.Portions.append(portion)
         self.PkMin = min(self.PkMin, portion.PkMin)
         self.PkMax = max(self.PkMax, portion.PkMax)
-        print(portion.PkMax, self.PkMax)
         self.PlanStepMin = min(self.PlanStepMin, portion.PlanStepMin)
         self.PlanStepMax = max(self.PlanStepMax, portion.PlanStepMax)
         self.MaxCompactionLevel = max(self.MaxCompactionLevel, portion.CompactionLevel)
@@ -107,7 +106,10 @@ def ParsePortionStatFile(path: str, pk0type: FirstPkColumnType) -> Portions:
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser("Visualize portions from YDB Column table")
+    parser = argparse.ArgumentParser("""Visualize portions from YDB Column table.
+To get portion info for a table, use ydb cli:
+    ydb -e grpc://<node>:2135 -d <path_to_db> sql -s 'select * from `<table>/.sys/primary_index_portion_stats` where TabletId==<id>' --format json-unicode
+                                     """)
     parser.add_argument("-i", "--input-file", help = "File with primary_index_portion_stats data in json per row format", required = True)
     parser.add_argument("-t", "--type", help = "First PK column type: Integer or Timestamp", required = True)
     args = parser.parse_args()
@@ -127,13 +129,16 @@ if __name__ == '__main__':
     ax.add_collection(PatchCollection(rectangles, match_original=True))
 
     ax.set_xlabel("pk")
-    if (pk0Type == FirstPkColumnType.Timestamp):
+    if pk0Type == FirstPkColumnType.Timestamp:
         ax.xaxis.set_major_locator(mdates.AutoDateLocator())
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
         xMin = mdates.date2num(portions.PkMin)
         xMax = mdates.date2num(portions.PkMax)
+    elif pk0Type == FirstPkColumnType.Integer:
+        xMin = portions.PkMin
+        xMax = portions.PkMax
     else:
-        pass #TBD
+        raise Exception(f"Unsupported PK column type: {str(pk0Type)}")
     dx = xMax - xMin
     ax.set_xlim(xMin - 0.05 * dx, xMax + 0.05 * dx)
 

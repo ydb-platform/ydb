@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    ydb_schema_gateway.cpp
+    ydb_schema.cpp
     yql_completer.cpp
 )
 

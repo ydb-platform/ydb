@@ -1,6 +1,6 @@
 #include "yql_completer.h"
 
-#include <ydb/public/lib/ydb_cli/commands/interactive/complete/ydb_schema_gateway.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/complete/ydb_schema.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/color/schema.h>
 
 #include <yql/essentials/sql/v1/complete/sql_complete.h>
@@ -39,10 +39,7 @@ namespace NYdb::NConsoleClient {
             for (auto& candidate : completion.Candidates) {
                 const auto back = candidate.Content.back();
                 if (
-                    !(candidate.Kind == NSQLComplete::ECandidateKind::FolderName 
-                    || candidate.Kind == NSQLComplete::ECandidateKind::TableName)
-                    && (!IsLeftPunct(back) && back != '<' || IsQuotation(back))
-                ) {
+                    !(candidate.Kind == NSQLComplete::ECandidateKind::FolderName || candidate.Kind == NSQLComplete::ECandidateKind::TableName) && (!IsLeftPunct(back) && back != '<' || IsQuotation(back))) {
                     candidate.Content += ' ';
                 }
 
@@ -93,9 +90,10 @@ namespace NYdb::NConsoleClient {
         NSQLComplete::IRanking::TPtr ranking = NSQLComplete::MakeDefaultRanking();
 
         NSQLComplete::INameService::TPtr service = NSQLComplete::MakeUnionNameService({
-            NSQLComplete::MakeSchemaNameService(MakeYDBSchemaGateway(std::move(driver), std::move(database))),
-            MakeStaticNameService(std::move(names), std::move(ranking)),
-        });
+                                                                                          NSQLComplete::MakeStaticNameService(std::move(names), ranking),
+                                                                                          NSQLComplete::MakeSchemaNameService(
+                                                                                              MakeYDBSchema(std::move(driver), std::move(database))),
+                                                                                      }, ranking);
 
         return IYQLCompleter::TPtr(new TYQLCompleter(
             NSQLComplete::MakeSqlCompletionEngine(std::move(lexer), std::move(service)),

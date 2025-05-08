@@ -1,4 +1,6 @@
 #pragma once
+#include <ydb/core/formats/arrow/accessor/abstract/constructor.h>
+#include <ydb/core/formats/arrow/accessor/abstract/request.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/schemeshard/olap/common/common.h>
@@ -7,14 +9,12 @@
 
 namespace NKikimr::NSchemeShard {
 
-[[nodiscard]] NKikimr::TConclusion<NKikimrSchemeOp::TOlapColumn::TSerializer> ConvertFamilyDescriptionToProtoSerializer(
-    const NKikimrSchemeOp::TFamilyDescription& familyDescription);
-
 class TOlapColumnFamlilyDiff {
 private:
     YDB_ACCESSOR_DEF(TString, Name);
     YDB_ACCESSOR_DEF(std::optional<NKikimrSchemeOp::EColumnCodec>, Codec);
     YDB_ACCESSOR_DEF(std::optional<i32>, CodecLevel);
+    YDB_ACCESSOR_DEF(NArrow::NAccessor::TRequestedConstructorContainer, AccessorConstructor);
 
 public:
     bool ParseFromRequest(const NKikimrSchemeOp::TFamilyDescription& diffColumnFamily, IErrorCollector& errors);
@@ -24,6 +24,7 @@ class TOlapColumnFamlilyAdd {
 private:
     YDB_READONLY_DEF(TString, Name);
     YDB_READONLY_DEF(NArrow::NSerialization::TSerializerContainer, SerializerContainer);
+    YDB_ACCESSOR_DEF(NArrow::NAccessor::TRequestedConstructorContainer, AccessorConstructor);
 
 public:
     bool ParseFromRequest(const NKikimrSchemeOp::TFamilyDescription& columnFamily, IErrorCollector& errors);

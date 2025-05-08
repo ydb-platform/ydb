@@ -92,7 +92,7 @@ TVector<TRequestedBlob> TPartitionBlobEncoder::GetBlobsFromBody(const ui64 start
         }
         while (it != DataKeysBody.end()
                && (size < maxSize && count < maxCount || count == 0) //count== 0 grants that blob with offset from ReadFromTimestamp will be readed
-               && (lastOffset == 0 || it->Key.GetOffset() <= lastOffset)
+               && (lastOffset == 0 || it->Key.GetOffset() < lastOffset)
         ) {
             size += sz;
             count += cnt;
@@ -144,7 +144,7 @@ TVector<TClientBlob> TPartitionBlobEncoder::GetBlobsFromHead(const ui64 startOff
             Y_ABORT_UNLESS(pno == blobs[i].GetPartNo());
             bool skip = offset < startOffset || offset == startOffset &&
                 blobs[i].GetPartNo() < partNo;
-            if (lastOffset != 0 && lastOffset < offset) {
+            if (0 < lastOffset && lastOffset <= offset) {
                 break;
             }
             if (blobs[i].IsLastPart()) {

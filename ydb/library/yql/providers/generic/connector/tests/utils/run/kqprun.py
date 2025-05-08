@@ -186,19 +186,7 @@ TableServiceConfig {
 }
 
 QueryServiceConfig {
-  AvailableExternalDataSources: "ObjectStorage"
-  AvailableExternalDataSources: "ClickHouse"
-  AvailableExternalDataSources: "PostgreSQL"
-  AvailableExternalDataSources: "MySQL"
-  AvailableExternalDataSources: "Ydb"
-  AvailableExternalDataSources: "YT"
-  AvailableExternalDataSources: "Greenplum"
-  AvailableExternalDataSources: "MsSQLServer"
-  AvailableExternalDataSources: "Oracle"
-  AvailableExternalDataSources: "Logging"
-  AvailableExternalDataSources: "Solomon"
-  AvailableExternalDataSources: "Redis"
-  AvailableExternalDataSources: "Prometheus"
+  AllExternalDataSourcesAreAvailable: true
   Generic {
     Connector {
         Endpoint {

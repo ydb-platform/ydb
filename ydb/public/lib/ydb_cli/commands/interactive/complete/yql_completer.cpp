@@ -26,32 +26,42 @@ namespace NYdb::NConsoleClient {
         }
 
         TCompletions Apply(TStringBuf text, const std::string& prefix, int& contextLen) override {
-            auto completion = Engine->Complete({
+            NSQLComplete::TCompletionInput input = {
                 .Text = text,
                 .CursorPosition = prefix.length(),
-            });
+            };
+
+            auto completion = Engine->CompleteAsync(input).ExtractValueSync();
 
             contextLen = GetNumberOfUTF8Chars(completion.CompletedToken.Content);
 
-            contextLen = GetNumberOfUTF8Chars(completion.CompletedToken.Content);
+            return ReplxxCompletionsOf(std::move(completion.Candidates));
+        }
 
+    private:
+        replxx::Replxx::completions_t ReplxxCompletionsOf(TVector<NSQLComplete::TCandidate> candidates) const {
             replxx::Replxx::completions_t entries;
-            for (auto& candidate : completion.Candidates) {
-                const auto back = candidate.Content.back();
-                if (
-                    !(candidate.Kind == NSQLComplete::ECandidateKind::FolderName || candidate.Kind == NSQLComplete::ECandidateKind::TableName) && (!IsLeftPunct(back) && back != '<' || IsQuotation(back))) {
-                    candidate.Content += ' ';
-                }
-
-                entries.emplace_back(
-                    std::move(candidate.Content),
-                    ReplxxColorOf(candidate.Kind));
+            entries.reserve(candidates.size());
+            for (auto& candidate : candidates) {
+                entries.emplace_back(ReplxxCompletionOf(std::move(candidate)));
             }
             return entries;
         }
 
-    private:
-        replxx::Replxx::Color ReplxxColorOf(NSQLComplete::ECandidateKind kind) {
+        replxx::Replxx::Completion ReplxxCompletionOf(NSQLComplete::TCandidate candidate) const {
+            const auto back = candidate.Content.back();
+            if (
+                !(candidate.Kind == NSQLComplete::ECandidateKind::FolderName || candidate.Kind == NSQLComplete::ECandidateKind::TableName) && (!IsLeftPunct(back) && back != '<' || IsQuotation(back))) {
+                candidate.Content += ' ';
+            }
+
+            return {
+                std::move(candidate.Content),
+                ReplxxColorOf(candidate.Kind),
+            };
+        }
+
+        replxx::Replxx::Color ReplxxColorOf(NSQLComplete::ECandidateKind kind) const {
             switch (kind) {
                 case NSQLComplete::ECandidateKind::Keyword:
                     return Color.keyword;

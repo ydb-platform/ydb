@@ -57,7 +57,9 @@ inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> GetEntriesForAuthAnd
 		};
 		return entries;
 	} else if (accessServiceType == "Nebius_v1") {
-		TVector<TString> permissions = {"ydb.clusters.get", "ydb.clusters.monitor", "ydb.clusters.manage"};
+        static const auto permissions = NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({
+            "ydb.clusters.get", "ydb.clusters.monitor", "ydb.clusters.manage"
+        });
 		auto it = std::find_if(rootAttributes.begin(), rootAttributes.end(),
 		[](const std::pair<TString, TString>& p) {
 			return p.first == "container_id";
@@ -66,7 +68,7 @@ inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> GetEntriesForAuthAnd
 			return {};
 		}
 		return {
-			{NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions(permissions), {{"gizmo_id", it->second}}}
+			{permissions, {{"gizmo_id", it->second}}}
 		};
 	} else {
 		return {};

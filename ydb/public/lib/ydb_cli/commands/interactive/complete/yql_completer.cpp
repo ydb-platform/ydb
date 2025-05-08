@@ -19,26 +19,49 @@ namespace NYdb::NConsoleClient {
     public:
         using TPtr = THolder<IYQLCompleter>;
 
-        explicit TYQLCompleter(NSQLComplete::ISqlCompletionEngine::TPtr engine, TColorSchema color)
-            : Engine(std::move(engine))
+        TYQLCompleter(
+            NSQLComplete::ISqlCompletionEngine::TPtr heavyEngine,
+            NSQLComplete::ISqlCompletionEngine::TPtr lightEngine,
+            TColorSchema color)
+            : HeavyEngine(std::move(heavyEngine))
+            , LightEngine(std::move(lightEngine))
             , Color(std::move(color))
         {
         }
 
-        TCompletions Apply(TStringBuf text, const std::string& prefix, int& contextLen) override {
+        TCompletions ApplyHeavy(TStringBuf text, const std::string& prefix, int& contextLen) override {
+            return Apply(text, prefix, contextLen, /* light = */ false);
+        }
+
+        THints ApplyLight(TStringBuf text, const std::string& prefix, int& contextLen) override {
+            replxx::Replxx::hints_t hints;
+            for (auto& candidate : Apply(text, prefix, contextLen, /* light = */ true)) {
+                hints.emplace_back(std::move(candidate.text()));
+            }
+            return hints;
+        }
+
+    private:
+        TCompletions Apply(TStringBuf text, const std::string& prefix, int& contextLen, bool light) {
             NSQLComplete::TCompletionInput input = {
                 .Text = text,
                 .CursorPosition = prefix.length(),
             };
 
-            auto completion = Engine->CompleteAsync(input).ExtractValueSync();
+            auto completion = GetEngine(light)->CompleteAsync(input).ExtractValueSync();
 
             contextLen = GetNumberOfUTF8Chars(completion.CompletedToken.Content);
 
             return ReplxxCompletionsOf(std::move(completion.Candidates));
         }
 
-    private:
+        NSQLComplete::ISqlCompletionEngine::TPtr& GetEngine(bool light) {
+            if (light) {
+                return LightEngine;
+            }
+            return HeavyEngine;
+        }
+
         replxx::Replxx::completions_t ReplxxCompletionsOf(TVector<NSQLComplete::TCandidate> candidates) const {
             replxx::Replxx::completions_t entries;
             entries.reserve(candidates.size());
@@ -77,7 +100,8 @@ namespace NYdb::NConsoleClient {
             }
         }
 
-        NSQLComplete::ISqlCompletionEngine::TPtr Engine;
+        NSQLComplete::ISqlCompletionEngine::TPtr HeavyEngine;
+        NSQLComplete::ISqlCompletionEngine::TPtr LightEngine;
         TColorSchema Color;
     };
 
@@ -95,21 +119,29 @@ namespace NYdb::NConsoleClient {
     IYQLCompleter::TPtr MakeYQLCompleter(TColorSchema color, TDriver driver, TString database) {
         NSQLComplete::TLexerSupplier lexer = MakePureLexerSupplier();
 
-        NSQLComplete::NameSet names = NSQLComplete::MakeDefaultNameSet();
-
         NSQLComplete::IRanking::TPtr ranking = NSQLComplete::MakeDefaultRanking();
 
-        TVector<NSQLComplete::INameService::TPtr> services = {
-            NSQLComplete::MakeStaticNameService(std::move(names), ranking),
+        auto statics = NSQLComplete::MakeStaticNameService(
+            NSQLComplete::MakeDefaultNameSet(), ranking);
+
+        TVector<NSQLComplete::INameService::TPtr> heavies = {
+            statics,
             NSQLComplete::MakeSchemaNameService(
                 NSQLComplete::MakeSimpleSchema(
                     MakeYDBSchema(std::move(driver), std::move(database)))),
         };
 
-        auto service = NSQLComplete::MakeUnionNameService(std::move(services), ranking);
+        TVector<NSQLComplete::INameService::TPtr> lighties = {
+            statics,
+        };
 
         return IYQLCompleter::TPtr(new TYQLCompleter(
-            NSQLComplete::MakeSqlCompletionEngine(std::move(lexer), std::move(service)),
+            NSQLComplete::MakeSqlCompletionEngine(
+                lexer,
+                NSQLComplete::MakeUnionNameService(std::move(heavies), ranking)),
+            NSQLComplete::MakeSqlCompletionEngine(
+                lexer,
+                NSQLComplete::MakeUnionNameService(std::move(lighties), ranking)),
             std::move(color)));
     }
 

@@ -2,6 +2,7 @@
 
 #include "fwd.h"
 
+#include <google/protobuf/arena.h>
 #include <util/datetime/base.h>
 
 #include <optional>
@@ -539,6 +540,8 @@ protected:
 
     TValueBuilderBase();
 
+    TValueBuilderBase(google::protobuf::Arena* arena);
+
     TValueBuilderBase(const TType& type);
 
     TValueBuilderBase(Ydb::Type& type, Ydb::Value& value);
@@ -558,6 +561,13 @@ public:
     TValueBuilder(const TType& type);
 
     TValue Build();
+};
+
+class TArenaAllocatedValueBuilder : public TValueBuilderBase<TArenaAllocatedValueBuilder> {
+public:
+    TArenaAllocatedValueBuilder(google::protobuf::Arena* arena);
+
+    TArenaAllocatedValue BuildArenaAllocatedValue();
 };
 
 } // namespace NYdb

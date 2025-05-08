@@ -2066,6 +2066,58 @@ void TValueParser::CloseTagged() {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TValueHolder {
+public:
+    virtual Ydb::Value& Value() = 0;
+    virtual Ydb::Value* ValuePtr() = 0;
+    virtual ~TValueHolder() = default;
+};
+
+class StackAllocatedValueHolder : public TValueHolder {
+public:
+    Ydb::Value& Value() override {
+        return ProtoValue_;
+    }
+
+    Ydb::Value* ValuePtr() override {
+        return &ProtoValue_;
+    }
+
+private:
+    Ydb::Value ProtoValue_;
+};
+
+class ArenaAllocatedValueHolder : public TValueHolder {
+public:
+    ArenaAllocatedValueHolder(google::protobuf::Arena* arena)
+        // value is created lazily on first access
+        : ArenaAllocatedValue_(nullptr)
+        , Arena_(arena) {
+            Y_ASSERT(arena != nullptr);
+        }
+
+    Ydb::Value& Value() override {
+        createValueIfAbsent();
+        return *ArenaAllocatedValue_;
+    }
+
+    Ydb::Value* ValuePtr() override {
+        createValueIfAbsent();
+        return ArenaAllocatedValue_;
+    }
+
+private:
+    void createValueIfAbsent() {
+        if (ArenaAllocatedValue_ == nullptr) {
+            ArenaAllocatedValue_ = google::protobuf::Arena::CreateMessage<Ydb::Value>(Arena_);
+        }
+    }
+
+private:
+    Ydb::Value* ArenaAllocatedValue_;
+    google::protobuf::Arena* Arena_;
+};
+
 // TODO: if TValueArenaBuilderImpl implemented, we can avoid copying Ydb::Value in TCsvParser::BuildListOnArena when FieldToValue is called
 class TValueBuilderImpl {
     using ETypeKind = TTypeParser::ETypeKind;
@@ -2092,19 +2144,29 @@ class TValueBuilderImpl {
 public:
     TValueBuilderImpl()
         : TypeBuilder_()
+        , ValueHolder_(std::make_unique<StackAllocatedValueHolder>())
     {
-        PushPath(ProtoValue_);
+        PushPath(ValueHolder_->Value());
+    }
+
+    TValueBuilderImpl(google::protobuf::Arena* arena)
+        : TypeBuilder_()
+        , ValueHolder_(std::make_unique<ArenaAllocatedValueHolder>(arena))
+    {
+        PushPath(ValueHolder_->Value());
     }
 
     TValueBuilderImpl(const TType& type)
         : TypeBuilder_()
+        , ValueHolder_(std::make_unique<StackAllocatedValueHolder>())
     {
-        PushPath(ProtoValue_);
+        PushPath(ValueHolder_->Value());
         GetType().CopyFrom(type.GetProto());
     }
 
     TValueBuilderImpl(Ydb::Type& type, Ydb::Value& value)
         : TypeBuilder_(type)
+        , ValueHolder_(std::make_unique<StackAllocatedValueHolder>())
     {
         PushPath(value);
     }
@@ -2116,13 +2178,18 @@ public:
         }
     }
 
-    TValue BuildValue() {
+    TValue BuildStackAllocatedValue() {
         CheckValue();
 
         Ydb::Value value;
-        value.Swap(&ProtoValue_);
+        value.Swap(&ValueHolder_->Value());
 
         return TValue(TypeBuilder_.Build(), std::move(value));
+    }
+
+    TArenaAllocatedValue BuildArenaAllocatedValue() {
+        CheckValue();
+        return TArenaAllocatedValue(TypeBuilder_.Build(), ValueHolder_->ValuePtr());
     }
 
     void Bool(bool value) {
@@ -2832,10 +2899,10 @@ private:
     }
 
 private:
-
     //TTypeBuilder TypeBuilder_;
     TTypeBuilder::TImpl TypeBuilder_;
-    Ydb::Value ProtoValue_;
+    // Ydb::Value ProtoValue_;
+    std::unique_ptr<TValueHolder> ValueHolder_;
     std::map<const Ydb::StructType*, TMembersMap> StructsMap_;
 
     TStackVec<TProtoPosition, 8> Path_;
@@ -2853,6 +2920,12 @@ TValueBuilderBase<TDerived>::~TValueBuilderBase() = default;
 template<typename TDerived>
 TValueBuilderBase<TDerived>::TValueBuilderBase()
     : Impl_(new TValueBuilderImpl()) {}
+
+
+template<typename TDerived>
+TValueBuilderBase<TDerived>::TValueBuilderBase(google::protobuf::Arena* arena)
+    : Impl_(new TValueBuilderImpl(arena)) {}
+
 
 template<typename TDerived>
 TValueBuilderBase<TDerived>::TValueBuilderBase(const TType& type)
@@ -3411,6 +3484,7 @@ TDerived& TValueBuilderBase<TDerived>::EndTagged() {
 
 template class TValueBuilderBase<TValueBuilder>;
 template class TValueBuilderBase<TParamValueBuilder>;
+template class TValueBuilderBase<TArenaAllocatedValueBuilder>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -3421,7 +3495,16 @@ TValueBuilder::TValueBuilder(const TType& type)
     : TValueBuilderBase(type) {}
 
 TValue TValueBuilder::Build() {
-    return Impl_->BuildValue();
+    return Impl_->BuildStackAllocatedValue();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TArenaAllocatedValueBuilder::TArenaAllocatedValueBuilder(google::protobuf::Arena* arena)
+    : TValueBuilderBase(arena) {}
+
+TArenaAllocatedValue TArenaAllocatedValueBuilder::BuildArenaAllocatedValue() {
+    return Impl_->BuildArenaAllocatedValue();
 }
 
 } // namespace NYdb

@@ -110,7 +110,9 @@ private:
         google::protobuf::RepeatedPtrField<Ydb::Value>* listItems,
         const std::vector<std::unique_ptr<TTypeParser>>& columnTypeParsers,
         std::optional<ui64> currentRow,
-        const TString& filename) const;
+        const TString& filename,
+        google::protobuf::Arena* arena
+    ) const;
 };
 
 }

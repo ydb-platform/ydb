@@ -108,6 +108,7 @@ message TAction {
     REPLACE_DEVICES = 8;
     REMOVE_DEVICES = 9;
     REBOOT_HOST = 10; // Same as SHUTDOWN_HOST, but forcibly allowed if host is down
+    DRAIN_NODE = 11;
   }
 
   message TIssue {
@@ -133,6 +134,7 @@ message TAction {
   // If specified will be expanded to list of hosts.
   optional string Tenant = 6;
   optional TIssue Issue = 7;
+  optional string MaintenanceTaskContext = 8;
 }
 
 enum ETenantPolicy {

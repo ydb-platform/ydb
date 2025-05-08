@@ -110,17 +110,17 @@ namespace {
     }
 
     void ConvertAction(const NKikimrCms::TAction& cmsAction, Ydb::Maintenance::ActionState& actionState) {
+        // FIXME: specify action_uid
+        actionState.set_status(Ydb::Maintenance::ActionState::ACTION_STATUS_PENDING);
+        actionState.set_reason(ConvertReason(cmsAction.GetIssue().GetType()));
+        actionState.set_reason_details(cmsAction.GetIssue().GetMessage());
+
         switch (cmsAction.GetType()) {
         default:
             return ConvertAction(cmsAction, *actionState.mutable_action()->mutable_lock_action());
         case NKikimrCms::TAction::DRAIN_NODE:
             return ConvertAction(cmsAction, *actionState.mutable_action()->mutable_drain_action());
         }
-
-        // FIXME: specify action_uid
-        actionState.set_status(Ydb::Maintenance::ActionState::ACTION_STATUS_PENDING);
-        actionState.set_reason(ConvertReason(cmsAction.GetIssue().GetType()));
-        actionState.set_reason_details(cmsAction.GetIssue().GetMessage());
     }
 
     void ConvertActionUid(const TString& taskUid, const TString& permissionId,
@@ -133,17 +133,18 @@ namespace {
     void ConvertPermission(const TString& taskUid, const NKikimrCms::TPermission& permission,
             Ydb::Maintenance::ActionState& actionState)
     {
+        ConvertActionUid(taskUid, permission.GetId(), *actionState.mutable_action_uid());
+
+        actionState.set_status(Ydb::Maintenance::ActionState::ACTION_STATUS_PERFORMED);
+        actionState.set_reason(Ydb::Maintenance::ActionState::ACTION_REASON_OK);
+        *actionState.mutable_deadline() = TimeUtil::MicrosecondsToTimestamp(permission.GetDeadline());
+
         switch (permission.GetAction().GetType()) {
         default:
             return ConvertAction(permission.GetAction(), *actionState.mutable_action()->mutable_lock_action());
         case NKikimrCms::TAction::DRAIN_NODE:
             return ConvertAction(permission.GetAction(), *actionState.mutable_action()->mutable_drain_action());
         }
-        ConvertActionUid(taskUid, permission.GetId(), *actionState.mutable_action_uid());
-
-        actionState.set_status(Ydb::Maintenance::ActionState::ACTION_STATUS_PERFORMED);
-        actionState.set_reason(Ydb::Maintenance::ActionState::ACTION_REASON_OK);
-        *actionState.mutable_deadline() = TimeUtil::MicrosecondsToTimestamp(permission.GetDeadline());
     }
 
     void ConvertPermission(const TString& taskUid, const TPermissionInfo& permission,

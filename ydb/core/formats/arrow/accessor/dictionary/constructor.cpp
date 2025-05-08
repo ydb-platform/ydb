@@ -86,7 +86,7 @@ TString TConstructor::DoSerializeToString(const std::shared_ptr<IChunkedArray>& 
     const TString blobVariants =
         externalInfo.GetDefaultSerializer()->SerializePayload(arrow::RecordBatch::Make(schemaVariants, arrVariants->length(), { arrVariants }));
     const TString blobRecords =
-        externalInfo.GetDefaultSerializer()->SerializePayload(arrow::RecordBatch::Make(schemaVariants, arrRecords->length(), { arrRecords }));
+        externalInfo.GetDefaultSerializer()->SerializePayload(arrow::RecordBatch::Make(schemaRecords, arrRecords->length(), { arrRecords }));
 
     NKikimrArrowAccessorProto::TDictionaryAccessor proto;
     proto.SetVariantsBlobSize(blobVariants.size());

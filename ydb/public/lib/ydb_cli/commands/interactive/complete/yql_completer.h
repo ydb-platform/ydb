@@ -12,12 +12,14 @@
 namespace NYdb::NConsoleClient {
 
     using TCompletions = replxx::Replxx::completions_t;
+    using THints = replxx::Replxx::hints_t;
 
     class IYQLCompleter {
     public:
         using TPtr = THolder<IYQLCompleter>;
 
-        virtual TCompletions Apply(TStringBuf text, const std::string& prefix, int& contextLen) = 0;
+        virtual TCompletions ApplyHeavy(TStringBuf text, const std::string& prefix, int& contextLen) = 0;
+        virtual THints ApplyLight(TStringBuf text, const std::string& prefix, int& contextLen) = 0;
         virtual ~IYQLCompleter() = default;
     };
 

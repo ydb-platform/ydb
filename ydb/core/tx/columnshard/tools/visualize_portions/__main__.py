@@ -14,6 +14,7 @@ class FirstPkColumnType(enum.Enum):
     Integer = 0
     Timestamp = 1
 
+
 class Portion:
     def __init__(self, pk0type: FirstPkColumnType):
         self.Pk0Type = pk0type
@@ -27,7 +28,7 @@ class Portion:
     def GetPlanStep(detailsSnapshot) -> datetime:
         planStepMilliSeconds = detailsSnapshot["plan_step"]
         return datetime.fromtimestamp(planStepMilliSeconds / 1000.0, tz=timezone.utc)
-    
+
     @staticmethod
     def GetPk(detailsPk: str, pk0Type: FirstPkColumnType):
         # Use only the 1st PK column currently
@@ -48,10 +49,10 @@ class Portion:
         portion.PkMax = Portion.GetPk(parsedDetails["primary_key_max"], pk0type)
         portion.CompactionLevel = portionDoc["CompactionLevel"]
         return portion
-    
+
     def __repr__(self):
         return f"pk:[{self.PkMin}..{self.PkMax}], plan_step:[{self.PlanStepMin}..{self.PlanStepMax}]"
-    
+
     def ToRectangle(self, levelColors) -> Rectangle:
         if self.Pk0Type == FirstPkColumnType.Integer:
             x0 = self.PkMin
@@ -96,6 +97,7 @@ class Portions:
         self.PlanStepMax = max(self.PlanStepMax, portion.PlanStepMax)
         self.MaxCompactionLevel = max(self.MaxCompactionLevel, portion.CompactionLevel)
 
+
 def ParsePortionStatFile(path: str, pk0type: FirstPkColumnType) -> Portions:
     portions = Portions(pk0type)
     with open(path, 'r') as file:
@@ -110,8 +112,8 @@ if __name__ == '__main__':
 To get portion info for a table, use ydb cli:
     ydb -e grpc://<node>:2135 -d <path_to_db> sql -s 'select * from `<table>/.sys/primary_index_portion_stats` where TabletId==<id>' --format json-unicode
                                      """)
-    parser.add_argument("-i", "--input-file", help = "File with primary_index_portion_stats data in json per row format", required = True)
-    parser.add_argument("-t", "--type", help = "First PK column type: Integer or Timestamp", required = True)
+    parser.add_argument("-i", "--input-file", help="File with primary_index_portion_stats data in json per row format", required=True)
+    parser.add_argument("-t", "--type", help="First PK column type: Integer or Timestamp", required=True)
     args = parser.parse_args()
     inputFile = args.input_file
     pk0Type = FirstPkColumnType[args.type]
@@ -119,7 +121,7 @@ To get portion info for a table, use ydb cli:
     portions = ParsePortionStatFile(inputFile, pk0Type)
     print(f"Loading file: {inputFile}... completed, {len(portions.Portions)} portions")
 
-    levelColors = {l: 'blue' for l in range(0, portions.MaxCompactionLevel + 1)}
+    levelColors = {level: 'blue' for level in range(0, portions.MaxCompactionLevel + 1)}
     levelColors[0] = 'black'
     levelColors[portions.MaxCompactionLevel] = 'green'
     rectangles = [p.ToRectangle(levelColors) for p in portions.Portions]

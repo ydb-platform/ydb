@@ -271,8 +271,7 @@ class TCompletionChunkReadPart : public TCompletionAction {
     NWilson::TSpan Span;
 public:
     TCompletionChunkReadPart(TPDisk *pDisk, TIntrusivePtr<TChunkRead> &read, ui64 rawReadSize, ui64 payloadReadSize,
-            ui64 commonBufferOffset, TCompletionChunkRead *cumulativeCompletion, bool isTheLastPart,
-            const NWilson::TSpan& parentSpan);
+            ui64 commonBufferOffset, TCompletionChunkRead *cumulativeCompletion, bool isTheLastPart);
 
 
     bool CanHandleResult() const override {

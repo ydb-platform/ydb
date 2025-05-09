@@ -116,8 +116,7 @@ void TCompletionLogWrite::Release(TActorSystem *actorSystem) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 TCompletionChunkReadPart::TCompletionChunkReadPart(TPDisk *pDisk, TIntrusivePtr<TChunkRead> &read, ui64 rawReadSize,
-        ui64 payloadReadSize, ui64 commonBufferOffset, TCompletionChunkRead *cumulativeCompletion, bool isTheLastPart,
-        const NWilson::TSpan& parentSpan)
+        ui64 payloadReadSize, ui64 commonBufferOffset, TCompletionChunkRead *cumulativeCompletion, bool isTheLastPart)
     : TCompletionAction()
     , PDisk(pDisk)
     , Read(read)
@@ -128,9 +127,13 @@ TCompletionChunkReadPart::TCompletionChunkReadPart(TPDisk *pDisk, TIntrusivePtr<
     , ChunkNonce(CumulativeCompletion->GetChunkNonce())
     , Buffer(PDisk->BufferPool->Pop())
     , IsTheLastPart(isTheLastPart)
-    , Span(parentSpan.CreateChild(TWilson::PDiskBasic, "PDisk.ChunkRead.Device"))
+    , Span(read->Span.CreateChild(TWilson::PDiskDetailed, "PDisk.ChunkRead.CompletionPart"))
 {
     TCompletionAction::CanBeExecutedInAdditionalCompletionThread = true;
+
+    Span.Attribute("common_buffer_offset", (i64)CommonBufferOffset)
+        .Attribute("raw_read_size", RawReadSize)
+        .Attribute("is_last_piece", IsTheLastPart);
 
     TBufferWithGaps *commonBuffer = CumulativeCompletion->GetCommonBuffer();
     Destination = commonBuffer->RawDataPtr(CommonBufferOffset, PayloadReadSize);
@@ -279,7 +282,7 @@ void TCompletionChunkReadPart::Exec(TActorSystem *actorSystem) {
     }
 
     if (Read->ChunkEncrypted) {
-        auto span = Span.CreateChild(TWilson::PDiskBasic, "PDisk.ChunkRead.Decryption");
+        Span.Event("PDisk.CompletionChunkReadPart.DecryptionStart");
         UnencryptData(actorSystem);
     }
 

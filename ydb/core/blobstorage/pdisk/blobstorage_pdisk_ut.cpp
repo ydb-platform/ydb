@@ -1544,6 +1544,7 @@ Y_UNIT_TEST_SUITE(WilsonTrace) {
             str << trace.ToString() << Endl;
         }
         auto string = str.Str();
+        Cerr << string;
         UNIT_ASSERT(string.Contains("LogWrite"));
         UNIT_ASSERT(string.Contains("LogRead"));
         UNIT_ASSERT(string.Contains("ChunkWrite"));

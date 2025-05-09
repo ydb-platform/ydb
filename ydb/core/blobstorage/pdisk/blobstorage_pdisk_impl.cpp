@@ -988,7 +988,7 @@ void TPDisk::SendChunkReadError(const TIntrusivePtr<TChunkRead>& read, TStringSt
 }
 
 TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &read, ui64 pieceCurrentSector,
-        ui64 pieceSizeLimit, const NWilson::TSpan& span, NLWTrace::TOrbit&& orbit) {
+        ui64 pieceSizeLimit, NLWTrace::TOrbit&& orbit) {
     if (read->IsReplied) {
         return ReadPieceResultOk;
     }
@@ -1034,7 +1034,7 @@ TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &
                 << " > " << read->LastSector);
 
         THolder<TCompletionChunkReadPart> completion(new TCompletionChunkReadPart(this, read, diskSize,
-                    diskSize, 0, read->FinalCompletion, isTheLastPart, span));
+                    diskSize, 0, read->FinalCompletion, isTheLastPart));
 
         auto buf = read->FinalCompletion->GetCommonBuffer();
         Y_VERIFY_S(bytesToRead <= buf->SizeWithTail(), buf->SizeWithTail());
@@ -1083,7 +1083,7 @@ TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &
     ui64 readOffset = Format.Offset(read->ChunkIdx, read->FirstSector, currentSectorOffset);
     // TODO: Get this from the drive
     THolder<TCompletionChunkReadPart> completion(new TCompletionChunkReadPart(this, read, bytesToRead,
-                payloadBytesToRead, payloadOffset, read->FinalCompletion, isTheLastPart, span));
+                payloadBytesToRead, payloadOffset, read->FinalCompletion, isTheLastPart));
     completion->CostNs = DriveModel.TimeForSizeNs(bytesToRead, read->ChunkIdx, TDriveModel::OP_TYPE_READ);
     LWTRACK(PDiskChunkReadPiecesSendToDevice, orbit, PCtx->PDiskId);
     completion->Orbit = std::move(orbit);
@@ -2414,7 +2414,7 @@ void TPDisk::ProcessChunkReadQueue() {
         ui64 currentLimit = Min(bufferSize, piece->PieceSizeLimit);
         Y_VERIFY(!read->ChunkEncrypted || piece->PieceSizeLimit <= bufferSize);
         EChunkReadPieceResult result = ChunkReadPiece(read, piece->PieceCurrentSector, piece->PieceSizeLimit,
-            piece->Span, std::move(piece->Orbit));
+            std::move(piece->Orbit));
         bool isComplete = (result != ReadPieceResultInProgress);
         Y_VERIFY_S(isComplete || currentLimit >= piece->PieceSizeLimit, PCtx->PDiskLogPrefix
                 << isComplete << " " << currentLimit << " " << piece->PieceSizeLimit);
@@ -3163,7 +3163,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             };
             ev.Completion = MakeHolder<TCompletionChunkWrite>(ev.Sender, result.release(), &Mon, PCtx->PDiskId,
                     ev.CreationTime, ev.TotalSize, ev.PriorityClass, std::move(onDestroy), ev.ReqId,
-                    ev.Span.CreateChild(TWilson::PDiskTopLevel, "PDisk.CompletionChunkWrite", NWilson::EFlags::AUTO_END));
+                    ev.Span.CreateChild(TWilson::PDiskBasic, "PDisk.CompletionChunkWrite"));
             ev.Completion->Parts = ev.PartsPtr;
 
             return true;
@@ -3343,7 +3343,7 @@ void TPDisk::PushRequestToScheduler(TRequestBase *request) {
 
         ui32 remainingSize = whole->TotalSize;
         for (ui32 idx = 0; idx < jobCount; ++idx) {
-            auto span = request->Span.CreateChild(TWilson::PDiskBasic, "PDisk.ChunkWritePiece", NWilson::EFlags::AUTO_END);
+            auto span = request->Span.CreateChild(TWilson::PDiskDetailed, "PDisk.ChunkWritePiece", NWilson::EFlags::AUTO_END);
             span.Attribute("small_job_idx", idx)
                 .Attribute("is_last_piece", idx == jobCount - 1);
             ui32 jobSize = Min(remainingSize, jobSizeLimit);
@@ -3365,13 +3365,10 @@ void TPDisk::PushRequestToScheduler(TRequestBase *request) {
         const ui32 jobCount = (totalSectors + jobSizeLimit - 1) / jobSizeLimit;
         Y_VERIFY(read->ChunkEncrypted || jobCount == 1);
         for (ui32 idx = 0; idx < jobCount; ++idx) {
-            auto span = request->Span.CreateChild(TWilson::PDiskBasic, "PDisk.ChunkReadPiece", NWilson::EFlags::AUTO_END);
             bool isLast = idx == jobCount - 1;
-            span.Attribute("small_job_idx", idx)
-                .Attribute("is_last_piece", isLast);
 
             ui32 jobSize = Min(totalSectors, jobSizeLimit);
-            auto piece = new TChunkReadPiece(read, idx * jobSizeLimit, jobSize * Format.SectorSize, isLast, std::move(span));
+            auto piece = new TChunkReadPiece(read, idx * jobSizeLimit, jobSize * Format.SectorSize, isLast);
             piece->GateId = read->GateId;
             read->Orbit.Fork(piece->Orbit);
             P_LOG(PRI_INFO, BPD01, "PDiskChunkReadPieceAddToScheduler", (idx, idx), (jobSizeLimit, jobSizeLimit),

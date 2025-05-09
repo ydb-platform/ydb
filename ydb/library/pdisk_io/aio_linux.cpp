@@ -549,6 +549,7 @@ public:
                 case ENOSYS:    return EIoResult::FunctionNotImplemented;
                 case EILSEQ:    return EIoResult::InvalidSequence;
                 case ENODATA:   return EIoResult::NoData;
+                case ENOSPC:    return EIoResult::NoSpaceLeft;
                 default: Y_FAIL_S(PDiskInfo << " unexpected error in " << info << ", error# " << -ret
                                  << " strerror# " << strerror(-ret));
             }

@@ -77,6 +77,7 @@ PEERDIR(
     ydb/library/actors/dnscachelib
     ydb/library/actors/dnsresolver
     ydb/library/actors/helpers
+    ydb/library/actors/interconnect/rdma
     ydb/library/actors/prof
     ydb/library/actors/protos
     ydb/library/actors/util

@@ -14,9 +14,11 @@ namespace NInterconnect {
         } Addr;
 
     public:
+        using TV6Addr = in6_addr;
         TAddress();
         TAddress(const char* addr, ui16 port);
         TAddress(const TString& addr, ui16 port);
+        TAddress(sockaddr addr);
         TAddress(in_addr addr, ui16 port);
         TAddress(in6_addr addr, ui16 port);
         TAddress(NAddr::IRemoteAddr& addr);
@@ -43,5 +45,7 @@ namespace NInterconnect {
             res.Addr.Ipv6.sin6_addr = in6addr_any;
             return res;
         }
+
+        TV6Addr GetV6CompatAddr() const;
     };
 }

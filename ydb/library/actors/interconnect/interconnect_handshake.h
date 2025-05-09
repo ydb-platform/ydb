@@ -9,6 +9,10 @@
 #include "poller_tcp.h"
 #include "events_local.h"
 
+namespace NInterconnect::NRdma {
+    class TRdmaCtx; 
+} 
+
 namespace NActors {
     static constexpr TDuration DEFAULT_HANDSHAKE_TIMEOUT = TDuration::Seconds(5);
     static constexpr ui64 INTERCONNECT_PROTOCOL_VERSION = 2;
@@ -21,6 +25,6 @@ namespace NActors {
                                          const TActorId& peer, ui32 nodeId, ui64 nextPacket, TString peerHostName,
                                          TSessionParams params);
 
-    IActor* CreateIncomingHandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket);
+    IActor* CreateIncomingHandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket, NInterconnect::NRdma::TRdmaCtx* rdmaCtx);
 
 }

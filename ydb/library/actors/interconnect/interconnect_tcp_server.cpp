@@ -6,6 +6,9 @@
 
 #include "interconnect_common.h"
 
+#include "rdma/rdma_link_manager.h"
+#include "rdma/rdma_ctx.h"
+
 namespace NActors {
     TInterconnectListenerTCP::TInterconnectListenerTCP(const TString& address, ui16 port, TInterconnectProxyCommon::TPtr common, const TMaybe<SOCKET>& socket)
         : TActor(&TThis::Initial)
@@ -101,9 +104,21 @@ namespace NActors {
             NInterconnect::TAddress address;
             const int r = Listener->Accept(address);
             if (r >= 0) {
-                LOG_DEBUG_IC("ICL04", "Accepted from: %s", address.ToString().data());
                 auto socket = MakeIntrusive<NInterconnect::TStreamSocket>(static_cast<SOCKET>(r));
-                ctx.Register(CreateIncomingHandshakeActor(ProxyCommonCtx, std::move(socket)));
+                LOG_ERROR_IC("ICL04", "Accepted from: %s", address.ToString().data());
+                NInterconnect::NRdma::TRdmaCtx* rdmaCtx = nullptr;
+                auto sockname = socket->GetSockName();
+                switch (sockname.index()) {
+                    case 0:
+                        Cerr << "AAAAA: " << std::get<0>(sockname).ToString() << Endl;
+                        rdmaCtx = NInterconnect::NRdma::NLinkMgr::GetCtx(std::get<0>(sockname).GetV6CompatAddr());
+                        //rdmaCtx = NInterconnect::NRdma::NLinkMgr::GetCtx(address.GetV6CompatAddr());
+                        break;
+                    case 1:
+                        LOG_ERROR_IC("ICL04", "Unable to get local address for socket: %d. Rdma will not be used", (int)(*socket));
+                        break; 
+                }
+                ctx.Register(CreateIncomingHandshakeActor(ProxyCommonCtx, std::move(socket), rdmaCtx));
                 continue;
             } else if (-r != EAGAIN && -r != EWOULDBLOCK) {
                 Y_ABORT_UNLESS(-r != ENFILE && -r != EMFILE && !ExternalSocket);

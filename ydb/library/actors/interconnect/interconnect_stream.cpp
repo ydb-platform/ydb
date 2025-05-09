@@ -92,6 +92,16 @@ namespace NInterconnect {
         return err;
     }
 
+    std::variant<TAddress, int> TSocket::GetSockName() const {
+        struct sockaddr addr;
+        socklen_t len = sizeof(addr);
+        memset(&addr, 0, len);
+        if (getsockname(Descriptor, &addr, &len) == -1) {
+            return LastSocketError();
+        }
+        return TAddress(addr);
+    }
+
     /////////////////////////////////////////////////////////////////
 
     TIntrusivePtr<TStreamSocket> TStreamSocket::Make(int domain, int *error) {

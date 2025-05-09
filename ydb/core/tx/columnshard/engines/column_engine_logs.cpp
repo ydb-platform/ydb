@@ -434,7 +434,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(
     if (!spg) {
         return out;
     }
-
+    
     for (const auto& [_, portionInfo] : spg->GetInsertedPortions()) {
         AFL_VERIFY(portionInfo->HasInsertWriteId());
         if (withUncommitted) {

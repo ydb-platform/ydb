@@ -95,7 +95,7 @@ private:
         Meta.FullValidation();
     }
 
-    TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
+    TConclusionStatus DeserializeFromProto(const NColumnShard::TUnifiedPathId& pathId, const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
 
 public:
     TPortionInfo(TPortionInfo&&) = default;
@@ -233,7 +233,7 @@ public:
     ui64 GetApproxChunksCount(const ui32 schemaColumnsCount) const;
     ui64 GetMetadataMemorySize() const;
 
-    void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
+    void SerializeToProto(const NColumnShard::TUnifiedPathId& pathId, NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
 
     TInternalPathId GetPathId() const {
         return PathId;

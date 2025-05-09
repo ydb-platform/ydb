@@ -19,18 +19,28 @@ private:
     using TBase = TCommonSession;
     const TTabletId SelfTabletId;
     std::shared_ptr<TSourceCursor> Cursor;
-    YDB_READONLY_DEF(std::set<TInternalPathId>, PathIds);
+    YDB_READONLY_DEF(std::set<NColumnShard::TLocalPathId>, PathIds);
     TTabletId DestinationTabletId = TTabletId(0);
 
 protected:
     virtual TConclusionStatus DoStart(NColumnShard::TColumnShard& shard, THashMap<TInternalPathId, std::vector<TPortionDataAccessor>>&& portions) override;
     virtual THashSet<TInternalPathId> GetPathIdsForStart() const override {
-        THashSet<TInternalPathId> result;
-        for (auto&& i : PathIds) {
-            result.emplace(i);
-        }
-        return result;
+        // THashSet<TLocalPathId> result;
+        // for (auto&& i : PathIds) {
+        //     result.emplace(i);
+        // }
+        // return result;
+        return {};
     }
+    virtual THashSet<TLocalPathId> GetLocalPathIdsForStart() const override {
+        // THashSet<TLocalPathId> result;
+        // for (auto&& i : PathIds) {
+        //     result.emplace(i);
+        // }
+        // return result;
+        return {};
+    }
+
 
 public:
     TSourceSession(const TTabletId selfTabletId)
@@ -38,7 +48,7 @@ public:
         , SelfTabletId(selfTabletId) {
     }
 
-    TSourceSession(const TString& sessionId, const TTransferContext& transfer, const TTabletId selfTabletId, const std::set<TInternalPathId>& pathIds, const TTabletId destTabletId)
+    TSourceSession(const TString& sessionId, const TTransferContext& transfer, const TTabletId selfTabletId, const std::set<NColumnShard::TLocalPathId>& pathIds, const TTabletId destTabletId)
         : TBase(sessionId, "source_base", transfer)
         , SelfTabletId(selfTabletId)
         , PathIds(pathIds)
@@ -79,7 +89,7 @@ public:
         TBase::SerializeToProto(result);
         result.SetDestinationTabletId((ui64)DestinationTabletId);
         for (auto&& i : PathIds) {
-            result.AddPathIds(i.GetRawValue());
+            i.ToProto(*result.AddPathIds());
         }
         return result;
     }

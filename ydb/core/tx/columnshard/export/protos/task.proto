@@ -1,11 +1,12 @@
 import "ydb/core/tx/columnshard/export/protos/selector.proto";
 import "ydb/core/tx/columnshard/export/protos/storage.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
+import "ydb/core/protos/tx_columnshard.proto";
 
 package NKikimrColumnShardExportProto;
 
 message TIdentifier {
-    optional uint64 PathId = 1;
+    optional NKikimrTxColumnShard.TSchemeShardLocalPathId PathId = 1;
 }
 
 message TExportTask {

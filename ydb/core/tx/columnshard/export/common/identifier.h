@@ -17,12 +17,12 @@ namespace NKikimr::NOlap::NExport {
 
 class TIdentifier {
 private:
-    YDB_READONLY_DEF(TInternalPathId, PathId);
+    YDB_READONLY_DEF(NColumnShard::TLocalPathId, PathId);
 
     TIdentifier() = default;
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardExportProto::TIdentifier& proto);
 public:
-    TIdentifier(const TInternalPathId pathId)
+    explicit TIdentifier(const NColumnShard::TLocalPathId pathId)
         : PathId(pathId)
     {
 

@@ -73,7 +73,7 @@ class TDestinationSession: public TCommonSession {
 private:
     using TBase = TCommonSession;
     YDB_READONLY_DEF(TInitiatorControllerContainer, InitiatorController);
-    using TPathIdsRemapper = THashMap<TInternalPathId, TInternalPathId>;
+    using TPathIdsRemapper = THashMap<TInternalPathId, TLocalPathId>;
     YDB_READONLY_DEF(TPathIdsRemapper, PathIds);
     YDB_READONLY_FLAG(Confirmed, false);
     THashMap<TTabletId, TSourceCursorForDestination> Cursors;
@@ -124,7 +124,7 @@ public:
 
     [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckInitiatorFinished(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& selfPtr);
 
-    [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> ReceiveData(NColumnShard::TColumnShard* self, THashMap<TInternalPathId, NEvents::TPathIdData>&& data,
+    [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> ReceiveData(NColumnShard::TColumnShard* self, THashMap<NColumnShard::TLocalPathId, NEvents::TPathIdData>&& data,
         std::vector<NOlap::TSchemaPresetVersionInfo>&& schemas, const ui32 receivedPackIdx, const TTabletId sourceTabletId, const std::shared_ptr<TDestinationSession>& selfPtr);
 
     NKikimrColumnShardDataSharingProto::TDestinationSession::TFullCursor SerializeCursorToProto() const;

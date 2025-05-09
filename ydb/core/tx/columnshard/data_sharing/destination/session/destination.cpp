@@ -19,7 +19,8 @@ NKikimr::TConclusionStatus TDestinationSession::DataReceived(
         auto it = PathIds.find(i.first);
         AFL_VERIFY(it != PathIds.end())("path_id_undefined", i.first);
         for (auto&& portion : i.second.DetachPortions()) {
-            portion.MutablePortionInfo().SetPathId(it->second);
+            //TODO convert to InternalPathId
+            //portion.MutablePortionInfo().SetPathId(it->second);
             index.AppendPortion(portion);
         }
     }
@@ -55,7 +56,7 @@ void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard&
             NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
                 new TEvPipeCache::TEvForward(ev.release(), (ui64)cursor.GetTabletId(), true), IEventHandle::FlagTrackDelivery, GetRuntimeId());
         } else {
-            std::set<TInternalPathId> pathIdsBase;
+            std::set<TLocalPathId> pathIdsBase;
             for (auto&& i : PathIds) {
                 pathIdsBase.emplace(i.first);
             }
@@ -69,7 +70,7 @@ void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard&
 }
 
 NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestinationSession::ReceiveData(NColumnShard::TColumnShard* self,
-    THashMap<TInternalPathId, NEvents::TPathIdData>&& data, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemas, const ui32 receivedPackIdx, const TTabletId sourceTabletId,
+    THashMap<TLocalPathId, NEvents::TPathIdData>&& data, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemas, const ui32 receivedPackIdx, const TTabletId sourceTabletId,
     const std::shared_ptr<TDestinationSession>& selfPtr) {
     auto result = GetCursorVerified(sourceTabletId).ReceiveData(receivedPackIdx);
     if (!result) {
@@ -106,14 +107,18 @@ NKikimr::TConclusionStatus TDestinationSession::DeserializeDataFromProto(
     }
 
     for (auto&& i : proto.GetPathIds()) {
-        auto g = index.GetGranuleOptional(TInternalPathId::FromRawValue(i.GetDestPathId()));
+        //TODO convert to internal
+        auto g = index.GetGranuleOptional(TInternalPathId::FromRawValue(0)); //TODO fixme
         if (!g) {
             return TConclusionStatus::Fail("Incorrect remapping into undefined path id: " + ::ToString(i.GetDestPathId()));
         }
-        if (!i.GetSourcePathId() || !i.GetDestPathId()) {
+        const auto sourcePathId = NColumnShard::TLocalPathId::FromProto(i.GetSourcePathId());
+        const auto dstPathId = NColumnShard::TLocalPathId::FromProto(i.GetDestPathId());
+
+        if (!sourcePathId || !dstPathId) {
             return TConclusionStatus::Fail("PathIds remapping contains incorrect ids: " + i.DebugString());
         }
-        if (!PathIds.emplace(TInternalPathId::FromRawValue(i.GetSourcePathId()), TInternalPathId::FromRawValue(i.GetDestPathId())).second) {
+        if (!PathIds.emplace(sourcePathId, dstPathId).second) {
             return TConclusionStatus::Fail("PathIds contains duplicated values.");
         }
     }
@@ -129,8 +134,8 @@ NKikimrColumnShardDataSharingProto::TDestinationSession TDestinationSession::Ser
     TBase::SerializeToProto(result);
     for (auto&& i : PathIds) {
         auto* pathIdRemap = result.AddPathIds();
-        pathIdRemap->SetSourcePathId(i.first.GetRawValue());
-        pathIdRemap->SetDestPathId(i.second.GetRawValue());
+        i.first.ToProto(pathIdRemap->GetSourcePathId());
+        i.second.ToProto(pathIdRemap->GetDestPathId());
     }
     return result;
 }

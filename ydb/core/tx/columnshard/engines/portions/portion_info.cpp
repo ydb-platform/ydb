@@ -54,8 +54,9 @@ ui64 TPortionInfo::GetApproxChunksCount(const ui32 schemaColumnsCount) const {
     return schemaColumnsCount * (GetRecordsCount() / 10000 + 1);
 }
 
-void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {
-    proto.SetPathId(PathId.GetRawValue());
+void TPortionInfo::SerializeToProto(const NColumnShard::TUnifiedPathId& pathId, NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {
+    AFL_VERIFY(pathId.GetInternalPathId() == PathId);
+    pathId.GetLocalPathId().ToProto(proto);
     proto.SetPortionId(PortionId);
     proto.SetSchemaVersion(GetSchemaVersionVerified());
     *proto.MutableMinSnapshotDeprecated() = MinSnapshotDeprecated.SerializeToProto();
@@ -66,8 +67,9 @@ void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortion
     *proto.MutableMeta() = Meta.SerializeToProto();
 }
 
-TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto) {
-    PathId = TInternalPathId::FromRawValue(proto.GetPathId());
+TConclusionStatus TPortionInfo::DeserializeFromProto(const NColumnShard::TUnifiedPathId& pathId, const NKikimrColumnShardDataSharingProto::TPortionInfo& proto) {
+    AFL_VERIFY(pathId.GetLocalPathId() == TLocalPathId::FromProto(proto.GetPathId()));
+    PathId = pathId.GetInternalPathId();
     PortionId = proto.GetPortionId();
     SchemaVersion = proto.GetSchemaVersion();
     {

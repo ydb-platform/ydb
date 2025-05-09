@@ -18,7 +18,7 @@ namespace NKikimr::NOlap::NDataSharing::NEvents {
 
 class TPathIdData {
 private:
-    YDB_READONLY_DEF(TInternalPathId, PathId); //TODO LocalPathId?
+    YDB_READONLY_DEF(NColumnShard::TUnifiedPathId, PathId);
     YDB_ACCESSOR_DEF(std::vector<TPortionDataAccessor>, Portions);
 
     TPathIdData() = default;
@@ -28,10 +28,10 @@ private:
         if (!proto.HasPathId()) {
             return TConclusionStatus::Fail("no path id in proto");
         }
-        PathId = TInternalPathId::FromRawValue(proto.GetPathId());
+        //PathId = {NColumnShard::TLocalPathId::FromProto(proto.GetPathId())};
         for (auto&& portionProto : proto.GetPortions()) {
             const auto schema = versionedIndex.GetSchemaVerified(portionProto.GetSchemaVersion());
-            TConclusion<TPortionDataAccessor> portion = TPortionDataAccessor::BuildFromProto(portionProto, schema->GetIndexInfo(), groupSelector);
+            TConclusion<TPortionDataAccessor> portion = TPortionDataAccessor::BuildFromProto(PathId, portionProto, schema->GetIndexInfo(), groupSelector);
             if (!portion) {
                 return portion.GetError();
             }
@@ -41,8 +41,8 @@ private:
     }
 
 public:
-    TPathIdData(const TInternalPathId pathId, const std::vector<TPortionDataAccessor>& portions)
-        : PathId(pathId)
+    TPathIdData(const TInternalPathId pathId, const TLocalPathId localPahId, const std::vector<TPortionDataAccessor>& portions)
+        : PathId(pathId, localPahId)
         , Portions(portions) {
     }
 
@@ -63,9 +63,9 @@ public:
     }
 
     void SerializeToProto(NKikimrColumnShardDataSharingProto::TPathIdData& proto) const {
-        proto.SetPathId(PathId.GetRawValue());
+        PathId.GetLocalPathId().ToProto(proto);
         for (auto&& i : Portions) {
-            i.SerializeToProto(*proto.AddPortions());
+            i.SerializeToProto(PathId, *proto.AddPortions());
         }
     };
 

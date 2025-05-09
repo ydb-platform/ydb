@@ -165,7 +165,7 @@ public:
         }
     }
 
-    static TConclusion<TPortionDataAccessor> BuildFromProto(
+    static TConclusion<TPortionDataAccessor> BuildFromProto(const NColumnShard::TUnifiedPathId pathId,
         const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo, const IBlobGroupSelector& groupSelector);
 
     std::vector<TString> GetIndexInplaceDataVerified(const ui32 indexId) const {
@@ -218,7 +218,7 @@ public:
         return result;
     }
 
-    void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
+    void SerializeToProto(const NColumnShard::TUnifiedPathId& pathId, NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
 
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
 

@@ -6,7 +6,7 @@
 namespace NKikimr::NOlap::NExport {
 
 NKikimr::TConclusionStatus TIdentifier::DeserializeFromProto(const NKikimrColumnShardExportProto::TIdentifier& proto) {
-    PathId = TInternalPathId::FromRawValue(proto.GetPathId()); //TODO check me
+    PathId = TLocalPathId::FromProto(proto.GetPathId());
     if (!PathId) {
         return TConclusionStatus::Fail("Incorrect pathId (zero)");
     }
@@ -24,7 +24,7 @@ NKikimr::TConclusion<NKikimr::NOlap::NExport::TIdentifier> TIdentifier::BuildFro
 
 NKikimr::TConclusion<NKikimr::NOlap::NExport::TIdentifier> TIdentifier::BuildFromProto(const NKikimrTxColumnShard::TBackupTxBody& proto) {
     TIdentifier result;
-    result.PathId = TInternalPathId::FromRawValue(proto.GetBackupTask().GetTableId()); //TODO check me
+    result.PathId = TLocalPathId::FromRawValue(proto.GetBackupTask().GetTableId());
     if (!result.PathId) {
         return TConclusionStatus::Fail("incorrect pathId (cannot been zero)");
     }
@@ -33,7 +33,7 @@ NKikimr::TConclusion<NKikimr::NOlap::NExport::TIdentifier> TIdentifier::BuildFro
 
 NKikimrColumnShardExportProto::TIdentifier TIdentifier::SerializeToProto() const {
     NKikimrColumnShardExportProto::TIdentifier result;
-    result.SetPathId(PathId.GetRawValue()); //TODO check me
+    PathId.ToProto(result);
     return result;
 }
 

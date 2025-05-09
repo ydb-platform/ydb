@@ -22,7 +22,9 @@ TConclusionStatus TCommonSession::TryStart(NColumnShard::TColumnShard& shard) {
     THashMap<TInternalPathId, std::vector<TPortionDataAccessor>> portionsByPath;
     THashSet<TString> StoragesIds;
     for (auto&& i : GetPathIdsForStart()) {
-        const auto& g = index.GetGranuleVerified(i);
+        Y_UNUSED(i);
+        //TODO resolve internal pathid
+        const auto& g = index.GetGranuleVerified(TInternalPathId{}); //FIXME 
         for (auto&& p : g.GetPortionsOlderThenSnapshot(GetSnapshotBarrier())) {
             if (shard.GetDataLocksManager()->IsLocked(
                     *p.second, NDataLocks::ELockCategory::Sharing, { "sharing_session:" + GetSessionId() })) {

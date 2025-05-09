@@ -25,7 +25,8 @@ bool TTxDataFromSource::DoExecute(NTabletFlatExecutor::TTransactionContext& txc,
         for (auto&& i : PortionsByPathId) {
             auto it = Session->GetPathIds().find(i.first);
             AFL_VERIFY(it != Session->GetPathIds().end());
-            i.second.InitPortionIds(lastPortionPtr, it->second);
+            //TODO resolve to internal pathid
+            i.second.InitPortionIds(lastPortionPtr, TInternalPathId{}); //TODO fixme
         }
         dbWrapper.WriteCounter(TColumnEngineForLogs::LAST_PORTION, *lastPortionPtr);
     }

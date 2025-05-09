@@ -18,7 +18,9 @@ NKikimr::TConclusionStatus TInStoreShardsTransfer::DoInitializeImpl(const TUpdat
             std::make_shared<NKikimr::NOlap::NDataSharing::TSSInitiatorController>(context.GetSSOperationContext()->SS->TabletID(), 0)).SerializeToProto();
         {
             auto& pathIdRemap = *destinationSession.AddPathIds();
-            pathIdRemap.SetSourcePathId(context.GetOriginalEntity().GetPathId().LocalPathId);
+            const auto pathId = NColumnShard::TLocalPathId::FromRawValue(context.GetOriginalEntity().GetPathId().LocalPathId);
+            pathId.ToProto(*pathIdRemap.GetSourcePathId());
+            pathId.ToProto(*pathIdRemap.GetDestPathId());
             pathIdRemap.SetDestPathId(context.GetOriginalEntity().GetPathId().LocalPathId);
         }
         ::NKikimr::NOlap::TSnapshot ssOpen = sharding->GetShardingOpenSnapshotVerified(alter.GetDestinationTabletId());

@@ -696,8 +696,8 @@ void TPortionDataAccessor::FullValidation() const {
     AFL_VERIFY(PortionInfo->GetBlobIdsCount() == *blobIdxs.rbegin() + 1);
 }
 
-void TPortionDataAccessor::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {
-    PortionInfo->SerializeToProto(proto);
+void TPortionDataAccessor::SerializeToProto(const NColumnShard::TUnifiedPathId& pathId, NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {
+    PortionInfo->SerializeToProto(pathId, proto);
     AFL_VERIFY(GetRecordsVerified().size());
     for (auto&& r : GetRecordsVerified()) {
         *proto.AddRecords() = r.SerializeToProto();
@@ -728,7 +728,7 @@ TConclusionStatus TPortionDataAccessor::DeserializeFromProto(const NKikimrColumn
     return TConclusionStatus::Success();
 }
 
-TConclusion<TPortionDataAccessor> TPortionDataAccessor::BuildFromProto(
+TConclusion<TPortionDataAccessor> TPortionDataAccessor::BuildFromProto(const NColumnShard::TUnifiedPathId pathId,
     const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo, const IBlobGroupSelector& groupSelector) {
     TPortionMetaConstructor constructor;
     if (!constructor.LoadMetadata(proto.GetMeta(), indexInfo, groupSelector)) {
@@ -736,7 +736,7 @@ TConclusion<TPortionDataAccessor> TPortionDataAccessor::BuildFromProto(
     }
     std::shared_ptr<TPortionInfo> resultPortion(new TPortionInfo(constructor.Build()));
     {
-        auto parse = resultPortion->DeserializeFromProto(proto);
+        auto parse = resultPortion->DeserializeFromProto(pathId, proto);
         if (!parse) {
             return parse;
         }

@@ -1272,12 +1272,12 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvSendDataFromSource::T
     // in current implementation the next loop will crash if schemas will be sent in the same package with the data, so adding this verify to ensure consistent behaviour
     AFL_VERIFY(ev->Get()->Record.GetPathIdData().empty() || ev->Get()->Record.GetSchemeHistory().empty())("reason", "can not send schemas and data in the same package");
 
-    THashMap<TInternalPathId, NOlap::NDataSharing::NEvents::TPathIdData> dataByPathId;
+    THashMap<NColumnShard::TLocalPathId, NOlap::NDataSharing::NEvents::TPathIdData> dataByPathId;
     TBlobGroupSelector dsGroupSelector(Info());
     for (auto&& i : ev->Get()->Record.GetPathIdData()) {
         auto data = NOlap::NDataSharing::NEvents::TPathIdData::BuildFromProto(i, TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().GetVersionedIndex(), dsGroupSelector);
         AFL_VERIFY(data.IsSuccess())("error", data.GetErrorMessage());
-        AFL_VERIFY(dataByPathId.emplace(TInternalPathId::FromRawValue(i.GetPathId()), data.DetachResult()).second);
+        AFL_VERIFY(dataByPathId.emplace(TLocalPathId::FromProto(i.GetPathId()), data.DetachResult()).second);
     }
 
     const auto& schemeHistoryProto = ev->Get()->Record.GetSchemeHistory();

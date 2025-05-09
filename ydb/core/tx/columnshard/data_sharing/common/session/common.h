@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/data_sharing/common/context/context.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/internal_path_mapper.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/status.h>
@@ -36,7 +37,7 @@ private:
         static TAtomicCounter Counter = 0;
         return (ui64)Counter.Inc();
     }
-
+    TInternalPathIdMapper::TPtr InternalPathIdMapper;
     YDB_READONLY_DEF(TString, SessionId);
     const TString Info;
     YDB_READONLY(ui64, RuntimeId, GetNextRuntimeId());
@@ -47,17 +48,20 @@ protected:
     TTransferContext TransferContext;
     virtual TConclusionStatus DoStart(NColumnShard::TColumnShard& shard, THashMap<TInternalPathId, std::vector<TPortionDataAccessor>>&& portions) = 0;
     virtual THashSet<TInternalPathId> GetPathIdsForStart() const = 0;
+    virtual THashSet<TLocalPathId> GetLocalPathIdsForStart() const = 0;
 
 public:
     virtual ~TCommonSession() = default;
 
-    TCommonSession(const TString& info)
-        : Info(info) {
+    TCommonSession(const TString& info, NColumnShard::TInternalPathIdMapper::TPtr internalPathIdMapper)
+        : Info(info)
+        , InternalPathIdMapper(internalPathIdMapper) {
     }
 
-    TCommonSession(const TString& sessionId, const TString& info, const TTransferContext& transferContext)
+    TCommonSession(const TString& sessionId, const TString& info, NColumnShard::TInternalPathIdMapper::TPtr internalPathIdMapper, const TTransferContext& transferContext)
         : SessionId(sessionId)
         , Info(info)
+        , InternalPathIdMapper(internalPathIdMapper)
         , TransferContext(transferContext) {
         AFL_VERIFY(!!SessionId);
     }

@@ -117,7 +117,7 @@ void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationDa
         InsertWriteIds.push_back(TInsertWriteId(writeId));
     }
     WritePortions = proto.GetWritePortions();
-    const auto pathId =  TInternalPathId::FromProto(proto.GetPathId());
+    const auto pathId =  TInternalPathId::FromProto(proto);
     PathId = {
         pathId,
         TLocalPathId::FromRawValue(pathId.GetRawValue()) //TODO fix me

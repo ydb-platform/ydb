@@ -21,7 +21,7 @@ NKikimr::TConclusionStatus TSourceSession::DeserializeFromProto(const NKikimrCol
         return TConclusionStatus::Fail("Incorrect DestinationTabletId in proto.");
     }
     for (auto&& i : proto.GetPathIds()) {
-        if (!PathIds.emplace(TInternalPathId::FromRawValue(i)).second) {
+        if (!PathIds.emplace(TLocalPathId::FromProto(i)).second) {
             return TConclusionStatus::Fail("PathIds contains duplicated values.");
         }
     }
@@ -29,7 +29,7 @@ NKikimr::TConclusionStatus TSourceSession::DeserializeFromProto(const NKikimrCol
         return TConclusionStatus::Fail("PathIds empty.");
     }
     AFL_VERIFY(PathIds.size());
-    Cursor = std::make_shared<TSourceCursor>(SelfTabletId, PathIds, TransferContext);
+    //Cursor = std::make_shared<TSourceCursor>(SelfTabletId, PathIds, TransferContext);
     AFL_VERIFY(!!protoCursor == !!protoCursorStatic);
     if (protoCursor) {
         auto parsed = Cursor->DeserializeFromProto(*protoCursor, *protoCursorStatic);

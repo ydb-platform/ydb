@@ -32,7 +32,8 @@ void TSourceCursor::BuildSelection(const std::shared_ptr<IStoragesManager>& stor
             }
         }
         if (portions.size()) {
-            NEvents::TPathIdData pathIdDataCurrent(itCurrentPath->first, portions);
+            //TODO translate to LocalPathId itCurrentPath->first
+            NEvents::TPathIdData pathIdDataCurrent({{}, NColumnShard::TLocalPathId{}, portions);
             result.emplace(itCurrentPath->first, pathIdDataCurrent);
         }
     }
@@ -105,11 +106,12 @@ bool TSourceCursor::Next(const std::shared_ptr<IStoragesManager>& storagesManage
 
 NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic TSourceCursor::SerializeDynamicToProto() const {
     NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic result;
-    result.SetStartPathId(StartPathId.GetRawValue());
+    StartPathId.ToProto(*result.GetPathId());
     result.SetStartPortionId(StartPortionId);
     result.SetNextSchemasIntervalBegin(NextSchemasIntervalBegin);
     result.SetNextSchemasIntervalEnd(NextSchemasIntervalEnd);
     if (NextPathId) {
+        NextPathId.ToProto(result.GetNextPathId())
         result.SetNextPathId(NextPathId->GetRawValue());
     }
     if (NextPortionId) {

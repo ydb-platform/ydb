@@ -2211,6 +2211,10 @@ struct TQueryPlanReconstructor {
 
             result["Node Type"] = plan.GetMapSafe().at("Node Type").GetStringSafe();
 
+            if (plan.GetMapSafe().at("Node Type") == "HashShuffle") {
+                result["Node Type"] = TStringBuilder{} << "HashShuffle (KeyColumns: " << plan.GetMapSafe().at("KeyColumns") << ")";
+            }
+
             if (plan.GetMapSafe().contains("CTE Name")) {
                 auto precompute = plan.GetMapSafe().at("CTE Name").GetStringSafe();
                 if (Precomputes.contains(precompute)) {
@@ -2512,7 +2516,6 @@ NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
         "UnionAll",
         "Broadcast",
         "Map",
-        "HashShuffle",
         "Merge",
         "Collect",
         "Stage",

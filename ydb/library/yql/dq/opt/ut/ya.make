@@ -3,6 +3,7 @@ UNITTEST_FOR(ydb/library/yql/dq/opt)
 SRCS(
     dq_cbo_ut.cpp
     dq_opt_hypergraph_ut.cpp
+    dq_opt_interesting_orderings_ut.cpp
 )
 
 PEERDIR(

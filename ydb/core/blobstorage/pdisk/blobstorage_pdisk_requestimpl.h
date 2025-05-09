@@ -71,9 +71,7 @@ public:
         , CreationTime(HPNow())
         , Span(std::move(span))
     {
-        if (Span) {
-            Span.EnableAutoEnd();
-        }
+        Span.EnableAutoEnd();
     }
 
     void SetOwnerGroupType(bool isStaticGroupOwner) {

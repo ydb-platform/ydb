@@ -20,7 +20,7 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
 ydb/core/kqp/ut/cost KqpCost.OlapWriteRow
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestAggregation
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterCompare
-ydb/core/kqp/ut/olap KqpOlapJson.BloomIndexesVariants
+ydb/core/kqp/ut/olap KqpOlapOptimizer.OptimizationByTime
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesColumnActualization
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictActualization
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictStatActualization
@@ -35,6 +35,7 @@ ydb/core/kqp/ut/query KqpStats.SysViewClientLost
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication
 ydb/core/kqp/ut/scheme KqpScheme.AlterDatabaseChangeOwner+EnableAlterDatabase
+ydb/core/kqp/ut/scheme KqpScheme.AlterDatabaseChangeOwner-EnableAlterDatabase
 ydb/core/kqp/ut/scheme [*/*] chunk chunk
 ydb/core/kqp/ut/scheme [*/*]+chunk+chunk
 ydb/core/kqp/ut/service KqpQueryService.ExecuteQueryWithResourcePoolClassifier
@@ -92,6 +93,7 @@ ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/tests/fq/control_plane_storage [*/*] chunk chunk
 ydb/tests/fq/control_plane_storage [*/*]+chunk+chunk
 ydb/tests/fq/generic/analytics sole chunk chunk
+ydb/tests/fq/generic/analytics test_join.py.TestJoinAnalytics.test_simple[v1-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/analytics test_join.py.TestJoinAnalytics.test_simple[v2-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming sole chunk chunk
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_simple[v1-fq_client0-mvp_external_ydb_endpoint0]
@@ -123,10 +125,25 @@ ydb/tests/fq/yds test_recovery.py.TestRecovery.test_ic_disconnection
 ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_same_with_id[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_yds_bindings.py.TestBindings.test_yds_insert[v1]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_simple
+ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_simple[current_to_current-row]
+ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_simple[stable_24_4_to_current-column]
+ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_simple[stable_24_4_to_current_mixed-column]
+ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_simple[stable_25_1_to_current-column]
+ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_simple[stable_25_1_to_current_mixed-column]
+ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_current-column]
+ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_stable_24_4-column]
+ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_stable_25_1-column]
+ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_stable_25_1-row]
+ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[stable_24_4_to_current-column]
+ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[stable_24_4_to_current_mixed-column]
+ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[stable_25_1_to_current-column]
+ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[stable_25_1_to_current_mixed-column]
+ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[stable_25_1_to_current_mixed-row]
 ydb/tests/functional/compatibility test_followers.py.TestFollowersCompatibility.test_followers_compatability
 ydb/tests/functional/compatibility test_stress.py.TestStress.test_log[current-row]
 ydb/tests/functional/compatibility test_stress.py.TestStress.test_log[mixed-row]
 ydb/tests/functional/compatibility test_stress.py.TestStress.test_tpch1[current-row]
+ydb/tests/functional/compatibility test_stress.py.TestStress.test_tpch1[last_stable-row]
 ydb/tests/functional/compatibility test_stress.py.TestStress.test_tpch1[mixed-row]
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/rename [test_rename.py */*] chunk chunk

@@ -51,28 +51,28 @@ inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> GetEntriesForAuthAnd
 
     const TString& accessServiceType = AppData()->AuthConfig.GetAccessServiceType();
 
-	if (accessServiceType == "Yandex_v2") {
-		static const TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {
-			{NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"ydb.developerApi.get", "ydb.developerApi.update"}), {{"gizmo_id", "gizmo"}}}
-		};
-		return entries;
-	} else if (accessServiceType == "Nebius_v1") {
+    if (accessServiceType == "Yandex_v2") {
+        static const TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {
+            {NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"ydb.developerApi.get", "ydb.developerApi.update"}), {{"gizmo_id", "gizmo"}}}
+        };
+        return entries;
+    } else if (accessServiceType == "Nebius_v1") {
         static const auto permissions = NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({
             "ydb.clusters.get", "ydb.clusters.monitor", "ydb.clusters.manage"
         });
-		auto it = std::find_if(rootAttributes.begin(), rootAttributes.end(),
-		[](const std::pair<TString, TString>& p) {
-			return p.first == "container_id";
-		});
-		if (it == rootAttributes.end()) {
-			return {};
-		}
-		return {
-			{permissions, {{"gizmo_id", it->second}}}
-		};
-	} else {
-		return {};
-	}
+        auto it = std::find_if(rootAttributes.begin(), rootAttributes.end(),
+        [](const std::pair<TString, TString>& p) {
+            return p.first == "container_id";
+        });
+        if (it == rootAttributes.end()) {
+            return {};
+        }
+        return {
+            {permissions, {{"gizmo_id", it->second}}}
+        };
+    } else {
+        return {};
+    }
 }
 
 template <typename TEvent>

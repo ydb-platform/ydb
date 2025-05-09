@@ -13,6 +13,7 @@
 # changes in this file.
 
 add_subdirectory(helpers)
+add_subdirectory(combinatory)
 
 add_executable(ydb-core-kqp-ut-olap)
 
@@ -38,6 +39,7 @@ target_link_libraries(ydb-core-kqp-ut-olap PUBLIC
   tx-columnshard-test_helper
   core-tx-columnshard
   ut-olap-helpers
+  ut-olap-combinatory
   tx-datashard-ut_common
   src-client-operation
 )
@@ -61,6 +63,7 @@ target_link_options(ydb-core-kqp-ut-olap PRIVATE
 target_sources(ydb-core-kqp-ut-olap PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/blobs_sharing_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/kqp_olap_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/dictionary_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/aggregations_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/clickbench_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/olap/compression_ut.cpp

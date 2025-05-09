@@ -12,29 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(abstract)
-add_subdirectory(common)
-add_subdirectory(plain)
-add_subdirectory(sparsed)
-add_subdirectory(dictionary)
-add_subdirectory(sub_columns)
-
-add_library(engines-changes-compaction)
-
-
-target_link_libraries(engines-changes-compaction PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  core-tx-tiering
-  changes-compaction-abstract
-  changes-compaction-common
-  changes-compaction-plain
-  changes-compaction-sparsed
-  changes-compaction-dictionary
-  changes-compaction-sub_columns
-)
-
-target_sources(engines-changes-compaction PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/changes/compaction/merger.cpp
-)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64" AND NOT HAVE_CUDA)
+  include(CMakeLists.linux-aarch64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+  include(CMakeLists.darwin-x86_64.txt)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Darwin" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+  include(CMakeLists.darwin-arm64.txt)
+endif()
 

@@ -17,6 +17,7 @@ add_subdirectory(common)
 add_subdirectory(plain)
 add_subdirectory(composite_serial)
 add_subdirectory(composite)
+add_subdirectory(dictionary)
 add_subdirectory(sparsed)
 add_subdirectory(sub_columns)
 
@@ -31,6 +32,7 @@ target_link_libraries(formats-arrow-accessor INTERFACE
   arrow-accessor-plain
   arrow-accessor-composite_serial
   library-formats-arrow-accessor-composite
+  arrow-accessor-dictionary
   arrow-accessor-sparsed
   arrow-accessor-sub_columns
 )

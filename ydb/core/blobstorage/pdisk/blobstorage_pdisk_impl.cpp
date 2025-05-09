@@ -3476,20 +3476,17 @@ void TPDisk::RouteRequest(TRequestBase *request) {
         case ERequestType::RequestLogReadResultProcess:
             [[fallthrough]];
         case ERequestType::RequestLogSectorRestore:
-            request->Span.Event("move_to_batcher", {});
             JointLogReads.emplace_back(request);
             break;
         case ERequestType::RequestChunkReadPiece:
         {
             TChunkReadPiece *piece = static_cast<TChunkReadPiece*>(request);
-            piece->Span.Event("move_to_batcher", {});
             JointChunkReads.emplace(piece->SelfPointer.Get());
             piece->SelfPointer.Reset();
             // FIXME(cthulhu): Unreserve() for TChunkReadPiece is called while processing to avoid requeueing issues
             break;
         }
         case ERequestType::RequestChunkWritePiece:
-            request->Span.Event("move_to_batcher", {});
             JointChunkWrites.push(request);
             break;
         case ERequestType::RequestChunkTrim:
@@ -3504,10 +3501,6 @@ void TPDisk::RouteRequest(TRequestBase *request) {
             while (log) {
                 TLogWrite *batch = log->PopFromBatch();
 
-                log->Span.Event("move_to_batcher", {
-                    {"HasCommitRecord", log->Signature.HasCommitRecord()}
-                });
-
                 JointLogWrites.push(log);
                 log = batch;
             }
@@ -3515,7 +3508,6 @@ void TPDisk::RouteRequest(TRequestBase *request) {
         }
         case ERequestType::RequestChunkForget:
         {
-            request->Span.Event("move_to_batcher", {});
             TChunkForget *forget = static_cast<TChunkForget*>(request);
             JointChunkForgets.push_back(std::unique_ptr<TChunkForget>(forget));
             break;

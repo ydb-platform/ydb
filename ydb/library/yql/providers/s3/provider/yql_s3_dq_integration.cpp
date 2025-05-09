@@ -33,34 +33,41 @@ TString GetLastName(const TString& fullName) {
     return (n == fullName.npos) ? fullName : fullName.substr(n + 1);
 }
 
-TExprNode::TListType GetKeys(const TExprNode& settings) {
-    for (auto i = 0U; i < settings.ChildrenSize(); ++i) {
-        if (const auto& child = *settings.Child(i); child.Head().IsAtom("partitionedby")) {
-            auto children = child.ChildrenList();
-            children.erase(children.cbegin());
-            return children;
+TExprNode::TListType FindSetting(const TExprNode& settings, const TString& name) {
+    for (size_t i = 0; i < settings.ChildrenSize(); ++i) {
+        if (const auto& child = *settings.Child(i); child.Head().IsAtom(name)) {
+            return child.ChildrenList();
         }
+    }
+    return {};
+}
+
+TExprNode::TListType GetKeys(const TExprNode& settings) {
+    if (auto children = FindSetting(settings, "partitionedby"); !children.empty()) {
+        children.erase(children.cbegin());
+        return children;
     }
     return {};
 }
 
 std::string_view GetCompression(const TExprNode& settings) {
-    for (auto i = 0U; i < settings.ChildrenSize(); ++i) {
-        if (settings.Child(i)->Head().IsAtom("compression")) {
-            return settings.Child(i)->Tail().Content();
-        }
+    if (const auto children = FindSetting(settings, "compression"); !children.empty()) {
+        return children.back()->Content();
     }
-
     return {};
 }
 
 bool GetMultipart(const TExprNode& settings) {
-    for (auto i = 0U; i < settings.ChildrenSize(); ++i) {
-        if (settings.Child(i)->Head().IsAtom("multipart")) {
-            return FromString(settings.Child(i)->Tail().Content());
-        }
+    if (const auto children = FindSetting(settings, "multipart"); !children.empty()) {
+        return FromString(children.back()->Content());
     }
+    return false;
+}
 
+bool GetBlockOutput(const TExprNode& settings) {
+    if (const auto children = FindSetting(settings, "block_output"); !children.empty()) {
+        return FromString(children.back()->Content());
+    }
     return false;
 }
 
@@ -584,17 +591,36 @@ public:
             sinkDesc.SetToken(settings.Token().Name().StringValue());
             sinkDesc.SetPath(settings.Path().StringValue());
             sinkDesc.SetExtension(settings.Extension().StringValue());
-            for (const auto& key : GetKeys(settings.Settings().Ref()))
+            for (const auto& key : GetKeys(settings.Settings().Ref())) {
                 sinkDesc.MutableKeys()->Add(TString(key->Content()));
+            }
 
-            if (const auto& memoryLimit = State_->Configuration->InFlightMemoryLimit.Get())
+            if (const auto& memoryLimit = State_->Configuration->InFlightMemoryLimit.Get()) {
                 sinkDesc.SetMemoryLimit(*memoryLimit);
+            }
 
-            if (const auto& compression = GetCompression(settings.Settings().Ref()); !compression.empty())
+            if (const auto& compression = GetCompression(settings.Settings().Ref()); !compression.empty()) {
                 sinkDesc.SetCompression(TString(compression));
+            }
 
             sinkDesc.SetMultipart(GetMultipart(settings.Settings().Ref()));
             sinkDesc.SetAtomicUploadCommit(State_->Configuration->AllowAtomicUploadCommit && State_->Configuration->AtomicUploadCommit.Get().GetOrElse(false));
+
+            if (GetBlockOutput(settings.Settings().Ref())) {
+                auto& arrowSettings = *sinkDesc.MutableArrowSettings();
+
+                const auto& fullRowType = settings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                TExprContext ctx;
+                arrowSettings.SetRowType(NCommon::WriteTypeToYson(fullRowType, NYT::NYson::EYsonFormat::Text));
+
+                if (const auto maxFileSize = State_->Configuration->MaxOutputObjectSize.Get()) {
+                    arrowSettings.SetMaxFileSize(*maxFileSize);
+                }
+
+                if (const auto maxBlockSize = State_->Configuration->BlockSizeMemoryLimit.Get()) {
+                    arrowSettings.SetMaxBlockSize(*maxBlockSize);
+                }
+            }
 
             protoSettings.PackFrom(sinkDesc);
             sinkType = "S3Sink";

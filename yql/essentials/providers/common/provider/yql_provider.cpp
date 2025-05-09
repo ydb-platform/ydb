@@ -23,21 +23,19 @@ namespace NCommon {
 using namespace NNodes;
 
 namespace {
-    constexpr std::array<std::string_view, 8> FormatsForInput = {
+    constexpr std::array<std::string_view, 7> FormatsForInput = {
         "csv_with_names"sv,
         "tsv_with_names"sv,
         "json_list"sv,
-        "json"sv,
         "raw"sv,
         "json_as_string"sv,
         "json_each_row"sv,
         "parquet"sv
     };
-    constexpr std::array<std::string_view, 7> FormatsForOutput = {
+    constexpr std::array<std::string_view, 6> FormatsForOutput = {
         "csv_with_names"sv,
         "tsv_with_names"sv,
         "json_list"sv,
-        "json"sv,
         "raw"sv,
         "json_each_row"sv,
         "parquet"sv

@@ -38,15 +38,17 @@ public:
 
 class IChunkedArray {
 public:
+// PERSISTENT ENUM!!. DONT CHANGE ELEMENT'S IDS
     enum class EType : ui8 {
         Undefined = 0,
-        Array,
-        ChunkedArray,
-        SerializedChunkedArray,
-        CompositeChunkedArray,
-        SparsedArray,
-        SubColumnsArray,
-        SubColumnsPartialArray
+        Array = 1,
+        ChunkedArray = 2,
+        SerializedChunkedArray = 3,
+        CompositeChunkedArray = 4,
+        SparsedArray = 5,
+        SubColumnsArray = 6,
+        SubColumnsPartialArray = 7,
+        Dictionary = 8
     };
 
     using TValuesSimpleVisitor = std::function<void(std::shared_ptr<arrow::Array>)>;
@@ -467,6 +469,7 @@ public:
             case EType::SubColumnsArray:
             case EType::SubColumnsPartialArray:
             case EType::Array:
+            case EType::Dictionary:
                 return true;
             case EType::Undefined:
                 AFL_VERIFY(false);

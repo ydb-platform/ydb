@@ -25,7 +25,9 @@
 {% endif %}
 * `VIRTUAL_TIMESTAMPS`: Enabling/disabling [virtual timestamps](../../../../concepts/cdc.md#virtual-timestamps). Disabled by default.
 * `RETENTION_PERIOD`: [Record retention period](../../../../concepts/cdc.md#retention-period). The value type is `Interval` and the default value is 24 hours (`Interval('PT24H')`).
-* `TOPIC_MIN_ACTIVE_PARTITIONS`: [The number of topic partitions](../../../../concepts/cdc.md#topic-partitions). By default, the number of topic partitions is equal to the number of table partitions.
+* `TOPIC_AUTO_PARTITIONING`: [Topic autopartitioning mode](../../../../concepts/cdc.md#topic-partitions):
+    * `ENABLED` - [autopartitioned topic](../../../../concepts/topic.md#autopartitioning) will be create for this changefeed. Number of partitions in such topic grows automatically as table update rate increases. Topic autopartitioning parameters [can be configured](../alter-topic.md#alter-topic).
+* `TOPIC_MIN_ACTIVE_PARTITIONS`: [The initial number of topic partitions](../../../../concepts/cdc.md#topic-partitions). By default, the initial number of topic partitions is equal to the number of table partitions. For the autopartitioned topics number of partitions will grow automatically as table update rate increases.
 * `INITIAL_SCAN`: Enables/disables [initial table scan](../../../../concepts/cdc.md#initial-scan). Disabled by default.
 {% if audience == "tech" %}
 * `AWS_REGION`: Value to be written to the `awsRegion` field. Used only with the `DYNAMODB_STREAMS_JSON` format.
@@ -67,6 +69,17 @@ ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',
     MODE = 'UPDATES',
     INITIAL_SCAN = TRUE
+);
+```
+
+Example of creating a changefeed with autopartitioning:
+
+```yql
+ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
+    FORMAT = 'JSON',
+    MODE = 'UPDATES',
+    TOPIC_AUTO_PARTITIONING = 'ENABLED',
+    TOPIC_MIN_ACTIVE_PARTITIONS = 2
 );
 ```
 

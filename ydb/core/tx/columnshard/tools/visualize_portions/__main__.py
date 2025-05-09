@@ -36,7 +36,7 @@ class Portion:
         if (pk0Type == FirstPkColumnType.Integer):
             return int(pk0)
         if (pk0Type == FirstPkColumnType.Timestamp):
-            return datetime.strptime(pk0, "%Y-%m-%d %H:%M:%S.%f").replace(tzinfo=timezone.utc)
+            return datetime.fromtimestamp(int(pk0) / 1000000.0, tz=timezone.utc)
         raise Exception(f"Unsupported PK column type: {str(pk0Type)}")
 
     @staticmethod
@@ -64,14 +64,13 @@ class Portion:
             raise Exception("Unsupported PK column type")
         y0 = mdates.date2num(self.PlanStepMin)
         dy = mdates.date2num(self.PlanStepMax) - mdates.date2num(self.PlanStepMin)
-
         return Rectangle(
             (x0, y0),
             dx,
             dy,
             linestyle="dashed",
             linewidth=1,
-            edgecolor="black",
+            edgecolor=levelColors[self.CompactionLevel] if self.CompactionLevel == 0 else "black",
             fc=levelColors[self.CompactionLevel]
         )
 
@@ -107,6 +106,13 @@ def ParsePortionStatFile(path: str, pk0type: FirstPkColumnType) -> Portions:
     return portions
 
 
+def GetLevelColours(maxLevel):
+    levelColors = {l: 'blue' for l in range(portions.MaxCompactionLevel + 1)}
+    levelColors[maxLevel] = 'green'
+    levelColors[0] = 'red'
+    return levelColors
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("""Visualize portions from YDB Column table.
 To get portion info for a table, use ydb cli:
@@ -121,9 +127,7 @@ To get portion info for a table, use ydb cli:
     portions = ParsePortionStatFile(inputFile, pk0Type)
     print(f"Loading file: {inputFile}... completed, {len(portions.Portions)} portions")
 
-    levelColors = {level: 'blue' for level in range(0, portions.MaxCompactionLevel + 1)}
-    levelColors[0] = 'black'
-    levelColors[portions.MaxCompactionLevel] = 'green'
+    levelColors = GetLevelColours(portions.MaxCompactionLevel)
     rectangles = [p.ToRectangle(levelColors) for p in portions.Portions]
 
     fig, ax = plt.subplots()

@@ -1,6 +1,6 @@
 <tmp_path>/program.sql:<main>: Error: Type annotation
 
-    <tmp_path>/program.sql:<main>:64:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    <tmp_path>/program.sql:<main>:64:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
     	SELECT $udf(TestField) FROM plato.Input;
 	^
         <tmp_path>/program.sql:<main>:64:8: Error: At function: NamedApply, At function: Udf, At Protobuf.Parse

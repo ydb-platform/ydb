@@ -253,7 +253,6 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::
     auto* partitionRequest = request.MutablePartitionRequest();
     partitionRequest->SetTopic(topicName);
     partitionRequest->SetPartition(data.Index);
-    // partitionRequest->SetCmdWriteOffset();
     partitionRequest->SetCookie(cookie);
     if (ruPerRequest) {
         partitionRequest->SetMeteringV2Enabled(true);

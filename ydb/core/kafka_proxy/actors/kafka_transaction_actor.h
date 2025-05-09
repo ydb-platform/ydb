@@ -2,6 +2,7 @@
 
 #include "kafka_init_producer_id_actor.h"
 #include <ydb/core/kafka_proxy/kafka_events.h>
+#include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/core/kafka_proxy/kqp_helper.h>
 
@@ -122,7 +123,7 @@ namespace NKafka {
             std::unordered_map<TTopicPartition, TPartitionCommit, TopicPartitionHashFn> OffsetsToCommit = {};
             std::unordered_set<TTopicPartition, TopicPartitionHashFn> PartitionsInTxn = {};
             const TString TransactionalId;
-            const TEvKafka::TProducerInstanceId ProducerInstanceId;
+            const TProducerInstanceId ProducerInstanceId;
             // const i64 ProducerId;
             // const i16 ProducerEpoch;
 

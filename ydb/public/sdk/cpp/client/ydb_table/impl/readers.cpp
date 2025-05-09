@@ -90,9 +90,16 @@ TAsyncScanQueryPart TScanQueryPartIterator::TReaderImpl::ReadNext(std::shared_pt
 
             diagnostics = self->Response_.result().query_full_diagnostics();
 
+            std::optional<TVirtualTimestamp> vt;
+
+            if (self->Response_.result().has_snapshot()) {
+                const auto& snap = self->Response_.result().snapshot();
+                vt = TVirtualTimestamp(snap.plan_step(), snap.tx_id());
+            }
+
             if (self->Response_.result().has_result_set()) {
                 promise.SetValue({std::move(status),
-                    TResultSet(std::move(*self->Response_.mutable_result()->mutable_result_set())), queryStats, diagnostics});
+                    TResultSet(std::move(*self->Response_.mutable_result()->mutable_result_set())), queryStats, diagnostics, std::move(vt)});
             } else {
                 promise.SetValue({std::move(status), queryStats, diagnostics});
             }

@@ -304,6 +304,13 @@ protected:
                 streamEv->Record.SetChannelId(channel.Id);
                 streamEv->Record.MutableResultSet()->Swap(&resultSet);
 
+                const auto& snap = GetSnapshot();
+                if (snap.IsValid()) {
+                    auto vt = streamEv->Record.MutableVirtualTimestamp();
+                    vt->SetStep(snap.Step);
+                    vt->SetTxId(snap.TxId);
+                }
+
                 LOG_D("Send TEvStreamData to " << Target << ", seqNo: " << streamEv->Record.GetSeqNo()
                     << ", nRows: " << streamEv->Record.GetResultSet().rows().size());
 

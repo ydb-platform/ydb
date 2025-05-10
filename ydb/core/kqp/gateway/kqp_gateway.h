@@ -137,6 +137,7 @@ public:
 
         static void FillRequestFrom(IKqpGateway::TExecPhysicalRequest& request, const IKqpGateway::TExecPhysicalRequest& from);
 
+        bool IsInternalCall = false;
         bool AllowTrailingResults = false;
         NKikimrKqp::EQueryType QueryType = NKikimrKqp::EQueryType::QUERY_TYPE_UNDEFINED;
         NKikimr::TControlWrapper PerRequestDataSizeLimit;

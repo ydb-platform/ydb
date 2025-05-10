@@ -121,7 +121,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
             if (firstCall) {
                 defCountStart = defCount;
             } else {
-                AFL_VERIFY(defCountStart == defCount);
+                AFL_VERIFY(defCountStart == defCount)("start", defCountStart)("current", defCount);
             }
             const ui32 count = GetCount();
             AFL_VERIFY(count == countExpectation)("expect", countExpectation)("count", count);

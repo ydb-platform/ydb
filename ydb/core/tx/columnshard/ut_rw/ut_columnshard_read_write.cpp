@@ -883,6 +883,7 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
     TTester::Setup(runtime);
     auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::S3_WRAPPER, NActors::NLog::PRI_WARN);
 
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);

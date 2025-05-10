@@ -26,6 +26,10 @@ private:
     YDB_ACCESSOR(i64, MaxPortionSize, DefaultMaxPortionSize);
 
 public:
+    ui64 GetExpectedBlobPage() const {
+        return ((ui64)512) << 10;
+    }
+
     static TSplitSettings BuildForTests(const double scaleKff = 1) {
         return TSplitSettings().SetMaxBlobSize(1024 * 10 * scaleKff).SetMinBlobSize(256 * 10 * scaleKff);
     }
@@ -34,12 +38,24 @@ public:
         return 1.5 * MinRecordsCount;
     }
 
+    ui64 GetMinRecordsCountOnPage() const {
+        return 1.5 * MinRecordsCount;
+    }
+
+    ui64 GetMaxRecordsCountOnPage() const {
+        return 7.5 * MinRecordsCount;
+    }
+
     ui64 GetExpectedUnpackColumnChunkRawSize() const {
         return (ui64)50 * 1024 * 1024;
     }
 
     ui64 GetExpectedPortionSize() const {
         return MaxPortionSize;
+    }
+
+    ui64 GetExpectedPortionRecordsCount() const {
+        return 10 * GetExpectedRecordsCountOnPage();
     }
 };
 

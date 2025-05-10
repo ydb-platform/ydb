@@ -820,8 +820,7 @@ std::vector<std::pair<ui32, ui64>> TestOneTierExport(const TTestSchema::TTableSp
     return rowsBytes;
 }
 
-void TestTwoHotTiers(bool reboot, bool changeTtl, const EInitialEviction initial = EInitialEviction::None,
-                    bool revCompaction = false) {
+void TestTwoHotTiers(bool reboot, bool changeTtl, bool revCompaction, const EInitialEviction initial) {
     TTestSchema::TTableSpecials spec;
     spec.SetTtlColumn("timestamp");
     spec.Tiers.emplace_back(TTestSchema::TStorageTier("tier0").SetTtlColumn("timestamp"));
@@ -1166,97 +1165,18 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
         }
     }
 
-
-
-
-    // TODO: EnableOneTierAfterTtl, EnableTtlAfterOneTier
-
-    Y_UNIT_TEST(HotTiers) {
-        TestTwoHotTiers(false, false);
+    Y_UNIT_TEST_OCTO(HotTiers, Reboot, ChangeTtl, RevCompaction) {
+        TestTwoHotTiers(Reboot, ChangeTtl, RevCompaction, EInitialEviction::None);
     }
 
-    Y_UNIT_TEST(RebootHotTiers) {
-        TestTwoHotTiers(true, false);
+    Y_UNIT_TEST_DUO(HotTiersInitialTtl, Reboot) {
+        TestTwoHotTiers(Reboot, false, false, EInitialEviction::Ttl);
     }
 
-    Y_UNIT_TEST(HotTiersWithStat) {
-        TestTwoHotTiers(false, false);
-    }
-
-    Y_UNIT_TEST(RebootHotTiersWithStat) {
-        TestTwoHotTiers(true, false);
-    }
-
-    Y_UNIT_TEST(HotTiersRevCompression) {
-        TestTwoHotTiers(false, false, EInitialEviction::None);
-    }
-
-    Y_UNIT_TEST(RebootHotTiersRevCompression) {
-        TestTwoHotTiers(true, false, EInitialEviction::None);
-    }
-
-    Y_UNIT_TEST(HotTiersTtl) {
-        NColumnShard::gAllowLogBatchingDefaultValue = false;
-        TestTwoHotTiers(false, true);
-    }
-
-    Y_UNIT_TEST(RebootHotTiersTtl) {
-        NColumnShard::gAllowLogBatchingDefaultValue = false;
-        TestTwoHotTiers(true, true);
-    }
-
-    Y_UNIT_TEST(HotTiersTtlWithStat) {
-        NColumnShard::gAllowLogBatchingDefaultValue = false;
-        TestTwoHotTiers(false, true);
-    }
-
-    Y_UNIT_TEST(RebootHotTiersTtlWithStat) {
-        NColumnShard::gAllowLogBatchingDefaultValue = false;
-        TestTwoHotTiers(true, true);
-    }
-
-    Y_UNIT_TEST(HotTiersAfterTtl) {
-        TestTwoHotTiers(false, false, EInitialEviction::Ttl);
-    }
-
-    Y_UNIT_TEST(RebootHotTiersAfterTtl) {
-        TestTwoHotTiers(true, false, EInitialEviction::Ttl);
-    }
-
-    // TODO: EnableTtlAfterHotTiers
-
-    Y_UNIT_TEST(ColdTiers) {
-        TestHotAndColdTiers(false, EInitialEviction::Tiering);
-    }
-
-    Y_UNIT_TEST(RebootColdTiers) {
-        //NColumnShard::gAllowLogBatchingDefaultValue = false;
-        TestHotAndColdTiers(true, EInitialEviction::Tiering);
-    }
-
-    Y_UNIT_TEST(ColdTiersWithStat) {
-        TestHotAndColdTiers(false, EInitialEviction::Tiering);
-    }
-
-    Y_UNIT_TEST(RebootColdTiersWithStat) {
-        //NColumnShard::gAllowLogBatchingDefaultValue = false;
-        TestHotAndColdTiers(true, EInitialEviction::Tiering);
-    }
-
-    Y_UNIT_TEST(EnableColdTiersAfterNoEviction) {
-        TestHotAndColdTiers(false, EInitialEviction::None);
-    }
-
-    Y_UNIT_TEST(RebootEnableColdTiersAfterNoEviction) {
-        TestHotAndColdTiers(true, EInitialEviction::None);
-    }
-
-    Y_UNIT_TEST(EnableColdTiersAfterTtl) {
-        TestHotAndColdTiers(false, EInitialEviction::Ttl);
-    }
-
-    Y_UNIT_TEST(RebootEnableColdTiersAfterTtl) {
-        TestHotAndColdTiers(true, EInitialEviction::Ttl);
+    Y_UNIT_TEST_DUO(HotAndColdTiers, Reboot) {
+        for (const auto initial: {EInitialEviction::None, EInitialEviction::Ttl, EInitialEviction::Tiering}) {
+            TestHotAndColdTiers(Reboot, initial);
+        }
     }
 
     Y_UNIT_TEST(OneColdTier) {
@@ -1310,12 +1230,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
         TestCompaction();
     }
 
-    Y_UNIT_TEST(Drop) {
-        TestDrop(false);
-    }
-
-    Y_UNIT_TEST(RebootDrop) {
-        TestDrop(true);
+    Y_UNIT_TEST_DUO(Drop, Reboot) {
+        TestDrop(Reboot);
     }
 
     Y_UNIT_TEST(DropWriteRace) {

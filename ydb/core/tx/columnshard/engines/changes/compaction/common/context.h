@@ -62,27 +62,4 @@ public:
         Y_ABORT_UNLESS(ChunkRawBytesLimit);
     }
 };
-
-class TChunkMergeContext {
-private:
-    YDB_READONLY(ui32, PortionRowsCountLimit, 10000);
-    YDB_READONLY(ui32, BatchIdx, 0);
-    YDB_READONLY(ui32, RecordsCount, 0);
-    const NColumnShard::TIndexationCounters& Counters;
-
-public:
-    const NColumnShard::TIndexationCounters& GetCounters() const {
-        return Counters;
-    }
-
-    TChunkMergeContext(
-        const ui32 portionRowsCountLimit, const ui32 batchIdx, const ui32 recordsCount, const NColumnShard::TIndexationCounters& counters)
-        : PortionRowsCountLimit(portionRowsCountLimit)
-        , BatchIdx(batchIdx)
-        , RecordsCount(recordsCount)
-        , Counters(counters) {
-        AFL_VERIFY(RecordsCount);
-        AFL_VERIFY(PortionRowsCountLimit);
-    }
-};
 }   // namespace NKikimr::NOlap::NCompaction

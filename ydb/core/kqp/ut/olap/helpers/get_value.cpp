@@ -110,6 +110,15 @@ ui64 GetUint64(const NYdb::TValue& v) {
     }
 }
 
+ui64 GetInt64(const NYdb::TValue& v) {
+    NYdb::TValueParser value(v);
+    if (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
+        return *value.GetOptionalInt64();
+    } else {
+        return value.GetInt64();
+    }
+}
+
 TString GetUtf8(const NYdb::TValue& v) {
     NYdb::TValueParser value(v);
     if (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {

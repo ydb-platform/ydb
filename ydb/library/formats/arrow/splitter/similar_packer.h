@@ -77,6 +77,8 @@ public:
         return result;
     }
 
+    static std::vector<i64> SplitWithExpected(const i64 count, const ui32 expectation, const bool canDrop = true, const bool canGrow = true);
+
     static std::vector<ui32> SizesToRecordsCount(
         const ui32 serializedRecordsCount, const TString& dataSerialization, const std::vector<ui64>& splitPartSizesExt);
 };

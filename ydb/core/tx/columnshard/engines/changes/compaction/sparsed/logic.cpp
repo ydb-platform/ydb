@@ -134,4 +134,29 @@ std::optional<i64> TSparsedMerger::TSparsedChunkCursor::GetGlobalResultIndexImpl
     return *result - *GlobalResultOffset;
 }
 
+bool TSparsedMerger::TSparsedChunkCursor::InitGlobalRemapping(
+    const TSourceReverseRemap& remapToGlobalResult, const ui32 globalResultOffset, const ui32 globalResultSize) {
+    if (remapToGlobalResult.IsEmpty()) {
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "skip_source")("reason", "empty")("idx", GetCursorIdx());
+        return false;
+    }
+    if (globalResultOffset + globalResultSize <= remapToGlobalResult.GetMinResultIndex()) {
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "skip_source")("reason", "too_early")("idx", GetCursorIdx());
+        return false;
+    }
+    GlobalResultOffset = globalResultOffset;
+    RemapToGlobalResult = &remapToGlobalResult;
+    if (GetGlobalPosition() <= RemapToGlobalResult->GetMinSourceIndex()) {
+        MoveToSignificant(RemapToGlobalResult->GetMinSourceIndex());
+        AFL_VERIFY(RemapToGlobalResult->GetMinSourceIndex() <= GetGlobalPosition());
+    }
+    if (!GetGlobalResultIndexImpl()) {
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "skip_source")("reason", "not_index")("idx", GetCursorIdx())(
+            "offset", globalResultOffset)("size", globalResultSize)("debug", remapToGlobalResult.DebugString())("pos", GetGlobalPosition());
+        return false;
+    }
+    Y_UNUSED(GetGlobalResultIndexVerified());
+    return true;
+}
+
 }   // namespace NKikimr::NOlap::NCompaction

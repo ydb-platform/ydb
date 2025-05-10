@@ -15,6 +15,7 @@ class WorkloadType(StrEnum):
     Clickbench = 'clickbench'
     TPC_H = 'tpch'
     TPC_DS = 'tpcds'
+    EXTERNAL = 'external'
 
 
 class CheckCanonicalPolicy(Enum):
@@ -134,7 +135,8 @@ class YdbCliHelper:
                      check_canonical: CheckCanonicalPolicy,
                      query_syntax: str,
                      scale: Optional[int],
-                     query_prefix: Optional[str]):
+                     query_prefix: Optional[str],
+                     external_path: str):
             def _get_output_path(ext: str) -> str:
                 return yatest.common.test_output_path(f'q{query_num}.{ext}')
 
@@ -151,6 +153,7 @@ class YdbCliHelper:
             self._plan_path = _get_output_path('plan')
             self._query_output_path = _get_output_path('out')
             self._json_path = _get_output_path('json')
+            self.external_path = external_path
 
         def _init_iter(self, iter_num: int) -> None:
             if iter_num not in self.result.iterations:
@@ -241,7 +244,11 @@ class YdbCliHelper:
 
         def _get_cmd(self) -> list[str]:
             cmd = YdbCliHelper.get_cli_command() + [
-                'workload', str(self.workload_type), '--path', self.db_path, 'run',
+                'workload', str(self.workload_type), '--path', self.db_path]
+            if self.external_path:
+                cmd += ['--data-path', self.external_path]
+            cmd += [
+                'run',
                 '--json', self._json_path,
                 '--output', self._query_output_path,
                 '--executer', 'generic',
@@ -282,7 +289,7 @@ class YdbCliHelper:
     @staticmethod
     def workload_run(workload_type: WorkloadType, path: str, query_num: int, iterations: int = 5,
                      timeout: float = 100., check_canonical: CheckCanonicalPolicy = CheckCanonicalPolicy.NO, query_syntax: str = '',
-                     scale: Optional[int] = None, query_prefix=None) -> YdbCliHelper.WorkloadRunResult:
+                     scale: Optional[int] = None, query_prefix=None, external_path='') -> YdbCliHelper.WorkloadRunResult:
         return YdbCliHelper.WorkloadProcessor(
             workload_type,
             path,
@@ -292,5 +299,6 @@ class YdbCliHelper:
             check_canonical,
             query_syntax,
             scale,
-            query_prefix=query_prefix
+            query_prefix=query_prefix,
+            external_path=external_path
         ).process()

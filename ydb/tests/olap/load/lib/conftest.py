@@ -40,6 +40,20 @@ class LoadSuiteBase:
     __nodes_state: Optional[dict[str, YdbCluster.Node]] = None
 
     @classmethod
+    def get_external_path(cls) -> str:
+        if not hasattr(cls, 'external_folder'):
+            return ''
+        result = os.getenv('EXTERNAL_DATA')
+        if result is None:
+            result = os.getenv('ARCADIA_EXTERNAL_DATA', '')
+            if result:
+                result = yatest.common.source_path(result)
+
+        if result and cls.external_folder:
+            return os.path.join(result, cls.external_folder)
+        return result
+
+    @classmethod
     def suite(cls) -> str:
         result = cls.__name__
         if result.startswith('Test'):
@@ -63,8 +77,12 @@ class LoadSuiteBase:
         return result
 
     @classmethod
-    def _test_name(cls, query_num: int) -> str:
+    def _stat_name(cls, query_num: int) -> str:
         return f'Query{query_num:02d}' if query_num >= 0 else '_Verification'
+
+    @classmethod
+    def _test_name(cls, query_num: int) -> str:
+        return cls._stat_name(query_num)
 
     @classmethod
     @allure.step('check tables size')
@@ -291,7 +309,7 @@ class LoadSuiteBase:
             cls.suite(), test, refference_set=cls.refference,
             start_time=result.start_time, end_time=end_time, node_errors=cls.check_nodes(result, end_time)
         )
-        stats = result.get_stats(test)
+        stats = result.get_stats(cls._stat_name(query_num))
         for p in ['Mean']:
             if p in stats:
                 allure.dynamic.parameter(p, _duration_text(stats[p] / 1000.))
@@ -358,6 +376,7 @@ class LoadSuiteBase:
             check_canonical=self.check_canonical,
             query_syntax=self.query_syntax,
             scale=self.scale,
-            query_prefix=qparams.query_prefix
+            query_prefix=qparams.query_prefix,
+            external_path=self.get_external_path(),
         )
         self.process_query_result(result, query_num, qparams.iterations, True)

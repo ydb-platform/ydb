@@ -351,6 +351,67 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         UNIT_ASSERT_STRINGS_EQUAL(httpResponseRedirect->Message, "Found");
         UNIT_ASSERT_STRING_CONTAINS(httpResponseRedirect->Headers, "Set-Cookie: cookie1=123456;");
         UNIT_ASSERT_STRING_CONTAINS(httpResponseRedirect->Headers, "Location: http://www.yandex.ru/data/url");
+
+        for (ui32 testSize = NHttp::THttpOutgoingResponse::BUFFER_SIZE - 128; testSize < NHttp::THttpOutgoingResponse::BUFFER_SIZE + 32; ++testSize) {
+            Cerr << testSize << Endl;
+            NHttp::THttpOutgoingResponsePtr httpResponseBig = request->CreateIncompleteResponse("200", "OK");
+            constexpr auto maxHeaderSize = NHttp::THttpIncomingRequest::MaxHeaderSize;
+            for(ui32 i = 0; httpResponseBig->Headers.size() + maxHeaderSize < testSize; ++i) {
+                TString value(maxHeaderSize/2, 'A');
+                httpResponseBig->Set("Header"+ToString(i), value);
+            }
+            TString value(testSize - httpResponseBig->Headers.size(), 'A');
+            httpResponseBig->Set("Set-Cookie", "cookie1=" + value + ";");
+            httpResponseBig->Set("Content-Type", "application/octet-stream");
+            httpResponseBig->Finish();
+
+            Cerr << (const void *) httpResponseBig->Headers.Data() << Endl;
+            Cerr << (const void *) httpResponseBig->ContentType.Data() << Endl;
+            Cerr << (const void *) (httpResponseBig->Headers.Data() + httpResponseBig->ContentType.Size()) << Endl;
+            Cerr << (const void *) (httpResponseBig->ContentType.Data() + httpResponseBig->ContentType.Size()) << Endl;
+            UNIT_ASSERT_GE((uintptr_t)httpResponseBig->ContentType.Data(), (uintptr_t)(httpResponseBig->Headers.Data()));
+            UNIT_ASSERT_LE((uintptr_t)httpResponseBig->ContentType.Data() + httpResponseBig->ContentType.Size(), (uintptr_t)httpResponseBig->Headers.Data() + httpResponseBig->Headers.Size());
+            UNIT_ASSERT_STRINGS_EQUAL(httpResponseBig->ContentType, "application/octet-stream");
+        }
+
+        for (ui32 testSize = NHttp::THttpOutgoingResponse::BUFFER_SIZE - 128; testSize < NHttp::THttpOutgoingResponse::BUFFER_SIZE + 32; ++testSize) {
+            Cerr << testSize << Endl;
+            NHttp::THttpOutgoingResponsePtr httpResponseBig = request->CreateIncompleteResponse("200", "OK");
+            constexpr auto maxHeaderSize = NHttp::THttpIncomingRequest::MaxHeaderSize;
+            for(ui32 i = 0; httpResponseBig->Headers.size() + maxHeaderSize < testSize; ++i) {
+                TString value(maxHeaderSize/2, (char)('a' + i % ('z' - 'a' + 1)));
+                httpResponseBig->Set("Header"+ToString(i), value);
+            }
+            TString value(testSize - httpResponseBig->Headers.size(), 'A');
+            httpResponseBig->Set("Set-Cookie", "cookie1=" + value + ";");
+            httpResponseBig->Set<&NHttp::THttpResponse::ContentType>("application/octet-stream");
+            httpResponseBig->Finish();
+
+            Cerr << (const void *) httpResponseBig->Headers.Data() << Endl;
+            Cerr << (const void *) httpResponseBig->ContentType.Data() << Endl;
+            Cerr << (const void *) (httpResponseBig->Headers.Data() + httpResponseBig->ContentType.Size()) << Endl;
+            Cerr << (const void *) (httpResponseBig->ContentType.Data() + httpResponseBig->ContentType.Size()) << Endl;
+            UNIT_ASSERT_GE((uintptr_t)httpResponseBig->ContentType.Data(), (uintptr_t)(httpResponseBig->Headers.Data()));
+            UNIT_ASSERT_LE((uintptr_t)httpResponseBig->ContentType.Data() + httpResponseBig->ContentType.Size(), (uintptr_t)httpResponseBig->Headers.Data() + httpResponseBig->Headers.Size());
+            UNIT_ASSERT_STRINGS_EQUAL(httpResponseBig->ContentType, "application/octet-stream");
+        }
+
+        for (ui32 testSize = NHttp::THttpOutgoingResponse::BUFFER_SIZE - 256; testSize < NHttp::THttpOutgoingResponse::BUFFER_SIZE + 32; ++testSize) {
+            Cerr << testSize << Endl;
+            NHttp::THttpOutgoingResponsePtr httpResponseBig = request->CreateIncompleteResponse("200", "OK");
+            TString value(testSize, 'A');
+            httpResponseBig->Set("Set-Cookie", "cookie1=" + value + ";");
+            httpResponseBig->Set("Content-Type", "application/octet-stream");
+            httpResponseBig->Finish();
+
+            Cerr << (const void *) httpResponseBig->Headers.Data() << Endl;
+            Cerr << (const void *) httpResponseBig->ContentType.Data() << Endl;
+            Cerr << (const void *) (httpResponseBig->Headers.Data() + httpResponseBig->ContentType.Size()) << Endl;
+            Cerr << (const void *) (httpResponseBig->ContentType.Data() + httpResponseBig->ContentType.Size()) << Endl;
+            UNIT_ASSERT_GE((uintptr_t)httpResponseBig->ContentType.Data(), (uintptr_t)(httpResponseBig->Headers.Data()));
+            UNIT_ASSERT_LE((uintptr_t)httpResponseBig->ContentType.Data() + httpResponseBig->ContentType.Size(), (uintptr_t)httpResponseBig->Headers.Data() + httpResponseBig->Headers.Size());
+            UNIT_ASSERT_STRINGS_EQUAL(httpResponseBig->ContentType, "application/octet-stream");
+        }
     }
 
     Y_UNIT_TEST(BasicRunning4) {

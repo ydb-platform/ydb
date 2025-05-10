@@ -134,12 +134,12 @@ void TTieringActualizer::ActualizePortionInfo(const TPortionDataAccessor& access
         std::shared_ptr<ISnapshotSchema> portionSchema = portion.GetSchema(VersionedIndex);
         std::shared_ptr<arrow::Scalar> max;
         AFL_VERIFY(*TieringColumnId != portionSchema->GetIndexInfo().GetPKColumnIds().front());
-        const auto& indexMeta = portionSchema->GetIndexInfo().GetIndexMetaMax(*TieringColumnId);
-        const auto justInserted = portion.GetMeta().Produced == NPortion::INSERTED;
-        if (indexMeta && !justInserted) {
+        if (auto indexMeta = portionSchema->GetIndexInfo().GetIndexMetaMax(*TieringColumnId)) {
             NYDBTest::TControllers::GetColumnShardController()->OnStatisticsUsage(NIndexes::TIndexMetaContainer(indexMeta));
-            const std::vector<TString> data = accessor.GetIndexInplaceDataVerified(indexMeta->GetIndexId());
-            max = indexMeta->GetMaxScalarVerified(data, portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type());
+            const std::vector<TString> data = accessor.GetIndexInplaceDataOptional(indexMeta->GetIndexId());
+            if (!data.empty()) {
+                max = indexMeta->GetMaxScalarVerified(data, portionSchema->GetIndexInfo().GetColumnFieldVerified(*TieringColumnId)->type());
+            }
         }
         AFL_VERIFY(MaxByPortionId.emplace(portion.GetPortionId(), max).second);
     }

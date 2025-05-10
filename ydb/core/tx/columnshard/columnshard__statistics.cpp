@@ -207,7 +207,7 @@ public:
                     if (!indexMeta->IsInplaceData()) {
                         portionInfo.FillBlobRangesByStorage(rangesByColumn, portionSchema->GetIndexInfo(), { indexMeta->GetIndexId() });
                     } else {
-                        const std::vector<TString> data = portionInfo.GetIndexInplaceDataVerified(indexMeta->GetIndexId());
+                        const std::vector<TString> data = portionInfo.GetIndexInplaceDataOptional(indexMeta->GetIndexId());
 
                         for (const auto& sketchAsString : data) {
                             auto sketch =

@@ -1029,6 +1029,7 @@ public:
                 request.CancelAfter = cancelAt - now;
             }
 
+            request.IsInternalCall = queryState->IsInternalCall();
             request.StatsMode = queryState->GetStatsMode();
             request.ProgressStatsPeriod = queryState->GetProgressStatsPeriod();
             request.QueryType = queryState->GetType();

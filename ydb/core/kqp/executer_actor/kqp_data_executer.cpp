@@ -7,6 +7,7 @@
 #include "kqp_tasks_validate.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/client/minikql_compile/db_key_resolver.h>
 #include <ydb/core/kqp/common/buffer/events.h>
@@ -1990,6 +1991,44 @@ private:
         return false;
     }
 
+    void CheckDatashardIndexTables(const TStageInfoMeta& meta, TString& error) {
+        const bool isClusterAdmin = IsAdministrator(AppData(), UserToken.Get());
+        TStringBuilder errorBuilder;
+        switch (meta.ShardKind) {
+            case NSchemeCache::TSchemeCacheRequest::KindAsyncIndexTable: {
+                if (meta.ShardKey->RowOperation != TKeyDesc::ERowOperation::Read) {
+                    errorBuilder << "Non-read operation can't be performed on async index table";
+                } else if (Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_READ_STALE) {
+                    errorBuilder << "Read operation requires StaleRO isolation level to be performed on async index table";
+                }
+                break;
+            }
+            case NSchemeCache::TSchemeCacheRequest::KindSyncIndexTable: {
+                if (!(Request.IsInternalCall || isClusterAdmin)) {
+                    errorBuilder << "Operation can't be performed on sync index table";
+                }
+                break;
+            }
+            case NSchemeCache::TSchemeCacheRequest::KindVectorIndexTable: {
+                if (!(Request.IsInternalCall || isClusterAdmin)) {
+                    errorBuilder << "Operation can't be performed on vector index table";
+                }                
+                if (meta.ShardKey->RowOperation != TKeyDesc::ERowOperation::Read) {
+                    errorBuilder << "Non-read operation can't be performed on vector index table";
+                }
+                break;
+            }
+            case NSchemeCache::TSchemeCacheRequest::KindRegularTable:
+            case NSchemeCache::TSchemeCacheRequest::KindUnknown:
+                break;
+        }
+
+        if (!errorBuilder.empty()) {
+            errorBuilder << ": " << meta.ShardKey->TableId << ", " << meta.TablePath;
+            error = errorBuilder;
+        }
+    }
+
     void Execute() {
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
 
@@ -2004,23 +2043,13 @@ private:
                 auto& stageInfo = TasksGraph.GetStageInfo(stageId);
                 AFL_ENSURE(stageInfo.Id == stageId);
 
-                if (stageInfo.Meta.ShardKind == NSchemeCache::TSchemeCacheRequest::KindAsyncIndexTable) {
-                    TMaybe<TString> error;
-
-                    if (stageInfo.Meta.ShardKey->RowOperation != TKeyDesc::ERowOperation::Read) {
-                        error = TStringBuilder() << "Non-read operations can't be performed on async index table"
-                            << ": " << stageInfo.Meta.ShardKey->TableId;
-                    } else if (Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_READ_STALE) {
-                        error = TStringBuilder() << "Read operation can be performed on async index table"
-                            << ": " << stageInfo.Meta.ShardKey->TableId << " only with StaleRO isolation level";
-                    }
-
-                    if (error) {
-                        LOG_E(*error);
-                        ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
-                            YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, *error));
-                        return;
-                    }
+                TString shardKindError;
+                CheckDatashardIndexTables(stageInfo.Meta, shardKindError);
+                if (shardKindError) {
+                    LOG_E(shardKindError);
+                    ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED,
+                        YqlIssue({}, NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED, shardKindError));
+                    return;
                 }
 
                 if ((stageInfo.Meta.IsOlap() && HasDmlOperationOnOlap(tx.Body->GetType(), stage))) {

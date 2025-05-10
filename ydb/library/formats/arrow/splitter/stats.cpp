@@ -34,10 +34,10 @@ TSimpleSerializationStat::TSimpleSerializationStat(const ui64 bytes, const ui64 
 
 std::vector<i64> TSimpleSerializationStat::SplitRecords(
     const ui32 recordsCount, const ui32 expectedRecordsCount, const ui32 expectedColumnPageSize) {
-    if (!SerializedBytes) {
+    if (!SerializedBytes || !RecordsCount) {
         return TSimilarPacker::SplitWithExpected(recordsCount, expectedRecordsCount);
     } else {
-        const ui32 recordsCountPerExpectedPageSize = std::max<ui32>(expectedRecordsCount, expectedColumnPageSize / SerializedBytes);
+        const ui32 recordsCountPerExpectedPageSize = std::max<ui32>(expectedRecordsCount, expectedColumnPageSize / GetSerializedBytesPerRecord());
         return TSimilarPacker::SplitWithExpected(recordsCount, recordsCountPerExpectedPageSize);
     }
 }

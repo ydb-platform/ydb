@@ -4,14 +4,18 @@ import yaml
 import tempfile
 from hamcrest import assert_that
 import time
+import requests
 
 from ydb.tests.library.common.types import Erasure
+from ydb.tests.library.common.types import TabletStates
 import ydb.tests.library.common.cms as cms
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.clients.kikimr_config_client import ConfigClient
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.kv.helpers import create_kv_tablets_and_wait_for_start
+from ydb.tests.library.kv.helpers import get_kv_tablet_ids
+from ydb.tests.library.kv.helpers import wait_tablets_state_by_id
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.library.harness.util import LogLevels
 
@@ -43,6 +47,9 @@ class DistConfKiKiMRTest(object):
     erasure = Erasure.BLOCK_4_2
     use_config_store = True
     separate_node_configs = True
+    nodes_count = 0
+    state_storage_rings = None
+    n_to_select = None
     metadata_section = {
         "kind": "MainConfig",
         "version": 0,
@@ -51,7 +58,8 @@ class DistConfKiKiMRTest(object):
 
     @classmethod
     def setup_class(cls):
-        nodes_count = 8 if cls.erasure == Erasure.BLOCK_4_2 else 9
+        if cls.nodes_count == 0:
+            cls.nodes_count = 8 if cls.erasure == Erasure.BLOCK_4_2 else 9
         log_configs = {
             'BS_NODE': LogLevels.DEBUG,
             'GRPC_SERVER': LogLevels.DEBUG,
@@ -61,7 +69,7 @@ class DistConfKiKiMRTest(object):
         }
         cls.configurator = KikimrConfigGenerator(
             cls.erasure,
-            nodes=nodes_count,
+            nodes=cls.nodes_count,
             use_in_memory_pdisks=False,
             use_config_store=cls.use_config_store,
             metadata_section=cls.metadata_section,
@@ -69,6 +77,8 @@ class DistConfKiKiMRTest(object):
             simple_config=True,
             use_self_management=True,
             extra_grpc_services=['config'],
+            state_storage_rings = cls.state_storage_rings,
+            n_to_select = cls.n_to_select,
             additional_log_configs=log_configs)
 
         cls.cluster = KiKiMR(configurator=cls.configurator)
@@ -194,3 +204,43 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
             if 'pdisk_info' in locals():
                 logger.error(f"Viewer API response content: {pdisk_info}")
             raise
+
+class TestKiKiMRDistConfReassignStateStorage(DistConfKiKiMRTest):
+    nodes_count = 12
+    state_storage_rings = list(range(1, 3))
+    n_to_select = 3
+    
+    def do_request(self, json_req):
+        url = f'http://localhost:{self.cluster.nodes[1].mon_port}/actors/nodewarden?page=distconf'
+        return requests.post(url, 
+                            headers={'content-type': 'application/json'},
+                            json=json_req).json()
+    
+    def do_load_and_test(self, req):
+        table_path = '/Root/mydb/mytable_with_expand'
+        number_of_tablets = 500
+
+        response = self.cluster.kv_client.create_tablets(number_of_tablets, table_path)
+        assert_that(response.operation.status == StatusIds.SUCCESS)
+        tablet_ids = get_kv_tablet_ids(self.swagger_client)
+        
+        res = self.do_request(req)
+        wait_tablets_state_by_id(
+            self.cluster.client,
+            TabletStates.Active,
+            tablet_ids=tablet_ids,
+            timeout_seconds=3
+        )
+        self.check_kikimr_is_operational(table_path, tablet_ids)
+        return res
+    def test_cluster_change_state_storage_distconf(self):
+        assert_that(self.do_load_and_test({"ReconfigStateStorage": { "NewStateStorageConfig": {
+                "RingGroups": []
+            }}})["Status"] == "ERROR")
+        assert_that(self.do_load_and_test({"ReconfigStateStorage": { "NewStateStorageConfig": {
+                        "RingGroups": [
+                            { "WriteOnly": False, "NToSelect": 3, "Ring": [ { "Node": [1] }, { "Node": [2] }, { "Node": [3] } ] },
+                            { "WriteOnly": True, "NToSelect": 3, "Ring": [ { "Node": [4] }, { "Node": [5] }, { "Node": [6] } ] }
+                        ]
+                    }}})["Scepter"])
+       

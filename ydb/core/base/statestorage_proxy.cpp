@@ -651,6 +651,13 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         T *msg = ev->Get();
         Source = ev->Sender;
         WaitAllReplies = true;
+        if(SignatureSz != msg->SignatureSz) {
+            TabletID = msg->TabletID;
+            Cookie = msg->Cookie;
+            Reply(NKikimrProto::EReplyStatus::ERROR);
+            PassAway();
+            return;
+        }
         BLOG_D("RingGroupProxyRequest::HandleInit ev: " << msg->ToString());
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
             auto actorId = RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, ringGroupIndex));

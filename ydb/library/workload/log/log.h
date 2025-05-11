@@ -36,6 +36,10 @@ public:
 
     YDB_READONLY(EStoreType, StoreType, EStoreType::Row);
     TWorkloadDataInitializer::TList CreateDataInitializers() const override;
+
+private:
+    void ConfigureOptsFillData(NLastGetopt::TOpts& opts);
+    void ConfigureOptsColumns(NLastGetopt::TOpts& opts);
 };
 
 class TLogGenerator final: public TWorkloadQueryGeneratorBase<TLogWorkloadParams> {

@@ -132,7 +132,7 @@ private:
 
         {
             TSchemeBoardEvents::TDescribeSchemeResult schemeData;
-            Register(CreateGrpcRequestCheckActor<TEvent>(SelfId(), schemeData, nullptr, event.Release(), Counters, false, this));
+            Register(CreateGrpcRequestCheckActor<TEvent>(SelfId(), schemeData, nullptr, event.Release(), Counters, false, {}, this));
             return;
         }
 

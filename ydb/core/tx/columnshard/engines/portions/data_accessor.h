@@ -365,7 +365,7 @@ public:
     static TConclusion<TPortionDataAccessor> BuildFromProto(
         const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo, const IBlobGroupSelector& groupSelector);
 
-    std::vector<TString> GetIndexInplaceDataVerified(const ui32 indexId) const {
+    std::vector<TString> GetIndexInplaceDataOptional(const ui32 indexId) const {
         if (!Indexes) {
             return {};
         }

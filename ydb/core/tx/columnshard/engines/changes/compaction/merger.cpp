@@ -10,6 +10,7 @@
 
 #include <ydb/library/formats/arrow/simple_builder/array.h>
 #include <ydb/library/formats/arrow/simple_builder/filler.h>
+#include <ydb/library/formats/arrow/splitter/stats.h>
 
 namespace NKikimr::NOlap::NCompaction {
 
@@ -143,8 +144,14 @@ public:
             Portions.emplace_back(p, Remapper->Slice(recordsCountCursor, p));
             recordsCountCursor += p;
             for (auto&& c : resultFiltered->GetColumnIds()) {
-                auto colStatsOpt = stats->GetColumnInfo(c);
+                std::optional<NArrow::NSplitter::TSimpleSerializationStat> colStatsOpt = stats->GetColumnInfo(c);
                 std::vector<i64> chunks;
+                if (!colStatsOpt) {
+                    auto loader = resultFiltered->GetColumnLoaderOptional(c);
+                    if (loader) {
+                        colStatsOpt = loader->TryBuildColumnStat();
+                    }
+                }
                 if (!colStatsOpt) {
                     chunks = NArrow::NSplitter::TSimilarPacker::SplitWithExpected(p, settings.GetExpectedRecordsCountOnPage());
                 } else {

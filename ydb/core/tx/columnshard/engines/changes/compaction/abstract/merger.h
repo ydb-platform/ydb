@@ -178,6 +178,7 @@ public:
             , Offset(offset)
             , Size(size) {
             AFL_VERIFY(offset + size <= Owner->GetRecordsCount());
+            AFL_VERIFY(size);
             IdxArray = std::static_pointer_cast<arrow::UInt16Array>(Owner->IdxArray->Slice(offset, size));
             RecordIdxArray = std::static_pointer_cast<arrow::UInt32Array>(Owner->RecordIdxArray->Slice(offset, size));
         }

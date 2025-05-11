@@ -571,9 +571,9 @@ namespace NKikimr::NStorage {
         }
         auto *ringGroup = ss->AddRingGroups();
         ringGroup->SetNToSelect(nodes.size() / 2 + 1);
-        auto *ring = ringGroup->AddRing();
 
         for (ui32 nodeId : nodes) {
+            auto *ring = ringGroup->AddRing();
             ring->AddNode(nodeId);
         }
 

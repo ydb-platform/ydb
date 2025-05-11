@@ -773,6 +773,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
 
     auto [pushable, remaining] = SplitForPartialPushdown(predicateTree, false);
     TVector<TFilterOpsLevels> pushedPredicates;
+    TVector<TOLAPPredicateNode> pushedPredicatesOriginalForm = pushable;
     for (const auto& p: pushable) {
         pushedPredicates.emplace_back(PredicatePushdown(TExprBase(p.ExprNode), lambdaArg, ctx, node.Pos()));
     }
@@ -811,6 +812,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
                     TFilterOpsLevels pred(expr);
                     pushedPredicates.emplace_back(pred);
                 }
+                pushedPredicatesOriginalForm.emplace_back(p);
             }
             remainingAfterApply.insert(remainingAfterApply.end(), remaining.begin(), remaining.end());
         }
@@ -822,8 +824,8 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     }
 
     const auto& pushedFilter = TFilterOpsLevels::Merge(pushedPredicates, ctx, node.Pos());
-
     const auto remainingFilter = CombinePredicatesWithAnd(remaining, ctx, node.Pos(), false, true);
+    const auto pushedFilterOriginalForm = CombinePredicatesWithAnd(pushedPredicatesOriginalForm, ctx, node.Pos(), false, true);
 
     TMaybeNode<TExprBase> olapFilter;
     if (pushedFilter.FirstLevelOps.IsValid()) {
@@ -839,6 +841,22 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             .Condition(pushedFilter.SecondLevelOps.Cast())
             .Done();
     }
+
+    auto pushedOriginalFormLambda = Build<TCoLambda>(ctx, node.Pos())
+        .Args({"new_arg"})
+            .Body<TCoOptionalIf>()
+                .Predicate<TExprApplier>()
+                .Apply(pushedFilterOriginalForm.Cast())
+                .With(lambda.Args().Arg(0), "new_arg")
+                .Build()
+            .Value<TExprApplier>()
+                .Apply(value)
+                .With(lambda.Args().Arg(0), "new_arg")
+                .Build()
+            .Build()
+        .Done();
+
+    (void)pushedOriginalFormLambda;
 
     auto newProcessLambda = Build<TCoLambda>(ctx, node.Pos())
         .Args({"olap_filter_row"})
@@ -869,6 +887,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         .Settings(read.Settings())
         .ExplainPrompt(read.ExplainPrompt())
         .Process(newProcessLambda)
+        .ProcessOriginalForm(lambda)//pushedOriginalFormLambda)
         .Done();
 
 #ifdef ENABLE_COLUMNS_PRUNING

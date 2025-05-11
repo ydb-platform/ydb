@@ -446,6 +446,11 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
     streamLookupTransform.InputType = streamLookup.GetLookupKeysType();
     streamLookupTransform.OutputType = streamLookup.GetResultType();
 
+    if (streamLookup.GetIsTableImmutable()) {
+        settings->SetAllowUseFollowers(true);
+        settings->SetIsTableImmutable(true);
+    }
+
     for (ui32 taskId = 0; taskId < inputStageInfo.Tasks.size(); ++taskId) {
         auto& originTask = graph.GetTask(inputStageInfo.Tasks[taskId]);
         auto& targetTask = graph.GetTask(stageInfo.Tasks[taskId]);
@@ -1245,18 +1250,26 @@ void FillInputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskInput&
             inputDesc.MutableSource()->SetWatermarksMode(input.WatermarksMode);
             if (Y_LIKELY(input.Meta.SourceSettings)) {
                 enableMetering = true;
-                if (snapshot.IsValid()) {
+                YQL_ENSURE(input.Meta.SourceSettings->HasTable());
+                bool isTableImmutable = input.Meta.SourceSettings->GetIsTableImmutable();
+
+                if (snapshot.IsValid() && !isTableImmutable) {
                     input.Meta.SourceSettings->MutableSnapshot()->SetStep(snapshot.Step);
                     input.Meta.SourceSettings->MutableSnapshot()->SetTxId(snapshot.TxId);
                 }
 
-                if (tasksGraph.GetMeta().UseFollowers) {
-                    input.Meta.SourceSettings->SetUseFollowers(tasksGraph.GetMeta().UseFollowers);
+                if (tasksGraph.GetMeta().UseFollowers || isTableImmutable) {
+                    input.Meta.SourceSettings->SetUseFollowers(tasksGraph.GetMeta().UseFollowers || isTableImmutable);
                 }
 
                 if (serializeAsyncIoSettings) {
                     inputDesc.MutableSource()->MutableSettings()->PackFrom(*input.Meta.SourceSettings);
                 }
+
+                if (isTableImmutable) {
+                    input.Meta.SourceSettings->SetAllowInconsistentReads(true);
+                }
+
             } else {
                 YQL_ENSURE(input.SourceSettings);
                 inputDesc.MutableSource()->MutableSettings()->CopyFrom(*input.SourceSettings);
@@ -1295,21 +1308,25 @@ void FillInputDesc(const TKqpTasksGraph& tasksGraph, NYql::NDqProto::TTaskInput&
         if (input.Meta.StreamLookupSettings) {
             enableMetering = true;
             YQL_ENSURE(input.Meta.StreamLookupSettings);
-            if (snapshot.IsValid()) {
+            bool isTableImmutable = input.Meta.StreamLookupSettings->GetIsTableImmutable();
+
+            if (snapshot.IsValid() && !isTableImmutable) {
                 input.Meta.StreamLookupSettings->MutableSnapshot()->SetStep(snapshot.Step);
                 input.Meta.StreamLookupSettings->MutableSnapshot()->SetTxId(snapshot.TxId);
             } else {
-                YQL_ENSURE(tasksGraph.GetMeta().AllowInconsistentReads, "Expected valid snapshot or enabled inconsistent read mode");
+                YQL_ENSURE(tasksGraph.GetMeta().AllowInconsistentReads || isTableImmutable, "Expected valid snapshot or enabled inconsistent read mode");
                 input.Meta.StreamLookupSettings->SetAllowInconsistentReads(true);
             }
 
-            if (lockTxId) {
+            if (lockTxId && !isTableImmutable) {
                 input.Meta.StreamLookupSettings->SetLockTxId(*lockTxId);
                 input.Meta.StreamLookupSettings->SetLockNodeId(tasksGraph.GetMeta().LockNodeId);
             }
-            if (tasksGraph.GetMeta().LockMode) {
+
+            if (tasksGraph.GetMeta().LockMode && !isTableImmutable) {
                 input.Meta.StreamLookupSettings->SetLockMode(*tasksGraph.GetMeta().LockMode);
             }
+
             transformProto->MutableSettings()->PackFrom(*input.Meta.StreamLookupSettings);
         } else if (input.Meta.SequencerSettings) {
             transformProto->MutableSettings()->PackFrom(*input.Meta.SequencerSettings);

@@ -961,7 +961,7 @@ protected:
             } else {
                 settings = *stageInfo.Meta.ResolvedSinkSettings;
             }
-        
+
             auto& lockTxId = TasksGraph.GetMeta().LockTxId;
             if (lockTxId) {
                 settings.SetLockTxId(*lockTxId);
@@ -1171,6 +1171,8 @@ protected:
             input.Meta.SourceSettings = TasksGraph.GetMeta().Allocate<NKikimrTxDataShard::TKqpReadRangesSourceSettings>();
             NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings = input.Meta.SourceSettings;
             FillTableMeta(stageInfo, settings->MutableTable());
+
+            settings->SetIsTableImmutable(source.GetIsTableImmutable());
 
             for (auto& keyColumn : keyTypes) {
                 auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(keyColumn, "");

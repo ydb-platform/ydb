@@ -1143,39 +1143,11 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
         TestTwoHotTiers(true, false);
     }
 
-    Y_UNIT_TEST(HotTiersWithStat) {
-        TestTwoHotTiers(false, false);
-    }
-
-    Y_UNIT_TEST(RebootHotTiersWithStat) {
-        TestTwoHotTiers(true, false);
-    }
-
-    Y_UNIT_TEST(HotTiersRevCompression) {
-        TestTwoHotTiers(false, false, EInitialEviction::None);
-    }
-
-    Y_UNIT_TEST(RebootHotTiersRevCompression) {
-        TestTwoHotTiers(true, false, EInitialEviction::None);
-    }
-
     Y_UNIT_TEST(HotTiersTtl) {
-        NColumnShard::gAllowLogBatchingDefaultValue = false;
         TestTwoHotTiers(false, true);
     }
 
     Y_UNIT_TEST(RebootHotTiersTtl) {
-        NColumnShard::gAllowLogBatchingDefaultValue = false;
-        TestTwoHotTiers(true, true);
-    }
-
-    Y_UNIT_TEST(HotTiersTtlWithStat) {
-        NColumnShard::gAllowLogBatchingDefaultValue = false;
-        TestTwoHotTiers(false, true);
-    }
-
-    Y_UNIT_TEST(RebootHotTiersTtlWithStat) {
-        NColumnShard::gAllowLogBatchingDefaultValue = false;
         TestTwoHotTiers(true, true);
     }
 
@@ -1194,16 +1166,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     }
 
     Y_UNIT_TEST(RebootColdTiers) {
-        //NColumnShard::gAllowLogBatchingDefaultValue = false;
-        TestHotAndColdTiers(true, EInitialEviction::Tiering);
-    }
-
-    Y_UNIT_TEST(ColdTiersWithStat) {
-        TestHotAndColdTiers(false, EInitialEviction::Tiering);
-    }
-
-    Y_UNIT_TEST(RebootColdTiersWithStat) {
-        //NColumnShard::gAllowLogBatchingDefaultValue = false;
         TestHotAndColdTiers(true, EInitialEviction::Tiering);
     }
 

@@ -5,7 +5,7 @@ namespace NYT::NSecurityClient {
 ////////////////////////////////////////////////////////////////////////////////
 
 const TString RootAccountName("root");
-const TString RootAccountCypressPath("//sys/account_tree");
+const NYPath::TYPath RootAccountCypressPath("//sys/account_tree");
 const TString TmpAccountName("tmp");
 const TString SysAccountName("sys");
 const TString IntermediateAccountName("intermediate");

@@ -462,7 +462,7 @@ private:
         pathsContainer->mutable_resource_path()->add_path()->set_id(id);
     }
 
-    static void AddNebiusContainerId(nebius::iam::v1::AuthorizeCheck* pathsContainer, const TString& id) {
+    static void SetNebiusContainerId(nebius::iam::v1::AuthorizeCheck* pathsContainer, const TString& id) {
         pathsContainer->set_container_id(id);
     }
 
@@ -474,16 +474,17 @@ private:
             AddNebiusResourcePath(pathsContainer, databaseId);
         }
 
+        // Use attribute "gizmo_id" as container id that contains cluster access resource
+        // IAM can link roles for cluster access resource
+        // Note: "gizmo_id" and "folder_id" are always sent in separate TEvAuthorizeTicket requests
+        if (const auto gizmoId = record.GetAttributeValue(permission, "gizmo_id"); gizmoId) {
+            SetNebiusContainerId(pathsContainer, gizmoId);
+        }
+
         // Use attribute "folder_id" as container id that contains our database
         // IAM can link roles for containers hierarchy
         if (const auto folderId = record.GetAttributeValue(permission, "folder_id"); folderId) {
-            AddNebiusContainerId(pathsContainer, folderId);
-        }
-
-        // Use attribute "gizmo_id" as container id that contains cluster access resource
-        // IAM can link roles for cluster access resource
-        if (const auto gizmoId = record.GetAttributeValue(permission, "gizmo_id"); gizmoId) {
-            AddNebiusContainerId(pathsContainer, gizmoId);
+            SetNebiusContainerId(pathsContainer, folderId);
         }
     }
 

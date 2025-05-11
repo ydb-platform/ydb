@@ -24,6 +24,8 @@ public:
     ui64 IntColumnsCnt = 0;
     ui64 KeyColumnsCnt = 0;
     ui64 TimestampStandardDeviationMinutes = 0;
+    TMaybe<ui64> TimestampDateFrom;
+    TMaybe<ui64> TimestampDateTo;
     ui64 TimestampTtlMinutes = 0;
     ui64 TimestampSubtract = 0;
     ui64 RowsCnt = 1;

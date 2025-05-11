@@ -58,7 +58,6 @@ message TAuthConfig {
     optional string NodeRegistrationToken = 82 [default = "root@builtin", (Ydb.sensitive) = true];
     optional TPasswordComplexity PasswordComplexity = 83;
     optional TAccountLockout AccountLockout = 84;
-    optional string ClusterAccessResourceId = 85 [default = "gizmo"];
 }
 
 message TUserRegistryConfig {

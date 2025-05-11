@@ -322,8 +322,8 @@ TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActor
     for (size_t i = 0; i < config.RingGroupsSize(); i++) {
         memset(namePrefix + offset, 0, TActorId::MaxServiceIDLength - offset);
         auto& ringGroup = config.GetRingGroups(i);
-        info.Get()->RingGroups.push_back({ringGroup.GetWriteOnly(), ringGroup.GetRing().GetNToSelect(), {}});
-        CopyStateStorageRingInfo(ringGroup.GetRing(), info.Get()->RingGroups.back(), namePrefix, offset);
+        info.Get()->RingGroups.push_back({ringGroup.GetWriteOnly(), ringGroup.GetNToSelect(), {}});
+        CopyStateStorageRingInfo(ringGroup, info.Get()->RingGroups.back(), namePrefix, offset);
     }
     if (config.HasRing() && config.RingGroupsSize() == 0) {
         auto& ring = config.GetRing();

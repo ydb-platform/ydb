@@ -570,13 +570,13 @@ namespace NKikimr::NStorage {
             nodes.insert(nodes.end(), r.begin(), r.end());
         }
         auto *ringGroup = ss->AddRingGroups();
-        auto *ring = ringGroup->MutableRing();
+        ringGroup->SetNToSelect(nodes.size() / 2 + 1);
+        auto *ring = ringGroup->AddRing();
 
         for (ui32 nodeId : nodes) {
             ring->AddNode(nodeId);
         }
 
-        ring->SetNToSelect(nodes.size() / 2 + 1);
     }
 
     bool TDistributedConfigKeeper::UpdateConfig(NKikimrBlobStorage::TStorageConfig *config) {

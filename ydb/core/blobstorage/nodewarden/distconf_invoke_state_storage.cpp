@@ -53,8 +53,7 @@ namespace NKikimr::NStorage {
 
             auto *m = (config.*mutableFunc)();
             for (size_t i = 0; i < m->RingGroupsSize(); i++) {
-                auto *ringGroup = m->MutableRingGroups(i);
-                auto *ring = ringGroup->MutableRing();
+                auto *ring = m->MutableRingGroups(i);
                 if (ring->RingSize() && ring->NodeSize()) {
                     FinishWithError(TResult::ERROR, TStringBuilder() << name << " incorrect configuration:"
                         " both Ring and Node fields are set");

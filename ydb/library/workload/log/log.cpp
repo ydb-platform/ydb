@@ -391,6 +391,8 @@ TQueryInfoList TLogGenerator::GetWorkload(int type) {
 }
 
 void TLogWorkloadParams::ConfigureOptsColumns(NLastGetopt::TOpts& opts) {
+    opts.AddLongOption("len", "String len")
+        .DefaultValue(StringLen).StoreResult(&StringLen);
     opts.AddLongOption("int-cols", "Number of int columns")
         .DefaultValue(IntColumnsCnt).StoreResult(&IntColumnsCnt);
     opts.AddLongOption("str-cols", "Number of string columns")
@@ -400,8 +402,6 @@ void TLogWorkloadParams::ConfigureOptsColumns(NLastGetopt::TOpts& opts) {
 }
 
 void TLogWorkloadParams::ConfigureOptsFillData(NLastGetopt::TOpts& opts) {
-    opts.AddLongOption("len", "String len")
-        .DefaultValue(StringLen).StoreResult(&StringLen);
     ConfigureOptsColumns(opts);
     opts.AddLongOption("rows", "Number of rows to upsert")
         .DefaultValue(RowsCnt).StoreResult(&RowsCnt);

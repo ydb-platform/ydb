@@ -56,7 +56,6 @@ message TAuthConfig {
     optional string CertificateAuthenticationDomain = 80 [default = "cert"];
     optional bool EnableLoginAuthentication = 81 [default = true];
     optional string NodeRegistrationToken = 82 [default = "root@builtin", (Ydb.sensitive) = true];
-    optional string ClusterAccessResourceId = 85 [default = "gizmo"];
 }
 
 message TUserRegistryConfig {

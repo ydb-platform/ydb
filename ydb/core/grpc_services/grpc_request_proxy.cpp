@@ -227,6 +227,25 @@ private:
         }
 
         if (database) {
+            TVector<std::pair<TString, TString>> rootAttributes;
+            auto rootIt = Databases.find(RootDatabase);
+            if (rootIt == Databases.end() || !rootIt->second.IsDatabaseReady() || !rootIt->second.SchemeBoardResult) {
+                Counters->IncDatabaseUnavailableCounter();
+                const TString error = "Grpc proxy is not ready to accept request, root database unknown";
+                LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, error);
+                const auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, error);
+                requestBaseCtx->RaiseIssue(issue);
+                requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
+                requestBaseCtx->FinishSpan();
+                return;
+            }
+
+            const auto& schemeData = rootIt->second.SchemeBoardResult->DescribeSchemeResult;
+            rootAttributes.reserve(schemeData.GetPathDescription().UserAttributesSize());
+            for (const auto& attr : schemeData.GetPathDescription().GetUserAttributes()) {
+                rootAttributes.emplace_back(std::make_pair(attr.GetKey(), attr.GetValue()));
+            }
+
             if (database->SchemeBoardResult) {
                 const auto& domain = database->SchemeBoardResult->DescribeSchemeResult.GetPathDescription().GetDomainDescription();
                 if (domain.HasResourcesDomainKey() && !skipResourceCheck && DynamicNode) {
@@ -272,6 +291,7 @@ private:
                 event.Release(),
                 Counters,
                 skipCheckConnectRigths,
+                rootAttributes,
                 this));
             return;
         }

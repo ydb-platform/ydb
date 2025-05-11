@@ -28,8 +28,8 @@ CFLAGS(
 SRCDIR(contrib/libs/liburing/test)
 
 SRCS(
+    fsnotify.c
     helpers.c
-    uring_cmd_ublk.c
 )
 
 END()

@@ -706,11 +706,6 @@ protected:
         } else {
             SystemStateInfo.ClearMemoryUsed();
         }
-        if (memoryStats.HasHardLimit()) {
-            SystemStateInfo.SetMemoryLimit(memoryStats.GetHardLimit());
-        } else {
-            SystemStateInfo.ClearMemoryLimit();
-        }
         if (memoryStats.HasAllocatedMemory()) {
             SystemStateInfo.SetMemoryUsedInAlloc(memoryStats.GetAllocatedMemory());
         } else {

@@ -546,4 +546,4 @@ class TestS3(object):
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         issues = str(client.describe_query(query_id).result.query.issue)
 
-        assert "Missing format - please use WITH FORMAT when writing into S3" in issues, "Incorrect Issues: " + issues
+        assert "No write format specified. Please use WITH FORMAT for writing into S3" in issues, "Incorrect Issues: " + issues

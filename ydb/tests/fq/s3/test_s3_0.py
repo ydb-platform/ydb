@@ -1152,7 +1152,7 @@ Pear,15,33'''
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         issues = str(client.describe_query(query_id).result.query.issue)
 
-        assert "Double optional types are not supported" in issues, "Incorrect issues: " + issues
+        assert "double optional types are not supported" in issues, "Incorrect issues: " + issues
 
         sql = f'''
             INSERT INTO `{storage_connection_name}`.`insert/`
@@ -1166,4 +1166,4 @@ Pear,15,33'''
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         issues = str(client.describe_query(query_id).result.query.issue)
 
-        assert "Double optional types are not supported" in issues, "Incorrect issues: " + issues
+        assert "double optional types are not supported" in issues, "Incorrect issues: " + issues

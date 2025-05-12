@@ -118,7 +118,7 @@ std::optional<TTypeError> ValidateCoroReadActorDataType(const TDataExprType* typ
     return ValidateIoDataType(type, {EDataSlot::Interval, EDataSlot::Decimal});
 }
 
-// Data type compatible with ClickHouseClient.ParseFormat, ClickHouseClient.SerializeFormat udf
+// Data type compatible with ClickHouseClient.ParseFormat and ClickHouseClient.SerializeFormat udfs
 std::optional<TTypeError> ValidateClickHouseUdfDataType(const TDataExprType* type) {
     return ValidateIoDataType(type, {});
 }
@@ -224,10 +224,10 @@ bool ValidateS3WriteSchema(TPositionHandle pos, std::string_view format, const T
     }
 
     if (format == "json_list"sv) {
-        return ValidateIoSchema(pos, schemaStructRowType, "S3 json_list otput format", ctx, &ValidateJsonListIoType);
+        return ValidateIoSchema(pos, schemaStructRowType, "S3 json_list output format", ctx, &ValidateJsonListIoType);
     }
 
-    return ValidateIoSchema(pos, schemaStructRowType, TStringBuilder() << "S3 " << format << " otput format", ctx, [](const TTypeAnnotationNode* type) {
+    return ValidateIoSchema(pos, schemaStructRowType, TStringBuilder() << "S3 " << format << " output format", ctx, [](const TTypeAnnotationNode* type) {
         return ValidateGenericIoType(type, &ValidateClickHouseUdfDataType);
     });
 }

@@ -28,6 +28,7 @@ CFLAGS(
 )
 
 SRCS(
+    generic.cpp
     lexer.cpp
     regex.cpp
 )

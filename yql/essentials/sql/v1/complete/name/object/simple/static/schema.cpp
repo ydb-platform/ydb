@@ -27,6 +27,10 @@ namespace NSQLComplete {
             }
 
             NThreading::TFuture<TVector<TFolderEntry>> List(TString folder) const override {
+                if (!folder.StartsWith('/')) {
+                    folder.prepend('/');
+                }
+
                 TVector<TFolderEntry> entries;
                 if (const auto* data = Data_.FindPtr(folder)) {
                     entries = *data;

@@ -765,7 +765,8 @@ template <class TKey, class TValue, class THash>
 void TAsyncSlruCacheBase<TKey, TValue, THash>::EndInsert(const TInsertCookie& insertCookie, TValuePtr value)
 {
     YT_VERIFY(value);
-    auto key = value->GetKey();
+    const auto& key = value->GetKey();
+    YT_ASSERT(insertCookie.GetKey() == key);
 
     auto* shard = GetShardByKey(key);
 

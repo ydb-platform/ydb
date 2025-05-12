@@ -361,16 +361,14 @@ struct TDeleteRange : public TOperation {
         return {};
     }
 
-    void MakeQueryWithParams(std::ostream& sql, const std::string_view& keyFilter, NYdb::TParamsBuilder& params, size_t* paramsCounter = nullptr, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
+    void MakeQueryWithParams(std::ostream& sql, const std::string_view& keyFilter, size_t* resultsCounter = nullptr, const std::string_view& txnFilter = {}) {
         if (resultsCounter)
             ResultIndex = (*resultsCounter)++;
 
         const auto& oldResultSetName = GetNameWithIndex("Old", resultsCounter);
-        sql << oldResultSetName << " = select * from (";
-        MakeSlice(keyFilter, sql, params, paramsCounter);
-        sql << ')';
+        sql << oldResultSetName << " = select * from `current`" << keyFilter;
         if (!txnFilter.empty())
-            sql << " where " << txnFilter;
+            sql << " and " << txnFilter;
         sql << ';' << std::endl;
 
         sql << "insert into `history`" << std::endl;
@@ -392,7 +390,7 @@ struct TDeleteRange : public TOperation {
         std::ostringstream keyFilter;
         keyFilter << " where ";
         MakeSimplePredicate(Key, RangeEnd, keyFilter, params, paramsCounter);
-        MakeQueryWithParams(sql, keyFilter.view(), params, paramsCounter, resultsCounter, txnFilter);
+        MakeQueryWithParams(sql, keyFilter.view(), resultsCounter, txnFilter);
     }
 
     etcdserverpb::DeleteRangeResponse MakeResponse(i64 revision, const NYdb::TResultSets& results, const TNotifier& notifier) const {
@@ -516,8 +514,6 @@ struct TTxn : public TOperation {
     std::vector<TCompare> Compares;
     std::vector<TRequestOp> Success, Failure;
 
-    using TKeysSet = std::unordered_set<std::pair<std::string, std::string>>;
-
     std::ostream& Dump(std::ostream& out) const {
         const auto dump = [](const std::vector<TRequestOp>& operations, std::ostream& out) {
             for (const auto& operation : operations) {
@@ -550,7 +546,28 @@ struct TTxn : public TOperation {
         return out;
     }
 
-    void GetKeys(TKeysSet& keys) const {
+    bool IsReadOnly() const {
+        for (const auto& operation : Success) {
+            if (const auto oper = std::get_if<TTxn>(&operation)) {
+                if (!oper->IsReadOnly())
+                    return false;
+            } else if (!std::get_if<TRange>(&operation))
+                return false;
+        }
+
+        for (const auto& operation : Failure) {
+            if (const auto oper = std::get_if<TTxn>(&operation)) {
+                if (!oper->IsReadOnly())
+                    return false;
+            } else if (!std::get_if<TRange>(&operation))
+                return false;
+        }
+
+        return true;
+    }
+
+    TKeysSet GetKeys() const {
+        TKeysSet keys;
         for (const auto& compare : Compares)
             keys.emplace(compare.Key, compare.RangeEnd);
 
@@ -563,11 +580,12 @@ struct TTxn : public TOperation {
                 else if (const auto oper = std::get_if<TDeleteRange>(&operation))
                     keys.emplace(oper->Key, oper->RangeEnd);
                 else if (const auto oper = std::get_if<TTxn>(&operation))
-                    oper->GetKeys(keys);
+                    keys.merge(oper->GetKeys());
             }
         };
         get(Success, keys);
         get(Failure, keys);
+        return keys;
     }
 
     template<class TOperation, class TSrc>
@@ -629,7 +647,7 @@ struct TTxn : public TOperation {
                 else if (const auto oper = std::get_if<TPut>(&operation))
                     oper->MakeQueryWithParams(sql, keyParamName, keyFilter, params, paramsCounter, resultsCounter, txnFilter);
                 else if (const auto oper = std::get_if<TDeleteRange>(&operation))
-                    oper->MakeQueryWithParams(sql, keyFilter, params, paramsCounter, resultsCounter, txnFilter);
+                    oper->MakeQueryWithParams(sql, keyFilter, resultsCounter, txnFilter);
                 else if (const auto oper = std::get_if<TTxn>(&operation))
                     oper->MakeQueryWithParams(sql, keyParamName, singleKey, keyFilter, params, paramsCounter, resultsCounter, txnFilter);
             }
@@ -980,7 +998,6 @@ private:
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
-        AddParam("Revision", params, Revision);
         return Put.MakeQueryWithParams(sql, params);
     }
 
@@ -1031,7 +1048,6 @@ private:
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
-        AddParam("Revision", params, Revision);
         return DeleteRange.MakeQueryWithParams(sql, params);
     }
 
@@ -1078,12 +1094,8 @@ private:
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
-        AddParam("Revision", params, Revision);
-
-        TTxn::TKeysSet keys;
-        Txn.GetKeys(keys);
         size_t resultsCounter = 0U, paramsCounter = 0U;
-        if (keys.empty()) {
+        if (const auto& keys = Txn.GetKeys(); keys.empty()) {
             return Txn.MakeQueryWithParams(sql, {}, true, {}, params, &resultsCounter, &paramsCounter);
         } else if (1U == keys.size()) {
             std::ostringstream where;
@@ -1111,6 +1123,14 @@ private:
             std::cout << bad->second << std::endl;
             return Reply(bad->first, bad->second, ctx);
         }
+    }
+
+    bool RequiredNextRevision() const final {
+        return !Txn.IsReadOnly();
+    }
+
+    TKeysSet GetAffectedKeysSet() const final {
+        return Txn.GetKeys();
     }
 
     std::ostream& Dump(std::ostream& out) const final {

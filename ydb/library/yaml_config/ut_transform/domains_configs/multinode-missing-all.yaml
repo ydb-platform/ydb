@@ -5,7 +5,6 @@ hosts:
 - host: host2
   drive:
     - path: ydb.data
-fail_domain_type: disk
 domains_config:
   domain:
   - name: "Root"

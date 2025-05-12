@@ -1,0 +1,1 @@
+{"error": true, "stderr": "Terminating due to uncaught exception 0x4b83ec40410    what() -> \"ydb/library/yaml_config/yaml_config_parser.cpp:32: Unknown EPDiskType enum value: HDD\"\n of type TWithBackTrace<yexception>\n"}

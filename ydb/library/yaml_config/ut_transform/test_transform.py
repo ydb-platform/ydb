@@ -75,3 +75,7 @@ class TestYamlConfigTransformations(object):
     @pytest.mark.parametrize('binary', [('dump', dump_bin()), ('dump_ds_init', dump_ds_init_bin())], ids=lambda binary: binary[0])
     def test_simplified(self, binary):
         return self.execute_test("ydb/library/yaml_config/ut_transform/simplified_configs", binary[1])
+        
+    @pytest.mark.parametrize('binary', [('dump', dump_bin())], ids=lambda binary: binary[0])
+    def test_domains_config(self, binary):
+        return self.execute_test("ydb/library/yaml_config/ut_transform/domains_configs", binary[1])

@@ -736,11 +736,27 @@ namespace NKikimr::NYaml {
 
         if (ephemeralConfig.HasDefaultDiskType()) {
             defaultDiskType = ephemeralConfig.GetDefaultDiskType();
-            Y_ENSURE_BT(NKikimrBlobStorage::EPDiskType_Parse(*defaultDiskType, &dtEnum.ConstructInPlace()),
-                "incorrect enum: " << defaultDiskType);
         }
+        else {
+            bool isFirst = true;
+            for (const auto& hostConfig : ephemeralConfig.GetHostConfigs()) {
+                for (const auto& drive : hostConfig.GetDrive()) {
+                    if (isFirst) {
+                        defaultDiskType = drive.GetType();
+                        isFirst = false;
+                    }
+                    else if (*defaultDiskType != drive.GetType()) {
+                        defaultDiskType.Clear();
+                        goto endDiskTypeCheck;
+                    }
+                }
+            }
+        }
+endDiskTypeCheck:   ;
 
         if (defaultDiskType) {
+            Y_ENSURE_BT(NKikimrBlobStorage::EPDiskType_Parse(*defaultDiskType, &dtEnum.ConstructInPlace()),
+                "incorrect enum: " << defaultDiskType);
             defaultDiskTypeLower = *defaultDiskType.Get();
             defaultDiskTypeLower.Get()->to_lower();
         }
@@ -748,6 +764,8 @@ namespace NKikimr::NYaml {
         if (erasureName && !ephemeralConfig.HasStaticErasure()) {
             ephemeralConfig.SetStaticErasure(*erasureName);
         }
+
+        Y_ENSURE_BT(ephemeralConfig.HasStaticErasure(), "Erasure is not specified");
 
         if (!config.HasDomainsConfig() || !config.GetDomainsConfig().DomainSize()) {
             auto& domainsConfig = *config.MutableDomainsConfig();
@@ -780,19 +798,15 @@ namespace NKikimr::NYaml {
                 storagePoolType.SetKind(*defaultDiskTypeLower);
             }
             auto& poolConfig = *storagePoolType.MutablePoolConfig();
-
             if (erasureName && !info.HasErasureSpecies) {
                 poolConfig.SetErasureSpecies(erasureName.GetRef());
             }
-
             if (defaultDiskTypeLower && !info.HasKind) {
                 poolConfig.SetKind(*defaultDiskTypeLower);
             }
-
             if (defaultDiskType && !poolConfig.PDiskFilterSize()) {
                 poolConfig.AddPDiskFilter()->AddProperty()->SetType(*dtEnum);
             }
-
             if (!info.HasVDiskKind) {
                 poolConfig.SetVDiskKind("Default");
             }
@@ -839,7 +853,6 @@ namespace NKikimr::NYaml {
         } else if (erasureName && defaultDiskTypeLower) {
             auto& channelProfile = *config.MutableChannelProfileConfig()->AddProfile();
             channelProfile.SetProfileId(0);
-
             for (size_t i = 0; i < 3; ++i) {
                 auto& channel = *channelProfile.AddChannel();
                 channel.SetErasureSpecies(erasureName.GetRef());

@@ -26,6 +26,7 @@ def create_table_sql_request(table_name: str, columns: dict[str, dict[str]], pk_
             {", ".join(create_index)}
             )
     """
+    print(sql_create)
     return sql_create
 
 
@@ -42,12 +43,12 @@ def create_ttl_sql_request(ttl: str, inteval: dict[str, str], time: str, table_n
     return sql_ttl
 
 
-def create_vector_index_sql_request(table_name: str, embedding: str, function: str, distance: str, vector_type: str, sync, vector_dimension: int, levels: int, clusters: int, cover):
+def create_vector_index_sql_request(table_name: str, embedding: str, prefix: str, function: str, distance: str, vector_type: str, sync, vector_dimension: int, levels: int, clusters: int, cover):
     create_vector_index = f"""
         ALTER TABLE {table_name}
         ADD INDEX idx_vector_{embedding}
         GLOBAL {sync} USING vector_kmeans_tree
-        ON ({embedding}) {f"COVER ({", ".join(cover)})" if len(cover) != 0 else ""}
+        ON ({f"{prefix}, " if prefix != "" else ""}{embedding}) {f"COVER ({", ".join(cover)})" if len(cover) != 0 else ""}
         WITH ({function}={distance}, vector_type="{vector_type}", vector_dimension={vector_dimension}, levels={levels}, clusters={clusters});
     """
     return create_vector_index

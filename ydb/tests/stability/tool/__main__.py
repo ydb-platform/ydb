@@ -380,7 +380,7 @@ class StabilityCluster:
             if running_workloads:
                 print(f"{bcolors.OKCYAN}Found running workloads: {', '.join(running_workloads)}{bcolors.ENDC}")
             
-            # Get list of running screen sessions
+            # Get list of running screen sessions with their proper names
             result = node.ssh_command(
                 'screen -ls || true',  # || true to handle case when no screens exist
                 raise_on_error=False
@@ -398,75 +398,70 @@ class StabilityCluster:
             for screen in screens:
                 if not screen.strip() or 'Socket' in screen:  # Skip socket directory line
                     continue
-                # Extract screen name from the format "id.name"
-                try:
-                    screen_name = screen.strip().split('.')[1].split('\t')[0]
-                except IndexError:
-                    continue
                 
-                if screen_name in DICT_OF_PROCESSES:
-                    found_screens = True
-                    print(f'\n{bcolors.BOLD}{bcolors.OKCYAN}=== {screen_name} ==={bcolors.ENDC}')
-                    # Configure screen to log both stdout and stderr to separate files
-                    node.ssh_command(f'screen -S {screen_name} -X logfile /tmp/{screen_name}.out.log', raise_on_error=False)
-                    node.ssh_command(f'screen -S {screen_name} -X log on', raise_on_error=False)
-                    # Ensure stderr is also being captured (by default screen only captures stdout)
-                    node.ssh_command(f'screen -S {screen_name} -X colon "logfile flush 0^M"', raise_on_error=False)
-                    node.ssh_command(f'screen -S {screen_name} -X eval "logtstamp on" "logtstamp string \\%Y-\\%m-\\%d \\%c:\\%s "', raise_on_error=False)
-                    node.ssh_command(f'screen -S {screen_name} -X log on', raise_on_error=False)
-                    
-                    # Get the last N seconds of output from both stdout and stderr
-                    time_filter = f'$(date -d "{seconds} seconds ago" +"%Y-%m-%d %H:%M:%S")'
-                    
-                    # Get stdout if requested
-                    if mode in ['out', 'all']:
-                        result = node.ssh_command(
-                            f'tail -n 1000 /tmp/{screen_name}.out.log | grep -A 1000 "{time_filter}" 2>/dev/null || true',
-                            raise_on_error=False
-                        )
-                        print(f"\n{bcolors.BOLD}{bcolors.OKGREEN}STDOUT:{bcolors.ENDC}")
-                        if result:
-                            output_lines = result.decode('utf-8').split('\n')
-                            for line in output_lines:
-                                # Color timestamp in cyan, rest of line in default color
-                                if line.strip():  # Skip empty lines
-                                    timestamp_end = line.find(' ', 20)  # Find space after timestamp
-                                    if timestamp_end != -1:
-                                        timestamp = line[:timestamp_end]
-                                        rest = line[timestamp_end:]
-                                        print(f"{bcolors.OKCYAN}{timestamp}{bcolors.ENDC}{rest}")
-                                    else:
-                                        print(line)
-                        else:
-                            print(f"{bcolors.WARNING}No output in the specified time window{bcolors.ENDC}")
-
-                    # Get stderr if requested
-                    if mode in ['err', 'all']:
-                        result = node.ssh_command(
-                            f'tail -n 1000 /tmp/screenlog.{screen_name} | grep -A 1000 "{time_filter}" 2>/dev/null || true',
-                            raise_on_error=False
-                        )
-                        print(f"\n{bcolors.BOLD}{bcolors.FAIL}STDERR:{bcolors.ENDC}")
-                        if result:
-                            error_lines = result.decode('utf-8').split('\n')
-                            for line in error_lines:
-                                if line.strip():  # Skip empty lines
-                                    # Color timestamp in cyan, errors in red
-                                    timestamp_end = line.find(' ', 20)  # Find space after timestamp
-                                    if timestamp_end != -1:
-                                        timestamp = line[:timestamp_end]
-                                        rest = line[timestamp_end:]
-                                        if 'ERROR' in rest:
-                                            print(f"{bcolors.OKCYAN}{timestamp}{bcolors.ENDC}{bcolors.FAIL}{rest}{bcolors.ENDC}")
-                                        elif 'WARN' in rest or 'WARNING' in rest:
-                                            print(f"{bcolors.OKCYAN}{timestamp}{bcolors.ENDC}{bcolors.WARNING}{rest}{bcolors.ENDC}")
-                                        else:
+                # Try to find screen by its session name using screen -ls output
+                for workload_name in running_workloads:
+                    if workload_name in screen:
+                        found_screens = True
+                        print(f'\n{bcolors.BOLD}{bcolors.OKCYAN}=== {workload_name} ==={bcolors.ENDC}')
+                        # Configure screen to log both stdout and stderr to separate files
+                        node.ssh_command(f'screen -S {workload_name} -X logfile /tmp/{workload_name}.out.log', raise_on_error=False)
+                        node.ssh_command(f'screen -S {workload_name} -X log on', raise_on_error=False)
+                        # Ensure stderr is also being captured (by default screen only captures stdout)
+                        node.ssh_command(f'screen -S {workload_name} -X colon "logfile flush 0^M"', raise_on_error=False)
+                        node.ssh_command(f'screen -S {workload_name} -X eval "logtstamp on" "logtstamp string \\%Y-\\%m-\\%d \\%c:\\%s "', raise_on_error=False)
+                        node.ssh_command(f'screen -S {workload_name} -X log on', raise_on_error=False)
+                        
+                        # Get the last N seconds of output from both stdout and stderr
+                        time_filter = f'$(date -d "{seconds} seconds ago" +"%Y-%m-%d %H:%M:%S")'
+                        
+                        # Get stdout if requested
+                        if mode in ['out', 'all']:
+                            result = node.ssh_command(
+                                f'tail -n 1000 /tmp/{workload_name}.out.log | grep -A 1000 "{time_filter}" 2>/dev/null || true',
+                                raise_on_error=False
+                            )
+                            print(f"\n{bcolors.BOLD}{bcolors.OKGREEN}STDOUT:{bcolors.ENDC}")
+                            if result:
+                                output_lines = result.decode('utf-8').split('\n')
+                                for line in output_lines:
+                                    if line.strip():  # Skip empty lines
+                                        timestamp_end = line.find(' ', 20)  # Find space after timestamp
+                                        if timestamp_end != -1:
+                                            timestamp = line[:timestamp_end]
+                                            rest = line[timestamp_end:]
                                             print(f"{bcolors.OKCYAN}{timestamp}{bcolors.ENDC}{rest}")
-                                    else:
-                                        print(line)
-                        else:
-                            print(f"{bcolors.WARNING}No output in the specified time window{bcolors.ENDC}")
-            
+                                        else:
+                                            print(line)
+                            else:
+                                print(f"{bcolors.WARNING}No output in the specified time window{bcolors.ENDC}")
+
+                        # Get stderr if requested
+                        if mode in ['err', 'all']:
+                            result = node.ssh_command(
+                                f'tail -n 1000 /tmp/screenlog.{workload_name} | grep -A 1000 "{time_filter}" 2>/dev/null || true',
+                                raise_on_error=False
+                            )
+                            print(f"\n{bcolors.BOLD}{bcolors.FAIL}STDERR:{bcolors.ENDC}")
+                            if result:
+                                error_lines = result.decode('utf-8').split('\n')
+                                for line in error_lines:
+                                    if line.strip():  # Skip empty lines
+                                        timestamp_end = line.find(' ', 20)  # Find space after timestamp
+                                        if timestamp_end != -1:
+                                            timestamp = line[:timestamp_end]
+                                            rest = line[timestamp_end:]
+                                            if 'ERROR' in rest:
+                                                print(f"{bcolors.OKCYAN}{timestamp}{bcolors.ENDC}{bcolors.FAIL}{rest}{bcolors.ENDC}")
+                                            elif 'WARN' in rest or 'WARNING' in rest:
+                                                print(f"{bcolors.OKCYAN}{timestamp}{bcolors.ENDC}{bcolors.WARNING}{rest}{bcolors.ENDC}")
+                                            else:
+                                                print(f"{bcolors.OKCYAN}{timestamp}{bcolors.ENDC}{rest}")
+                                        else:
+                                            print(line)
+                            else:
+                                print(f"{bcolors.WARNING}No output in the specified time window{bcolors.ENDC}")
+
             if not found_screens and running_workloads:
                 print(f"\n{bcolors.WARNING}Warning: Found running workloads but no matching screen sessions. The workloads might be running outside of screen.{bcolors.ENDC}")
                 print(f"{bcolors.WARNING}Try checking process output directly:{bcolors.ENDC}")

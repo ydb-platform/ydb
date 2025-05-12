@@ -9,6 +9,7 @@ struct TOLAPPredicateNode {
     TExprNode::TPtr ExprNode;
     std::vector<TOLAPPredicateNode> Children;
     bool CanBePushed = false;
+    bool CanBePushedApply = false;
 
     bool IsValid() const {
         return ExprNode && std::all_of(Children.cbegin(), Children.cend(), std::bind(&TOLAPPredicateNode::IsValid, std::placeholders::_1));

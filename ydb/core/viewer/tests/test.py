@@ -711,6 +711,15 @@ def test_topic_data():
         'limit': '5'
     })
 
+    response_cut_by_last_offset = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': '{}/topic1'.format(dedicated_db),
+        'partition': '0',
+        'offset': '0',
+        'last_offset': '3',
+        'limit': '5'
+    })
+
     response_w_meta = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
         'path': '{}/topic1'.format(dedicated_db),
@@ -734,11 +743,21 @@ def test_topic_data():
         'limit': '5'
     })
 
+    response_short_msg = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': '{}/topic1'.format(dedicated_db),
+        'partition': '0',
+        'offset': '20',
+        'limit': '1',
+        'message_size_limit': '5'
+    })
+
     response_no_part = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
         'path': '{}/topic1'.format(dedicated_db),
         'offset': '20'
     })
+
     response_both_offset_and_ts = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
         'path': '{}/topic1'.format(dedicated_db),
@@ -762,7 +781,9 @@ def test_topic_data():
         'response_compressed': replace_values(response_compressed),
         'response_not_truncated': replace_values(response_last),
         'no_partition': response_no_part,
-        'both_offset_and_ts': response_both_offset_and_ts
+        'both_offset_and_ts': response_both_offset_and_ts,
+        'response_truncated': replace_values(response_short_msg),
+        'response_last_offset': replace_values(response_cut_by_last_offset),
     }
     return result
 

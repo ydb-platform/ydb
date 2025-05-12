@@ -347,7 +347,7 @@ private:
 
         for (const auto& [key, value] : planNode.NodeInfo) {
             writer.WriteKey(key);
-            writer.WriteJsonValue(&value, true);
+            writer.WriteJsonValue(&value, true, PREC_NDIGITS, 17);
         }
 
         if (!planNode.Operators.empty()) {
@@ -358,7 +358,7 @@ private:
                 writer.BeginObject();
                 for (const auto& [key, value] : op.Properties) {
                     writer.WriteKey(key);
-                    writer.WriteJsonValue(&value, true);
+                    writer.WriteJsonValue(&value, true, PREC_NDIGITS, 17);
                 }
 
                 writer.WriteKey("Inputs");
@@ -1060,6 +1060,8 @@ private:
             return {CurrentArgContext.AddArg(node.Get())};
         } else if (auto maybeCrossJoin = TMaybeNode<TDqPhyCrossJoin>(node)) {
             operatorId = Visit(maybeCrossJoin.Cast(), planNode);
+        } else if (auto maybeCombineByKey = TMaybeNode<TCoCombineByKey>(node)) {
+            operatorId = Visit(maybeCombineByKey.Cast(), planNode);
         }
 
         TVector<std::variant<ui32, TArgContext>> inputIds;
@@ -1374,6 +1376,28 @@ private:
             op.Properties["ToFlow"] = *planNode.CteRefName;
         } else {
             auto inputs = Visit(toflow.Input().Ptr(), planNode);
+            if (inputs.size() == 1) {
+                return inputs[0];
+            } else {
+                return TMaybe<std::variant<ui32, TArgContext>> ();
+            }
+        }
+
+        return AddOperator(planNode, "ConstantExpr", std::move(op));
+    }
+
+    TMaybe<std::variant<ui32, TArgContext>> Visit(const TCoCombineByKey& combineByKey, TQueryPlanNode& planNode) {
+        const auto combineByKeyValue = NPlanUtils::PrettyExprStr(combineByKey.Input());
+
+        TOperator op;
+        op.Properties["Name"] = "CombineByKey";
+
+        if (auto maybeResultBinding = ContainResultBinding(combineByKeyValue)) {
+            auto [txId, resId] = *maybeResultBinding;
+            planNode.CteRefName = TStringBuilder() << "precompute_" << txId << "_" << resId;
+            op.Properties["CombineByKey"] = *planNode.CteRefName;
+        } else {
+            auto inputs = Visit(combineByKey.Input().Ptr(), planNode);
             if (inputs.size() == 1) {
                 return inputs[0];
             } else {
@@ -2335,11 +2359,14 @@ struct TQueryPlanReconstructor {
             op.GetMapSafe().erase("Inputs");
         }
 
-        if (op.GetMapSafe().contains("Input")
+        if (
+            op.GetMapSafe().contains("Input")
             || op.GetMapSafe().contains("ToFlow")
             || op.GetMapSafe().contains("Member")
             || op.GetMapSafe().contains("AssumeSorted")
-            || op.GetMapSafe().contains("Iterator")) {
+            || op.GetMapSafe().contains("Iterator")
+            || op.GetMapSafe().contains("CombineByKey")
+        ) {
 
             TString maybePrecompute = "";
             if (op.GetMapSafe().contains("Input")) {
@@ -2352,6 +2379,8 @@ struct TQueryPlanReconstructor {
                 maybePrecompute = op.GetMapSafe().at("AssumeSorted").GetStringSafe();
             } else if (op.GetMapSafe().contains("Iterator")) {
                 maybePrecompute = op.GetMapSafe().at("Iterator").GetStringSafe();
+            } else if (op.GetMapSafe().contains("CombineByKey")) {
+                maybePrecompute = op.GetMapSafe().at("CombineByKey").GetStringSafe();
             }
 
             if (Precomputes.contains(maybePrecompute) && planInputs.empty()) {
@@ -2545,7 +2574,8 @@ NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
         "PartitionByKey",
         "ToFlow",
         "Member",
-        "AssumeSorted"
+        "AssumeSorted",
+        "CombineByKey"
     };
 
     THashMap<int, NJson::TJsonValue> planIndex;
@@ -2601,7 +2631,7 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NO
         NJson::ReadJsonTree(commonPlanInfo, &commonPlanJson, true);
 
         writer.WriteKey("tables");
-        writer.WriteJsonValue(&commonPlanJson);
+        writer.WriteJsonValue(&commonPlanJson, false, PREC_NDIGITS, 17);
     }
 
     writer.WriteKey("Plan");
@@ -2614,7 +2644,7 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NO
         NJson::ReadJsonTree(queryStats, &queryStatsJson, true);
 
         writer.WriteKey("Stats");
-        writer.WriteJsonValue(&queryStatsJson);
+        writer.WriteJsonValue(&queryStatsJson, false, PREC_NDIGITS, 17);
     }
 
     writer.WriteKey("Plans");
@@ -2637,7 +2667,7 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NO
 
         for (auto& subplan : txPlanJson.GetMapSafe().at("Plans").GetArraySafe()) {
             ModifyPlan(subplan, removeStageGuid);
-            writer.WriteJsonValue(&subplan, true);
+            writer.WriteJsonValue(&subplan, true, PREC_NDIGITS, 17);
         }
     }
 
@@ -3159,7 +3189,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
     ModifyPlan(root, addStatsToPlanNode);
 
     NJsonWriter::TBuf txWriter;
-    txWriter.WriteJsonValue(&root, true);
+    txWriter.WriteJsonValue(&root, true, PREC_NDIGITS, 17);
     auto resultPlan = txWriter.Str();
     return AddSimplifiedPlan(resultPlan, optCtx, true);
 }
@@ -3227,14 +3257,14 @@ TString SerializeScriptPlan(const TVector<const TString>& queryPlans) {
         writer.BeginObject();
         if (auto tableAccesses = planMap.FindPtr("tables")) {
             writer.WriteKey("tables");
-            writer.WriteJsonValue(tableAccesses);
+            writer.WriteJsonValue(tableAccesses, false, PREC_NDIGITS, 17);
         }
         if (auto dqPlan = planMap.FindPtr("Plan")) {
             writer.WriteKey("Plan");
-            writer.WriteJsonValue(dqPlan);
+            writer.WriteJsonValue(dqPlan, false, PREC_NDIGITS, 17);
             writer.WriteKey("SimplifiedPlan");
             auto simplifiedPlan = SimplifyQueryPlan(*dqPlan);
-            writer.WriteJsonValue(&simplifiedPlan);
+            writer.WriteJsonValue(&simplifiedPlan, false, PREC_NDIGITS, 17);
         }
         writer.EndObject();
     }

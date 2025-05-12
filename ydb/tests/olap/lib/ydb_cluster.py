@@ -50,6 +50,10 @@ class YdbCluster:
                 self.role = YdbCluster.Node.Role.UNKNOWN
             self.tablets = [YdbCluster.Node.Tablet(t) for t in desc.get('Tablets', [])]
 
+        @property
+        def slot(self) -> str:
+            return f'{"static" if self.role == YdbCluster.Node.Role.STORAGE else self.ic_port}@{self.host}'
+
     _ydb_driver = None
     _results_driver = None
     _cluster_info = None

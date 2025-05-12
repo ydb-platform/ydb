@@ -477,6 +477,7 @@ void TKikimrRunner::InitializeMonitoring(const TKikimrRunConfig& runConfig, bool
         if (securityConfig.MonitoringAllowedSIDsSize() > 0) {
             monConfig.AllowedSIDs.assign(securityConfig.GetMonitoringAllowedSIDs().begin(), securityConfig.GetMonitoringAllowedSIDs().end());
         }
+        monConfig.AllowOrigin = appConfig.GetMonitoringConfig().GetAllowOrigin();
 
         if (ModuleFactories && ModuleFactories->MonitoringFactory) {
             Monitoring = ModuleFactories->MonitoringFactory(std::move(monConfig), appConfig);
@@ -1252,6 +1253,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->WorkloadManagerConfig = runConfig.AppConfig.GetWorkloadManagerConfig();
     }
 
+    if (runConfig.AppConfig.HasQueryServiceConfig()) {
+        AppData->QueryServiceConfig = runConfig.AppConfig.GetQueryServiceConfig();
+    }
+
     // setup resource profiles
     AppData->ResourceProfiles = new TResourceProfiles;
     if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())
@@ -1800,6 +1805,9 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
 }
 
 void TKikimrRunner::KikimrStart() {
+    for (auto plugin: Plugins) {
+        plugin->Start();
+    }
 
     if (!!PollerThreads) {
         PollerThreads->Start();
@@ -1825,6 +1833,17 @@ void TKikimrRunner::KikimrStart() {
             endpoint += Sprintf(":%d", server.second->GetPort());
             ActorSystem->Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(ActorSystem->NodeId),
                               new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint(server.first, endpoint));
+            if (ProcessMemoryInfoProvider) {
+                auto memInfo = ProcessMemoryInfoProvider->Get();
+                NKikimrWhiteboard::TSystemStateInfo systemStateInfo;
+                if (memInfo.CGroupLimit) {
+                    systemStateInfo.SetMemoryLimit(*memInfo.CGroupLimit);
+                } else if (memInfo.MemTotal) {
+                    systemStateInfo.SetMemoryLimit(*memInfo.MemTotal);
+                }
+                ActorSystem->Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(ActorSystem->NodeId),
+                              new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateUpdate(systemStateInfo));
+            }
         }
     }
 
@@ -1961,6 +1980,9 @@ void TKikimrRunner::KikimrStop(bool graceful) {
     if (YdbDriver) {
         YdbDriver->Stop(true);
     }
+    for (auto plugin: Plugins) {
+        plugin->Stop();
+    }
 }
 
 void TKikimrRunner::BusyLoop() {
@@ -2031,6 +2053,14 @@ void TKikimrRunner::InitializeRegistries(const TKikimrRunConfig& runConfig) {
     NKikHouse::RegisterFormat(*FormatFactory);
 }
 
+void TKikimrRunner::InitializePlugins(const TKikimrRunConfig& runConfig) {
+    for (const auto& initializer: runConfig.Plugins) {
+        if (auto plugin = initializer->CreatePlugin()) {
+            Plugins.push_back(plugin);
+        }
+    }
+}
+
 TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
         const TKikimrRunConfig& runConfig,
         std::shared_ptr<TModuleFactories> factories) {
@@ -2047,6 +2077,7 @@ TIntrusivePtr<TKikimrRunner> TKikimrRunner::CreateKikimrRunner(
     runner->InitializeKqpController(runConfig);
     runner->InitializeGracefulShutdown(runConfig);
     runner->InitializeGRpc(runConfig);
+    runner->InitializePlugins(runConfig);
     return runner;
 }
 

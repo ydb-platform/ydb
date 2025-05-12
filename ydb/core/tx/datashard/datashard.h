@@ -955,7 +955,7 @@ namespace TEvDataShard {
             return TBase::SerializeToArcadiaStream(chunker);
         }
 
-        static NActors::IEventBase* Load(TEventSerializedData* data);
+        static TEvRead* Load(const TEventSerializedData* data);
 
     private:
         void FillRecord();
@@ -1001,7 +1001,7 @@ namespace TEvDataShard {
             return TBase::SerializeToArcadiaStream(chunker);
         }
 
-        static NActors::IEventBase* Load(TEventSerializedData* data);
+        static TEvReadResult* Load(const TEventSerializedData* data);
 
         size_t GetRowsCount() const {
             return Record.GetRowCount();

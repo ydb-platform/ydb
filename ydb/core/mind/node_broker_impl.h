@@ -52,6 +52,7 @@ public:
         enum EEv {
             EvUpdateEpoch = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvResolvedRegistrationRequest,
+            EvProcessSubscribersQueue,
 
             EvEnd
         };
@@ -75,6 +76,8 @@ public:
             NActors::TScopeId ScopeId;
             TSubDomainKey ServicedSubDomain;
         };
+
+        struct TEvProcessSubscribersQueue : public TEventLocal<TEvProcessSubscribersQueue, EvProcessSubscribersQueue> {};
     };
 
 private:
@@ -154,6 +157,31 @@ private:
         }
     };
 
+    struct TPipeServerInfo {
+        TPipeServerInfo(TActorId id, TActorId icSession)
+            : Id(id)
+            , IcSession(icSession)
+        {}
+
+        TActorId Id;
+        TActorId IcSession;
+        THashSet<TActorId> Subscribers;
+    };
+
+    struct TSubscriberInfo : public TIntrusiveListItem<TSubscriberInfo> {
+        TSubscriberInfo(TActorId id, ui64 seqNo, ui64 version, TPipeServerInfo* pipeServerInfo)
+            : Id(id)
+            , SeqNo(seqNo)
+            , SentVersion(version)
+            , PipeServerInfo(pipeServerInfo)
+        {}
+
+        TActorId Id;
+        ui64 SeqNo = 0;
+        ui64 SentVersion = 0;
+        TPipeServerInfo* PipeServerInfo;
+    };
+
     class TTxExtendLease;
     class TTxInitScheme;
     class TTxLoadState;
@@ -223,10 +251,13 @@ private:
             HFuncTraced(TEvNodeBroker::TEvCompactTables, Handle);
             HFuncTraced(TEvNodeBroker::TEvGetConfigRequest, Handle);
             HFuncTraced(TEvNodeBroker::TEvSetConfigRequest, Handle);
+            HFuncTraced(TEvNodeBroker::TEvSubscribeNodesRequest, Handle);
+            HFuncTraced(TEvNodeBroker::TEvSyncNodesRequest, Handle);
             HFuncTraced(TEvPrivate::TEvUpdateEpoch, Handle);
             HFuncTraced(TEvPrivate::TEvResolvedRegistrationRequest, Handle);
-            IgnoreFunc(TEvTabletPipe::TEvServerConnected);
-            IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
+            HFuncTraced(TEvPrivate::TEvProcessSubscribersQueue, Handle);
+            HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
+            hFunc(TEvTabletPipe::TEvServerConnected, Handle);
             IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
             IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvRemoveConfigSubscriptionResponse);
 
@@ -245,16 +276,27 @@ private:
     void ProcessDelayedListNodesRequests();
 
     void ScheduleEpochUpdate(const TActorContext &ctx);
+    void ScheduleProcessSubscribersQueue(const TActorContext &ctx);
     void FillNodeInfo(const TNodeInfo &node,
                       NKikimrNodeBroker::TNodeInfo &info) const;
     void FillNodeName(const std::optional<ui32> &slotIndex,
                       NKikimrNodeBroker::TNodeInfo &info) const;
 
     void PrepareEpochCache();
+    void PrepareUpdateNodesLog();
     void AddNodeToEpochCache(const TNodeInfo &node);
     void AddDeltaToEpochDeltasCache(const TString& delta, ui64 version);
+    void AddNodeToUpdateNodesLog(const TNodeInfo &node);
 
     void SubscribeForConfigUpdates(const TActorContext &ctx);
+
+    void SendUpdateNodes(TSubscriberInfo &subscriber, const TActorContext &ctx);
+    void SendToSubscriber(const TSubscriberInfo &subscriber, IEventBase* event, const TActorContext &ctx) const;
+    void SendToSubscriber(const TSubscriberInfo &subscriber, IEventBase* event, ui64 cookie, const TActorContext &ctx) const;
+
+    TSubscriberInfo& AddSubscriber(TActorId subscriberId, TActorId pipeServerId, ui64 seqNo, ui64 version, const TActorContext &ctx);
+    void RemoveSubscriber(TActorId subscriber, const TActorContext &ctx);
+    bool HasOutdatedSubscription(TActorId subscriber, ui64 newSeqNo) const;
 
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                 const TActorContext &ctx);
@@ -276,9 +318,17 @@ private:
                 const TActorContext &ctx);
     void Handle(TEvNodeBroker::TEvSetConfigRequest::TPtr &ev,
                 const TActorContext &ctx);
+    void Handle(TEvNodeBroker::TEvSubscribeNodesRequest::TPtr &ev,
+                const TActorContext &ctx);
+    void Handle(TEvNodeBroker::TEvSyncNodesRequest::TPtr &ev,
+                const TActorContext &ctx);
+    void Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev);
+    void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev,
                 const TActorContext &ctx);
     void Handle(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev,
+                const TActorContext &ctx);
+    void Handle(TEvPrivate::TEvProcessSubscribersQueue::TPtr &ev,
                 const TActorContext &ctx);
 
     bool EnableStableNodeNames = false;
@@ -288,10 +338,18 @@ private:
     // Events collected during initialization phase.
     TMultiMap<ui64, TEvNodeBroker::TEvListNodes::TPtr> DelayedListNodesRequests;
     TSchedulerCookieHolder EpochTimerCookieHolder;
-    TString EpochCache;
 
+    // old epoch protocol
+    TString EpochCache;
     TString EpochDeltasCache;
     TVector<TCacheVersion> EpochDeltasVersions;
+
+    // new delta protocol
+    TString UpdateNodesLog;
+    TVector<TCacheVersion> UpdateNodesLogVersions;
+    THashMap<TActorId, TPipeServerInfo> PipeServers;
+    THashMap<TActorId, TSubscriberInfo> Subscribers;
+    TIntrusiveList<TSubscriberInfo> SubscribersQueue; // sorted by version
 
     TTabletCountersBase* TabletCounters;
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;

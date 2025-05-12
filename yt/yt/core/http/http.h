@@ -151,7 +151,7 @@ DEFINE_ENUM(EStatusCode,
 //! define our own.
 
 TStringBuf ToHttpString(EMethod method);
-TStringBuf ToHttpString(EStatusCode code);
+TString ToHttpString(EStatusCode code);
 
 ////////////////////////////////////////////////////////////////////////////////
 

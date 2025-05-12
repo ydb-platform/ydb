@@ -983,7 +983,7 @@ bool TYtOutTableInfo::Validate(const TExprNode& node, TExprContext& ctx) {
     }
 
     if (auto setting = NYql::GetSetting(*node.Child(TYtOutTable::idx_Settings), EYtSettingType::ColumnGroups)) {
-        if (!ValidateColumnGroups(*setting, *node.Child(TYtOutTable::idx_RowSpec)->GetTypeAnn()->Cast<TStructExprType>(), ctx)) {
+        if (!ValidateColumnGroups(*setting, *TYqlRowSpecInfo(TExprBase(node.ChildPtr(TYtOutTable::idx_RowSpec))).GetExtendedType(ctx), ctx)) {
             return false;
         }
     }

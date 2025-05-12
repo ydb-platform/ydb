@@ -1888,6 +1888,15 @@ public:
 
             // We remember acquired lock for faster checking
             state.Lock = guardLocks.Lock;
+
+            if (!state.Lock) {
+                // We may fail to acquire an existing write lock
+                // This means our read result is potentially inconsistent
+                auto lock = Self->SysLocksTable().GetRawLock(state.LockId);
+                if (lock && lock->IsWriteLock()) {
+                    state.LockInconsistent = true;
+                }
+            }
         }
 
         if (!Self->IsFollower()) {
@@ -2079,7 +2088,7 @@ public:
             return;
         }
 
-        if (!Result->Record.HasStatus() && Reader && Reader->HadInconsistentResult()) {
+        if (!Result->Record.HasStatus() && ((Reader && Reader->HadInconsistentResult()) || state.LockInconsistent)) {
             SetStatusError(Result->Record, Ydb::StatusIds::ABORTED, TStringBuilder()
                 << "Read conflict with concurrent transaction"
                 << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")");

@@ -167,6 +167,8 @@ struct TPDiskConfig : public TThrRefBase {
     ui32 CompletionThreadsCount = 1;
     bool UseNoopScheduler = false;
 
+    bool PlainDataChunks = false;
+
     bool MetadataOnly = false;
 
     bool ReadOnly = false;
@@ -325,6 +327,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " SpaceColorBorder# " << SpaceColorBorder << x;
         str << " CompletionThreadsCount# " << CompletionThreadsCount << x;
         str << " UseNoopScheduler# " << (UseNoopScheduler ? "true" : "false") << x;
+        str << " PlainDataChunks# " << PlainDataChunks << x;
         str << "}";
         return str.Str();
     }
@@ -416,6 +419,9 @@ struct TPDiskConfig : public TThrRefBase {
 
         if (cfg->HasUseNoopScheduler()) {
             UseNoopScheduler = cfg->GetUseNoopScheduler();
+        }
+        if (cfg->HasPlainDataChunks()) {
+            PlainDataChunks = cfg->GetPlainDataChunks();
         }
     }
 };

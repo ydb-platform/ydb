@@ -54,14 +54,16 @@ SELECT String::Strip("YQL ");       -- "YQL"
 * `String::StartsWith(string:String?, prefix:String) -> Bool` - Устаревшая: используйте встроенную функцию [StartsWith](../../builtins/basic.md#starts_ends_with)
 * `String::HasSuffix(string:String?, suffix:String) -> Bool` - Устаревшая: используйте встроенную функцию [EndsWith](../../builtins/basic.md#starts_ends_with)
 * `String::EndsWith(string:String?, suffix:String) -> Bool` - Устаревшая: используйте встроенную функцию [EndsWith](../../builtins/basic.md#starts_ends_with)
-* `String::Reverse(string:String?) -> String?` - Устаревшая: используйте [Unicode::Reverse](unicode.md)
+* `String::Reverse(string:String?) -> String?` - удалена в версии [2025.02](../../changelog/2025.02.md#string-module)
 
   Устаревшие функции, к использованию не рекомендуются.
 
-* `String::HasPrefixIgnoreCase(string:String?, prefix:String) -> Bool`
-* `String::StartsWithIgnoreCase(string:String?, prefix:String) -> Bool`
-* `String::HasSuffixIgnoreCase(string:String?, suffix:String) -> Bool`
-* `String::EndsWithIgnoreCase(string:String?, suffix:String) -> Bool`
+* `String::AsciiStartsWithIgnoreCase(string:String?, prefix:String) -> Bool` - добавлена в версии [2025.02](../../changelog/2025.02.md#string-module)
+* `String::AsciiEndsWithIgnoreCase(string:String?, suffix:String) -> Bool` - добавлена в версии [2025.02](../../changelog/2025.02.md#string-module)
+* `String::HasPrefixIgnoreCase(string:String?, prefix:String) -> Bool` - удалена в версии [2025.02](../../changelog/2025.02.md#string-module)
+* `String::StartsWithIgnoreCase(string:String?, prefix:String) -> Bool` - удалена в версии [2025.02](../../changelog/2025.02.md#string-module)
+* `String::HasSuffixIgnoreCase(string:String?, suffix:String) -> Bool` - удалена в версии [2025.02](../../changelog/2025.02.md#string-module)
+* `String::EndsWithIgnoreCase(string:String?, suffix:String) -> Bool` - удалена в версии [2025.02](../../changelog/2025.02.md#string-module)
 
   Проверяют наличие префикса или суффикса в строке без учёта региста символов.
 

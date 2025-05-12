@@ -60,6 +60,7 @@ message TRemoveTenantResponse {
 message TGetOperationRequest {
     optional Ydb.Operations.GetOperationRequest Request = 1;
     optional bytes UserToken = 2;
+    optional string PeerName = 3;
 }
 
 message TGetOperationResponse {

@@ -2302,7 +2302,6 @@ void TTenantsManager::DeleteTenantSubDomain(TTenant::TPtr tenant, const TActorCo
 
 void TTenantsManager::ProcessTenantActions(TTenant::TPtr tenant, const TActorContext &ctx)
 {
-    // ev->Get()->Record.GetPeerName()
     if (tenant->State == TTenant::CREATING_POOLS) {
         AllocateTenantPools(tenant, ctx);
     } else if (tenant->State == TTenant::CREATING_SUBDOMAIN) {

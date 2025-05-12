@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
         TestCreateSysView(runtime, ++txId, "/MyRoot/.sys",
                           R"(
                              Name: "new_sys_view"
-                             Type: EPartitionStats
+                             Type: ENodes
                             )",
                           {EStatus::StatusSchemeError, EStatus::StatusAlreadyExists});
         env.TestWaitNotification(runtime, txId);
@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
         AsyncCreateSysView(runtime, ++txId, "/MyRoot/.sys",
                            R"(
                               Name: "sys_view_2"
-                              Type: EPartitionStats
+                              Type: ENodes
                              )");
 
         TestModificationResult(runtime, txId - 1);
@@ -151,7 +151,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSysViewTest) {
         {
             const auto describeResult = DescribePath(runtime, "/MyRoot/.sys/sys_view_2");
             TestDescribeResult(describeResult, {NLs::Finished, NLs::IsSysView});
-            ExpectEqualSysViewDescription(describeResult, "sys_view_2", ESysViewType::EPartitionStats);
+            ExpectEqualSysViewDescription(describeResult, "sys_view_2", ESysViewType::ENodes);
         }
     }
 

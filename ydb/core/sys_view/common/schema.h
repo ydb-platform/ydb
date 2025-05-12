@@ -2,10 +2,15 @@
 
 #include "path.h"
 
+#include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tx/locks/sys_tables.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+
+namespace {
+    using NKikimrSysView::ESysViewType;
+}
 
 namespace NKikimr {
 namespace NSysView {
@@ -826,6 +831,8 @@ public:
     virtual bool IsSystemViewPath(const TVector<TString>& path, TSystemViewPath& sysViewPath) const = 0;
 
     virtual TMaybe<TSchema> GetSystemViewSchema(const TStringBuf viewName, ETarget target) const = 0;
+
+    virtual TMaybe<TSchema> GetSystemViewSchema(ESysViewType viewType) const = 0;
 
     virtual bool IsSystemView(const TStringBuf viewName) const = 0;
 

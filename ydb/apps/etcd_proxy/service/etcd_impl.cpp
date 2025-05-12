@@ -785,6 +785,8 @@ protected:
     virtual void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) = 0;
     virtual void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) = 0;
     virtual bool ExecuteAsync() const { return false; }
+    virtual bool RequiredNextRevision() const { return false; }
+    virtual TKeysSet GetAffectedKeysSet() const { return {}; }
 
     i64 Revision = 0LL;
 };
@@ -806,12 +808,16 @@ public:
         if (const auto& error = this->ParseGrpcRequest(); !error.empty()) {
             this->Request_->ReplyWithRpcStatus(grpc::StatusCode::INVALID_ARGUMENT, TString(error));
             this->Die(ctx);
+        } else if (this->RequiredNextRevision()) {
+            this->Become(&TEtcdRequestGrpc::WaitRevisionFunc);
+            ctx.Send(Stuff->MainGate, new TEvRequestRevision(this->GetAffectedKeysSet()));
         } else {
-            this->Become(&TEtcdRequestGrpc::StateFunc);
             SendDatabaseRequest(ctx);
         }
     }
 private:
+    TGuard Guard;
+
     static std::string GetRequestName() {
         return TRequest::TRequest::descriptor()->name();
     }
@@ -823,12 +829,18 @@ private:
         NYdb::TParamsBuilder params;
         sql << "-- " << GetRequestName() << " >>>>" << std::endl;
         sql << Stuff->TablePrefix;
+        if (this->RequiredNextRevision())
+            AddParam("Revision", params, Revision);
         this->MakeQueryWithParams(sql, params);
+        if (!this->RequiredNextRevision())
+            sql << "select nvl(max(`revision`), 0L) from `commited`;" << std::endl;
+        else if (!Guard)
+            sql << "insert into `commited` (`revision`,`timestamp`) values ($Revision,CurrentUtcDatetime());" << std::endl;
         sql << "-- " << GetRequestName() << " <<<<" << std::endl;
 //      std::cout << std::endl << sql.view() << std::endl;
 
         return [query = sql.str(), args = params.Build()](TQueryClient::TSession session) -> TAsyncExecuteQueryResult {
-            return session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), args, TExecuteQuerySettings().StatsMode(EStatsMode::Basic));
+            return session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), args);
         };
     }
 
@@ -842,6 +854,7 @@ private:
             });
             ctx.Send(this->SelfId(), new NEtcd::TEvQueryResult);
         } else {
+            this->Become(&TEtcdRequestGrpc::WaitResultFunc);
             Stuff->Client->RetryQuery(GetQueryResultFunc()).Subscribe([my = this->SelfId(), stuff = TSharedStuff::TWeakPtr(Stuff)](const auto& future) {
                 if (const auto lock = stuff.lock()) {
                     if (const auto res = future.GetValue(); res.IsSuccess())
@@ -853,11 +866,24 @@ private:
         }
     }
 
-    STFUNC(StateFunc) {
+    STFUNC(WaitRevisionFunc) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NEtcd::TEvQueryResult, Handle);
-            HFunc(NEtcd::TEvQueryError, Handle);
+            HFunc(TEvReturnRevision, Handle);
+            HFunc(TEvQueryError, Handle);
         }
+    }
+
+    STFUNC(WaitResultFunc) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvQueryResult, Handle);
+            HFunc(TEvQueryError, Handle);
+        }
+    }
+
+    void Handle(TEvReturnRevision::TPtr &ev, const TActorContext& ctx) {
+        Revision = ev->Get()->Revision;
+        Guard = std::move(ev->Get()->Guard);
+        SendDatabaseRequest(ctx);
     }
 
     void Handle(NEtcd::TEvQueryResult::TPtr &ev, const TActorContext& ctx) {
@@ -932,6 +958,10 @@ private:
         return Range.Dump(out);
     }
 
+    TKeysSet GetAffectedKeysSet() const final {
+        return {{Range.Key, Range.RangeEnd}};
+    }
+
     TRange Range;
 };
 
@@ -972,6 +1002,14 @@ private:
         }
     }
 
+    bool RequiredNextRevision() const final {
+        return true;
+    }
+
+    TKeysSet GetAffectedKeysSet() const final {
+        return {{Put.Key, {}}};
+    }
+
     std::ostream& Dump(std::ostream& out) const final {
         return Put.Dump(out);
     }
@@ -1009,6 +1047,14 @@ private:
 
         Dump(std::cout) << '=' << response.deleted() << std::endl;
         return Reply(response, ctx);
+    }
+
+    bool RequiredNextRevision() const final {
+        return true;
+    }
+
+    TKeysSet GetAffectedKeysSet() const final {
+        return {{DeleteRange.Key, DeleteRange.RangeEnd}};
     }
 
     std::ostream& Dump(std::ostream& out) const final {
@@ -1219,7 +1265,7 @@ private:
 
         if constexpr (NotifyWatchtower) {
             i64 deleted = 0ULL;
-            for (auto parser = NYdb::TResultSetParser(results.back()); parser.TryNextRow(); ++deleted) {
+            for (auto parser = NYdb::TResultSetParser(results[1U]); parser.TryNextRow(); ++deleted) {
                 NEtcd::TData oldData;
                 oldData.Value = NYdb::TValueParser(parser.GetValue("value")).GetString();
                 oldData.Created = NYdb::TValueParser(parser.GetValue("created")).GetInt64();
@@ -1285,7 +1331,7 @@ private:
         response.set_grantedttl(exists ? NYdb::TValueParser(parser.GetValue("granted")).GetInt64() : 0LL);
 
         if (Keys) {
-            for (auto parser = NYdb::TResultSetParser(results.back()); parser.TryNextRow();) {
+            for (auto parser = NYdb::TResultSetParser(results[1U]); parser.TryNextRow();) {
                 response.add_keys(NYdb::TValueParser(parser.GetValue(0)).GetString());
             }
         }
@@ -1321,7 +1367,7 @@ private:
         etcdserverpb::LeaseLeasesResponse response;
         response.mutable_header()->set_revision(Revision);
 
-        for (auto parser = NYdb::TResultSetParser(results.back()); parser.TryNextRow();) {
+        for (auto parser = NYdb::TResultSetParser(results.front()); parser.TryNextRow();) {
             response.add_leases()->set_id(NYdb::TValueParser(parser.GetValue(0)).GetInt64());
         }
 

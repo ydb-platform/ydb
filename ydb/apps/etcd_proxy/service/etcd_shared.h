@@ -18,7 +18,7 @@ struct TSharedStuff {
     std::unique_ptr<NYdb::NQuery::TQueryClient> Client;
     std::atomic<i64> Revision = 0LL, Lease = 0LL;
     NActors::TActorSystem* ActorSystem = nullptr;
-    NActors::TActorId Watchtower;
+    NActors::TActorId Watchtower, MainGate;
     std::string TablePrefix;
 };
 

@@ -11,6 +11,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/discovery/discovery.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/apps/etcd_proxy/service/etcd_base_init.h>
+#include <ydb/apps/etcd_proxy/service/etcd_gate.h>
 #include <ydb/apps/etcd_proxy/service/etcd_watch.h>
 #include <ydb/apps/etcd_proxy/service/etcd_grpc.h>
 #include <ydb/core/grpc_services/base/base.h>
@@ -94,6 +95,7 @@ int TProxy::StartServer() {
     }
 
     const auto watchtower = ActorSystem->Register(NEtcd::BuildWatchtower(Counters, Stuff));
+    ActorSystem->Register(NEtcd::BuildMainGate(Counters, Stuff));
 
     GRpcServer = std::make_unique<NYdbGrpc::TGRpcServer>(opts, Counters);
     GRpcServer->AddService(new NEtcd::TEtcdKVService(ActorSystem.get(), Counters, watchtower, Stuff));
@@ -217,6 +219,11 @@ int TProxy::ImportDatabase() {
 
     const auto& param = NYdb::TParamsBuilder().AddParam("$Prefix").String(ImportPrefix_).Build().Build();
     if (const auto res = Stuff->Client->ExecuteQuery("insert into `history` select * from `current` where startswith(`key`,$Prefix);", NYdb::NQuery::TTxControl::NoTx(), param).ExtractValueSync(); !res.IsSuccess()) {
+        std::cout << res.GetIssues().ToString() << std::endl;
+        return 1;
+    }
+
+    if (const auto res = Stuff->Client->ExecuteQuery("insert into `revision` select false as `stub`, nvl(max(`modified`), 0L) as `revision`, CurrentUtcDatetime() as `timestamp` from `history`;", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); !res.IsSuccess()) {
         std::cout << res.GetIssues().ToString() << std::endl;
         return 1;
     }

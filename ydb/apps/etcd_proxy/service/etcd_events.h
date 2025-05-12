@@ -38,6 +38,9 @@ enum Ev : ui32 {
     Changes,
     Cancel,
 
+    RequestRevision,
+    ReturnRevision,
+
     End
 };
 
@@ -109,6 +112,25 @@ public:
     }
 private:
     const TIntrusivePtr<IStreamCtx> Ctx_;
+};
+
+using TKeysSet = std::set<std::pair<std::string, std::string>>;
+
+struct TEvRequestRevision : public NActors::TEventLocal<TEvRequestRevision, Ev::RequestRevision> {
+    explicit TEvRequestRevision(TKeysSet&& keysSet = {})
+        : KeysSet(std::move(keysSet))
+    {}
+
+    TKeysSet KeysSet;
+};
+
+using TGuard = std::shared_ptr<void>;
+
+struct TEvReturnRevision : public NActors::TEventLocal<TEvReturnRevision, Ev::ReturnRevision> {
+    explicit TEvReturnRevision(const i64 revision, const TGuard& guard = {}) : Revision(revision), Guard(std::move(guard)) {}
+
+    const i64 Revision;
+    const TGuard Guard;
 };
 
 using TEvWatchRequest = TEtcdRequestStreamWrapper<Ev::Watch, etcdserverpb::WatchRequest, etcdserverpb::WatchResponse>;

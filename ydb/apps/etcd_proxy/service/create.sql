@@ -1,3 +1,18 @@
+CREATE TABLE revision
+(
+    `stub` Bool NOT NULL,
+    `revision` Int64 NOT NULL,
+    `timestamp` Datetime NOT NULL,
+    PRIMARY KEY (`stub`)
+);
+
+CREATE TABLE commited
+(
+    `revision` Int64 NOT NULL,
+    `timestamp` Datetime NOT NULL,
+    PRIMARY KEY (`revision`)
+);
+
 CREATE TABLE current
 (
     `key` Bytes NOT NULL,
@@ -8,7 +23,6 @@ CREATE TABLE current
     `lease` Int64 NOT NULL,
     PRIMARY KEY (`key`),
     INDEX `lease` GLOBAL ON (`lease`)
-
 )
 WITH (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 23, AUTO_PARTITIONING_PARTITION_SIZE_MB = 11);
 

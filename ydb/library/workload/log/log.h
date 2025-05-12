@@ -14,7 +14,6 @@ public:
     };
 
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
-    void Parse(const NLastGetopt::TOptsParseResult& opts, int wokrloadType) override;
     THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
     TString GetWorkloadName() const override;
     ui64 MinPartitions = 40;
@@ -25,8 +24,6 @@ public:
     ui64 IntColumnsCnt = 0;
     ui64 KeyColumnsCnt = 0;
     ui64 TimestampStandardDeviationMinutes = 0;
-    std::optional<ui64> TimestampDateFrom{std::nullopt};
-    std::optional<ui64> TimestampDateTo{std::nullopt};
     ui64 TimestampTtlMinutes = 0;
     ui64 TimestampSubtract = 0;
     ui64 RowsCnt = 1;

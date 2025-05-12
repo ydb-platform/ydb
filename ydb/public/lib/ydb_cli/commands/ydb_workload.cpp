@@ -359,11 +359,6 @@ void TWorkloadCommandRun::Config(TConfig& config) {
     Params.ConfigureOpts(config.Opts->GetOpts(), NYdbWorkload::TWorkloadParams::ECommandType::Run, Type);
 }
 
-void TWorkloadCommandRun::Parse(TConfig& config) {
-    TWorkloadCommand::Parse(config);
-    Params.Parse(ParseResult->GetCommandLineParseResult(), Type);
-}
-
 TWorkloadCommandBase::TWorkloadCommandBase(const TString& name, NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::TWorkloadParams::ECommandType commandType, const TString& description, int type)
     : TYdbCommand(name, std::initializer_list<TString>(), description)
     , CommandType(commandType)

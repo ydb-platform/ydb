@@ -6,13 +6,7 @@ extern "C" {
 
 #include <ydb/library/benchmarks/gen/tpch-dbgen/config.h>
 #include <ydb/library/benchmarks/gen/tpch-dbgen/release.h>
-#ifdef DT_CHR
-#undef DT_CHR
-#endif
 #include <ydb/library/benchmarks/gen/tpch-dbgen/dss.h>
-#ifdef DT_CHR
-#undef DT_CHR
-#endif
 #include <ydb/library/benchmarks/gen/tpch-dbgen/dsstypes.h>
 
 void InitTpchGen(DSS_HUGE scale);

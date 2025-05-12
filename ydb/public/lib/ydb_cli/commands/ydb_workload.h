@@ -73,7 +73,6 @@ class TWorkloadCommandRun : public TWorkloadCommand {
 public:
     TWorkloadCommandRun(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload);
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:

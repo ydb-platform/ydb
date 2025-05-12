@@ -6292,6 +6292,11 @@
                 "ColumnId": 19,
                 "ColumnName": "SrcPath",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 20,
+                "ColumnName": "Topic",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],

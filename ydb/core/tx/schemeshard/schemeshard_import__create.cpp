@@ -425,6 +425,25 @@ private:
         Send(Self->SelfId(), std::move(propose));
     }
 
+    void CreateTopic(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
+        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+        auto& item = importInfo->Items.at(itemIdx);
+
+        item.SubState = ESubState::Proposed;
+
+        LOG_I("TImport::TTxProgress: CreateTopic propose"
+            << ": info# " << importInfo->ToString()
+            << ", item# " << item.ToString(itemIdx)
+            << ", txId# " << txId);
+
+        Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
+
+        auto propose = CreateTopicPropose(Self, txId, importInfo, itemIdx);
+        Y_ABORT_UNLESS(propose);
+
+        Send(Self->SelfId(), std::move(propose));
+    }
+
     void ExecutePreparedQuery(TTransactionContext& txc, TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items[itemIdx];
@@ -1222,6 +1241,11 @@ private:
                     itemIdx = i;
                     break;
                 }
+                if (item.Topic) {
+                    CreateTopic(importInfo, i, txId);
+                    itemIdx = i;
+                    break;
+                }
                 if (IsCreatedByQuery(item)) {
                     // We only need a txId for modify scheme transactions.
                     // If an object’s CreationQuery has not been prepared yet, it does not need a txId at this point.
@@ -1475,6 +1499,9 @@ private:
         switch (item.State) {
         case EState::CreateSchemeObject:
             if (IsCreatedByQuery(item)) {
+                item.State = EState::Done;
+                break;
+            } else if (item.Topic) {
                 item.State = EState::Done;
                 break;
             }

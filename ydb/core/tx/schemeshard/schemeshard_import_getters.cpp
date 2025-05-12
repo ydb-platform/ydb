@@ -202,6 +202,14 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateView().FileName);
     }
 
+    static bool IsTableScheme(TStringBuf schemeKey) {
+        return schemeKey.EndsWith(NYdb::NDump::NFiles::TableScheme().FileName);
+    }
+
+    static bool IsTopic(TStringBuf schemeKey) {
+        return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateTopic().FileName);
+    }
+
     static bool NoObjectFound(Aws::S3::S3Errors errorType) {
         return errorType == S3Errors::RESOURCE_NOT_FOUND || errorType == S3Errors::NO_SUCH_KEY;
     }
@@ -227,10 +235,16 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ": self# " << SelfId()
             << ", result# " << result);
 
-        if (!IsView(SchemeKey) && NoObjectFound(result.GetError().GetErrorType())) {
-            // try search for a view
-            SchemeKey = SchemeKeyFromSettings(ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateView().FileName);
-            HeadObject(SchemeKey);
+        if (NoObjectFound(result.GetError().GetErrorType())) {
+            if (IsTableScheme(SchemeKey)) {
+                // try search for a view
+                SchemeKey = SchemeKeyFromSettings(ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateView().FileName);
+                HeadObject(SchemeKey);
+            } else if (IsView(SchemeKey)) {
+                // try search for a topic
+                SchemeKey = SchemeKeyFromSettings(ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateTopic().FileName);
+                HeadObject(SchemeKey);
+            }
             return;
         }
 
@@ -371,6 +385,12 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
         if (IsView(SchemeKey)) {
             item.CreationQuery = content;
+        } else if (IsTopic(SchemeKey)) {
+            Ydb::Topic::CreateTopicRequest request;
+            if (!google::protobuf::TextFormat::ParseFromString(content, &request)) {
+                return Reply(false, "Cannot parse topic scheme");
+            }
+            item.Topic = request;
         } else if (!google::protobuf::TextFormat::ParseFromString(content, &item.Scheme)) {
             return Reply(false, "Cannot parse scheme");
         }

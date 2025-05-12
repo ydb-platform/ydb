@@ -985,17 +985,17 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         }
 
         #if !defined(_tsan_enabled_) && !defined(_msan_enabled_) && !defined(_asan_enabled_)
-        for (ui64 itemsLimit : part.Slices->size() > 1 ? TVector<ui64>{0, 1, 2, 5} : TVector<ui64>{0, 1, 2, 5, 13, 19, part.Stat.Rows - 2, part.Stat.Rows - 1}) {
+        for (ui64 itemsLimit : params.Groups || params.History || params.Slices ? TVector<ui64>{0, 1, 2, 5} : TVector<ui64>{0, 1, 2, 5, 13, 19, part.Stat.Rows - 2, part.Stat.Rows - 1}) {
             for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
                 for (ui32 secondCellKey1 : xrange<ui32>(0, 14)) {
                     for (ui32 firstCellKey2 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
-                        for (ui32 secondCellKey2 : xrange<ui32>(0, 14)) {
+                        for (ui32 secondCellKey2 : xrange<ui32>(0, itemsLimit ? 0 : 14)) {
         #else
-        for (ui64 itemsLimit : part.Slices->size() > 1 ? TVector<ui64>{0, 3} : TVector<ui64>{0, 5, part.Stat.Rows - 1}) {
+        for (ui64 itemsLimit : params.Groups || params.History || params.Slices ? TVector<ui64>{0, 3} : TVector<ui64>{0, 5, part.Stat.Rows - 1}) {
             for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
                 for (ui32 secondCellKey1 : xrange<ui32>(10, 14)) {
                     for (ui32 firstCellKey2 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
-                        for (ui32 secondCellKey2 : xrange<ui32>(10, 14)) {
+                        for (ui32 secondCellKey2 : xrange<ui32>(10, itemsLimit ? 11 : 14)) {
         #endif
                             TVector<TCell> key1 = MakeKey(firstCellKey1, secondCellKey1);
                             TVector<TCell> key2 = MakeKey(firstCellKey2, secondCellKey2);

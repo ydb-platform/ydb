@@ -234,6 +234,7 @@ private:
             buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryIndex;
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync;
             break;
+
         case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
             if (!Self->EnableAddUniqueIndex) {
                 explain = "Adding a unique index to an existing table is disabled";
@@ -242,6 +243,7 @@ private:
             buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex;
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
             break;
+        }
         case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex: {
             if (!Self->EnableVectorIndex) {
                 explain = "Vector index support is disabled";

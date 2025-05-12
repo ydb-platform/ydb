@@ -421,15 +421,6 @@ class StabilityCluster:
                         found_screens = True
                         print(f'\n{bcolors.BOLD}{bcolors.OKCYAN}=== {workload_name} ==={bcolors.ENDC}')
                         
-                        # Set up screen logging for both stdout and stderr
-                        node.ssh_command(f'screen -S {screen_pid} -X logfile /tmp/{workload_name}.out.log', raise_on_error=False)
-                        node.ssh_command(f'screen -S {screen_pid} -X log on', raise_on_error=False)
-                        # Set up stderr logging
-                        node.ssh_command(f'screen -S {screen_pid} -X logfile /tmp/{workload_name}.err.log', raise_on_error=False)
-                        node.ssh_command(f'screen -S {screen_pid} -X deflog on', raise_on_error=False)
-                        # Configure timestamp
-                        node.ssh_command(f'screen -S {screen_pid} -X eval "logtstamp on" "logtstamp string \\%Y-\\%m-\\%d \\%c:\\%s "', raise_on_error=False)
-                        
                         # Get the last N seconds of output from both stdout and stderr
                         time_filter = f'$(date -d "{seconds} seconds ago" +"%Y-%m-%d %H:%M:%S")'
                         
@@ -457,7 +448,7 @@ class StabilityCluster:
                         # Get stderr if requested
                         if mode in ['err', 'all']:
                             result = node.ssh_command(
-                                f'tail -n 1000 /tmp/{workload_name}.err.log | grep -A 1000 "{time_filter}" 2>/dev/null || true',
+                                f'tail -n 1000 /tmp/{workload_name}.err.log 2>/dev/null | grep -E "ERROR|WARN|WARNING" || true',
                                 raise_on_error=False
                             )
                             print(f"\n{bcolors.BOLD}{bcolors.FAIL}STDERR:{bcolors.ENDC}")
@@ -631,15 +622,15 @@ def main():
         if action == "start_default_workloads":
             for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
                 node.ssh_command(
-                    'screen -s simple_queue_row -d -m bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode row; done"',
+                    'screen -s simple_queue_row -d -m -L -Logfile /tmp/simple_queue_row.out.log bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode row; done"',
                     raise_on_error=True
                 )
                 node.ssh_command(
-                    'screen -s simple_queue_column -d -m bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode column; done"',
+                    'screen -s simple_queue_column -d -m -L -Logfile /tmp/simple_queue_column.out.log bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode column; done"',
                     raise_on_error=True
                 )
                 node.ssh_command(
-                    'screen -s olap_workload -d -m bash -c "while true; do /Berkanavt/nemesis/bin/olap_workload --database /Root/db1; done"',
+                    'screen -s olap_workload -d -m -L -Logfile /tmp/olap_workload.out.log bash -c "while true; do /Berkanavt/nemesis/bin/olap_workload --database /Root/db1; done"',
                     raise_on_error=True
                 )
             stability_cluster.get_state()
@@ -740,28 +731,28 @@ def main():
         if action == "start_workload_simple_queue_row":
             for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
                 node.ssh_command(
-                    'screen -s simple_queue_row -d -m bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode row; done"',
+                    'screen -s simple_queue_row -d -m -L -Logfile /tmp/simple_queue_row.out.log bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode row; done"',
                     raise_on_error=True
                 )
             stability_cluster.get_state()
         if action == "start_workload_simple_queue_column":
             for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
                 node.ssh_command(
-                    'screen -s simple_queue_column -d -m bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode column; done"',
+                    'screen -s simple_queue_column -d -m -L -Logfile /tmp/simple_queue_column.out.log bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode column; done"',
                     raise_on_error=True
                 )
             stability_cluster.get_state()
         if action == "start_workload_olap_workload":
             for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
                 node.ssh_command(
-                    'screen -s olap_workload -d -m bash -c "while true; do /Berkanavt/nemesis/bin/olap_workload --database /Root/db1; done"',
+                    'screen -s olap_workload -d -m -L -Logfile /tmp/olap_workload.out.log bash -c "while true; do /Berkanavt/nemesis/bin/olap_workload --database /Root/db1; done"',
                     raise_on_error=True
                 )
             stability_cluster.get_state()
         if action == "start_workload_oltp_workload":
             for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
                 node.ssh_command(
-                    'screen -s oltp_workload -d -m bash -c "while true; do /Berkanavt/nemesis/bin/oltp_workload --database /Root/db1 --path oltp_workload --duration 3600; done"',
+                    'screen -s oltp_workload -d -m -L -Logfile /tmp/oltp_workload.out.log bash -c "while true; do /Berkanavt/nemesis/bin/oltp_workload --database /Root/db1 --path oltp_workload --duration 3600; done"',
                     raise_on_error=True
                 )
             stability_cluster.get_state()

@@ -54,7 +54,8 @@ class TGeneralSerializedSlice {
 private:
     YDB_READONLY(ui32, RecordsCount, 0);
     YDB_READONLY(ui32, InternalSplitsCount, 0);
-protected:
+    std::vector<std::shared_ptr<IPortionDataChunk>> SplitToSize(const std::shared_ptr<IPortionDataChunk>& bigChunk, const ui32 sizeLimit) const;
+    protected:
     std::vector<TSplittedEntity> Data;
     ui64 Size = 0;
     NArrow::NSplitter::ISchemaDetailInfo::TPtr Schema;

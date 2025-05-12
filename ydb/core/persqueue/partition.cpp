@@ -167,8 +167,8 @@ void TPartition::ReplyOk(const TActorContext& ctx, const ui64 dst, NWilson::TSpa
 }
 
 void TPartition::ReplyGetClientOffsetOk(const TActorContext& ctx, const ui64 dst, const i64 offset,
-    const TInstant writeTimestamp, const TInstant createTimestamp, bool consumerHasAnyCommits) {
-    ctx.Send(Tablet, MakeReplyGetClientOffsetOk(dst, offset, writeTimestamp, createTimestamp, consumerHasAnyCommits).Release());
+    const TInstant writeTimestamp, const TInstant createTimestamp, bool consumerHasAnyCommits, const TString& committedMetadata) {
+    ctx.Send(Tablet, MakeReplyGetClientOffsetOk(dst, offset, writeTimestamp, createTimestamp, consumerHasAnyCommits, committedMetadata).Release());
 }
 
 NKikimrClient::TKeyValueRequest::EStorageChannel GetChannel(ui32 i) {
@@ -3344,14 +3344,15 @@ void TPartition::ScheduleReplyGetClientOffsetOk(const ui64 dst,
                                                 const i64 offset,
                                                 const TInstant writeTimestamp,
                                                 const TInstant createTimestamp,
-                                                bool consumerHasAnyCommits)
+                                                bool consumerHasAnyCommits, TString committedMetadata)
 {
     Replies.emplace_back(Tablet,
                          MakeReplyGetClientOffsetOk(dst,
                                                     offset,
                                                     writeTimestamp,
                                                     createTimestamp,
-                                                    consumerHasAnyCommits).Release());
+                                                    consumerHasAnyCommits, committedMetadata).Release());
+                                                    // тут метадата?
 
 }
 
@@ -3582,7 +3583,8 @@ THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyGetClientOffsetOk(const ui
                                                                         const i64 offset,
                                                                         const TInstant writeTimestamp,
                                                                         const TInstant createTimestamp,
-                                                                        bool consumerHasAnyCommits)
+                                                                        bool consumerHasAnyCommits,
+                                                                        const TString& committedMetadata)
 {
     auto response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
     NKikimrClient::TResponse& resp = *response->Response;
@@ -3593,6 +3595,10 @@ THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyGetClientOffsetOk(const ui
     auto user = resp.MutablePartitionResponse()->MutableCmdGetClientOffsetResult();
     if (offset > -1)
         user->SetOffset(offset);
+
+    if (committedMetadata) {
+        user->SetCommittedMetadata(committedMetadata);
+    }
     if (writeTimestamp)
         user->SetWriteTimestampMS(writeTimestamp.MilliSeconds());
     if (createTimestamp) {

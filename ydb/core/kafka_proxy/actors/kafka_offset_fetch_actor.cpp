@@ -144,7 +144,7 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
         response->TopicName = OriginalTopicName;
         response->Status = NONE_ERROR;
         response->PartitionIdToOffsets = PartitionIdToOffsets;
-
+        // туть?
         Send(Requester, response.Release());
         Die(ctx);
     };

@@ -619,6 +619,8 @@ protected:
 
         //! Log level for events emitted via |Set(Request|Response)Info|-like functions.
         NLogging::ELogLevel LogLevel = NLogging::ELogLevel::Debug;
+        //! Log level for events emitted when method fails, by default |LogLevel| is used.
+        std::optional<NLogging::ELogLevel> ErrorLogLevel;
 
         //! Logging suppression timeout for this method requests.
         TDuration LoggingSuppressionTimeout = TDuration::Zero();
@@ -654,6 +656,7 @@ protected:
         TMethodDescriptor SetConcurrencyByteLimit(i64 value) const;
         TMethodDescriptor SetSystem(bool value) const;
         TMethodDescriptor SetLogLevel(NLogging::ELogLevel value) const;
+        TMethodDescriptor SetErrorLogLevel(NLogging::ELogLevel value) const;
         TMethodDescriptor SetLoggingSuppressionTimeout(TDuration value) const;
         TMethodDescriptor SetCancelable(bool value) const;
         TMethodDescriptor SetGenerateAttachmentChecksums(bool value) const;
@@ -764,6 +767,7 @@ protected:
         NProfiling::TCounter UnauthenticatedRequestCounter;
 
         std::atomic<NLogging::ELogLevel> LogLevel = {};
+        std::atomic<NLogging::ELogLevel> ErrorLogLevel = {};
         std::atomic<TDuration> LoggingSuppressionTimeout = {};
 
         using TNonowningPerformanceCountersKey = std::tuple<TStringBuf, TRequestQueue*>;
@@ -907,7 +911,7 @@ protected:
 
 protected:
     virtual void OnMethodError(
-        const TError& error,
+        TError* error,
         const TString& method);
 
 private:

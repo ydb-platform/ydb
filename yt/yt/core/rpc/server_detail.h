@@ -125,6 +125,7 @@ protected:
 
     const NLogging::TLogger Logger;
     const NLogging::ELogLevel LogLevel_;
+    const NLogging::ELogLevel ErrorLogLevel_;
 
     // Set in #Initialize.
     bool LoggingEnabled_;
@@ -163,13 +164,15 @@ protected:
         TMemoryUsageTrackerGuard memoryGuard,
         IMemoryUsageTrackerPtr memoryUsageTracker,
         NLogging::TLogger logger,
-        NLogging::ELogLevel logLevel);
+        NLogging::ELogLevel logLevel,
+        std::optional<NLogging::ELogLevel> errorLogLevel = {});
     TServiceContextBase(
         TSharedRefArray requestMessage,
         TMemoryUsageTrackerGuard memoryGuard,
         IMemoryUsageTrackerPtr memoryUsageTracker,
         NLogging::TLogger logger,
-        NLogging::ELogLevel logLevel);
+        NLogging::ELogLevel logLevel,
+        std::optional<NLogging::ELogLevel> errorLogLevel = {});
 
     virtual void DoReply() = 0;
     virtual void DoFlush();

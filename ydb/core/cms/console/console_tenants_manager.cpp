@@ -710,22 +710,28 @@ public:
         BLOG_D("TSubdomainManip(" << Tenant->Path << ") reply with " << resp->ToString());
 
         using TAuditFunc = decltype(AuditLogEndConfigureDatabase);
-        auto audit = [&](TAuditFunc auditFunc, bool success) {
+        auto audit = [&](TAuditFunc auditFunc) {
+            bool isSuccess = (typeid(*resp) != typeid(TTenantsManager::TEvPrivate::TEvSubdomainFailed));
+
+            TString issue = "";
+            if (!isSuccess) {
+                issue = dynamic_cast<TTenantsManager::TEvPrivate::TEvSubdomainFailed*>(resp)->Issue;
+            }
+
             auditFunc(
                 Tenant->PeerName,
                 Tenant->UserToken.GetUserSID(),
                 Tenant->UserToken.GetSanitizedToken(),
                 Tenant->Path,
-                success ? "" : resp->GetReason(),
-                success
+                issue,
+                isSuccess
             );
         };
 
-        bool isSuccess = (typeid(*resp) != typeid(TTenantsManager::TEvPrivate::TEvSubdomainFailed));
         if (Action == GET_KEY) {
-            audit(AuditLogEndConfigureDatabase, isSuccess);
+            audit(AuditLogEndConfigureDatabase);
         } else if (Action == REMOVE) {
-            audit(AuditLogEndRemoveDatabase, isSuccess);
+            audit(AuditLogEndRemoveDatabase);
         }
 
         ctx.Send(OwnerId, resp);

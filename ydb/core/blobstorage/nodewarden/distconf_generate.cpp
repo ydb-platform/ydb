@@ -569,11 +569,10 @@ namespace NKikimr::NStorage {
             auto r = pickNodes(v, Min<size_t>(v.size(), maxNodesPerDataCenter));
             nodes.insert(nodes.end(), r.begin(), r.end());
         }
-        auto *ringGroup = ss->AddRingGroups();
-        ringGroup->SetNToSelect(nodes.size() / 2 + 1);
+        auto *ring = ss->MutableRing();
+        ring->SetNToSelect(nodes.size() / 2 + 1);
 
         for (ui32 nodeId : nodes) {
-            auto *ring = ringGroup->AddRing();
             ring->AddNode(nodeId);
         }
 

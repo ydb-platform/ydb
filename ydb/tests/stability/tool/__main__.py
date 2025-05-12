@@ -371,14 +371,24 @@ class StabilityCluster:
             print(f'\n{bcolors.BOLD}{bcolors.HEADER}=== {node_host} ==={bcolors.ENDC}')
             
             # First check running processes to match get_state behavior
-            running_workloads = set()
+            running_workloads = {}  # workload_name -> pid
             for workload_name, workload in DICT_OF_PROCESSES.items():
                 result = node.ssh_command(workload['status'], raise_on_error=False)
                 if result and 'Running' in result.decode('utf-8'):
-                    running_workloads.add(workload_name)
+                    # Get the PID of the screen process for this workload
+                    ps_result = node.ssh_command(
+                        f'ps aux | grep "SCREEN.*{workload_name}" | grep -v grep',
+                        raise_on_error=False
+                    )
+                    if ps_result:
+                        try:
+                            pid = ps_result.decode('utf-8').split()[1]
+                            running_workloads[workload_name] = pid
+                        except (IndexError, ValueError):
+                            running_workloads[workload_name] = None
             
             if running_workloads:
-                print(f"{bcolors.OKCYAN}Found running workloads: {', '.join(running_workloads)}{bcolors.ENDC}")
+                print(f"{bcolors.OKCYAN}Found running workloads: {', '.join(running_workloads.keys())}{bcolors.ENDC}")
             
             # Get list of running screen sessions with their proper names
             result = node.ssh_command(
@@ -399,18 +409,24 @@ class StabilityCluster:
                 if not screen.strip() or 'Socket' in screen:  # Skip socket directory line
                     continue
                 
-                # Try to find screen by its session name using screen -ls output
-                for workload_name in running_workloads:
-                    if workload_name in screen:
+                # Extract PID from screen listing (format: PID..hostname)
+                try:
+                    screen_pid = screen.strip().split('.')[0].split('\t')[0]
+                except IndexError:
+                    continue
+
+                # Match screen session with workload by PID
+                for workload_name, pid in running_workloads.items():
+                    if pid == screen_pid:
                         found_screens = True
                         print(f'\n{bcolors.BOLD}{bcolors.OKCYAN}=== {workload_name} ==={bcolors.ENDC}')
                         # Configure screen to log both stdout and stderr to separate files
-                        node.ssh_command(f'screen -S {workload_name} -X logfile /tmp/{workload_name}.out.log', raise_on_error=False)
-                        node.ssh_command(f'screen -S {workload_name} -X log on', raise_on_error=False)
+                        node.ssh_command(f'screen -S {screen_pid} -X logfile /tmp/{workload_name}.out.log', raise_on_error=False)
+                        node.ssh_command(f'screen -S {screen_pid} -X log on', raise_on_error=False)
                         # Ensure stderr is also being captured (by default screen only captures stdout)
-                        node.ssh_command(f'screen -S {workload_name} -X colon "logfile flush 0^M"', raise_on_error=False)
-                        node.ssh_command(f'screen -S {workload_name} -X eval "logtstamp on" "logtstamp string \\%Y-\\%m-\\%d \\%c:\\%s "', raise_on_error=False)
-                        node.ssh_command(f'screen -S {workload_name} -X log on', raise_on_error=False)
+                        node.ssh_command(f'screen -S {screen_pid} -X colon "logfile flush 0^M"', raise_on_error=False)
+                        node.ssh_command(f'screen -S {screen_pid} -X eval "logtstamp on" "logtstamp string \\%Y-\\%m-\\%d \\%c:\\%s "', raise_on_error=False)
+                        node.ssh_command(f'screen -S {screen_pid} -X log on', raise_on_error=False)
                         
                         # Get the last N seconds of output from both stdout and stderr
                         time_filter = f'$(date -d "{seconds} seconds ago" +"%Y-%m-%d %H:%M:%S")'

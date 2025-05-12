@@ -225,6 +225,12 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
         tableMeta->ColumnOrder.push_back(column);
     }
 
+    if (entry.ColumnTableInfo) {
+        for (const auto& column: entry.ColumnTableInfo->Description.GetSharding().GetHashSharding().GetColumns()) {
+            tableMeta->PartitionedByColumns.push_back(column);
+        }
+    }
+
     IndexProtoToMetadata(entry.Indexes, tableMeta);
 
     return result;

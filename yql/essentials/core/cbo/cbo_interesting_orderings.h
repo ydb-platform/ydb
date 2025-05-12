@@ -1,7 +1,6 @@
 #pragma once
 
 #include <yql/essentials/core/yql_cost_function.h>
-#include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/disjoint_sets/disjoint_sets.h>
 #include <util/generic/hash.h>
@@ -415,10 +414,6 @@ private:
                     }
                 }
             }
-
-            if (Nodes.size() >= EMaxNFSMStates) {
-                YQL_CLOG(TRACE, CoreDq) << "NFSM states exceeded the limit";
-            }
         }
 
     private:
@@ -485,10 +480,6 @@ private:
 
                     Nodes[nodeIdx].OutgoingFDs[fdIdx] = 1;
                 }
-            }
-
-            if (Nodes.size() >= EMaxDFSMStates) {
-                YQL_CLOG(TRACE, CoreDq) << "DFSM states exceeded the limit";
             }
 
             Precompute(nfsm, fds, interestingOrderings);
@@ -586,17 +577,9 @@ private:
         const std::vector<TFunctionalDependency>& fds,
         const std::vector<TOrdering>& interestingOrderings
     ) {
-        YQL_CLOG(TRACE, CoreDq) << "Building Orderings State Machine, Interesting Orderings amount:" << interestingOrderings.size();
         std::vector<TFunctionalDependency> processedFDs = PruneFDs(fds, interestingOrderings);
         NFSM.Build(processedFDs, interestingOrderings);
         DFSM.Build(NFSM, processedFDs, interestingOrderings);
-        YQL_CLOG(TRACE, CoreDq) << "Orderings FSM has been built, DFSM state count: " << DFSM.Size() << ", NFSM state count: " << NFSM.Size();
-        // for (const auto& ordering: interestingOrderings) {
-        //     for (const auto& item: ordering.Items) {
-        //         Cerr << item << '\n';
-        //         ++ShuffleCountByColumnIdx[item];
-        //     }
-        // }
     }
 
     /*

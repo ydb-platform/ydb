@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include "dq_opt_log.h"
-#include "dq_opt_join.h"
+#include <ydb/library/yql/dq/opt/dq_opt_log.h>
+#include <ydb/library/yql/dq/opt/dq_opt_join.h>
 
 #include <util/string/split.h>
 
@@ -42,7 +42,7 @@ struct TTestContext : public TBaseProviderContext {
         const TVector<NDq::TJoinColumn>& ,
         const TVector<NDq::TJoinColumn>& ,
         EJoinAlgoType ,
-        EJoinKind 
+        EJoinKind
     ) override {
         return true;
     }
@@ -53,8 +53,8 @@ std::shared_ptr<IBaseOptimizerNode> Enumerate(const std::shared_ptr<IBaseOptimiz
     auto ctx = TProviderContext();
     TExprContext dummyCtx;
     auto optimizer =
-        std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(ctx, std::numeric_limits<ui32>::max(), dummyCtx));
-    
+        std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(ctx, std::numeric_limits<ui32>::max(), dummyCtx, false));
+
     Y_ENSURE(root->Kind == EOptimizerNodeKind::JoinNodeType);
     auto res = optimizer->JoinSearch(std::static_pointer_cast<TJoinOptimizerNode>(root), hints);
     Cout << "Optimized Tree:" << Endl;
@@ -76,7 +76,7 @@ TVector<TJoinColumn> CollectConditions(const std::shared_ptr<IBaseOptimizerNode>
         lhsConds.push_back(lhsCond);
         lhsConds.push_back(rhsCond);
     }
-    
+
     return lhsConds;
 }
 
@@ -84,17 +84,17 @@ bool HaveSameConditions(const std::shared_ptr<IBaseOptimizerNode>& actual, std::
     auto actualConds = CollectConditions(actual);
     auto expectedConds = CollectConditions(expected);
 
-    return 
-        std::unordered_set<TJoinColumn, TJoinColumn::THashFunction>(actualConds.begin(), actualConds.end()) == 
+    return
+        std::unordered_set<TJoinColumn, TJoinColumn::THashFunction>(actualConds.begin(), actualConds.end()) ==
         std::unordered_set<TJoinColumn, TJoinColumn::THashFunction>(expectedConds.begin(), expectedConds.end());
 }
 
 bool HaveSameConditionCount(const std::shared_ptr<IBaseOptimizerNode>& actual, std::shared_ptr<IBaseOptimizerNode> expected) {
     auto actualConds = CollectConditions(actual);
     auto expectedConds = CollectConditions(expected);
-    
+
     return actualConds.size() == expectedConds.size() &&
-        std::unordered_set<TJoinColumn, TJoinColumn::THashFunction>(actualConds.begin(), actualConds.end()).size() == 
+        std::unordered_set<TJoinColumn, TJoinColumn::THashFunction>(actualConds.begin(), actualConds.end()).size() ==
         std::unordered_set<TJoinColumn, TJoinColumn::THashFunction>(expectedConds.begin(), expectedConds.end()).size();
 }
 
@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
 
         for (size_t i = 0; i < nodeCount; ++i) {
             for (size_t j = 0; j < nodeCount; ++j) {
-                if (i == j) continue; 
+                if (i == j) continue;
 
                 TNodeSet64 lhs; lhs[i] = 1;
                 TNodeSet64 rhs; rhs[j] = 1;
@@ -122,17 +122,17 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
 
         UNIT_ASSERT(graph.GetEdges().size() == 6);
 
-        CheckClique(graph); 
+        CheckClique(graph);
         Enumerate(root);
     }
 
     Y_UNIT_TEST(SimpleChain4NodesTransitiveClosure) {
         auto root = CreateChain(4, "Ya hochu pitsu");
         auto graph = MakeJoinHypergraph<TNodeSet64>(root);
-        
+
         UNIT_ASSERT(graph.GetEdges().size() == 12);
 
-        CheckClique(graph); 
+        CheckClique(graph);
         Enumerate(root);
     }
 
@@ -142,7 +142,7 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
 
         UNIT_ASSERT(graph.GetEdges().size() == 20);
 
-        CheckClique(graph); 
+        CheckClique(graph);
         Enumerate(root);
     }
 
@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
 
         rhs = CreateChain(2, "228", "c");
 
-        // a1 --228-- a2 --228-- a3 --1337-- b1 --1337-- b2 --123-- c1 --228-- c2 
+        // a1 --228-- a2 --228-- a3 --1337-- b1 --1337-- b2 --123-- c1 --228-- c2
         // ^ we don't want to have transitive closure between c and a
         root = std::make_shared<TJoinOptimizerNode>(
             root, rhs, leftKeys, rightKeys, EJoinKind::InnerJoin, EJoinAlgoType::Undefined, false, false
@@ -211,7 +211,7 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
             return root;
         } else {
             static_assert(
-                std::is_convertible_v<TJoinArg, std::string> || std::is_same_v<TJoinArg, std::shared_ptr<IBaseOptimizerNode>>, 
+                std::is_convertible_v<TJoinArg, std::string> || std::is_same_v<TJoinArg, std::shared_ptr<IBaseOptimizerNode>>,
                 "Args of join must be either Join or TString, for example: Join(Join('A', 'B'), 'C')"
             );
         }
@@ -252,7 +252,7 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
                 TString attr = ToString(rand());
                 leftJoinCond.push_back(TJoinColumn(std::move(lhsCond), attr));
                 rightJoinCond.push_back(TJoinColumn(std::move(rhsCond), attr));
- 
+
             }
         }
 
@@ -286,13 +286,22 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
         return Join(lhsArg, rhsArg, on, EJoinKind::Cross);
     }
 
+    Y_UNIT_TEST(SimpleDimpleJoin) {
+        auto join = Join("A", "B");
+
+        auto graph = MakeJoinHypergraph<TNodeSet64>(join);
+        Cout << graph.String() << Endl;
+
+        Enumerate(join);
+    }
+
     Y_UNIT_TEST(AnyJoinWithTransitiveClosure) {
         auto root = Join("A", Join("B", Join("C", "D", "C.id=D.id"), "B.id=C.id"), "A.id=B.id");
         std::static_pointer_cast<TJoinOptimizerNode>(root)->LeftAny = true;
 
         auto graph = MakeJoinHypergraph<TNodeSet64>(root);
         Cout << graph.String() << Endl;
-        
+
         auto A = graph.GetNodesByRelNames({"A"});
         auto B = graph.GetNodesByRelNames({"B"});
         auto C = graph.GetNodesByRelNames({"C"});
@@ -309,7 +318,7 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
         auto anyJoin = Join(Join("A", "B"), "C", /*on=*/ "B=C");
         std::static_pointer_cast<TJoinOptimizerNode>(anyJoin)->LeftAny = true;
         auto join = Join(anyJoin, "D", /*on=*/"A=D");
-        
+
         auto graph = MakeJoinHypergraph<TNodeSet64>(join);
         Cout << graph.String() << Endl;
         UNIT_ASSERT(graph.GetEdges().size() !=  graph.GetSimpleEdges().size());
@@ -322,7 +331,7 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
         auto anyJoin = Join(Join(Join("A", "B"), "C", /*on=*/ "B=C"), "D", "C=D");
         std::static_pointer_cast<TJoinOptimizerNode>(anyJoin)->LeftAny = true;
         auto join = Join(anyJoin, "E", /*on=*/ "A=E");
-        
+
         auto graph = MakeJoinHypergraph<TNodeSet64>(join);
         Cout << graph.String() << Endl;
         UNIT_ASSERT(graph.GetEdges().size() !=  graph.GetSimpleEdges().size());
@@ -334,7 +343,7 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
         auto anyJoin = Join(Join("A", "B"), Join("C", "D"), /*on=*/"B=C");
         std::static_pointer_cast<TJoinOptimizerNode>(anyJoin)->RightAny = true;
         auto join = Join(anyJoin, "E", /*on=*/ "C=E");
-        
+
         auto graph = MakeJoinHypergraph<TNodeSet64>(join);
         Cout << graph.String() << Endl;
         UNIT_ASSERT(graph.GetEdges().size() !=  graph.GetSimpleEdges().size());
@@ -346,7 +355,7 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
         auto nonReorderable = Join(Join(Join("A", "B"), "C", /*on=*/ "B=C"), "D", "C=D");
         std::static_pointer_cast<TJoinOptimizerNode>(nonReorderable)->IsReorderable = false;
         auto join = Join(nonReorderable, "E", /*on=*/ "A=E");
-        
+
         auto graph = MakeJoinHypergraph<TNodeSet64>(join);
         Cout << graph.String() << Endl;
         UNIT_ASSERT(graph.GetEdges().size() !=  graph.GetSimpleEdges().size());
@@ -499,20 +508,23 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
 
     Y_UNIT_TEST(JoinTopologiesBenchmark) {
         #if defined(_asan_enabled_)
-            enum { CliqueSize = 0, ChainSize = 0, StarSize = 0 };
+            enum { CliqueSize = 0, StarSize = 0, ChainSize = 0 };
             std::cerr << "test is not running for ASAN!" << std::endl;
             return;
         #elif !defined(NDEBUG)
-            enum { CliqueSize = 11, ChainSize = 71, StarSize = 15 };
+            enum { CliqueSize = 6, StarSize = 6, ChainSize = 6 };
         #else
-            enum { CliqueSize = 15, ChainSize = 165, StarSize = 20 };
+            enum { CliqueSize = 10, StarSize = 14, ChainSize = 28 }; // after
+            // enum { CliqueSize = 15, StarSize = 20, ChainSize = 165, }; // before
         #endif
 
         TVector<double> cliqueTime{};
         TVector<double> starTime{};
         TVector<double> chainTime{};
 
-        for (size_t i = 0; i < 1; ++i) {
+        for (size_t i = 0; i < 3; ++i) {
+            srand(2281337);
+
             {
                 auto startClique = std::chrono::high_resolution_clock::now();
                 Enumerate(MakeClique(CliqueSize));
@@ -544,7 +556,7 @@ Y_UNIT_TEST_SUITE(HypergraphBuild) {
             return res;
         };
 
-        auto mean = [](const TVector<double>& v) -> double { 
+        auto mean = [](const TVector<double>& v) -> double {
             double sum = std::accumulate(v.begin(), v.end(), 0.0);
             return sum / static_cast<double>(v.size());
         };

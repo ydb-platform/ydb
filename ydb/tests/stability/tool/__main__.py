@@ -363,6 +363,93 @@ class StabilityCluster:
                 )
                 node.ssh_command(f"sudo chmod 777 {node_artifact_path}", raise_on_error=False)
 
+    def get_workload_outputs(self, minutes=1, mode='err'):
+        """Capture last N minutes of output from all running workload screens.
+        
+        Args:
+            minutes: Number of minutes of history to show
+            mode: One of 'out' (stdout only), 'err' (stderr only), or 'all' (both)
+        """
+        logging.getLogger().setLevel(logging.WARNING)
+        for node_id, node in enumerate(self.kikimr_cluster.nodes.values()):
+            node_host = node.host.split(':')[0]
+            print(f'\n{bcolors.BOLD}{bcolors.HEADER}=== {node_host} ==={bcolors.ENDC}')
+            
+            # Get list of running screen sessions
+            result = node.ssh_command(
+                'screen -ls | grep "\\."',
+                raise_on_error=False
+            )
+            if not result:
+                print(f"{bcolors.WARNING}No running screens found{bcolors.ENDC}")
+                continue
+
+            screens = result.decode('utf-8').strip().split('\n')
+            for screen in screens:
+                # Extract screen name from the format "id.name"
+                screen_name = screen.strip().split('.')[1].split('\t')[0]
+                if screen_name in DICT_OF_PROCESSES:
+                    print(f'\n{bcolors.BOLD}{bcolors.OKCYAN}=== {screen_name} ==={bcolors.ENDC}')
+                    # Configure screen to log both stdout and stderr to separate files
+                    node.ssh_command(f'screen -S {screen_name} -X logfile /tmp/{screen_name}.out.log', raise_on_error=False)
+                    node.ssh_command(f'screen -S {screen_name} -X log on', raise_on_error=False)
+                    # Ensure stderr is also being captured (by default screen only captures stdout)
+                    node.ssh_command(f'screen -S {screen_name} -X colon "logfile flush 0^M"', raise_on_error=False)
+                    node.ssh_command(f'screen -S {screen_name} -X eval "logtstamp on" "logtstamp string \\%Y-\\%m-\\%d \\%c:\\%s "', raise_on_error=False)
+                    node.ssh_command(f'screen -S {screen_name} -X log on', raise_on_error=False)
+                    
+                    # Get the last N minutes of output from both stdout and stderr
+                    time_filter = f'$(date -d "{minutes} minutes ago" +"%Y-%m-%d %H:%M:%S")'
+                    
+                    # Get stdout if requested
+                    if mode in ['out', 'all']:
+                        result = node.ssh_command(
+                            f'tail -n 1000 /tmp/{screen_name}.out.log | grep -A 1000 "{time_filter}"',
+                            raise_on_error=False
+                        )
+                        print(f"\n{bcolors.BOLD}{bcolors.OKGREEN}STDOUT:{bcolors.ENDC}")
+                        if result:
+                            output_lines = result.decode('utf-8').split('\n')
+                            for line in output_lines:
+                                # Color timestamp in cyan, rest of line in default color
+                                if line.strip():  # Skip empty lines
+                                    timestamp_end = line.find(' ', 20)  # Find space after timestamp
+                                    if timestamp_end != -1:
+                                        timestamp = line[:timestamp_end]
+                                        rest = line[timestamp_end:]
+                                        print(f"{bcolors.OKCYAN}{timestamp}{bcolors.ENDC}{rest}")
+                                    else:
+                                        print(line)
+                        else:
+                            print(f"{bcolors.WARNING}No output in the specified time window{bcolors.ENDC}")
+
+                    # Get stderr if requested
+                    if mode in ['err', 'all']:
+                        result = node.ssh_command(
+                            f'tail -n 1000 /tmp/screenlog.{screen_name} | grep -A 1000 "{time_filter}"',
+                            raise_on_error=False
+                        )
+                        print(f"\n{bcolors.BOLD}{bcolors.FAIL}STDERR:{bcolors.ENDC}")
+                        if result:
+                            error_lines = result.decode('utf-8').split('\n')
+                            for line in error_lines:
+                                if line.strip():  # Skip empty lines
+                                    # Color timestamp in cyan, errors in red
+                                    timestamp_end = line.find(' ', 20)  # Find space after timestamp
+                                    if timestamp_end != -1:
+                                        timestamp = line[:timestamp_end]
+                                        rest = line[timestamp_end:]
+                                        if 'ERROR' in rest:
+                                            print(f"{bcolors.OKCYAN}{timestamp}{bcolors.ENDC}{bcolors.FAIL}{rest}{bcolors.ENDC}")
+                                        elif 'WARN' in rest or 'WARNING' in rest:
+                                            print(f"{bcolors.OKCYAN}{timestamp}{bcolors.ENDC}{bcolors.WARNING}{rest}{bcolors.ENDC}")
+                                        else:
+                                            print(f"{bcolors.OKCYAN}{timestamp}{bcolors.ENDC}{rest}")
+                                    else:
+                                        print(line)
+                        else:
+                            print(f"{bcolors.WARNING}No output in the specified time window{bcolors.ENDC}")
+
 
 def path_type(path):
     # Expand the user's home directory if ~ is present
@@ -430,6 +517,7 @@ def parse_args():
             "stop_workloads",
             "stop_workload",
             "perform_checks",
+            "get_workload_outputs"
         ],
         help="actions to execute",
     )
@@ -450,6 +538,21 @@ def parse_args():
             required=True,
             help="Name of the workload to stop",
             choices=list(DICT_OF_PROCESSES.keys())
+        )
+
+    if "get_workload_outputs" in args.actions:
+        parser.add_argument(
+            "--minutes",
+            type=int,
+            default=1,
+            help="Number of minutes of output to show (default: 1)"
+        )
+        parser.add_argument(
+            "--mode",
+            type=str,
+            choices=['out', 'err', 'all'],
+            default='err',
+            help="Which output to show: 'out' (stdout only), 'err' (stderr only), or 'all' (both) (default: err)"
         )
 
     return parser.parse_args()
@@ -637,6 +740,9 @@ def main():
 
         if action == "perform_checks":
             stability_cluster.perform_checks()
+
+        if action == "get_workload_outputs":
+            stability_cluster.get_workload_outputs(args.minutes, args.mode)
 
 
 if __name__ == "__main__":

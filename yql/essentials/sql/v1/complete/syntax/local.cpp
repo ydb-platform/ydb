@@ -68,7 +68,7 @@ namespace NSQLComplete {
                 return {};
             }
 
-            TC3Candidates candidates = C3_.Complete(statement);
+            TC3Candidates candidates = C3Complete(statement, context);
 
             TLocalSyntaxContext result;
 
@@ -116,6 +116,23 @@ namespace NSQLComplete {
 
         std::unordered_set<TRuleId> ComputePreferredRules() const {
             return GetC3PreferredRules();
+        }
+
+        TC3Candidates C3Complete(TCompletionInput statement, const TCursorTokenContext& context) {
+            auto enclosing = context.Enclosing();
+
+            size_t caretTokenIndex = context.Cursor.NextTokenIndex;
+            if (enclosing.Defined()) {
+                caretTokenIndex = enclosing->Index;
+            }
+
+            TStringBuf text = statement.Text;
+            if (enclosing.Defined() && enclosing->Base->Name == "NOT_EQUALS2") {
+                text = statement.Text.Head(statement.CursorPosition);
+                caretTokenIndex += 1;
+            }
+
+            return C3_.Complete(text, caretTokenIndex);
         }
 
         TLocalSyntaxContext::TKeywords SiftedKeywords(const TC3Candidates& candidates) const {

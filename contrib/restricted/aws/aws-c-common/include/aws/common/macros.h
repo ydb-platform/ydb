@@ -61,7 +61,7 @@ AWS_STATIC_ASSERT(CALL_OVERLOAD_TEST(1) == 1);
 AWS_STATIC_ASSERT(CALL_OVERLOAD_TEST(1, 2) == 2);
 AWS_STATIC_ASSERT(CALL_OVERLOAD_TEST(1, 2, 3) == 3);
 
-#define AWS_CACHE_LINE 64
+enum { AWS_CACHE_LINE = 64 };
 /**
  * Format macro for strings of a specified length.
  * Allows non null-terminated strings to be used with the printf family of functions.

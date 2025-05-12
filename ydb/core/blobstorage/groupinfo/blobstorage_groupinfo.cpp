@@ -719,6 +719,11 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
         }
     }
 
+    // parse bridge mode fields
+    for (const auto& groupId : group.GetBridgeGroupIds()) {
+        res->BridgeGroupIds.push_back(groupId);
+    }
+
     // store original group protobuf it was parsed from
     res->Group.emplace(group);
     return res;

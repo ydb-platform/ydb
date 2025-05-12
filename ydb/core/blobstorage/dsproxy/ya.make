@@ -76,6 +76,7 @@ PEERDIR(
 END()
 
 RECURSE(
+    bridge
     mock
 )
 

@@ -118,6 +118,8 @@ void TMethodConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("log_level", &TThis::LogLevel)
         .Optional();
+    registrar.Parameter("error_log_level", &TThis::ErrorLogLevel)
+        .Optional();
     registrar.Parameter("request_bytes_throttler", &TThis::RequestBytesThrottler)
         .Default();
     registrar.Parameter("request_weight_throttler", &TThis::RequestWeightThrottler)

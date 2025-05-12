@@ -301,7 +301,7 @@ namespace NFwd {
             auto& meta = Part->IndexPages.GetBTree(groupId);
             Levels.resize(meta.LevelCount + 1);
             Levels[0].Queue.push_back({meta.GetPageId(), meta.GetDataSize()});
-            Levels[0].BeginPageId = 0;
+            Levels[0].BeginPageId = meta.GetPageId();
             Levels[0].EndPageId = meta.GetPageId() + 1;
             if (meta.LevelCount) {
                 IndexPageLocator.Add(meta.GetPageId(), GroupId, 0);

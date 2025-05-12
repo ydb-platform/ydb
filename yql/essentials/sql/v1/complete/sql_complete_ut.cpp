@@ -91,7 +91,9 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                   {"/test/service/", {{"Table", "example"}}},
                   {"/.sys/", {{"Table", "status"}}}}},
             {"example",
-             {{"/", {{"Table", "people"}}}}},
+             {{"/", {{"Table", "people"},
+                     {"Folder", "yql"}}},
+              {"/yql/", {{"Table", "tutorial"}}}}},
             {"yt:saurus",
              {{"/", {{"Table", "maxim"}}}}},
         };
@@ -608,6 +610,12 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                 {TableName, "`people`"},
             };
             UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, "SELECT * FROM example."), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {TableName, "tutorial"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(CompleteTop(1, engine, "SELECT * FROM example.`/yql/t#`"), expected);
         }
     }
 

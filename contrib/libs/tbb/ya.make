@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(2022.0.0)
+VERSION(2022.1.0)
 
-ORIGINAL_SOURCE(https://github.com/uxlfoundation/oneTBB/archive/v2022.0.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/uxlfoundation/oneTBB/archive/v2022.1.0.tar.gz)
 
 LICENSE(Apache-2.0)
 

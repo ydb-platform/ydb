@@ -99,6 +99,8 @@ struct TPartitionBlobEncoder {
     std::deque<TDataKey> DataKeysBody;
     TVector<TKeyLevel> DataKeysHead;
     std::deque<TDataKey> HeadKeys;
+
+    bool HeadCleared = false;
 };
 
 }

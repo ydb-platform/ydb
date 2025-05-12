@@ -81,7 +81,7 @@ DICT_OF_PROCESSES = {
     },
     'workload_log_column' : {
         'status' : """
-            if ps aux | grep "/Berkanavt/nemesis/bin/ydb_cli" | grep column | grep -v grep > /dev/null; then
+            if ps aux | grep "/Berkanavt/nemesis/bin/ydb_cli.*workload.*log.*--store.*column" | grep -v grep > /dev/null; then
                 echo "Running"
             else
                 echo "Stopped"
@@ -91,7 +91,7 @@ DICT_OF_PROCESSES = {
     },
     'workload_log_row' : {
         'status' : """
-            if ps aux | grep "/Berkanavt/nemesis/bin/ydb_cli" | grep row | grep -v grep > /dev/null; then
+            if ps aux | grep "/Berkanavt/nemesis/bin/ydb_cli.*workload.*log.*--store.*row" | grep -v grep > /dev/null; then
                 echo "Running"
             else
                 echo "Stopped"

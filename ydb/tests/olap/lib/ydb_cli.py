@@ -276,11 +276,15 @@ class YdbCliHelper:
                     self.result.error_message = wait_error
                 else:
                     if os.getenv('SECRET_REQUESTS', '') == '1':
-                        process = subprocess.run(self._get_cmd(), check=False, text=True, capture_output=True)
+                        with open(f'query{self.query_num}.stdout', "wt") as sout, open(f'query{self.query_num}.stderr', "wt") as serr:
+                            process = subprocess.run(self._get_cmd(), check=False, text=True, stdout=sout, stderr=serr)
+                        with open(f'query{self.query_num}.stdout', "rt") as sout, open(f'query{self.query_num}.stderr', "rt") as serr:
+                            self._parse_stderr(serr.read())
+                            self._parse_stdout(sout.read())
                     else:
                         process = yatest.common.process.execute(self._get_cmd(), check_exit_code=False, text=True)
-                    self._parse_stderr(process.stderr)
-                    self._parse_stdout(process.stdout)
+                        self._parse_stderr(process.stderr)
+                        self._parse_stdout(process.stdout)
                     self._load_stats()
                     self._load_query_out()
                     self._load_plans()

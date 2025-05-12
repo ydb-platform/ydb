@@ -420,13 +420,15 @@ class StabilityCluster:
                     if pid == screen_pid:
                         found_screens = True
                         print(f'\n{bcolors.BOLD}{bcolors.OKCYAN}=== {workload_name} ==={bcolors.ENDC}')
-                        # Configure screen to log both stdout and stderr to separate files
+                        
+                        # Set up screen logging for both stdout and stderr
                         node.ssh_command(f'screen -S {screen_pid} -X logfile /tmp/{workload_name}.out.log', raise_on_error=False)
                         node.ssh_command(f'screen -S {screen_pid} -X log on', raise_on_error=False)
-                        # Ensure stderr is also being captured (by default screen only captures stdout)
-                        node.ssh_command(f'screen -S {screen_pid} -X colon "logfile flush 0^M"', raise_on_error=False)
+                        # Set up stderr logging
+                        node.ssh_command(f'screen -S {screen_pid} -X logfile /tmp/{workload_name}.err.log', raise_on_error=False)
+                        node.ssh_command(f'screen -S {screen_pid} -X deflog on', raise_on_error=False)
+                        # Configure timestamp
                         node.ssh_command(f'screen -S {screen_pid} -X eval "logtstamp on" "logtstamp string \\%Y-\\%m-\\%d \\%c:\\%s "', raise_on_error=False)
-                        node.ssh_command(f'screen -S {screen_pid} -X log on', raise_on_error=False)
                         
                         # Get the last N seconds of output from both stdout and stderr
                         time_filter = f'$(date -d "{seconds} seconds ago" +"%Y-%m-%d %H:%M:%S")'
@@ -455,7 +457,7 @@ class StabilityCluster:
                         # Get stderr if requested
                         if mode in ['err', 'all']:
                             result = node.ssh_command(
-                                f'tail -n 1000 /tmp/screenlog.{workload_name} | grep -A 1000 "{time_filter}" 2>/dev/null || true',
+                                f'tail -n 1000 /tmp/{workload_name}.err.log | grep -A 1000 "{time_filter}" 2>/dev/null || true',
                                 raise_on_error=False
                             )
                             print(f"\n{bcolors.BOLD}{bcolors.FAIL}STDERR:{bcolors.ENDC}")

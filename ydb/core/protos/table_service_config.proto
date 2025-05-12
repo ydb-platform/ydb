@@ -334,7 +334,7 @@ message TTableServiceConfig {
 
     message TWriteActorSettings {
         optional uint64 InFlightMemoryLimitPerActorBytes = 1 [ default = 67108864 ];
-        optional uint64 MemoryLimitPerMessageBytes = 2 [ default = 67108864 ];
+        reserved 2; // MemoryLimitPerMessageBytes
 
         optional uint64 StartRetryDelayMs = 4 [ default = 1000 ];
         optional uint64 MaxRetryDelayMs = 5 [ default = 10000 ];

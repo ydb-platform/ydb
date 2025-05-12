@@ -377,15 +377,18 @@ class StabilityCluster:
                 if result and 'Running' in result.decode('utf-8'):
                     # Get the PID of the screen process for this workload
                     ps_result = node.ssh_command(
-                        f'ps aux | grep "SCREEN.*{workload_name}" | grep -v grep',
+                        f'ps aux | grep "[S]CREEN.*{workload_name}\\|[s]creen.*{workload_name}" | grep -v grep',
                         raise_on_error=False
                     )
                     if ps_result:
                         try:
                             pid = ps_result.decode('utf-8').split()[1]
                             running_workloads[workload_name] = pid
+                            print(f"{bcolors.OKCYAN}Debug: Found screen process for {workload_name} with PID {pid}{bcolors.ENDC}")
                         except (IndexError, ValueError):
                             running_workloads[workload_name] = None
+                            print(f"{bcolors.WARNING}Warning: Could not extract PID for {workload_name} from ps output:{bcolors.ENDC}")
+                            print(ps_result.decode('utf-8'))
             
             if running_workloads:
                 print(f"{bcolors.OKCYAN}Found running workloads: {', '.join(running_workloads.keys())}{bcolors.ENDC}")
@@ -412,7 +415,9 @@ class StabilityCluster:
                 # Extract PID from screen listing (format: PID..hostname)
                 try:
                     screen_pid = screen.strip().split('.')[0].split('\t')[0]
+                    print(f"{bcolors.OKCYAN}Debug: Processing screen with PID {screen_pid}{bcolors.ENDC}")
                 except IndexError:
+                    print(f"{bcolors.WARNING}Warning: Could not extract PID from screen line: {screen}{bcolors.ENDC}")
                     continue
 
                 # Match screen session with workload by PID

@@ -16,7 +16,9 @@ TBlobIterator::TBlobIterator(const TKey& key, const TString& blob)
     , Count(0)
     , InternalPartsCount(0)
 {
-    Y_ABORT_UNLESS(Data != End);
+    Y_ABORT_UNLESS(Data != End,
+                   "Key=%s, blob.size=%" PRISZT,
+                   Key.ToString().data(), blob.size());
     ParseBatch();
     Y_ABORT_UNLESS(Header.GetPartNo() == Key.GetPartNo());
 }

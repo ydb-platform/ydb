@@ -8,6 +8,7 @@
 #include "counters_logger.h"
 #include "offsets_collector.h"
 #include "transaction.h"
+#include "direct_reader.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_session.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/include/read_session.h>
@@ -144,6 +145,11 @@ public:
         DoActions();
     }
 
+    // TODO(qyryq) Extract a separate TDeferredDirectReadActions class?
+    void DeferReadFromProcessor(const typename IDirectReadProcessor::TPtr& processor, TDirectReadServerMessage* dst, typename IDirectReadProcessor::TReadCallback callback);
+    void DeferScheduleCallback(TDuration delay, std::function<void(bool)> callback, TSingleClusterReadSessionContextPtr);
+    void DeferCallback(std::function<void()> callback);
+
     void DeferReadFromProcessor(const typename IProcessor<UseMigrationProtocol>::TPtr& processor, TServerMessage<UseMigrationProtocol>* dst, typename IProcessor<UseMigrationProtocol>::TReadCallback callback);
     void DeferStartExecutorTask(const typename IAExecutor<UseMigrationProtocol>::TPtr& executor, typename IAExecutor<UseMigrationProtocol>::TFunction&& task);
     void DeferAbortSession(TCallbackContextPtr<UseMigrationProtocol> cbContext, TASessionClosedEvent<UseMigrationProtocol>&& closeEvent);
@@ -159,6 +165,9 @@ private:
     void DoActions();
 
     void Read();
+    void DirectRead();
+    void DirectReadScheduleCallback();
+    void DirectReadCallback();
     void StartExecutorTasks();
     void AbortSession();
     void Reconnect();
@@ -170,6 +179,26 @@ private:
     typename IProcessor<UseMigrationProtocol>::TPtr Processor;
     TServerMessage<UseMigrationProtocol>* ReadDst = nullptr;
     typename IProcessor<UseMigrationProtocol>::TReadCallback ReadCallback;
+
+    // Direct read.
+    struct TDirectReadDeferredActions {
+        struct TRead {
+            IDirectReadProcessor::TPtr Processor;
+            TDirectReadServerMessage* ServerMessage = nullptr;
+            IDirectReadProcessor::TReadCallback ReadCallback;
+        };
+
+        TMaybe<TRead> Read;
+
+        struct TScheduledCallback {
+            std::function<void(bool)> Callback;
+            TDuration Delay;
+            TSingleClusterReadSessionContextPtr ContextPtr;
+        };
+
+        TMaybe<TScheduledCallback> ScheduledCallback;
+        TMaybe<std::function<void()>> Callback;
+    } DirectReadActions;
 
     // Executor tasks.
     std::vector<std::pair<typename IAExecutor<UseMigrationProtocol>::TPtr, typename IAExecutor<UseMigrationProtocol>::TFunction>> ExecutorsTasks;
@@ -609,8 +638,9 @@ public:
                          i64 partitionId,
                          i64 assignId,
                          i64 readOffset,
+                         TMaybe<TPartitionLocation> location,
                          TCallbackContextPtr<UseMigrationProtocol> cbContext)
-        : Key{topicPath, "", static_cast<ui64>(partitionId)}
+        : Key{.Topic = topicPath, .Cluster = "", .Partition = static_cast<ui64>(partitionId)}
         , AssignId(static_cast<ui64>(assignId))
         , FirstNotReadOffset(static_cast<ui64>(readOffset))
         , CbContext(std::move(cbContext))
@@ -620,6 +650,7 @@ public:
         TAPartitionStream<false>::TopicPath = std::move(topicPath);
         TAPartitionStream<false>::ReadSessionId = std::move(readSessionId);
         TAPartitionStream<false>::PartitionId = static_cast<ui64>(partitionId);
+        TAPartitionStream<false>::Location = location;
         MaxCommittedOffset = static_cast<ui64>(readOffset);
     }
 
@@ -631,6 +662,16 @@ public:
 
     void SetFirstNotReadOffset(const ui64 offset) {
         FirstNotReadOffset = offset;
+    }
+
+    template <bool V = UseMigrationProtocol, class = std::enable_if_t<!V>>
+    void SetNextDirectReadId(const i64 id) {
+        TAPartitionStream<false>::NextDirectReadId = id;
+    }
+
+    template <bool V = UseMigrationProtocol, class = std::enable_if_t<!V>>
+    void SetLastDirectReadId(const i64 id) {
+        TAPartitionStream<false>::LastDirectReadId = id;
     }
 
     void Commit(ui64 startOffset, ui64 endOffset) /*override*/;
@@ -758,6 +799,10 @@ public:
                                  std::vector<typename TADataReceivedEvent<UseMigrationProtocol>::TMessage>& messages,
                                  std::vector<typename TADataReceivedEvent<UseMigrationProtocol>::TCompressedMessage>& compressedMessages,
                                  TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol>& accumulator);
+
+    void SetLocation(TPartitionLocation location) {
+        TAPartitionStream<false>::Location = location;
+    }
 
     std::mutex& GetLock() {
         return Lock;
@@ -1063,10 +1108,13 @@ class TSingleClusterReadSessionImpl : public TEnableSelfContext<TSingleClusterRe
 public:
     using TSelf = TSingleClusterReadSessionImpl<UseMigrationProtocol>;
     using TPtr = std::shared_ptr<TSelf>;
-    using IProcessor = typename IReadSessionConnectionProcessorFactory<UseMigrationProtocol>::IProcessor;
-
+    using IProcessorFactory = IReadSessionConnectionProcessorFactory<UseMigrationProtocol>;
+    using IProcessorFactoryPtr = std::shared_ptr<IProcessorFactory>;
+    using IProcessor = typename IProcessorFactory::IProcessor;
+    using TScheduleCallbackFunc = std::function<void(TDuration, std::function<void(bool)>, NYdbGrpc::IQueueClientContextPtr)>;
 
     friend class TPartitionStreamImpl<UseMigrationProtocol>;
+    friend class TDirectReadSessionControlCallbacks;
 
     TSingleClusterReadSessionImpl(
         const TAReadSessionSettings<UseMigrationProtocol>& settings,
@@ -1078,7 +1126,9 @@ public:
         std::shared_ptr<TReadSessionEventsQueue<UseMigrationProtocol>> eventsQueue,
         NYdbGrpc::IQueueClientContextPtr clientContext,
         ui64 partitionStreamIdStart,
-        ui64 partitionStreamIdStep
+        ui64 partitionStreamIdStep,
+        TScheduleCallbackFunc scheduleCallbackFunc = {},
+        IDirectReadProcessorFactoryPtr directReadProcessorFactory = {}
     )
         : Settings(settings)
         , Database(database)
@@ -1093,6 +1143,8 @@ public:
         , CookieMapping()
         , ReadSizeBudget(GetCompressedDataSizeLimit())
         , ReadSizeServerDelta(0)
+        , ScheduleCallbackFunc(scheduleCallbackFunc)
+        , DirectReadProcessorFactory(std::move(directReadProcessorFactory))
     {
     }
 
@@ -1148,6 +1200,8 @@ public:
     void DumpStatisticsToLog(TLogElement& log);
     void UpdateMemoryUsageStatistics();
 
+    void ScheduleCallback(TDuration timeout, std::function<void(bool)> callback);
+
     TStringBuilder GetLogPrefix() const;
 
     const TLog& GetLog() const {
@@ -1199,6 +1253,16 @@ private:
     void ReadFromProcessorImpl(TDeferredActions<UseMigrationProtocol>& deferred); // Assumes that we're under lock.
     void WriteToProcessorImpl(TClientMessage<UseMigrationProtocol>&& req); // Assumes that we're under lock.
     void OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t connectionGeneration);
+
+    // Direct Read
+    bool IsDirectRead();
+
+    // TODO(qyryq) Is it possible to revert back to the approach without TLockFreeQueue?
+    // void OnDirectReadDone(Ydb::Topic::StreamDirectReadMessage::DirectReadResponse&&, TDeferredActions<false>&);
+    void OnDirectReadDone(std::shared_ptr<TLockFreeQueue<Ydb::Topic::StreamDirectReadMessage::DirectReadResponse>>); //, TDeferredActions<false>&);
+
+    void StopPartitionSession(TPartitionSessionId);
+    void StopPartitionSessionImpl(TIntrusivePtr<TPartitionStreamImpl<false>>, bool graceful, TDeferredActions<false>&);
 
     // Assumes that we're under lock.
     template<typename TMessage>
@@ -1339,7 +1403,14 @@ private:
     TLog Log;
     ui64 NextPartitionStreamId;
     ui64 PartitionStreamIdStep;
-    std::shared_ptr<IReadSessionConnectionProcessorFactory<UseMigrationProtocol>> ConnectionFactory;
+
+    // Currently needed only for scheduling callbacks in direct read sessions
+    // to retry sending StartDirectReadPartitionSession requests after temporary errors.
+    TScheduleCallbackFunc ScheduleCallbackFunc;
+
+    IProcessorFactoryPtr ConnectionFactory;
+    IDirectReadProcessorFactoryPtr DirectReadProcessorFactory;
+
     std::shared_ptr<TReadSessionEventsQueue<UseMigrationProtocol>> EventsQueue;
     NYdbGrpc::IQueueClientContextPtr ClientContext; // Common client context.
     NYdbGrpc::IQueueClientContextPtr ConnectContext;
@@ -1350,6 +1421,7 @@ private:
     typename IProcessor::TPtr Processor;
     typename IARetryPolicy<UseMigrationProtocol>::IRetryState::TPtr RetryState; // Current retry state (if now we are (re)connecting).
     size_t ConnectionAttemptsDone = 0;
+    TString ServerSessionId;
 
     // Memory usage.
     i64 CompressedDataSize = 0;
@@ -1360,7 +1432,8 @@ private:
     bool WaitingReadResponse = false;
     std::shared_ptr<TServerMessage<UseMigrationProtocol>> ServerMessage; // Server message to write server response to.
     std::unordered_map<ui64, TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>>> PartitionStreams; // assignId -> Partition stream.
-    TPartitionCookieMapping CookieMapping;
+    TMaybe<TDirectReadSessionManager> DirectReadSessionManager; // Only for ydb_topic
+    TPartitionCookieMapping CookieMapping;  // Only for ydb_persqueue
     std::deque<TDecompressionQueueItem> DecompressionQueue;
     bool DataReadingSuspended = false;
 

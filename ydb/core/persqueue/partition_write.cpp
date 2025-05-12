@@ -1595,12 +1595,12 @@ void TPartition::BeginProcessWrites(const TActorContext& ctx)
 {
     SourceIdBatch.ConstructInPlace(SourceManager.CreateModificationBatch(ctx));
 
-    HeadCleared = false;
+    BlobEncoder.HeadCleared = false;
 }
 
 void TPartition::EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
 {
-    if (HeadCleared) {
+    if (BlobEncoder.HeadCleared) {
         Y_ABORT_UNLESS(!BlobEncoder.CompactedKeys.empty() || BlobEncoder.Head.PackedSize == 0);
         for (ui32 i = 0; i < TotalLevels; ++i) {
             BlobEncoder.DataKeysHead[i].Clear();
@@ -1622,7 +1622,7 @@ void TPartition::EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActor
 
     SourceIdBatch->FillRequest(request);
 
-    std::pair<TKey, ui32> res = GetNewFastWriteKey(HeadCleared);
+    std::pair<TKey, ui32> res = GetNewFastWriteKey(BlobEncoder.HeadCleared);
     const auto& key = res.first;
 
     PQ_LOG_D("Add new write blob: topic '" << TopicName() << "' partition " << Partition
@@ -1703,7 +1703,7 @@ void TPartition::EndAppendHeadWithNewWrites(const TActorContext& ctx)
     Y_ABORT_UNLESS((Parameters->HeadCleared ? 0 : BlobEncoder.Head.PackedSize) + BlobEncoder.NewHead.PackedSize <= MaxBlobSize); //otherwise last PartitionedBlob.Add must compact all except last cl
     BlobEncoder.MaxWriteResponsesSize = Max<ui32>(BlobEncoder.MaxWriteResponsesSize, Responses.size());
 
-    HeadCleared = Parameters->HeadCleared;
+    BlobEncoder.HeadCleared = Parameters->HeadCleared;
 }
 
 void TPartition::RequestQuotaForWriteBlobRequest(size_t dataSize, ui64 cookie) {

@@ -912,19 +912,12 @@ private:
     }
 
     void Handle(NEtcd::TEvQueryError::TPtr &ev, const TActorContext& ctx) {
-        TryToRollbackRevision();
         std::ostringstream err;
         Dump(err) << " SQL error received:" << std::endl << ev->Get()->Issues.ToString() << std::endl;
         std::cout << err.view();
         Reply(grpc::StatusCode::INTERNAL, err.view(), ctx);
     }
 protected:
-    void TryToRollbackRevision() {
-        if constexpr (!ReadOnly) {
-            Stuff->Revision.compare_exchange_weak(Revision, Revision - 1LL);
-        }
-    }
-
     const typename TRequest::TRequest* GetProtoRequest() const {
         return TRequest::GetProtoRequest(Request_);
     }
@@ -961,7 +954,6 @@ public:
     using TBase::TBase;
 private:
     std::string ParseGrpcRequest() final {
-        Revision = Stuff->Revision.load();
         return Range.Parse(*GetProtoRequest());
     }
 
@@ -995,8 +987,6 @@ private:
     std::string ParseGrpcRequest() final {
         if (const auto& error = Put.Parse(*GetProtoRequest()); !error.empty())
             return error;
-
-        Revision = Stuff->Revision.fetch_add(1LL) + 1LL;
         return {};
     }
 
@@ -1016,7 +1006,6 @@ private:
             std::cout << "ok" << std::endl;
             return Reply(*good, ctx);
         } else if (const auto bad = std::get_if<TGrpcError>(&response)) {
-            TryToRollbackRevision();
             std::cout << bad->second << std::endl;
             return Reply(bad->first, bad->second, ctx);
         }
@@ -1046,7 +1035,6 @@ private:
     std::string ParseGrpcRequest() final {
         if (const auto& error = DeleteRange.Parse(*GetProtoRequest()); !error.empty())
             return error;
-        Revision = Stuff->Revision.fetch_add(1LL) + 1LL;
         return {};
     }
 
@@ -1061,9 +1049,6 @@ private:
         };
 
         auto response = DeleteRange.MakeResponse(Revision, results, notifier);
-        if (!response.deleted())
-            TryToRollbackRevision();
-
         Dump(std::cout) << '=' << response.deleted() << std::endl;
         return Reply(response, ctx);
     }
@@ -1092,7 +1077,6 @@ private:
     std::string ParseGrpcRequest() final {
         if (const auto& error = Txn.Parse(*GetProtoRequest()); !error.empty())
             return error;
-        Revision = Stuff->Revision.fetch_add(1LL) + 1LL;
         return {};
     }
 
@@ -1122,7 +1106,6 @@ private:
             std::cout << (good->succeeded() ? "success" : "failure") << std::endl;
             return Reply(*good, ctx);
         } else if (const auto bad = std::get_if<TGrpcError>(&response)) {
-            TryToRollbackRevision();
             std::cout << bad->second << std::endl;
             return Reply(bad->first, bad->second, ctx);
         }
@@ -1150,8 +1133,6 @@ public:
     using TBase::TBase;
 private:
     std::string ParseGrpcRequest() final {
-        Revision = Stuff->Revision.load();
-
         const auto &rec = *GetProtoRequest();
         KeyRevision = rec.revision();
         Physical = rec.physical();
@@ -1180,9 +1161,6 @@ private:
         if (Physical) {
             auto parser = NYdb::TResultSetParser(results.front());
             const auto erased = parser.TryNextRow() ? NYdb::TValueParser(parser.GetValue(0)).GetUint64() : 0ULL;
-            if (!erased)
-                TryToRollbackRevision();
-
             std::cout << '=' << erased << std::endl;
         } else {
             std::cout << " is executing asynchronously." << std::endl;
@@ -1211,7 +1189,6 @@ public:
     using TBase::TBase;
 private:
     std::string ParseGrpcRequest() final {
-        Revision = Stuff->Revision.load();
         const auto &rec = *GetProtoRequest();
         TTL = rec.ttl();
 
@@ -1281,14 +1258,12 @@ private:
     void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
         if (auto parser = NYdb::TResultSetParser(results.front()); parser.TryNextRow()) {
             if (!NYdb::TValueParser(parser.GetValue(0)).GetBool()) {
-                TryToRollbackRevision();
                 return Reply(grpc::StatusCode::NOT_FOUND, "requested lease not found", ctx);
             }
         }
 
         if constexpr (NotifyWatchtower) {
-            i64 deleted = 0ULL;
-            for (auto parser = NYdb::TResultSetParser(results[1U]); parser.TryNextRow(); ++deleted) {
+            for (auto parser = NYdb::TResultSetParser(results[1U]); parser.TryNextRow();) {
                 NEtcd::TData oldData;
                 oldData.Value = NYdb::TValueParser(parser.GetValue("value")).GetString();
                 oldData.Created = NYdb::TValueParser(parser.GetValue("created")).GetInt64();
@@ -1299,9 +1274,6 @@ private:
 
                 ctx.Send(Stuff->Watchtower, std::make_unique<NEtcd::TEvChange>(std::move(key), Revision, std::move(oldData)));
             }
-
-            if (!deleted)
-                TryToRollbackRevision();
         }
 
         etcdserverpb::LeaseRevokeResponse response;
@@ -1324,8 +1296,6 @@ public:
     using TBase::TBase;
 private:
     std::string ParseGrpcRequest() final {
-        Revision = Stuff->Revision.load();
-
         const auto &rec = *GetProtoRequest();
         Lease = rec.id();
         Keys = rec.keys();
@@ -1378,7 +1348,6 @@ public:
     using TBase::TBase;
 private:
     std::string ParseGrpcRequest() final {
-        Revision = Stuff->Revision.load();
         return {};
     }
 

@@ -363,11 +363,11 @@ class StabilityCluster:
                 )
                 node.ssh_command(f"sudo chmod 777 {node_artifact_path}", raise_on_error=False)
 
-    def get_workload_outputs(self, minutes=1, mode='err'):
-        """Capture last N minutes of output from all running workload screens.
+    def get_workload_outputs(self, seconds=30, mode='err'):
+        """Capture last N seconds of output from all running workload screens.
         
         Args:
-            minutes: Number of minutes of history to show
+            seconds: Number of seconds of history to show
             mode: One of 'out' (stdout only), 'err' (stderr only), or 'all' (both)
         """
         logging.getLogger().setLevel(logging.WARNING)
@@ -398,8 +398,8 @@ class StabilityCluster:
                     node.ssh_command(f'screen -S {screen_name} -X eval "logtstamp on" "logtstamp string \\%Y-\\%m-\\%d \\%c:\\%s "', raise_on_error=False)
                     node.ssh_command(f'screen -S {screen_name} -X log on', raise_on_error=False)
                     
-                    # Get the last N minutes of output from both stdout and stderr
-                    time_filter = f'$(date -d "{minutes} minutes ago" +"%Y-%m-%d %H:%M:%S")'
+                    # Get the last N seconds of output from both stdout and stderr
+                    time_filter = f'$(date -d "{seconds} seconds ago" +"%Y-%m-%d %H:%M:%S")'
                     
                     # Get stdout if requested
                     if mode in ['out', 'all']:
@@ -542,10 +542,10 @@ def parse_args():
 
     if "get_workload_outputs" in args.actions:
         parser.add_argument(
-            "--minutes",
+            "--seconds",
             type=int,
-            default=1,
-            help="Number of minutes of output to show (default: 1)"
+            default=30,
+            help="Number of seconds of output to show (default: 30)"
         )
         parser.add_argument(
             "--mode",
@@ -742,7 +742,7 @@ def main():
             stability_cluster.perform_checks()
 
         if action == "get_workload_outputs":
-            stability_cluster.get_workload_outputs(args.minutes, args.mode)
+            stability_cluster.get_workload_outputs(args.seconds, args.mode)
 
 
 if __name__ == "__main__":

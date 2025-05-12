@@ -392,8 +392,6 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         Y_ABORT_UNLESS(!replicasList.empty(), "must not happens, guardian must be created over active tablet");
 
         const ui32 replicaSz = replicasList.size();
-        // Reconfig StateStorage case replicas count can be the same, but actors changed
-        // Y_ABORT_UNLESS(ReplicaGuardians.empty() || ReplicaGuardians.size() == replicaSz);
 
         TVector<std::pair<TActorId, TActorId>> updatedReplicaGuardians;
         updatedReplicaGuardians.reserve(replicaSz);

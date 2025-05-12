@@ -190,89 +190,6 @@ namespace {
             return status;
         }
 
-        std::vector<std::string_view> lCheck;
-        lCheck.reserve(leftKeys.size());
-        for (const auto& x : leftKeys) {
-            for (const auto& name : (*labels.FindInput(x.first))->AllNames(x.second))
-                lCheck.emplace_back(ctx.AppendString(name));
-            if (!myLeftScope.contains(x.first)) {
-                ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
-                    TStringBuilder() << "Correlation name " << x.first << " is out of scope"));
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            joinsStates[*labels.FindInputIndex(x.first)].Used = true;
-        }
-
-        TVector<std::pair<TStringBuf, TStringBuf>> rightKeys;
-        TVector<const TTypeAnnotationNode*> rightKeyTypes;
-        if (const auto status = ParseJoinKeys(*joins.Child(4), rightKeys, rightKeyTypes, labels, ctx, cross); status.Level != IGraphTransformer::TStatus::Ok) {
-            return status;
-        }
-
-        std::vector<std::string_view> rCheck;
-        rCheck.reserve(rightKeys.size());
-        for (const auto& x : rightKeys) {
-            for (const auto& name : (*labels.FindInput(x.first))->AllNames(x.second))
-                rCheck.emplace_back(ctx.AppendString(name));
-            if (!myRightScope.contains(x.first)) {
-                ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
-                    TStringBuilder() << "Correlation name " << x.first << " is out of scope"));
-                return IGraphTransformer::TStatus::Error;
-            }
-
-            joinsStates[*labels.FindInputIndex(x.first)].Used = true;
-        }
-
-        if (leftKeys.size() != rightKeys.size()) {
-            ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
-                TStringBuilder() << "Mismatch of key column count in equality between " << leftKeys.front().first
-                << " and " << rightKeys.front().first));
-            return IGraphTransformer::TStatus::Error;
-        }
-
-        for (auto i = 0U; i < leftKeyTypes.size(); ++i) {
-            if (strictKeys && leftKeyTypes[i] != rightKeyTypes[i]) {
-                ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
-                    TStringBuilder() << "Strict key type match requested, but keys have different types: ("
-                    << leftKeys[i].first << "." << leftKeys[i].second
-                    << " has type: " << *leftKeyTypes[i] << ", " << rightKeys[i].first << "." << rightKeys[i].second
-                    << " has type: " << *rightKeyTypes[i] << ")"));
-                return IGraphTransformer::TStatus::Error;
-            }
-            if (ECompareOptions::Uncomparable == CanCompare<true>(leftKeyTypes[i], rightKeyTypes[i])) {
-                ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
-                    TStringBuilder() << "Cannot compare key columns (" << leftKeys[i].first << "." << leftKeys[i].second
-                    << " has type: " << *leftKeyTypes[i] << ", " << rightKeys[i].first << "." << rightKeys[i].second
-                    << " has type: " << *rightKeyTypes[i] << ")"));
-                return IGraphTransformer::TStatus::Error;
-            }
-        }
-
-        if (cross) {
-            for (const auto& x : myLeftScope) {
-                joinsStates[*labels.FindInputIndex(x)].Used = true;
-            }
-
-            for (const auto& x : myRightScope) {
-                joinsStates[*labels.FindInputIndex(x)].Used = true;
-            }
-        }
-
-        scope.clear();
-
-        const bool singleSide = joinType.Content().ends_with("Only") || joinType.Content().ends_with("Semi");
-        const bool rightSide = joinType.Content().starts_with("Right");
-        const bool leftSide = joinType.Content().starts_with("Left");
-
-        if (!singleSide || !rightSide) {
-            scope.insert(myLeftScope.cbegin(), myLeftScope.cend());
-        }
-
-        if (!singleSide || !leftSide) {
-            scope.insert(myRightScope.cbegin(), myRightScope.cend());
-        }
-
         const auto linkOptions = joins.Child(5);
         if (!EnsureTuple(*linkOptions, ctx)) {
             return IGraphTransformer::TStatus::Error;
@@ -357,6 +274,89 @@ namespace {
                     "Unknown option name: " << option.Content()));
                 return IGraphTransformer::TStatus::Error;
             }
+        }
+
+        std::vector<std::string_view> lCheck;
+        lCheck.reserve(leftKeys.size());
+        for (const auto& x : leftKeys) {
+            for (const auto& name : (*labels.FindInput(x.first))->AllNames(x.second))
+                lCheck.emplace_back(ctx.AppendString(name));
+            if (!myLeftScope.contains(x.first)) {
+                ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
+                    TStringBuilder() << "Correlation name " << x.first << " is out of scope"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            joinsStates[*labels.FindInputIndex(x.first)].Used = true;
+        }
+
+        TVector<std::pair<TStringBuf, TStringBuf>> rightKeys;
+        TVector<const TTypeAnnotationNode*> rightKeyTypes;
+        if (const auto status = ParseJoinKeys(*joins.Child(4), rightKeys, rightKeyTypes, labels, ctx, cross); status.Level != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        std::vector<std::string_view> rCheck;
+        rCheck.reserve(rightKeys.size());
+        for (const auto& x : rightKeys) {
+            for (const auto& name : (*labels.FindInput(x.first))->AllNames(x.second))
+                rCheck.emplace_back(ctx.AppendString(name));
+            if (!myRightScope.contains(x.first)) {
+                ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
+                    TStringBuilder() << "Correlation name " << x.first << " is out of scope"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            joinsStates[*labels.FindInputIndex(x.first)].Used = true;
+        }
+
+        if (leftKeys.size() != rightKeys.size()) {
+            ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
+                TStringBuilder() << "Mismatch of key column count in equality between " << leftKeys.front().first
+                << " and " << rightKeys.front().first));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        for (auto i = 0U; i < leftKeyTypes.size(); ++i) {
+            if (strictKeys && leftKeyTypes[i] != rightKeyTypes[i]) {
+                ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
+                    TStringBuilder() << "Strict key type match requested, but keys have different types: ("
+                    << leftKeys[i].first << "." << leftKeys[i].second
+                    << " has type: " << *leftKeyTypes[i] << ", " << rightKeys[i].first << "." << rightKeys[i].second
+                    << " has type: " << *rightKeyTypes[i] << ")"));
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (ECompareOptions::Uncomparable == CanCompare<true>(leftKeyTypes[i], rightKeyTypes[i])) {
+                ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
+                    TStringBuilder() << "Cannot compare key columns (" << leftKeys[i].first << "." << leftKeys[i].second
+                    << " has type: " << *leftKeyTypes[i] << ", " << rightKeys[i].first << "." << rightKeys[i].second
+                    << " has type: " << *rightKeyTypes[i] << ")"));
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        if (cross) {
+            for (const auto& x : myLeftScope) {
+                joinsStates[*labels.FindInputIndex(x)].Used = true;
+            }
+
+            for (const auto& x : myRightScope) {
+                joinsStates[*labels.FindInputIndex(x)].Used = true;
+            }
+        }
+
+        scope.clear();
+
+        const bool singleSide = joinType.Content().ends_with("Only") || joinType.Content().ends_with("Semi");
+        const bool rightSide = joinType.Content().starts_with("Right");
+        const bool leftSide = joinType.Content().starts_with("Left");
+
+        if (!singleSide || !rightSide) {
+            scope.insert(myLeftScope.cbegin(), myLeftScope.cend());
+        }
+
+        if (!singleSide || !leftSide) {
+            scope.insert(myRightScope.cbegin(), myRightScope.cend());
         }
 
         const bool lAny = leftHints && (leftHints->contains("unique") || leftHints->contains("any"));

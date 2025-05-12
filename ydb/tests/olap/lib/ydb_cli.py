@@ -4,6 +4,7 @@ import yatest.common
 import json
 import os
 import re
+import subprocess
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import get_external_param
 from enum import StrEnum, Enum
@@ -159,8 +160,8 @@ class YdbCliHelper:
             if iter_num not in self.result.iterations:
                 self.result.iterations[iter_num] = YdbCliHelper.Iteration()
 
-        def _parse_stderr(self, stderr: str) -> None:
-            self.result.stderr = stderr
+        def _parse_stderr(self, stderr: Optional[str]) -> None:
+            self.result.stderr = stderr if stderr else ''
             begin_str = f'{self.query_num}:'
             end_str = 'Query text:'
             iter_str = 'iteration '
@@ -233,8 +234,8 @@ class YdbCliHelper:
                 with open(self._query_output_path, 'r') as r:
                     self.result.query_out = r.read()
 
-        def _parse_stdout(self, stdout: str) -> None:
-            self.result.stdout = stdout
+        def _parse_stdout(self, stdout: Optional[str]) -> None:
+            self.result.stdout = stdout if stdout else ''
             for line in self.result.stdout.splitlines():
                 m = re.search(r'iteration ([0-9]*):\s*ok\s*([\.0-9]*)s', line)
                 if m is not None:
@@ -274,9 +275,12 @@ class YdbCliHelper:
                 if wait_error is not None:
                     self.result.error_message = wait_error
                 else:
-                    process = yatest.common.process.execute(self._get_cmd(), check_exit_code=False)
-                    self._parse_stderr(process.stderr.decode('utf-8', 'replace'))
-                    self._parse_stdout(process.stdout.decode('utf-8', 'replace'))
+                    if os.getenv('SECRET_REQUESTS', '') == '1':
+                        process = subprocess.run(self._get_cmd(), check=False, text=True)
+                    else:
+                        process = yatest.common.process.execute(self._get_cmd(), check_exit_code=False, text=True)
+                    self._parse_stderr(process.stderr)
+                    self._parse_stdout(process.stdout)
                     self._load_stats()
                     self._load_query_out()
                     self._load_plans()

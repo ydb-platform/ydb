@@ -1,5 +1,4 @@
 #include <yql/essentials/minikql/mkql_type_ops.h>
-#include <yql/essentials/public/udf/tz/udf_tz.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/minikql/datetime/datetime.h>
 #include <yql/essentials/minikql/datetime/datetime64.h>

@@ -226,6 +226,7 @@ struct TEvTopicOffsetsResponse : public NActors::TEventLocal<TEvTopicOffsetsResp
 };
 
 struct PartitionConsumerOffset {
+    ui64 PartitionIndex;
     ui64 Offset;
     TString Metadata;
 };

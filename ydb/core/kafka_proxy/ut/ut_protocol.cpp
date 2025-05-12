@@ -1,4 +1,3 @@
-#include "kafka_test_client.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/retry/retry.h>
@@ -301,17 +300,6 @@ void AlterTopic(NYdb::NTopic::TTopicClient& pqClient, TString& topicName, std::v
     UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
     UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
-}
-
-TConsumerProtocolAssignment GetAssignments(NKafka::TSyncGroupResponseData::AssignmentMeta::Type metadata) {
-    TKafkaVersion version = *(TKafkaVersion*)(metadata.value().data() + sizeof(TKafkaVersion));
-    TBuffer buffer(metadata.value().data() + sizeof(TKafkaVersion), metadata.value().size_bytes() - sizeof(TKafkaVersion));
-    TKafkaReadable readable(buffer);
-
-    TConsumerProtocolAssignment result;
-    result.Read(readable, version);
-
-    return result;
 }
 
 Y_UNIT_TEST_SUITE(KafkaProtocol) {
@@ -1529,6 +1517,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         TString headerKey = "header-key";
         TString headerValue = "header-value";
 
+        TString commitedMetaData = "additional-info";
+
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
         CreateTopic(pqClient, firstTopicName, minActivePartitions, {firstConsumerName, secondConsumerName});
         CreateTopic(pqClient, secondTopicName, minActivePartitions, {firstConsumerName, secondConsumerName});
@@ -1578,10 +1568,10 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         {
             // Check commit
-            std::unordered_map<TString, std::vector<std::pair<ui64,ui64>>> offsets;
-            std::vector<std::pair<ui64, ui64>> partitionsAndOffsets;
+            std::unordered_map<TString, std::vector<TConsumerOffset>> offsets;
+            std::vector<TConsumerOffset> partitionsAndOffsets;
             for (ui64 i = 0; i < minActivePartitions; ++i) {
-                partitionsAndOffsets.emplace_back(std::make_pair(i, recordsCount));
+                partitionsAndOffsets.emplace_back(TConsumerOffset{i, static_cast<ui64>(recordsCount), commitedMetaData});
             }
             offsets[firstTopicName] = partitionsAndOffsets;
             offsets[shortTopicName] = partitionsAndOffsets;
@@ -1609,12 +1599,18 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             topicsToPartions[firstTopicName] = std::vector<i32>{0, 1, 2 , 3 };
             auto msg = client.OffsetFetch(firstConsumerName, topicsToPartions);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
             const auto& partitions = msg->Groups[0].Topics[0].Partitions;
             UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 4);
             auto partition0 = std::find_if(partitions.begin(), partitions.end(), [](const auto& partition) { return partition.PartitionIndex == 0; });
             UNIT_ASSERT_VALUES_UNEQUAL(partition0, partitions.end());
             UNIT_ASSERT_VALUES_EQUAL(partition0->CommittedOffset, 5);
+            // ToDo: return here to change ASSERT to check that metadata is transfered correctly
+            // after realization of metadata saving is completed.
+            for (auto p = partitions.begin(); p != partitions.end(); p++) {
+                UNIT_ASSERT_VALUES_EQUAL(p->Metadata, "");
+            }
         }
 
         {
@@ -1632,10 +1628,10 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         {
             // Check commit with nonexistent topic
-            std::unordered_map<TString, std::vector<std::pair<ui64,ui64>>> offsets;
-            std::vector<std::pair<ui64, ui64>> partitionsAndOffsets;
+            std::unordered_map<TString, std::vector<TConsumerOffset>> offsets;
+            std::vector<TConsumerOffset> partitionsAndOffsets;
             for (ui64 i = 0; i < minActivePartitions; ++i) {
-                partitionsAndOffsets.emplace_back(std::make_pair(i, recordsCount));
+                partitionsAndOffsets.emplace_back(TConsumerOffset{i, static_cast<ui64>(recordsCount), commitedMetaData});
             }
             offsets[firstTopicName] = partitionsAndOffsets;
             offsets[notExistsTopicName] = partitionsAndOffsets;
@@ -1665,10 +1661,10 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         {
             // Check commit with nonexistent consumer
-            std::unordered_map<TString, std::vector<std::pair<ui64,ui64>>> offsets;
-            std::vector<std::pair<ui64, ui64>> partitionsAndOffsets;
+            std::unordered_map<TString, std::vector<TConsumerOffset>> offsets;
+            std::vector<TConsumerOffset> partitionsAndOffsets;
             for (ui64 i = 0; i < minActivePartitions; ++i) {
-                partitionsAndOffsets.emplace_back(std::make_pair(i, recordsCount));
+                partitionsAndOffsets.emplace_back(i, static_cast<ui64>(recordsCount), commitedMetaData);
             }
             offsets[firstTopicName] = partitionsAndOffsets;
 

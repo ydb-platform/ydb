@@ -25,6 +25,8 @@
 
 namespace NKikimr::NPQ {
 
+static const ui32 BATCH_UNPACK_SIZE_BORDER = 500_KB;
+static const ui32 MAX_INLINE_SIZE = 1000;
 static const ui64 MAX_SEQNO_DIFFERENCE_UNTIL_OUT_OF_ORDER = std::numeric_limits<i32>::max() / 2;
 static const TDuration SubDomainQuotaWaitDurationMs = TDuration::Seconds(60);
 

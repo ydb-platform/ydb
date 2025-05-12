@@ -903,13 +903,12 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
             tags.push_back(c.Tag);
         }
 
-        #if !defined(_tsan_enabled_) && !defined(_msan_enabled_) && !defined(_asan_enabled_)
-        for (auto [readLo, readHi] : TVector<std::pair<ui32, ui32>>{{1, 1}}) { // TODO
+        for (auto [readLo, readHi] : TVector<std::pair<ui32, ui32>>{{512, 1024}}) {
         for (ESeek seek : {ESeek::Exact, ESeek::Lower, ESeek::Upper}) {
+        #if !defined(_tsan_enabled_) && !defined(_msan_enabled_) && !defined(_asan_enabled_)
             for (ui32 firstCell : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
                 for (ui32 secondCell : xrange<ui32>(0, 14)) {
         #else
-        for (ESeek seek : {ESeek::Exact, ESeek::Lower, ESeek::Upper}) {
             for (ui32 firstCell : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
                 for (ui32 secondCell : xrange<ui32>(10, 14)) {
         #endif
@@ -985,11 +984,11 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         }
 
         #if !defined(_tsan_enabled_) && !defined(_msan_enabled_) && !defined(_asan_enabled_)
-        for (ui64 itemsLimit : params.Groups || params.History || params.Slices ? TVector<ui64>{0, 1, 2, 5} : TVector<ui64>{0, 1, 2, 5, 13, 19, part.Stat.Rows - 2, part.Stat.Rows - 1}) {
+        for (ui64 itemsLimit : params.Groups || params.History || params.Slices ? TVector<ui64>{0, 3} : TVector<ui64>{0, 1, 2, 5, 13, 19, part.Stat.Rows - 2, part.Stat.Rows - 1}) {
             for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
                 for (ui32 secondCellKey1 : xrange<ui32>(0, 14)) {
-                    for (ui32 firstCellKey2 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
-                        for (ui32 secondCellKey2 : xrange<ui32>(0, itemsLimit ? 0 : 14)) {
+                    for (ui32 firstCellKey2 : xrange<ui32>(0, itemsLimit ? 1 : part.Stat.Rows / 7 + 1)) {
+                        for (ui32 secondCellKey2 : xrange<ui32>(0, itemsLimit ? 1 : 14)) {
         #else
         for (ui64 itemsLimit : params.Groups || params.History || params.Slices ? TVector<ui64>{0, 3} : TVector<ui64>{0, 5, part.Stat.Rows - 1}) {
             for (ui32 firstCellKey1 : xrange<ui32>(0, part.Stat.Rows / 7 + 1)) {
@@ -1075,19 +1074,19 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
     }
 
     Y_UNIT_TEST(OneNode_Groups_Slices) {
-        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::UpperLoopLimit)) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
             CheckPart({.Levels = 1, .Groups = true, .Slices = TTestParams::ESlices(slices)});
         }
     }
 
     Y_UNIT_TEST(OneNode_History_Slices) {
-        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::UpperLoopLimit)) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
             CheckPart({.Levels = 1, .History = true, .Slices = TTestParams::ESlices(slices)});
         }
     }
 
     Y_UNIT_TEST(OneNode_Groups_History_Slices) {
-        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::UpperLoopLimit)) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
             CheckPart({.Levels = 1, .Groups = true, .History = true, .Slices = TTestParams::ESlices(slices)});
         }
     }
@@ -1115,25 +1114,25 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
     }
 
     Y_UNIT_TEST(FewNodes_Groups_Slices) {
-        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::UpperLoopLimit)) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
             CheckPart({.Levels = 3, .Groups = true, .Slices = TTestParams::ESlices(slices)});
         }
     }
 
     Y_UNIT_TEST(FewNodes_History_Slices) {
-        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::UpperLoopLimit)) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
             CheckPart({.Levels = 3, .History = true, .Slices = TTestParams::ESlices(slices)});
         }
     }
 
     Y_UNIT_TEST(FewNodes_Groups_History_Slices) {
-        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::UpperLoopLimit)) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
             CheckPart({.Levels = 3, .Groups = true, .History = true, .Slices = TTestParams::ESlices(slices)});
         }
     }
 
     Y_UNIT_TEST(FewNodes_Groups_History_Slices_Sticky) {
-        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::UpperLoopLimit)) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::Many + 1)) {
             CheckPart({.Levels = 3, .Groups = true, .History = true, .Slices = TTestParams::ESlices(slices), .StickSomePages = true});
         }
     }

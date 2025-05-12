@@ -215,7 +215,15 @@ public:
         }
 
         const auto* structType = input.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-        if (State_->Configuration->UseBlocksSink.Get().GetOrElse(false)) {
+        if (TString error; !UseBlocksSink(format, keys, structType, State_->Configuration, error)){
+            YQL_ENSURE(!error, "Got block sink error");
+            stageBody = Build<TS3SinkOutput>(ctx, writePos)
+                .Input(stageBody)
+                .Format(target.Format())
+                .KeyColumns().Add(keys).Build()
+                .Settings(sinkOutputSettingsBuilder.Done())
+                .Done();
+        } else {
             YQL_ENSURE(format == "parquet");
             YQL_ENSURE(keys.empty());
 
@@ -239,13 +247,6 @@ public:
                 .Input<TCoFromFlow>()
                     .Input(stageBody)
                     .Build()
-                .Done();
-        } else {
-            stageBody = Build<TS3SinkOutput>(ctx, writePos)
-                .Input(stageBody)
-                .Format(target.Format())
-                .KeyColumns().Add(keys).Build()
-                .Settings(sinkOutputSettingsBuilder.Done())
                 .Done();
         }
 

@@ -31,6 +31,7 @@ target_link_libraries(engines-reader-abstract PUBLIC
   core-tx-program
   ydb-core-protos
   columnshard-data_sharing-protos
+  tx-conveyor-usage
   tools-enum_parser-enum_serialization_runtime
 )
 

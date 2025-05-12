@@ -77,8 +77,8 @@ class DistConfKiKiMRTest(object):
             simple_config=True,
             use_self_management=True,
             extra_grpc_services=['config'],
-            state_storage_rings = cls.state_storage_rings,
-            n_to_select = cls.n_to_select,
+            state_storage_rings=cls.state_storage_rings,
+            n_to_select=cls.n_to_select,
             additional_log_configs=log_configs)
 
         cls.cluster = KiKiMR(configurator=cls.configurator)
@@ -205,25 +205,22 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
                 logger.error(f"Viewer API response content: {pdisk_info}")
             raise
 
+
 class TestKiKiMRDistConfReassignStateStorage(DistConfKiKiMRTest):
     nodes_count = 12
-    state_storage_rings = list(range(1, 3))
-    n_to_select = 3
-    
+
     def do_request(self, json_req):
         url = f'http://localhost:{self.cluster.nodes[1].mon_port}/actors/nodewarden?page=distconf'
-        return requests.post(url, 
-                            headers={'content-type': 'application/json'},
-                            json=json_req).json()
-    
+        return requests.post(url, headers={'content-type': 'application/json'}, json=json_req).json()
+
     def do_load_and_test(self, req):
         table_path = '/Root/mydb/mytable_with_expand'
-        number_of_tablets = 500
+        number_of_tablets = 50
 
         response = self.cluster.kv_client.create_tablets(number_of_tablets, table_path)
         assert_that(response.operation.status == StatusIds.SUCCESS)
         tablet_ids = get_kv_tablet_ids(self.swagger_client)
-        
+
         res = self.do_request(req)
         wait_tablets_state_by_id(
             self.cluster.client,
@@ -233,14 +230,56 @@ class TestKiKiMRDistConfReassignStateStorage(DistConfKiKiMRTest):
         )
         self.check_kikimr_is_operational(table_path, tablet_ids)
         return res
+
+    def test_cluster_change_state_storage_distconf_bad_cases(self):
+        assert_that(self.do_request({"ReconfigStateStorage": {"NewStateStorageConfig": {"RingGroups": []}}})
+                    ["ErrorReason"] == "New configuration RingGroups is not filled in")
+        assert_that(self.do_request({"ReconfigStateStorage": {"NewStateStorageConfig": {"Ring": {"Node": [1]}}}})
+                    ["ErrorReason"] == "New configuration Ring option is not allowed use RingGroups")
+        assert_that(self.do_request({"ReconfigStateStorage": {"NewStateStorageConfig": {"RingGroups": [{"Ring": [{"Node": [4]}]}]}}})
+                    ["ErrorReason"] == "StateStorage invalid ring group selection")
+        assert_that(self.do_request({"ReconfigStateStorage": {"NewStateStorageConfig": {"RingGroups": [{"NToSelect": 1, "Ring": [{"Ring": [{"Node": [4]}]}]}]}}})
+                    ["ErrorReason"] == "StateStorage too deep nested ring declaration")
+        assert_that(self.do_request({"ReconfigStateStorage": {"NewStateStorageConfig": {"RingGroups": [{"NToSelect": 1, "Ring": [{"Node": [4]}]}]}}})
+                    ["ErrorReason"] == "New StateStorage configuration first ring group should be equal to old config")
+        assert_that(self.do_request({"ReconfigStateStorage": {"NewStateStorageConfig": {"RingGroups": [{"NToSelect": 2, "Ring": [{"Node": [4]}]}]}}})
+                    ["ErrorReason"] == "StateStorage invalid ring group selection")
+        assert_that(self.do_request({"ReconfigStateStorage": {"NewStateStorageConfig": {"RingGroups": [{"WriteOnly": True, "NToSelect": 1, "Ring": [{"Node": [4]}]}]}}})
+                    ["ErrorReason"] == "New configuration first RingGroup is writeOnly")
+
     def test_cluster_change_state_storage_distconf(self):
-        assert_that(self.do_load_and_test({"ReconfigStateStorage": { "NewStateStorageConfig": {
-                "RingGroups": []
-            }}})["Status"] == "ERROR")
-        assert_that(self.do_load_and_test({"ReconfigStateStorage": { "NewStateStorageConfig": {
-                        "RingGroups": [
-                            { "WriteOnly": False, "NToSelect": 3, "Ring": [ { "Node": [1] }, { "Node": [2] }, { "Node": [3] } ] },
-                            { "WriteOnly": True, "NToSelect": 3, "Ring": [ { "Node": [4] }, { "Node": [5] }, { "Node": [6] } ] }
-                        ]
-                    }}})["Scepter"])
-       
+        defaultRingGroup = self.do_request({"ReconfigStateStorage": {"GetStateStorageConfig": True}})["StateStorageConfig"]["RingGroups"][0]
+        assert_that(defaultRingGroup["NToSelect"] > 0)
+        assert_that(self.do_load_and_test({"ReconfigStateStorage": {"NewStateStorageConfig": {
+                    "RingGroups": [
+                        defaultRingGroup,
+                        {"WriteOnly": True, "NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}]}
+                    ]}}})["Scepter"])
+        time.sleep(1)
+        assert_that(self.do_request({"ReconfigStateStorage": {"GetStateStorageConfig": True}})
+                    ["StateStorageConfig"] == {"RingGroups": [
+                        defaultRingGroup,
+                        {"NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}], "WriteOnly": True}
+                    ]})
+        time.sleep(1)
+        assert_that(self.do_load_and_test({"ReconfigStateStorage": {"NewStateStorageConfig": {
+                    "RingGroups": [
+                        defaultRingGroup,
+                        {"WriteOnly": False, "NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}]}
+                    ]}}})["Scepter"])
+        time.sleep(1)
+        assert_that(self.do_request({"ReconfigStateStorage": {"GetStateStorageConfig": True}})
+                    ["StateStorageConfig"] == {"RingGroups": [
+                        defaultRingGroup,
+                        {"NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}], "WriteOnly": False}
+                    ]})
+        time.sleep(1)
+        assert_that(self.do_load_and_test({"ReconfigStateStorage": {"NewStateStorageConfig": {
+                    "RingGroups": [
+                        {"WriteOnly": False, "NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}]}
+                    ]}}})["Scepter"])
+        time.sleep(1)
+        assert_that(self.do_request({"ReconfigStateStorage": {"GetStateStorageConfig": True}})
+                    ["StateStorageConfig"] == {"RingGroups": [
+                        {"NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}], "WriteOnly": False}
+                    ]})

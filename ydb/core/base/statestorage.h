@@ -537,7 +537,7 @@ struct TStateStorageInfo : public TThrRefBase {
     };
 
     struct TRingGroup {
-        bool writeOnly = false;
+        bool WriteOnly = false;
         ui32 NToSelect = 0;
         TVector<TRing> Rings;
 
@@ -564,6 +564,11 @@ private:
     mutable ui64 Hash;
 };
 
+bool operator==(const TStateStorageInfo::TRing& lhs, const TStateStorageInfo::TRing& rhs);
+bool operator==(const TStateStorageInfo::TRingGroup& lhs, const TStateStorageInfo::TRingGroup& rhs);
+bool operator!=(const TStateStorageInfo::TRing& lhs, const TStateStorageInfo::TRing& rhs);
+bool operator!=(const TStateStorageInfo::TRingGroup& lhs, const TStateStorageInfo::TRingGroup& rhs);
+
 enum class EBoardLookupMode {
     First,
     Second,
@@ -579,7 +584,7 @@ struct TBoardRetrySettings {
     TDuration MaxDelayMs = TDuration::MilliSeconds(5000);
 };
 
-TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActorId::MaxServiceIDLength], const NKikimrConfig::TDomainsConfig::TStateStorage& config);
+TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(const char* namePrefix, const NKikimrConfig::TDomainsConfig::TStateStorage& config);
 void BuildStateStorageInfos(const NKikimrConfig::TDomainsConfig::TStateStorage& config,
     TIntrusivePtr<TStateStorageInfo> &stateStorageInfo,
     TIntrusivePtr<TStateStorageInfo> &boardInfo,

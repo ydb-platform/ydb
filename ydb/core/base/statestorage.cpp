@@ -240,6 +240,22 @@ void TStateStorageInfo::TSelection::MergeReply(EStatus status, EStatus *owner, u
     }
 }
 
+bool operator==(const TStateStorageInfo::TRing& lhs, const TStateStorageInfo::TRing& rhs) {
+    return lhs.IsDisabled == rhs.IsDisabled && lhs.UseRingSpecificNodeSelection == rhs.UseRingSpecificNodeSelection && lhs.Replicas == rhs.Replicas;
+}
+
+bool operator==(const TStateStorageInfo::TRingGroup& lhs, const TStateStorageInfo::TRingGroup& rhs) {
+    return lhs.WriteOnly == rhs.WriteOnly && lhs.NToSelect == rhs.NToSelect && lhs.Rings == rhs.Rings;
+}
+
+bool operator!=(const TStateStorageInfo::TRing& lhs, const TStateStorageInfo::TRing& rhs) { 
+    return !operator==(lhs, rhs);
+}
+
+bool operator!=(const TStateStorageInfo::TRingGroup& lhs, const TStateStorageInfo::TRingGroup& rhs) { 
+    return !operator==(lhs, rhs);
+}
+
 static void CopyStateStorageRingInfo(
     const NKikimrConfig::TDomainsConfig::TStateStorage::TRing &source,
     TStateStorageInfo::TRingGroup& ringGroup,
@@ -304,8 +320,10 @@ static void CopyStateStorageRingInfo(
     Y_ABORT("must have rings or legacy node config");
 }
 
-TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActorId::MaxServiceIDLength], 
+TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(const char* namePrefix, 
         const NKikimrConfig::TDomainsConfig::TStateStorage& config) {
+    char name[TActorId::MaxServiceIDLength];
+    strcpy(name, namePrefix);
     TIntrusivePtr<TStateStorageInfo> info = new TStateStorageInfo();
     Y_ABORT_UNLESS(config.GetSSId() == 1);
     info->StateStorageVersion = config.GetStateStorageVersion();
@@ -315,20 +333,20 @@ TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActor
         info->CompatibleVersions.push_back(version);
     }
     
-    const size_t offset = FindIndex(namePrefix, char()) + sizeof(ui32);
+    const size_t offset = FindIndex(name, char()) + sizeof(ui32);
     Y_ABORT_UNLESS(offset != NPOS && (offset) < TActorId::MaxServiceIDLength);
     const ui32 stateStorageGroup = 1;
-    memcpy(namePrefix + offset - sizeof(ui32), reinterpret_cast<const char *>(&stateStorageGroup), sizeof(ui32));
+    memcpy(name + offset - sizeof(ui32), reinterpret_cast<const char *>(&stateStorageGroup), sizeof(ui32));
     for (size_t i = 0; i < config.RingGroupsSize(); i++) {
-        memset(namePrefix + offset, 0, TActorId::MaxServiceIDLength - offset);
+        memset(name + offset, 0, TActorId::MaxServiceIDLength - offset);
         auto& ringGroup = config.GetRingGroups(i);
         info.Get()->RingGroups.push_back({ringGroup.GetWriteOnly(), ringGroup.GetNToSelect(), {}});
-        CopyStateStorageRingInfo(ringGroup, info.Get()->RingGroups.back(), namePrefix, offset);
+        CopyStateStorageRingInfo(ringGroup, info.Get()->RingGroups.back(), name, offset);
     }
     if (config.HasRing() && config.RingGroupsSize() == 0) {
         auto& ring = config.GetRing();
         info.Get()->RingGroups.push_back({false, ring.GetNToSelect(), {}});
-        CopyStateStorageRingInfo(ring, info.Get()->RingGroups.back(), namePrefix, offset);
+        CopyStateStorageRingInfo(ring, info.Get()->RingGroups.back(), name, offset);
     }
     return info;
 }
@@ -338,13 +356,9 @@ void BuildStateStorageInfos(const NKikimrConfig::TDomainsConfig::TStateStorage& 
     TIntrusivePtr<TStateStorageInfo> &boardInfo,
     TIntrusivePtr<TStateStorageInfo> &schemeBoardInfo)
 {
-    char ssr[TActorId::MaxServiceIDLength] = { 's', 's', 'r' }; // state storage replica
-    char ssb[TActorId::MaxServiceIDLength] = { 's', 's', 'b' }; // state storage board
-    char sbr[TActorId::MaxServiceIDLength] = { 's', 'b', 'r' }; // scheme board replica
-
-    stateStorageInfo = BuildStateStorageInfo(ssr, config);
-    boardInfo = BuildStateStorageInfo(ssb, config);
-    schemeBoardInfo = BuildStateStorageInfo(sbr, config);
+    stateStorageInfo = BuildStateStorageInfo("ssr", config);
+    boardInfo = BuildStateStorageInfo("ssb", config);
+    schemeBoardInfo = BuildStateStorageInfo("sbr", config);
 }
 
 }

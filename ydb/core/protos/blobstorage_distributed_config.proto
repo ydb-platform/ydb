@@ -190,7 +190,8 @@ message TEvNodeConfigInvokeOnRoot {
     }
 
     message TReconfigStateStorage {
-        NKikimrConfig.TDomainsConfig.TStateStorage NewStateStorageConfig = 1;
+        optional NKikimrConfig.TDomainsConfig.TStateStorage NewStateStorageConfig = 1;
+        optional bool GetStateStorageConfig = 2;
     }
 
     message TAdvanceGeneration
@@ -270,6 +271,7 @@ message TEvNodeConfigInvokeOnRootResult {
         TQueryConfig QueryConfig = 5;
         TFetchStorageConfig FetchStorageConfig = 10;
         TReplaceStorageConfig ReplaceStorageConfig = 11;
+        NKikimrConfig.TDomainsConfig.TStateStorage StateStorageConfig = 12;
     }
 }
 

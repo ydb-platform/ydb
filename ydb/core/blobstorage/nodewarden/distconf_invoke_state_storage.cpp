@@ -1,4 +1,5 @@
 #include "distconf_invoke.h"
+#include "ydb/core/base/statestorage.h"
 
 namespace NKikimr::NStorage {
 
@@ -11,6 +12,17 @@ namespace NKikimr::NStorage {
         }
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+
+        if(cmd.HasGetStateStorageConfig() && cmd.GetGetStateStorageConfig()) {
+            auto ev = PrepareResult(TResult::OK, std::nullopt);
+            ev->Record.MutableStateStorageConfig()->CopyFrom(config.GetStateStorageConfig());
+            Finish(Sender, SelfId(), ev.release(), 0, Cookie);
+            return;
+        }
+        if(!cmd.HasNewStateStorageConfig()) {
+            FinishWithError(TResult::ERROR, TStringBuilder() << "New configuration is not defined");
+            return;   
+        }
         const auto &newSSConfig = cmd.GetNewStateStorageConfig();
 
         if (newSSConfig.HasRing()) {
@@ -29,8 +41,46 @@ namespace NKikimr::NStorage {
             FinishWithError(TResult::ERROR, TStringBuilder() << "StateStorage configuration is not filled in");
             return;
         }
-        
-        //TODO: Validate new config at least 1 ringGroup in ReadWrite state should be not changed 
+        for (ui32 rgIndex : xrange(newSSConfig.RingGroupsSize())) {
+            auto &rg = newSSConfig.GetRingGroups(rgIndex);
+            if (rg.RingSize() < 1 || rg.GetNToSelect() < 1 || rg.GetNToSelect() > rg.RingSize()) {
+                FinishWithError(TResult::ERROR, TStringBuilder() << "StateStorage invalid ring group selection");
+                return;
+            }
+            for (ui32 ringIndex : xrange(rg.RingSize())) {
+                auto &ring = rg.GetRing(ringIndex);
+                if (ring.RingSize() > 0) {
+                    FinishWithError(TResult::ERROR, TStringBuilder() << "StateStorage too deep nested ring declaration");
+                    return;  
+                }
+                if (ring.NodeSize() < 1) {
+                    FinishWithError(TResult::ERROR, TStringBuilder() << "StateStorage empty ring");
+                    return;
+                }
+            }
+        }
+        try {
+            TIntrusivePtr<TStateStorageInfo> newSSInfo;
+            TIntrusivePtr<TStateStorageInfo> oldSSInfo;
+            newSSInfo = BuildStateStorageInfo("ssr", newSSConfig);
+            oldSSInfo = BuildStateStorageInfo("ssr", config.GetStateStorageConfig());
+
+            bool found = false;
+            auto& firstGroup = newSSInfo.Get()->RingGroups[0];
+            for (auto& rg : oldSSInfo.Get()->RingGroups) {
+                if (firstGroup == rg) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                FinishWithError(TResult::ERROR, TStringBuilder() << "New StateStorage configuration first ring group should be equal to old config");
+                return;
+            }
+        } catch(std::exception &/*e*/) {
+            FinishWithError(TResult::ERROR, TStringBuilder() << "Can not build StateStorage info from config");
+            return;
+        }
 
         config.MutableStateStorageConfig()->CopyFrom(newSSConfig);
         config.SetGeneration(config.GetGeneration() + 1);

@@ -638,7 +638,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         WaitAllReplies = msg->ProxyOptions.RingGroupsSigWaitMode == msg->ProxyOptions.SigSync;
         BLOG_D("RingGroupProxyRequest::HandleInit ev: " << msg->ToString());
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
-            if (!WaitAllReplies && Info->RingGroups[ringGroupIndex].writeOnly)
+            if (!WaitAllReplies && Info->RingGroups[ringGroupIndex].WriteOnly)
                 continue;
             auto actorId = RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, ringGroupIndex));
             RingGroupActors[actorId] = ringGroupIndex;
@@ -684,7 +684,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     }
 
     void ProcessEvInfo(ui32 ringGroupIdx, TEvStateStorage::TEvInfo *msg) {
-        if (Replies <= 1 || !Info->RingGroups[ringGroupIdx].writeOnly) {
+        if (Replies <= 1 || !Info->RingGroups[ringGroupIdx].WriteOnly) {
             TabletID = msg->TabletID;
             Cookie = msg->Cookie;
             CurrentLeader = msg->CurrentLeader;

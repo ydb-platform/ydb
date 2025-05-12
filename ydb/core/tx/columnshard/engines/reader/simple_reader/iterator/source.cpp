@@ -40,8 +40,9 @@ void IDataSource::StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr)
         //    NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
     }
     TFetchingScriptCursor cursor(FetchingPlan, 0);
-    auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), GetContext()->GetCommonContext()->GetScanActorId(), true);
-    NConveyor::TScanServiceOperator::SendTaskToExecute(task);
+    const auto& commonContext = *GetContext()->GetCommonContext();
+    auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), commonContext.GetScanActorId(), true);
+    NConveyor::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
 }
 
 void IDataSource::ContinueCursor(const std::shared_ptr<IDataSource>& sourcePtr) {
@@ -50,8 +51,9 @@ void IDataSource::ContinueCursor(const std::shared_ptr<IDataSource>& sourcePtr) 
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId())("event", "ContinueCursor");
         auto cursor = std::move(*ScriptCursor);
         ScriptCursor.reset();
-        auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), GetContext()->GetCommonContext()->GetScanActorId(), true);
-        NConveyor::TScanServiceOperator::SendTaskToExecute(task);
+        const auto& commonContext = *GetContext()->GetCommonContext();
+        auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), commonContext.GetScanActorId(), true);
+        NConveyor::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
     } else {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId())("event", "CannotContinueCursor");
     }
@@ -388,8 +390,9 @@ private:
         Source->MutableStageData().SetPortionAccessor(std::move(result.ExtractPortionsVector().front()));
         Source->InitUsedRawBytes();
         AFL_VERIFY(Step.Next());
-        auto task = std::make_shared<TStepAction>(Source, std::move(Step), Source->GetContext()->GetCommonContext()->GetScanActorId(), false);
-        NConveyor::TScanServiceOperator::SendTaskToExecute(task);
+        const auto& commonContext = *Source->GetContext()->GetCommonContext();
+        auto task = std::make_shared<TStepAction>(Source, std::move(Step), commonContext.GetScanActorId(), false);
+        NConveyor::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
     }
 
 public:

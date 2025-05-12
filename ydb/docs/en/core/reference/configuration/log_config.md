@@ -152,3 +152,9 @@ log_config:
 - Log levels are specified as numeric values rather than strings in the configuration. Use [the table above](#log-levels) to determine the numeric values of log levels.
 - If `backend_file_name` is specified, logs are written to that file. If `sys_log` is set to true, logs are sent to the system logger.
 - The `format` parameter determines how log entries are formatted. The "full" format includes all available information, "short" provides a more compact format, and "json" outputs logs in JSON format for easier parsing.
+
+## See Also
+
+- [{#T}](../observability/index.md)
+- [{#T}](../observability/metrics/index.md)
+- [{#T}](../observability/tracing/setup.md)

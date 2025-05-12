@@ -1,5 +1,6 @@
 #include "yql_s3_write_actor.h"
 #include "yql_s3_actors_util.h"
+#include "yql_arrow_column_converters.h"
 
 #include <arrow/result.h>
 #include <arrow/table.h>
@@ -844,6 +845,7 @@ class TS3BlockWriteActor : public TS3WriteActorBase {
 public:
     struct TBlockSettings {
         std::shared_ptr<arrow::Schema> ArrowSchema;
+        std::vector<TColumnConverter> ColumnConverters;
         ui64 MaxFileSize;
         ui64 MaxBlockSize;
     };
@@ -851,6 +853,7 @@ public:
     TS3BlockWriteActor(const TBlockSettings& blockSettings, const TBase::TParams& params)
         : TBase(params)
         , ArrowSchema(blockSettings.ArrowSchema)
+        , ColumnConverters(blockSettings.ColumnConverters)
         , MaxFileSize(blockSettings.MaxFileSize ? blockSettings.MaxFileSize : 50_MB)
         , MaxBlockSize(blockSettings.MaxBlockSize ? blockSettings.MaxBlockSize : 1_MB)
     {}
@@ -884,7 +887,7 @@ private:
         const auto numRows = TArrowBlock::From(values[width - 1]).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
 
         auto tableResult = arrow::Table::FromRecordBatches({
-            arrow::RecordBatch::Make(ArrowSchema, numRows, std::move(columns))
+            ConvertArrowColumns(arrow::RecordBatch::Make(ArrowSchema, numRows, std::move(columns)), ColumnConverters)
         });
         ARROW_OK(tableResult.status());
         const auto table = std::move(tableResult).ValueOrDie();
@@ -924,6 +927,7 @@ private:
 
 private:
     const std::shared_ptr<arrow::Schema> ArrowSchema;
+    std::vector<TColumnConverter> ColumnConverters;
     const ui64 MaxFileSize;
     const ui64 MaxBlockSize;
 
@@ -987,7 +991,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
     for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
         const auto memberType = structType->GetMemberType(i);
         std::shared_ptr<arrow::DataType> dataType;
-        YQL_ENSURE(ConvertArrowType(memberType, dataType), "Unsupported arrow type");
+        YQL_ENSURE(S3ConvertArrowOutputType(memberType, dataType), "Unsupported arrow type");
 
         const std::string memberName(structType->GetMemberName(i));
         ARROW_OK(builder.AddField(std::make_shared<arrow::Field>(memberName, dataType, memberType->IsOptional())));
@@ -997,11 +1001,14 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
     ARROW_OK(schemaResult.status());
     auto schema = std::move(schemaResult).ValueOrDie();
 
-    const auto actor = new TS3BlockWriteActor({
+    TS3BlockWriteActor::TBlockSettings settings = {
         .ArrowSchema = std::move(schema),
         .MaxFileSize = arrowSettings.GetMaxFileSize(),
         .MaxBlockSize = arrowSettings.GetMaxBlockSize(),
-    }, s3Params);
+    };
+    BuildOutputColumnConverters(structType, settings.ColumnConverters);
+
+    const auto actor = new TS3BlockWriteActor(settings, s3Params);
     return {actor, actor};
 }
 

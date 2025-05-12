@@ -2,6 +2,7 @@
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <ydb/library/yql/providers/s3/actors/yql_arrow_column_converters.h>
 #include <ydb/library/yql/providers/s3/common/util.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 
@@ -412,27 +413,20 @@ private:
 
 private:
     const TTypeAnnotationNode* AnnotateTargetBase(TCoAtom format, const TExprNode::TListType& keys, const TStructExprType* structType, TExprContext& ctx) {
-        const auto keysCount = keys.size();
-        if (State_->Configuration->UseBlocksSink.Get().GetOrElse(false)) {
-            if (keysCount) {
-                ctx.AddError(TIssue(ctx.GetPosition(format.Pos()), "Block sink is not supported for partitioned output"));
+        if (const auto blockSink = State_->Configuration->UseBlocksSink.Get(); blockSink.GetOrElse(true)) {
+            TString error;
+            if (const auto* type = AnnotateTargetBlocks(format, keys, structType, error, ctx)) {
+                return type;
+            }
+            if (blockSink) {
+                ctx.AddError(TIssue(ctx.GetPosition(format.Pos()), error));
                 return nullptr;
             }
-            if (format != "parquet") {
-                ctx.AddError(TIssue(ctx.GetPosition(format.Pos()), TStringBuilder() << "Block sink supported only for parquet output format"));
-                return nullptr;
-            }
-
-            TTypeAnnotationNode::TListType items;
-            items.reserve(structType->GetSize() + 1);
-            for (const auto* item : structType->GetItems()) {
-                items.emplace_back(ctx.MakeType<TBlockExprType>(item->GetItemType()));
-            }
-            items.emplace_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
-            return ctx.MakeType<TMultiExprType>(items);
         }
 
         const bool isSingleRowPerFileFormat = IsIn({TStringBuf("raw"), TStringBuf("json_list")}, format);
+
+        const auto keysCount = keys.size();
         if (keysCount) {
             if (isSingleRowPerFileFormat) {
                 ctx.AddError(TIssue(ctx.GetPosition(format.Pos()), TStringBuilder() << "Partitioned isn't supported for " << (TStringBuf)format << " output format."));
@@ -463,6 +457,38 @@ private:
         }
 
         return listItemType;
+    }
+
+    const TTypeAnnotationNode* AnnotateTargetBlocks(TCoAtom format, const TExprNode::TListType& keys, const TStructExprType* structType, TString& error, TExprContext& ctx) {
+        if (keys.size()) {
+            error = "Block sink is not supported for partitioned output";
+            return nullptr;
+        }
+        if (format != "parquet") {
+            error = "Block sink supported only for parquet output format";
+            return nullptr;
+        }
+
+        TTypeAnnotationNode::TListType items;
+        items.reserve(structType->GetSize() + 1);
+        for (const auto* item : structType->GetItems()) {
+            const auto* unpackedType = item->GetItemType();
+            if (unpackedType->GetKind() == ETypeAnnotationKind::Optional) {
+                unpackedType = unpackedType->Cast<TOptionalExprType>()->GetItemType();
+            }
+            if (unpackedType->GetKind() != ETypeAnnotationKind::Data) {
+                error = TStringBuilder() << "Field '" << item->GetName() << "' has not supported for block sink type " << FormatType(item->GetItemType()) << ", allowed only data or optional of data types";
+                return nullptr;
+            }
+            if (std::shared_ptr<arrow::DataType> arrowType; !NDq::S3ConvertArrowOutputType(unpackedType->Cast<TDataExprType>()->GetSlot(), arrowType)) {
+                error = TStringBuilder() << "Field '" << item->GetName() << "' has not supported for block sink data type " << FormatType(unpackedType);
+                return nullptr;
+            }
+            items.emplace_back(ctx.MakeType<TBlockExprType>(item->GetItemType()));
+        }
+        items.emplace_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+
+        return ctx.MakeType<TMultiExprType>(items);
     }
 
 private:

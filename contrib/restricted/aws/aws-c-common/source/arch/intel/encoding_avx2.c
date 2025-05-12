@@ -179,7 +179,7 @@ static inline bool decode(const unsigned char *in, unsigned char *out) {
      * so we'll just copy right out of the vector as a fallback
      */
 
-#ifdef HAVE_MM256_EXTRACT_EPI64
+#ifdef AWS_HAVE_MM256_EXTRACT_EPI64
     uint64_t hi = _mm256_extract_epi64(vec, 2);
     const uint64_t *p_hi = &hi;
 #else

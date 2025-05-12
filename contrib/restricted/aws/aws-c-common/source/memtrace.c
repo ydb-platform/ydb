@@ -57,7 +57,7 @@ struct alloc_tracer {
 };
 
 /* number of frames to skip in call stacks (s_alloc_tracer_track, and the vtable function) */
-#define FRAMES_TO_SKIP 2
+enum { FRAMES_TO_SKIP = 2 };
 
 static void *s_trace_mem_acquire(struct aws_allocator *allocator, size_t size);
 static void s_trace_mem_release(struct aws_allocator *allocator, void *ptr);
@@ -438,11 +438,18 @@ static void s_trace_mem_release(struct aws_allocator *allocator, void *ptr) {
 static void *s_trace_mem_realloc(struct aws_allocator *allocator, void *old_ptr, size_t old_size, size_t new_size) {
     struct alloc_tracer *tracer = allocator->impl;
     void *new_ptr = old_ptr;
-    if (aws_mem_realloc(tracer->traced_allocator, &new_ptr, old_size, new_size)) {
-        return NULL;
-    }
 
+    /*
+     * Careful with the ordering of state clean up here.
+     * Tracer keeps a hash table (alloc ptr as key) of meta info about each allocation.
+     * To avoid race conditions during realloc state update needs to be done in
+     * following order to avoid race conditions:
+     * - remove meta info (other threads cant reuse that key, cause ptr is still valid )
+     * - realloc (cant fail, ptr might remain the same)
+     * - add meta info for reallocated mem
+     */
     s_alloc_tracer_untrack(tracer, old_ptr);
+    aws_mem_realloc(tracer->traced_allocator, &new_ptr, old_size, new_size);
     s_alloc_tracer_track(tracer, new_ptr, new_size);
 
     return new_ptr;

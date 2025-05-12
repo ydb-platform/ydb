@@ -182,6 +182,11 @@ AWS_STATIC_IMPL void aws_linked_list_move_all_front(
     struct aws_linked_list *AWS_RESTRICT dst,
     struct aws_linked_list *AWS_RESTRICT src);
 
+/**
+ * Returns true if the node is currently in a list, false otherwise.
+ */
+AWS_STATIC_IMPL bool aws_linked_list_node_is_in_list(struct aws_linked_list_node *node);
+
 #ifndef AWS_NO_STATIC_IMPL
 #    include <aws/common/linked_list.inl>
 #endif /* AWS_NO_STATIC_IMPL */

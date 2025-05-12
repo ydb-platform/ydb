@@ -185,7 +185,7 @@ int aws_hex_decode(const struct aws_byte_cursor *AWS_RESTRICT to_decode, struct 
     /* if the buffer isn't even, prepend a 0 to the buffer. */
     if (AWS_UNLIKELY(to_decode->len & 0x01)) {
         i = 1;
-        if (s_hex_decode_char_to_int(to_decode->ptr[0], &low_value)) {
+        if (s_hex_decode_char_to_int((char)to_decode->ptr[0], &low_value)) {
             return aws_raise_error(AWS_ERROR_INVALID_HEX_STR);
         }
 

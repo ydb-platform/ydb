@@ -9,7 +9,7 @@
 #include <aws/common/json.h>
 #include <aws/common/private/json_impl.h>
 
-#include <aws/common/external/cJSON.h>
+#include "external/cJSON.h"
 
 static struct aws_allocator *s_aws_json_module_allocator = NULL;
 static bool s_aws_json_module_initialized = false;
@@ -397,7 +397,7 @@ int aws_byte_buf_append_json_string(const struct aws_json_value *value, struct a
 
     char *tmp = cJSON_PrintUnformatted(cjson);
     if (tmp == NULL) {
-        return AWS_OP_ERR;
+        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
     }
 
     // Append the text to the byte buffer
@@ -415,7 +415,7 @@ int aws_byte_buf_append_json_string_formatted(const struct aws_json_value *value
 
     char *tmp = cJSON_Print(cjson);
     if (tmp == NULL) {
-        return AWS_OP_ERR;
+        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
     }
 
     // Append the text to the byte buffer

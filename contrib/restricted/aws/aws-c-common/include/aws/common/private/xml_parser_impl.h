@@ -9,6 +9,7 @@
 #include <aws/common/xml_parser.h>
 
 struct aws_xml_node {
+    struct aws_xml_parser *parser;
     struct aws_byte_cursor name;
     struct aws_array_list attributes;
     struct aws_byte_cursor doc_at_body;
@@ -25,7 +26,6 @@ struct aws_xml_parser {
     struct aws_byte_cursor split_scratch[11];
     size_t max_depth;
     int error;
-    bool stop_parsing;
 };
 
 #endif /* AWS_COMMON_PRIVATE_XML_PARSER_IMPL_H */

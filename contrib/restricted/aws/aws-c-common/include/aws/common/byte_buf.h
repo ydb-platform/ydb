@@ -136,6 +136,18 @@ AWS_COMMON_API
 int aws_byte_buf_init_from_file(struct aws_byte_buf *out_buf, struct aws_allocator *alloc, const char *filename);
 
 /**
+ * Same as aws_byte_buf_init_from_file(), but for reading "special files" like /proc/cpuinfo.
+ * These files don't accurately report their size, so size_hint is used as initial buffer size,
+ * and the buffer grows until the while file is read.
+ */
+AWS_COMMON_API
+int aws_byte_buf_init_from_file_with_size_hint(
+    struct aws_byte_buf *out_buf,
+    struct aws_allocator *alloc,
+    const char *filename,
+    size_t size_hint);
+
+/**
  * Evaluates the set of properties that define the shape of all valid aws_byte_buf structures.
  * It is also a cheap check, in the sense it run in constant time (i.e., no loops or recursion).
  */

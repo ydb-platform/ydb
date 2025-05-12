@@ -400,3 +400,27 @@ size_t aws_priority_queue_size(const struct aws_priority_queue *queue) {
 size_t aws_priority_queue_capacity(const struct aws_priority_queue *queue) {
     return aws_array_list_capacity(&queue->container);
 }
+
+void aws_priority_queue_clear(struct aws_priority_queue *queue) {
+    AWS_PRECONDITION(aws_priority_queue_is_valid(queue));
+    size_t backpointer_count = aws_array_list_length(&queue->backpointers);
+    for (size_t i = 0; i < backpointer_count; ++i) {
+        struct aws_priority_queue_node *node = NULL;
+        aws_array_list_get_at(&queue->backpointers, &node, i);
+        if (node != NULL) {
+            node->current_index = SIZE_MAX;
+        }
+    }
+
+    aws_array_list_clear(&queue->backpointers);
+    aws_array_list_clear(&queue->container);
+    AWS_PRECONDITION(aws_priority_queue_is_valid(queue));
+}
+
+void aws_priority_queue_node_init(struct aws_priority_queue_node *node) {
+    node->current_index = SIZE_MAX;
+}
+
+bool aws_priority_queue_node_is_in_queue(const struct aws_priority_queue_node *node) {
+    return node->current_index != SIZE_MAX;
+}

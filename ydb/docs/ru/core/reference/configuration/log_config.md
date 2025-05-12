@@ -46,7 +46,7 @@
 
 ### Объект UAClientConfig
 
-Поле `uaclient_config` настраивает интеграцию с [Unified Agent](https://cloud.yandex.ru/docs/monitoring/concepts/data-collection/unified-agent/):
+Поле `uaclient_config` настраивает интеграцию с [Unified Agent](https://yandex.cloud/ru/docs/monitoring/concepts/data-collection/unified-agent/):
 
 | Параметр | Тип | Значение по умолчанию | Описание |
 | --- | --- | --- | --- |

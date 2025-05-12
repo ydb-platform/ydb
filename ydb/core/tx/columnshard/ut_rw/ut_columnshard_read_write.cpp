@@ -2201,6 +2201,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TAutoPtr<IEventHandle> handle;
 
         bool isStrPk0 = table.Pk[0].GetType() == TTypeInfo(NTypeIds::String) || table.Pk[0].GetType() == TTypeInfo(NTypeIds::Utf8);
+        if (isStrPk0) {
+            csDefaultControllerGuard->SetOverrideBlobSplitSettings(
+                NOlap::NSplitter::TSplitSettings().SetMaxBlobSize(1024 * 1000).SetMinBlobSize(256 * 10));
+        }
 
         // Write different keys: grow on compaction
 

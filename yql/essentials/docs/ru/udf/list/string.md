@@ -47,6 +47,10 @@ SELECT String::Strip("YQL ");       -- "YQL"
 
   Проверяет наличие подстроки в строке.
 
+* `String::AsciiContainsIgnoreCase(string:String?, substring:String) -> Bool`
+* `String::AsciiEqualsIgnoreCase(left:String?, right:String) -> Bool`
+  Проверяют наличие подстроки или полное равенство строк без учета регистра символов.
+
 * `String::Find(string:String{Flags:AutoMap}, String, [Uint64?]) -> Int64` - Устаревшая: используйте встроенную функцию [Find](../../builtins/basic.md#find)
 * `String::ReverseFind(string:String{Flags:AutoMap}, String, [Uint64?]) -> Int64` - Устаревшая: используйте встроенную функцию [RFind](../../builtins/basic.md#rfind)
 * `String::Substring(string:String{Flags:AutoMap}, [Uint64?, Uint64?]) -> String` - Устаревшая: используйте встроенную функцию [Substring](../../builtins/basic.md#substring)

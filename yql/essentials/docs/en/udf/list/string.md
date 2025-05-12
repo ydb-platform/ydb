@@ -32,7 +32,11 @@ Functions for ASCII strings:
 
 * `String::CollapseText(String{Flags:AutoMap}, Uint64) -> String`
 
+* `String::AsciiEqualsIgnoreCase(String?, String) -> Bool` Added in the version [2025.02](../../changelog/2025.02.md#string-module)
+
 * `String::Contains(String?, String) -> Bool`
+
+* `String::AsciiContainsIgnoreCase(String?, String) -> Bool` Added in the version [2025.02](../../changelog/2025.02.md#string-module)
 
 * `String::Find(String{Flags:AutoMap}, String, [Uint64?]) -> Int64`: Returns the first position found or -1. The optional argument is the offset from the beginning of the string.
 

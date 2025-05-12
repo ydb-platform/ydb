@@ -363,8 +363,8 @@ class StabilityCluster:
                 )
                 node.ssh_command(f"sudo chmod 777 {node_artifact_path}", raise_on_error=False)
 
-    def get_workload_outputs(self, seconds=30, mode='err'):
-        """Capture last N seconds of output from all running workload screens."""
+    def get_workload_outputs(self, mode='err', last_n_lines=10):
+        """Capture last N lines of output from all running workload screens."""
         logging.getLogger().setLevel(logging.WARNING)
         for node_id, node in enumerate(self.kikimr_cluster.nodes.values()):
             node_host = node.host.split(':')[0]
@@ -426,55 +426,45 @@ class StabilityCluster:
                         found_screens = True
                         print(f'\n{bcolors.BOLD}{bcolors.OKCYAN}=== {workload_name} ==={bcolors.ENDC}')
                         
-                        # Get the last N seconds of output from both stdout and stderr
-                        time_filter = f'$(date -d "{seconds} seconds ago" +"%Y-%m-%d %H:%M:%S")'
-                        
                         # Get stdout if requested
                         if mode in ['out', 'all']:
                             result = node.ssh_command(
-                                f'tail -n 1000 /tmp/{workload_name}.out.log | grep -A 1000 "{time_filter}" 2>/dev/null || true',
+                                f'tail -n {last_n_lines} /tmp/{workload_name}.out.log 2>/dev/null || true',
                                 raise_on_error=False
                             )
-                            print(f"\n{bcolors.BOLD}{bcolors.OKGREEN}STDOUT:{bcolors.ENDC}")
+                            print(f"\n{bcolors.BOLD}{bcolors.OKGREEN}STDOUT (last {last_n_lines} lines):{bcolors.ENDC}")
                             if result:
                                 output_lines = result.decode('utf-8').split('\n')
                                 for line in output_lines:
                                     if line.strip():  # Skip empty lines
-                                        timestamp_end = line.find(' ', 20)  # Find space after timestamp
-                                        if timestamp_end != -1:
-                                            timestamp = line[:timestamp_end]
-                                            rest = line[timestamp_end:]
-                                            print(f"{bcolors.OKCYAN}{timestamp}{bcolors.ENDC}{rest}")
-                                        else:
-                                            print(line)
+                                        print(line)
                             else:
-                                print(f"{bcolors.WARNING}No output in the specified time window{bcolors.ENDC}")
+                                print(f"{bcolors.WARNING}No output found{bcolors.ENDC}")
 
                         # Get stderr if requested
                         if mode in ['err', 'all']:
                             result = node.ssh_command(
-                                f'tail -n 1000 /tmp/{workload_name}.err.log 2>/dev/null | grep -E "ERROR|WARN|WARNING" || true',
+                                f'tail -n {last_n_lines} /tmp/{workload_name}.err.log 2>/dev/null | grep -E "ERROR|FATAL|WARN|WARNING" || true',
                                 raise_on_error=False
                             )
-                            print(f"\n{bcolors.BOLD}{bcolors.FAIL}STDERR:{bcolors.ENDC}")
+                            print(f"\n{bcolors.BOLD}{bcolors.FAIL}STDERR (last {last_n_lines} lines, errors only):{bcolors.ENDC}")
                             if result:
                                 error_lines = result.decode('utf-8').split('\n')
                                 for line in error_lines:
                                     if line.strip():  # Skip empty lines
-                                        timestamp_end = line.find(' ', 20)  # Find space after timestamp
-                                        if timestamp_end != -1:
-                                            timestamp = line[:timestamp_end]
-                                            rest = line[timestamp_end:]
-                                            if 'ERROR' in rest:
-                                                print(f"{bcolors.OKCYAN}{timestamp}{bcolors.ENDC}{bcolors.FAIL}{rest}{bcolors.ENDC}")
-                                            elif 'WARN' in rest or 'WARNING' in rest:
-                                                print(f"{bcolors.OKCYAN}{timestamp}{bcolors.ENDC}{bcolors.WARNING}{rest}{bcolors.ENDC}")
-                                            else:
-                                                print(f"{bcolors.OKCYAN}{timestamp}{bcolors.ENDC}{rest}")
+                                        if 'FATAL' in line:
+                                            print(f"{bcolors.BOLD}{bcolors.FAIL}{line}{bcolors.ENDC}")
+                                        elif 'ERROR' in line:
+                                            print(f"{bcolors.FAIL}{line}{bcolors.ENDC}")
+                                        elif 'WARN' in line or 'WARNING' in line:
+                                            print(f"{bcolors.WARNING}{line}{bcolors.ENDC}")
                                         else:
                                             print(line)
                             else:
-                                print(f"{bcolors.WARNING}No output in the specified time window{bcolors.ENDC}")
+                                print(f"{bcolors.WARNING}No errors found{bcolors.ENDC}")
+
+                        # Ensure we detach from the screen session
+                        node.ssh_command(f'screen -d {screen_pid} 2>/dev/null || true', raise_on_error=False)
 
             if not found_screens and running_workloads:
                 print(f"\n{bcolors.WARNING}Warning: Found running workloads but no matching screen sessions. The workloads might be running outside of screen.{bcolors.ENDC}")
@@ -577,10 +567,10 @@ def parse_args():
 
     if "get_workload_outputs" in args.actions:
         parser.add_argument(
-            "--seconds",
+            "--last_n_lines",
             type=int,
-            default=30,
-            help="Number of seconds of output to show (default: 30)"
+            default=10,
+            help="Number of lines to show from the end of each log (default: 10)"
         )
         parser.add_argument(
             "--mode",
@@ -627,15 +617,15 @@ def main():
         if action == "start_default_workloads":
             for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
                 node.ssh_command(
-                    'screen -s simple_queue_row -d -m -L -Logfile /tmp/simple_queue_row.out.log bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode row; done"',
+                    'screen -S simple_queue_row -d -m -L -Logfile /tmp/simple_queue_row.out.log bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode row; done"',
                     raise_on_error=True
                 )
                 node.ssh_command(
-                    'screen -s simple_queue_column -d -m -L -Logfile /tmp/simple_queue_column.out.log bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode column; done"',
+                    'screen -S simple_queue_column -d -m -L -Logfile /tmp/simple_queue_column.out.log bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode column; done"',
                     raise_on_error=True
                 )
                 node.ssh_command(
-                    'screen -s olap_workload -d -m -L -Logfile /tmp/olap_workload.out.log bash -c "while true; do /Berkanavt/nemesis/bin/olap_workload --database /Root/db1; done"',
+                    'screen -S olap_workload -d -m -L -Logfile /tmp/olap_workload.out.log bash -c "while true; do /Berkanavt/nemesis/bin/olap_workload --database /Root/db1; done"',
                     raise_on_error=True
                 )
             stability_cluster.get_state()
@@ -757,9 +747,9 @@ def main():
         if action == "start_workload_oltp_workload":
             first_node = stability_cluster.kikimr_cluster.nodes[1]
             first_node.ssh_command(
-                    'screen -s oltp_workload -d -m -L -Logfile /tmp/oltp_workload.out.log bash -c "while true; do /Berkanavt/nemesis/bin/oltp_workload --database /Root/db1 --path oltp_workload --duration 3600; done"',
-                    raise_on_error=True
-                )
+                'screen -S oltp_workload -d -m -L -Logfile /tmp/oltp_workload.out.log bash -c "while true; do /Berkanavt/nemesis/bin/oltp_workload --database /Root/db1 --path oltp_workload --duration 3600; done"',
+                raise_on_error=True
+            )
             stability_cluster.get_state()
         if action == "stop_workloads":
             stability_cluster.stop_workloads()
@@ -777,7 +767,7 @@ def main():
             stability_cluster.perform_checks()
 
         if action == "get_workload_outputs":
-            stability_cluster.get_workload_outputs(args.seconds, args.mode)
+            stability_cluster.get_workload_outputs(mode=args.mode, last_n_lines=args.last_n_lines)
 
 
 if __name__ == "__main__":

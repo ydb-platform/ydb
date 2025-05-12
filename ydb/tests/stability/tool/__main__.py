@@ -750,8 +750,8 @@ def main():
                 )
             stability_cluster.get_state()
         if action == "start_workload_oltp_workload":
-            for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
-                node.ssh_command(
+            first_node = stability_cluster.kikimr_cluster.nodes[1]
+            first_node.ssh_command(
                     'screen -s oltp_workload -d -m -L -Logfile /tmp/oltp_workload.out.log bash -c "while true; do /Berkanavt/nemesis/bin/oltp_workload --database /Root/db1 --path oltp_workload --duration 3600; done"',
                     raise_on_error=True
                 )

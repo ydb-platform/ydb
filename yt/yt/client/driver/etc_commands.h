@@ -150,8 +150,8 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString SourceAccount;
-    TString DestinationAccount;
+std::string SourceAccount;
+    std::string DestinationAccount;
     NYTree::INodePtr ResourceDelta;
 
     void DoExecute(ICommandContextPtr context) override;

@@ -903,6 +903,11 @@ private:
     }
 
     void Handle(NEtcd::TEvQueryResult::TPtr &ev, const TActorContext& ctx) {
+        if (!this->RequiredNextRevision()) {
+            if (auto parser = NYdb::TResultSetParser(ev->Get()->Results.back()); parser.TryNextRow()) {
+                Revision = NYdb::TValueParser(parser.GetValue(0)).GetInt64();
+            }
+        }
         ReplyWith(ev->Get()->Results, ctx);
     }
 

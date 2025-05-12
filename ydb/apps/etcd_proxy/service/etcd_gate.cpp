@@ -134,7 +134,9 @@ private:
             return session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), args);
         };
 
-        Stuff->Client->RetryQuery(std::move(callback)).Subscribe([rev = ev->Get()->Revision](const auto& future) {
+        const auto rev = ev->Get()->Revision;
+        Stuff->Revision.store(rev);
+        Stuff->Client->RetryQuery(std::move(callback)).Subscribe([rev](const auto& future) {
             if (const auto res = future.GetValue(); res.IsSuccess())
                 std::cout << "Revision " << rev << " commited succesfully." << std::endl;
             else

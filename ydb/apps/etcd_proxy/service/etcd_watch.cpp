@@ -41,13 +41,14 @@ private:
     }
 
     void Handle(TEvQueryResult::TPtr &ev, const TActorContext& ctx) {
-        if (auto parser = NYdb::TResultSetParser(ev->Get()->Results.front()); parser.TryNextRow() && 2ULL == parser.ColumnsCount()) {
+        auto ttlParser = NYdb::TResultSetParser(ev->Get()->Results.front());
+        auto revParser = NYdb::TResultSetParser(ev->Get()->Results.back());
+        if (ttlParser.TryNextRow() && revParser.TryNextRow() && 2ULL == ttlParser.ColumnsCount()) {
             etcdserverpb::LeaseKeepAliveResponse response;
-            response.set_id(NYdb::TValueParser(parser.GetValue(0)).GetInt64());
-            response.set_ttl(NYdb::TValueParser(parser.GetValue(1)).GetInt64());
-
+            response.set_id(NYdb::TValueParser(ttlParser.GetValue(0)).GetInt64());
+            response.set_ttl(NYdb::TValueParser(ttlParser.GetValue(1)).GetInt64());
             const auto header = response.mutable_header();
-            header->set_revision(Stuff->Revision.load());
+            header->set_revision(NYdb::TValueParser(revParser.GetValue(0)).GetInt64());
 
             if (!Ctx->Write(std::move(response)))
                 return Die(ctx);
@@ -69,6 +70,7 @@ private:
         sql << Stuff->TablePrefix;
         sql << "update `leases` set `updated` = CurrentUtcDatetime(`id`) where " << leasePraramName << " = `id`;" << std::endl;
         sql << "select `id`, `ttl` - unwrap(cast(CurrentUtcDatetime(`id`) - `updated` as Int64) / 1000000L) as `granted` from `leases` where " << leasePraramName << " = `id`;" << std::endl;
+        sql << "select nvl(max(`revision`), 0L) from `commited`;" << std::endl;
 
         TQueryClient::TQueryResultFunc callback = [query = sql.str(), args = params.Build()](TQueryClient::TSession session) -> TAsyncExecuteQueryResult {
             return session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), args);

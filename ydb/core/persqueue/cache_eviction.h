@@ -462,14 +462,18 @@ namespace NKikimr::NPQ {
             const auto it = Cache.find(blobId);
             if (it == Cache.end()) {
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "No blob in L1. Partition "
-                    << blobId.Partition << " offset " << blobId.Offset << " actorID " << ctx.SelfID);
+                    << blobId.Partition << " offset " << blobId.Offset <<
+                    " partno " << blobId.PartNo << " count " << blobId.Count << " parts_count " << blobId.InternalPartsCount <<
+                    " actorID " << ctx.SelfID);
                 return nullptr;
             }
 
             TCacheValue::TPtr data = it->second.GetBlob();
             if (!data) {
                 LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Evicted blob in L1. Partition "
-                    << blobId.Partition << " offset " << blobId.Offset << " actorID " << ctx.SelfID);
+                    << blobId.Partition << " offset " << blobId.Offset <<
+                    " partno " << blobId.PartNo << " count " << blobId.Count << " parts_count " << blobId.InternalPartsCount <<
+                    " actorID " << ctx.SelfID);
                 RemoveBlob(it);
                 return nullptr;
             }
@@ -478,7 +482,8 @@ namespace NKikimr::NPQ {
 
             const TBlobId& blob = it->first;
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Got data from cache. Partition "
-                << blob.Partition << " offset " << blob.Offset << " count " << blob.Count
+                << blob.Partition << " offset " << blob.Offset <<
+                " partno " << blob.PartNo << " count " << blob.Count << " parts_count " << blob.InternalPartsCount
                 << " source " << (ui32)it->second.Source << " size " << data->DataSize()
                 << " accessed " << data->GetAccessCount() << " times before, last time " << data->GetAccessTime());
 

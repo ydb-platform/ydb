@@ -55,9 +55,9 @@ def uniq_suffix(path, unit):
     return '.{}'.format(pathid(upath)[:4])
 
 
-def pb2_arg(suf, path, mod, unit):
+def pb2_arg(suf, path, mod, py_ver, unit):
     return '{path}__int{py_ver}__{suf}={mod}{modsuf}'.format(
-        path=stripext(to_build_root(path, unit)), suf=suf, mod=mod, modsuf=stripext(suf), py_ver=unit.get('_PYTHON_VER')
+        path=stripext(to_build_root(path, unit)), suf=suf, mod=mod, modsuf=stripext(suf), py_ver=py_ver
     )
 
 
@@ -73,8 +73,8 @@ def ev_cc_arg(path, unit):
     return '{}.ev.pb.cc'.format(stripext(to_build_root(path, unit)))
 
 
-def ev_arg(path, mod, unit):
-    return '{}__int{}___ev_pb2.py={}_ev_pb2'.format(stripext(to_build_root(path, unit)), unit.get('_PYTHON_VER'), mod)
+def ev_arg(path, mod, py_ver, unit):
+    return '{}__int{}___ev_pb2.py={}_ev_pb2'.format(stripext(to_build_root(path, unit)), py_ver, mod)
 
 
 def mangle(name):
@@ -189,7 +189,7 @@ def add_python_lint_checks(unit, py_ver, files):
 
 
 def is_py3(unit):
-    return unit.get("PYTHON3") == "yes"
+    return unit.get("PYTHON2") != "yes"
 
 
 def on_py_program(unit, *args):
@@ -248,6 +248,14 @@ def onpy_srcs(unit, *args):
 
     upath = unit.path()[3:]
     py3 = is_py3(unit)
+
+    py_ver = unit.get('_PYTHON_VER') or 'unset'
+    if py_ver == 'unset':
+        ymake.report_configure_error(
+            "[[alt1]]PY_SRCS[[rst]]: Unknown Python version, select it using [[alt1]]USE_PYTHONx[[rst]] macro"
+        )
+        py_ver = 'py3' if py3 else 'py2'
+
     py_main_only = unit.get('PROCESS_PY_MAIN_ONLY')
     with_py = not unit.get('PYBUILD_NO_PY')
     with_pyc = not unit.get('PYBUILD_NO_PYC')
@@ -637,7 +645,7 @@ def onpy_srcs(unit, *args):
         unit.on_generate_py_protos_internal(proto_paths)
         unit.onpy_srcs(
             [
-                pb2_arg(py_suf, path, mod, unit)
+                pb2_arg(py_suf, path, mod, py_ver, unit)
                 for path, mod in protos
                 for py_suf in unit.get("PY_PROTO_SUFFIXES").split()
             ]
@@ -649,7 +657,7 @@ def onpy_srcs(unit, *args):
     if evs:
         unit.onpeerdir([cpp_runtime_path])
         unit.on_generate_py_evs_internal([path for path, mod in evs])
-        unit.onpy_srcs([ev_arg(path, mod, unit) for path, mod in evs])
+        unit.onpy_srcs([ev_arg(path, mod, py_ver, unit) for path, mod in evs])
 
     if fbss:
         unit.onpeerdir(unit.get('_PY_FBS_DEPS').split())
@@ -715,6 +723,12 @@ def onpy_register(unit, *args):
     Documentation: https://wiki.yandex-team.ru/arcadia/python/pysrcs/#makrospyregister
     """
 
+    py_ver = unit.get('_PYTHON_VER') or 'unset'
+    if py_ver == 'unset':
+        ymake.report_configure_error(
+            "[[alt1]]PY_REGISTER[[rst]]: Unknown Python version, select it using [[alt1]]USE_PYTHONx[[rst]] macro"
+        )
+
     py3 = is_py3(unit)
 
     for name in args:
@@ -747,6 +761,11 @@ def onpy_main(unit, arg):
 
     Documentation: https://wiki.yandex-team.ru/arcadia/python/pysrcs/#modulipyprogrampy3programimakrospymain
     """
+    py_ver = unit.get('_PYTHON_VER') or 'unset'
+    if py_ver == 'unset':
+        ymake.report_configure_error(
+            "[[alt1]]PY_MAIN[[rst]]: Unknown Python version, select it using [[alt1]]USE_PYTHONx[[rst]] macro"
+        )
 
     arg = arg.replace('/', '.')
 

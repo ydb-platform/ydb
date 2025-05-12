@@ -1046,10 +1046,6 @@ TRestoreResult TRestoreClient::RestoreView(
 {
     LOG_D("Process " << fsPath.GetPath().Quote());
 
-    if (auto error = ErrorOnIncomplete(fsPath)) {
-        return *error;
-    }
-
     const TString dbPath = dbRestoreRoot + dbPathRelativeToRestoreRoot;
     LOG_I("Restore view " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
 
@@ -1090,10 +1086,6 @@ TRestoreResult TRestoreClient::RestoreTopic(
     bool isAlreadyExisting)
 {
     LOG_D("Process " << fsPath.GetPath().Quote());
-
-    if (auto error = ErrorOnIncomplete(fsPath)) {
-        return *error;
-    }
 
     LOG_I("Restore topic " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
 
@@ -1147,10 +1139,6 @@ TRestoreResult TRestoreClient::RestoreReplication(
 {
     LOG_D("Process " << fsPath.GetPath().Quote());
 
-    if (auto error = ErrorOnIncomplete(fsPath)) {
-        return *error;
-    }
-
     const TString dbPath = dbRestoreRoot + dbPathRelativeToRestoreRoot;
     LOG_I("Restore async replication " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
 
@@ -1192,10 +1180,6 @@ TRestoreResult TRestoreClient::RestoreRateLimiter(
     const TString& rateLimiterPath)
 {
     LOG_D("Process " << fsPath.GetPath().Quote());
-
-    if (auto error = ErrorOnIncomplete(fsPath)) {
-        return *error;
-    }
 
     const auto request = ReadRateLimiterCreationRequest(fsPath, Log.get());
     auto result = CreateRateLimiter(RateLimiterClient, coordinationNodePath, rateLimiterPath, request);
@@ -1250,10 +1234,6 @@ TRestoreResult TRestoreClient::RestoreCoordinationNode(
 {
     LOG_D("Process " << fsPath.GetPath().Quote());
 
-    if (auto error = ErrorOnIncomplete(fsPath)) {
-        return *error;
-    }
-
     LOG_I("Restore coordination node " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
 
     if (settings.DryRun_) {
@@ -1283,10 +1263,6 @@ TRestoreResult TRestoreClient::RestoreExternalDataSource(
     bool isAlreadyExisting)
 {
     LOG_D("Process " << fsPath.GetPath().Quote());
-
-    if (auto error = ErrorOnIncomplete(fsPath)) {
-        return *error;
-    }
 
     LOG_I("Restore external data source " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
 
@@ -1327,10 +1303,6 @@ TRestoreResult TRestoreClient::RestoreExternalTable(
 {
     LOG_D("Process " << fsPath.GetPath().Quote());
 
-    if (auto error = ErrorOnIncomplete(fsPath)) {
-        return *error;
-    }
-
     LOG_I("Restore external table " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
 
     if (settings.DryRun_) {
@@ -1364,10 +1336,6 @@ TRestoreResult TRestoreClient::RestoreTable(
         bool isAlreadyExisting)
 {
     LOG_D("Process " << fsPath.GetPath().Quote());
-
-    if (auto error = ErrorOnIncomplete(fsPath)) {
-        return *error;
-    }
 
     auto scheme = ReadTableScheme(fsPath, Log.get());
     auto dumpedDesc = TableDescriptionFromProto(scheme);
@@ -1720,9 +1688,6 @@ TRestoreResult TRestoreClient::RestoreIndexes(const TString& dbPath, const TTabl
 
 TRestoreResult TRestoreClient::RestoreChangefeeds(const TFsPath& fsPath, const TString& dbPath) {
     LOG_D("Process " << fsPath.GetPath().Quote());
-    if (auto error = ErrorOnIncomplete(fsPath)) {
-        return *error;
-    }
 
     auto changefeedProto = ReadChangefeedDescription(fsPath, Log.get());
     auto topicProto = ReadTopicDescription(fsPath, Log.get());
@@ -1794,10 +1759,6 @@ TRestoreResult TRestoreClient::RestorePermissions(
         const TRestoreSettings& settings,
         bool isAlreadyExisting)
 {
-    if (auto error = ErrorOnIncomplete(fsPath)) {
-        return *error;
-    }
-
     if (!settings.RestoreACL_) {
         return Result<TRestoreResult>();
     }
@@ -1816,10 +1777,6 @@ TRestoreResult TRestoreClient::RestoreEmptyDir(
         bool isAlreadyExisting)
 {
     LOG_D("Process " << fsPath.GetPath().Quote());
-
-    if (auto error = ErrorOnIncomplete(fsPath)) {
-        return *error;
-    }
 
     LOG_I("Restore empty directory " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
 

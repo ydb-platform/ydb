@@ -75,8 +75,20 @@ public:
         return PopStats;
     }
 
-    TDqFillLevel GetFillLevel() const override {
-        return EstimatedStoredBytes >= MaxStoredBytes ? HardLimit : NoLimit;
+    TDqFillLevel UpdateFillLevel() override {
+        auto result = EstimatedStoredBytes >= MaxStoredBytes ? HardLimit : NoLimit;
+        if (FillLevel != result) {
+            if (Aggregator) {
+                Aggregator->UpdateCount(FillLevel, result);
+            }
+            FillLevel = result;
+        }
+        return result;
+    }
+
+    void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) override {
+        Aggregator = aggregator;
+        Aggregator->AddCount(FillLevel);
     }
 
     void Push(NUdf::TUnboxedValue&& value) override {
@@ -265,22 +277,25 @@ private:
             PushStats.Resume();
         }
 
-        if (GetFillLevel() != NoLimit) {
-            PopStats.TryPause();
-        }
+        auto fillLevel = UpdateFillLevel();
 
         if (PopStats.CollectFull()) {
+            if (fillLevel != NoLimit) {
+                PopStats.TryPause();
+            }
             PopStats.MaxMemoryUsage = std::max(PopStats.MaxMemoryUsage, EstimatedStoredBytes);
             PopStats.MaxRowsInMemory = std::max(PopStats.MaxRowsInMemory, Values.size());
         }
     }
 
     void ReportChunkOut(ui64 rows, ui64 bytes) {
+        auto fillLevel = UpdateFillLevel();
+
         if (PopStats.CollectBasic()) {
             PopStats.Bytes += bytes;
             PopStats.Rows += rows;
             PopStats.Chunks++;
-            if (GetFillLevel() == NoLimit) {
+            if (fillLevel == NoLimit) {
                 PopStats.Resume();
             }
         }
@@ -318,6 +333,8 @@ private:
     bool Finished = false;
     std::deque<TValueDesc> Values;
     ui64 EstimatedRowBytes = 0;
+    std::shared_ptr<TDqFillAggregator> Aggregator;
+    TDqFillLevel FillLevel = NoLimit;
 };
 
 } // namespace

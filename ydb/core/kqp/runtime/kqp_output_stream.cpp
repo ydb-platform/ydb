@@ -37,7 +37,7 @@ public:
     TDqFillLevel GetFillLevel() const override {
         TDqFillLevel result = SoftLimit;
         for (auto output : Outputs) {
-            switch(output->GetFillLevel()) {
+            switch(output->UpdateFillLevel()) {
                 case HardLimit:
                     return HardLimit;
                 case SoftLimit:

@@ -4,6 +4,8 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
+
 #include <string>
 
 namespace Ydb {
@@ -58,8 +60,9 @@ public:
 
     TResultSet::EType GetType() const;
 
-    const TString& GetArrowBatch() const;
-    const TString& GetArrowSchema() const;
+    std::shared_ptr<arrow::RecordBatch> GetArrowBatch() const;
+    const TString& GetSerializedArrowBatch() const;
+    const TString& GetSerializedArrowBatchSchema() const;
 
 private:
     const Ydb::ResultSet& GetProto() const;

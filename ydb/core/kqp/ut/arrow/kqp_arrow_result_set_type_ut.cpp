@@ -17,18 +17,6 @@ TKikimrRunner CreateOlapKikimrRunner() {
     return TKikimrRunner(settings);
 }
 
-std::shared_ptr<arrow::RecordBatch> DeserializeArrowResultSet(const TResultSet& resultSet) {
-    UNIT_ASSERT_VALUES_EQUAL(resultSet.GetType(), NYdb::TResultSet::EType::Arrow);
-
-    const TString& serializedSchema = resultSet.GetArrowSchema();
-    const TString& serializedBatch = resultSet.GetArrowBatch();
-
-    auto schema = NArrow::DeserializeSchema(serializedSchema);
-    UNIT_ASSERT(schema);
-
-    return NArrow::DeserializeBatch(serializedBatch, schema);
-}
-
 void FillAllTypesOltp(TQueryClient& client) {
     auto createResult = client.ExecuteQuery(R"(
         --!syntax_v1
@@ -124,13 +112,15 @@ Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
         auto arrowResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
             TExecuteQuerySettings().ResultSetType(TResultSet::EType::Arrow)).GetValueSync();
 
-        UNIT_ASSERT_C(messageResponse.IsSuccess(), messageResponse.GetIssues().ToString());
         UNIT_ASSERT_C(arrowResponse.IsSuccess(), arrowResponse.GetIssues().ToString());
 
         const auto& messageResultSet = messageResponse.GetResultSet(0);
         const auto& arrowResultSet = arrowResponse.GetResultSet(0);
 
-        std::shared_ptr<arrow::RecordBatch> batch = DeserializeArrowResultSet(arrowResultSet);
+        UNIT_ASSERT_VALUES_EQUAL(messageResultSet.RowsCount(), arrowResultSet.RowsCount());
+        UNIT_ASSERT_VALUES_EQUAL(messageResultSet.ColumnsCount(), arrowResultSet.ColumnsCount());
+
+        std::shared_ptr<arrow::RecordBatch> batch = arrowResultSet.GetArrowBatch();
 
         UNIT_ASSERT_VALUES_EQUAL(messageResultSet.RowsCount(), static_cast<size_t>(batch->num_rows()));
         UNIT_ASSERT_VALUES_EQUAL(messageResultSet.ColumnsCount(), static_cast<size_t>(batch->num_columns()));

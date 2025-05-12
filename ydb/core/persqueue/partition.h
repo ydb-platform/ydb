@@ -768,7 +768,6 @@ private:
     bool HaveData = false;
     bool HaveCheckDisk = false;
     bool HaveDrop = false;
-    bool HeadCleared = false;
     TMaybe<TPartitionSourceManager::TModificationBatch> SourceIdBatch;
     TMaybe<ProcessParameters> Parameters;
     THolder<TEvKeyValue::TEvRequest> PersistRequest;

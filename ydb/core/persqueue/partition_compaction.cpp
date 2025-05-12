@@ -327,8 +327,12 @@ void TPartition::BlobsForCompactionWereWrite()
 
 void TPartition::EndProcessWritesForCompaction(TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
 {
-    if (HeadCleared) {
-        Y_ABORT_UNLESS(!CompactionBlobEncoder.CompactedKeys.empty() || CompactionBlobEncoder.Head.PackedSize == 0);
+    if (CompactionBlobEncoder.HeadCleared) {
+        Y_ABORT_UNLESS(!CompactionBlobEncoder.CompactedKeys.empty() || CompactionBlobEncoder.Head.PackedSize == 0,
+                       "CompactedKeys.size=%" PRISZT
+                       ", Head.Offset=%" PRIu64 ", Head.PartNo=%" PRIu16 ", Head.PackedSize=%" PRIu32,
+                       CompactionBlobEncoder.CompactedKeys.size(),
+                       CompactionBlobEncoder.Head.Offset, CompactionBlobEncoder.Head.PartNo, CompactionBlobEncoder.Head.PackedSize);
         for (ui32 i = 0; i < TotalLevels; ++i) {
             CompactionBlobEncoder.DataKeysHead[i].Clear();
         }
@@ -342,7 +346,7 @@ void TPartition::EndProcessWritesForCompaction(TEvKeyValue::TEvRequest* request,
         return;
     }
 
-    std::pair<TKey, ui32> res = GetNewCompactionWriteKey(HeadCleared);
+    std::pair<TKey, ui32> res = GetNewCompactionWriteKey(CompactionBlobEncoder.HeadCleared);
     const auto& key = res.first;
 
     Y_ABORT_UNLESS(!key.HasSuffix() || key.IsHead()); // body or head
@@ -385,10 +389,16 @@ std::pair<TKey, ui32> TPartition::GetNewCompactionWriteKeyImpl(bool headCleared,
         res = std::make_pair(key, headSize + CompactionBlobEncoder.NewHead.PackedSize);
     } else {
         res = CompactionBlobEncoder.Compact(key, headCleared);
-        Y_ABORT_UNLESS(res.first.IsHead());//may compact some KV blobs from head, but new KV blob is from head too
-        Y_ABORT_UNLESS(res.second >= CompactionBlobEncoder.NewHead.PackedSize); //at least new data must be writed
+        Y_ABORT_UNLESS(res.first.IsHead(),
+                       "res.first=%s",
+                       res.first.ToString().data());//may compact some KV blobs from head, but new KV blob is from head too
+        Y_ABORT_UNLESS(res.second >= CompactionBlobEncoder.NewHead.PackedSize,
+                       "res.second=%" PRIu32 ", NewHead.PackedSize=%" PRIu32,
+                       res.second, CompactionBlobEncoder.NewHead.PackedSize); //at least new data must be writed
     }
-    Y_ABORT_UNLESS(res.second <= MaxBlobSize);
+    Y_ABORT_UNLESS(res.second <= MaxBlobSize,
+                   "res.second=%" PRIu32 ", MaxBlobSize=%" PRIu32,
+                   res.second, MaxBlobSize);
 
     return res;
 }

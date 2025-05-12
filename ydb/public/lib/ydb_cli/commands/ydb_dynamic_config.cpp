@@ -3,6 +3,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_dynamic_config.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/config/config.h>
 #include <ydb/library/yaml_config/public/yaml_config.h>
+#include <library/cpp/json/json_value.h>
+#include <library/cpp/json/json_writer.h>
 
 #include <openssl/sha.h>
 
@@ -859,51 +861,102 @@ TCommandVersionDynamicConfig::TCommandVersionDynamicConfig(bool allowEmptyDataba
 
 void TCommandVersionDynamicConfig::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    config.Opts->AddLongOption("list-V1-nodes", "List nodes with V1 configuration")
+    config.Opts->AddLongOption("list-v1-nodes", "List nodes with V1 configuration")
         .StoreTrue(&ListV1Nodes);
-    config.Opts->AddLongOption("list-V2-nodes", "List nodes with V2 configuration")
+    config.Opts->AddLongOption("list-v2-nodes", "List nodes with V2 configuration")
         .StoreTrue(&ListV2Nodes);
     config.Opts->AddLongOption("list-unknown-nodes", "List nodes with unknown configuration")
         .StoreTrue(&ListUnknownNodes);
     config.SetFreeArgsNum(0);
     config.AllowEmptyDatabase = AllowEmptyDatabase;
+
+    AddOutputFormats(config, {
+        EDataFormat::Pretty,
+        EDataFormat::JsonUnicode
+    });
+}
+
+void TCommandVersionDynamicConfig::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+    ParseOutputFormats();
 }
 
 int TCommandVersionDynamicConfig::Run(TConfig& config) {
+    bool anyListFlagManuallySet = ListV1Nodes || ListV2Nodes || ListUnknownNodes;
+
+    if (!anyListFlagManuallySet) {
+        ListV1Nodes = true;
+        ListV2Nodes = true;
+        ListUnknownNodes = true;
+    }
+
     auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
     auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
 
     auto result = client.GetConfigurationVersion(ListV1Nodes, ListV2Nodes, ListUnknownNodes).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
-
-    auto copySortAndPrintNodeList = [&](bool shouldPrint, const TString& header, const auto& list_getter) {
-        if (shouldPrint) {
-            const auto& proto_list = list_getter();
-            std::vector<std::decay_t<decltype(*proto_list.begin())>> nodes_vector(
-                proto_list.begin(), proto_list.end()
-            );
-            std::sort(nodes_vector.begin(), nodes_vector.end());
-
-            Cout << header << Endl;
-            bool first = true;
-            for (const auto& node : nodes_vector) {
-                if (!first) {
-                    Cout << ", ";
-                }
-                Cout << node;
-                first = false;
-            }
-            Cout << Endl;
-        }
+    auto sortNodes = [&](const auto& list) {
+        std::vector<ui32> sortedNodes(list.begin(), list.end());
+        std::sort(sortedNodes.begin(), sortedNodes.end());
+        return sortedNodes;
     };
 
-#define PRINT_NODE_VERSION_INFO(type) \
-    Cout << #type " nodes: " << result.Get##type##Nodes() << Endl; \
-    copySortAndPrintNodeList(List##type##Nodes, #type " nodes list: ", [&]() { return result.Get##type##NodesList(); })
+    if (OutputFormat == EDataFormat::JsonUnicode) {
+        NJson::TJsonValue jsonOutput(NJson::JSON_MAP);
+        auto serializeNodesInfo = [&](const TString& key, const auto& listGetter) {
+            NJson::TJsonValue nodesArray(NJson::JSON_ARRAY);
+            for (const auto& node : sortNodes(listGetter())) {
+                nodesArray.AppendValue(node);
+            }
+            jsonOutput.InsertValue(key, nodesArray);
+        };
 
-    PRINT_NODE_VERSION_INFO(V1);
-    PRINT_NODE_VERSION_INFO(V2);
-    PRINT_NODE_VERSION_INFO(Unknown);
+#define SERIALIZE_NODES_INFO(type, key) \
+    if (List##type##Nodes) { \
+        jsonOutput.InsertValue(#key "_nodes_count", result.Get##type##Nodes()); \
+        serializeNodesInfo(#key "_nodes_list", [&]() { return result.Get##type##NodesList(); }); \
+    }
+
+        SERIALIZE_NODES_INFO(V1, v1)
+        SERIALIZE_NODES_INFO(V2, v2)
+        SERIALIZE_NODES_INFO(Unknown, unknown)
+
+        NJson::WriteJson(&Cout, &jsonOutput, true);
+        Cout << Endl;
+    } else {
+        auto printNodeList = [&](const TString& header, const auto& list_getter) {
+            const auto& nodes_vector = sortNodes(list_getter());
+            Cout << header;
+            if (OutputFormat == EDataFormat::Pretty) {
+                bool first = true;
+                for (const auto& node : nodes_vector) {
+                    if (!first) {
+                        Cout << ", ";
+                    }
+                    Cout << node;
+                    first = false;
+                }
+                Cout << Endl;
+            } else if (OutputFormat == EDataFormat::JsonUnicode) {
+                NJson::TJsonValue nodesArray(NJson::JSON_ARRAY);
+                for (const auto& node : nodes_vector) {
+                    nodesArray.AppendValue(node);
+                }
+                Cout << nodesArray.GetStringRobust();
+            }
+        };
+
+#define PRINT_NODE_VERSION_INFO(type) \
+    Cout << #type " node: " << result.Get##type##Nodes() << Endl; \
+    if (List##type##Nodes) { \
+        printNodeList(#type " node list: ", [&]() { return result.Get##type##NodesList(); }); \
+    } \
+    Cout << Endl;
+
+        PRINT_NODE_VERSION_INFO(V1)
+        PRINT_NODE_VERSION_INFO(V2)
+        PRINT_NODE_VERSION_INFO(Unknown)
+    }
 
     return EXIT_SUCCESS;
 }

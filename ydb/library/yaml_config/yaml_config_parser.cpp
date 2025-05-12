@@ -167,6 +167,8 @@ namespace NKikimr::NYaml {
     }
 
     void ExtractExtraFields(NJson::TJsonValue& json, TTransformContext& ctx) {
+        Cerr << "Entering ExtractExtraFields. JSON content: " << NJson::WriteJson(&json, /*unformatted=*/false) << Endl;
+
         // for static group
         Iterate(json, COMBINED_DISK_INFO_PATH, [&ctx](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
             Y_ENSURE_BT(ids.size() == 4);
@@ -182,19 +184,26 @@ namespace NKikimr::NYaml {
         });
         EraseMultipleByPath(json, COMBINED_DISK_INFO_PATH);
 
+        Cerr << "Before Iterate for POOL_CONFIG_PATH. JSON has domains_config? " << json.Has("domains_config") << Endl;
+        if (json.Has("domains_config")) {
+            Cerr << "JSON has domains_config. domains_config is map? " << json["domains_config"].IsMap() << Endl;
+        }
+
         Iterate(json, POOL_CONFIG_PATH, [&ctx](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
+            Cerr << "Iterate POOL_CONFIG_PATH" << Endl;
             Y_ENSURE_BT(ids.size() == 2);
 
             TPoolConfigKey key{
                 .Domain = ids[0],
                 .StoragePoolType = ids[1],
             };
-
+            Cerr << "key: " << key.Domain << " " << key.StoragePoolType << Endl;
             ctx.PoolConfigInfo[key] = TPoolConfigInfo{
                 .HasErasureSpecies = node.Has("erasure_species"),
                 .HasKind = node.Has("kind"),
                 .HasVDiskKind = node.Has("vdisk_kind"),
             };
+            Cerr << "ctx.PoolConfigInfo[key]: " << ctx.PoolConfigInfo[key].HasErasureSpecies << " " << ctx.PoolConfigInfo[key].HasKind << " " << ctx.PoolConfigInfo[key].HasVDiskKind << Endl;
         });
 
         Iterate(json, GROUP_PATH, [&ctx](const std::vector<ui32>& ids, const NJson::TJsonValue& node) {
@@ -798,9 +807,12 @@ endDiskTypeCheck:   ;
                 storagePoolType.SetKind(*defaultDiskTypeLower);
             }
             auto& poolConfig = *storagePoolType.MutablePoolConfig();
+            Cerr << "info.HasErasureSpecies: " << info.HasErasureSpecies << Endl;
+            Y_ENSURE_BT(info.HasErasureSpecies || erasureName, "Erasure species is not specified for storage pool type, id " << storagePoolTypeId);
             if (erasureName && !info.HasErasureSpecies) {
                 poolConfig.SetErasureSpecies(erasureName.GetRef());
             }
+            Y_ENSURE_BT(info.HasKind || defaultDiskTypeLower, "Disk type is not specified for storage pool type, id " << storagePoolTypeId);
             if (defaultDiskTypeLower && !info.HasKind) {
                 poolConfig.SetKind(*defaultDiskTypeLower);
             }
@@ -841,10 +853,11 @@ endDiskTypeCheck:   ;
             auto& cpConfig = *config.MutableChannelProfileConfig();
             for (auto& profile : *cpConfig.MutableProfile()) {
                 for (auto& channel : *profile.MutableChannel()) {
+                    Y_ENSURE_BT(channel.HasErasureSpecies() || erasureName, "Erasure species is not specified for channel, id " << profile.GetProfileId());
                     if (erasureName && !channel.HasErasureSpecies()) {
                         channel.SetErasureSpecies(erasureName.GetRef());
                     }
-
+                    Y_ENSURE_BT(channel.HasStoragePoolKind() || defaultDiskTypeLower, "Disk type is not specified for channel, id " << profile.GetProfileId());
                     if (defaultDiskTypeLower && !channel.HasStoragePoolKind()) {
                         channel.SetStoragePoolKind(defaultDiskTypeLower.GetRef());
                     }
@@ -853,6 +866,7 @@ endDiskTypeCheck:   ;
         } else if (erasureName && defaultDiskTypeLower) {
             auto& channelProfile = *config.MutableChannelProfileConfig()->AddProfile();
             channelProfile.SetProfileId(0);
+
             for (size_t i = 0; i < 3; ++i) {
                 auto& channel = *channelProfile.AddChannel();
                 channel.SetErasureSpecies(erasureName.GetRef());

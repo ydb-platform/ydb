@@ -6,7 +6,7 @@ hosts:
 - host: host2
   drive:
     - path: ydb.data
-    - type: HDD
+    - type: ROT
 erasure: block-4-2
 domains_config:
   domain:

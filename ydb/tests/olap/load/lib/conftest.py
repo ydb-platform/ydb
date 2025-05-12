@@ -298,7 +298,6 @@ class LoadSuiteBase:
         query_text = ''
 
         if result.stdout is not None:
-            allure.attach(result.stdout, 'Stdout', attachment_type=allure.attachment_type.TEXT)
             begin_text = 'Query text:\n'
             begin_pos = result.stdout.find(begin_text)
             if begin_pos >= 0:
@@ -309,6 +308,7 @@ class LoadSuiteBase:
                 query_text = result.stdout[begin_pos:end_pos]
             if os.getenv('SECRET_REQUESTS', '') != '1':
                 allure.attach(query_text, 'Query text', attachment_type=allure.attachment_type.TEXT)
+            allure.attach(cls.__hide_query_text(result.stdout, query_text), 'Stdout', attachment_type=allure.attachment_type.TEXT)
 
         if result.stderr is not None:
             allure.attach(cls.__hide_query_text(result.stderr, query_text), 'Stderr', attachment_type=allure.attachment_type.TEXT)

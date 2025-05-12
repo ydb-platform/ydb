@@ -276,7 +276,7 @@ class YdbCliHelper:
                     self.result.error_message = wait_error
                 else:
                     if os.getenv('SECRET_REQUESTS', '') == '1':
-                        process = subprocess.run(self._get_cmd(), check=False, text=True)
+                        process = subprocess.run(self._get_cmd(), check=False, text=True, capture_output=True)
                     else:
                         process = yatest.common.process.execute(self._get_cmd(), check_exit_code=False, text=True)
                     self._parse_stderr(process.stderr)

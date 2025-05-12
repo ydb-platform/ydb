@@ -248,7 +248,7 @@ class TestKiKiMRDistConfReassignStateStorage(DistConfKiKiMRTest):
                     ["ErrorReason"] == "New configuration first RingGroup is writeOnly")
 
     def test_cluster_change_state_storage_distconf(self):
-        defaultRingGroup = self.do_request({"ReconfigStateStorage": {"GetStateStorageConfig": True}})["StateStorageConfig"]["RingGroups"][0]
+        defaultRingGroup = self.do_request({"ReconfigStateStorage": {"GetStateStorageConfig": True}})["StateStorageConfig"]["Ring"]
         newRingGroup = {"WriteOnly": True, "NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}]}
         assert_that(defaultRingGroup["NToSelect"] > 0)
         assert_that(self.do_load_and_test({"ReconfigStateStorage": {"NewStateStorageConfig": {

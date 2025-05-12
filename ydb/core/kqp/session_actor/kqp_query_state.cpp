@@ -373,6 +373,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
 
     switch (GetAction()) {
         case NKikimrKqp::QUERY_ACTION_EXECUTE:
+        case NKikimrKqp::QUERY_ACTION_EXPLAIN:
             query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
             break;
         default:
@@ -390,6 +391,14 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
     if (!Statements.empty()) {
         YQL_ENSURE(CurrentStatementId < Statements.size());
         statementAst = Statements[CurrentStatementId];
+    }
+
+    if (GetAction() == NKikimrKqp::QUERY_ACTION_EXPLAIN) {
+        // Splitted Expr can be used only for CTAS statement.
+        // CTAS consists of 3 exprs: CREATE TABLE, REPLACE, ALTER TABLE RENAME.
+        // For explain we need only REPLACE, because explain doesn't support for DDL statements.
+        AFL_ENSURE(SplittedExprs.size() == 3);
+        NextSplittedExpr = 1;
     }
 
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, ClientAddress, uid, std::move(query), false,

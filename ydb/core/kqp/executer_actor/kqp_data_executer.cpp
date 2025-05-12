@@ -1620,7 +1620,7 @@ private:
             shardTasks.emplace(shardId, task.Id);
 
             FillSecureParamsFromStage(task.Meta.SecureParams, stage);
-            BuildSinks(stage, task);
+            BuildSinks(stage, stageInfo, task);
 
             return task;
         };

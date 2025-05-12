@@ -1201,17 +1201,18 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                           .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 3 : 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 1 : 4);
 
-            int idx = 1;
+            int idx = UseSink ? 0 : 1;
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 1);
             // One read of main table
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), UseSink ? 0 : 1);
 
+            
             // One update of index table
-            idx += UseSink ? 1 : 2;
+            idx += UseSink ? 0 : 2;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/TestTable");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).updates().rows(), 1);    
@@ -5986,10 +5987,13 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         CompareYson(R"([[[2]]])", FormatResultSetYson(result.GetResultSet(2)));
     }
 
-    Y_UNIT_TEST(UpdateIndexSubsetPk) {
+    Y_UNIT_TEST_TWIN(UpdateIndexSubsetPk, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
 
         auto db = kikimr.GetTableClient();
@@ -6029,7 +6033,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         AssertTableStats(result, "/Root/TestTable", {
-            .ExpectedReads = 1,
+            .ExpectedReads = UseSink ? 0 : 1,
             .ExpectedUpdates = 1
         });
 
@@ -6367,10 +6371,19 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             });
         }
     }
-    Y_UNIT_TEST(UpdateOnReadColumns) {
+    Y_UNIT_TEST_TWIN(UpdateOnReadColumns, UseSink) {
+        auto getKikimr = []() {
+            NKikimrConfig::TAppConfig appConfig;
+            appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+            auto setting = NKikimrKqp::TKqpSetting();
+            auto serverSettings = TKikimrSettings()
+                .SetKqpSettings({setting})
+                .SetAppConfig(appConfig);
+            return TKikimrRunner(serverSettings);
+        };
         {
             // Check that keys from non involved index are not in read columns
-            TKikimrRunner kikimr;
+            TKikimrRunner kikimr = getKikimr();
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
             CreateSampleTablesWithIndex(session);
@@ -6383,14 +6396,11 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
             auto table = plan["tables"][0];
             UNIT_ASSERT_VALUES_EQUAL(table["name"], "/Root/SecondaryKeys");
-            auto reads = table["reads"].GetArraySafe();
-            UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
-            UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 1);
+            UNIT_ASSERT(UseSink ? !table.Has("reads") : table.Has("reads"));
         }
         {
             // Check that keys from involved index are in read columns
-            TKikimrRunner kikimr;
+            TKikimrRunner kikimr = getKikimr();
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
             CreateSampleTablesWithIndex(session);
@@ -6410,7 +6420,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
         {
             // Check that all keys from involved index are in read columns
-            TKikimrRunner kikimr;
+            TKikimrRunner kikimr = getKikimr();
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
             CreateSampleTablesWithIndex(session);
@@ -6430,7 +6440,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
         {
             // Check that data colomns from involved index are in read columns
-            TKikimrRunner kikimr;
+            TKikimrRunner kikimr = getKikimr();
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
             CreateSampleTablesWithIndex(session);
@@ -6450,7 +6460,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
         {
             // Check that data colomns not from involved index aren't in read columns
-            TKikimrRunner kikimr;
+            TKikimrRunner kikimr = getKikimr();
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
             CreateSampleTablesWithIndex(session);
@@ -6463,10 +6473,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
             auto table = plan["tables"][0];
             UNIT_ASSERT_VALUES_EQUAL(table["name"], "/Root/SecondaryWithDataColumns");
-            auto reads = table["reads"].GetArraySafe();
-            UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
-            UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 1);
+            UNIT_ASSERT(UseSink ? !table.Has("reads") : table.Has("reads"));
         }
     }
 

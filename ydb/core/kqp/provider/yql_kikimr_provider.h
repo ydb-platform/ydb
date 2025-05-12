@@ -255,6 +255,7 @@ enum class TYdbOperation : ui64 {
     AlterTransfer          = 1ull << 35,
     DropTransfer           = 1ull << 36,
     AlterDatabase          = 1ull << 37,
+    FillTable              = 1ull << 38,
 };
 
 Y_DECLARE_FLAGS(TYdbOperations, TYdbOperation);

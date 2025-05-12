@@ -419,6 +419,9 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorImmediateWritesRetries;
     ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorPrepareWrites;
 
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorWriteOnlyOperations;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WriteActorReadWriteOperations;
+
     ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorFlushes;
     ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorImmediateCommits;
     ::NMonitoring::TDynamicCounters::TCounterPtr BufferActorDistributedCommits;

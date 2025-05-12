@@ -548,6 +548,7 @@ public:
     }
 
     void AddBatch(IDataBatchPtr&& batch) override {
+        TGuard guard(*Alloc);
         auto columnshardBatch = dynamic_cast<TColumnBatch*>(batch.Get());
         AFL_ENSURE(columnshardBatch);
         if (columnshardBatch->IsEmpty()) {
@@ -555,11 +556,10 @@ public:
         }
         auto data = columnshardBatch->Extract();
         AFL_ENSURE(data);
-        ShardAndFlushBatch(data, false);
+        ShardAndFlushBatch(std::move(data), false);
     }
 
-    void ShardAndFlushBatch(const TRecordBatchPtr& unshardedBatch, bool force) {
-        TGuard guard(*Alloc);
+    void ShardAndFlushBatch(TRecordBatchPtr&& unshardedBatch, bool force) {
         for (auto [shardId, shardBatch] : Sharding->SplitByShardsToArrowBatches(
                                                     unshardedBatch, NKikimr::NMiniKQL::GetArrowMemoryPool())) {
             const i64 shardBatchMemory = NArrow::GetBatchDataSize(shardBatch);
@@ -647,6 +647,7 @@ public:
     }
 
     void Close() override {
+        TGuard guard(*Alloc);
         AFL_ENSURE(!Closed);
         Closed = true;
         FlushUnpreparedForce();
@@ -1089,21 +1090,18 @@ public:
             return IsClosed() && IsEmpty();
         }
 
-        void MakeNextBatches(i64 maxDataSize, std::optional<ui64> maxCount) {
+        void MakeNextBatches(std::optional<ui64> maxCount) {
             AFL_ENSURE(BatchesInFlight == 0);
             AFL_ENSURE(!IsEmpty());
-            i64 dataSize = 0;
+
             // For columnshard batch can be slightly larger than the limit.
             while ((!maxCount || BatchesInFlight < *maxCount)
-                    && BatchesInFlight < Batches.size()
-                    && (dataSize + GetBatch(BatchesInFlight).GetSerializedMemory() <= maxDataSize || BatchesInFlight == 0)) {
-                dataSize += GetBatch(BatchesInFlight).GetSerializedMemory();
+                    && BatchesInFlight < Batches.size()) {
                 ++BatchesInFlight;
             }
             AFL_ENSURE(BatchesInFlight != 0);
             AFL_ENSURE(BatchesInFlight == Batches.size()
-                || (maxCount && BatchesInFlight >= *maxCount)
-                || dataSize + GetBatch(BatchesInFlight).GetSerializedMemory() > maxDataSize);
+                || (maxCount && BatchesInFlight >= *maxCount));
         }
 
         TBatchWithMetadata& GetBatch(size_t index) {
@@ -1587,8 +1585,8 @@ private:
                         ShardsInfo.GetShard(shardId).PushBatch(TBatchWithMetadata{
                             .Token = token,
                             .Data = std::move(batch),
-                            .HasRead = (writeInfo.Metadata.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE
-                                && writeInfo.Metadata.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT),
+                            .HasRead = (writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
+                                || writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE),
                         });
                     }
                 }
@@ -1604,8 +1602,8 @@ private:
                     shard.PushBatch(TBatchWithMetadata{
                         .Token = token,
                         .Data = std::move(batch),
-                        .HasRead = (writeInfo.Metadata.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE
-                            && writeInfo.Metadata.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT),
+                        .HasRead = (writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
+                                || writeInfo.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE),
                     });
                 }
             }
@@ -1616,9 +1614,9 @@ private:
         if (shard.GetBatchesInFlight() == 0) {
             AFL_ENSURE(IsOlap != std::nullopt);
             if (*IsOlap) {
-                shard.MakeNextBatches(Settings.MemoryLimitPerMessage, 1);
+                shard.MakeNextBatches(1);
             } else {
-                shard.MakeNextBatches(Settings.MemoryLimitPerMessage, std::nullopt);
+                shard.MakeNextBatches(std::nullopt);
             }
         }
     }

@@ -1145,7 +1145,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             std::unordered_map<TString, std::vector<TConsumerOffset>> offsets;
             std::vector<TConsumerOffset> partitionsAndOffsets;
             for (ui64 i = 0; i < minActivePartitions; ++i) {
-                partitionsAndOffsets.emplace_back(TConsumerOffset{i, static_cast<ui64>(recordsCount), commitedMetaData});
+                partitionsAndOffsets.emplace_back(i, static_cast<ui64>(recordsCount), commitedMetaData);
             }
             offsets[firstTopicName] = partitionsAndOffsets;
 

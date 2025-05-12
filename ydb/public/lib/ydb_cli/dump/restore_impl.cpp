@@ -793,7 +793,7 @@ TRestoreResult TRestoreClient::RestoreDatabaseImpl(const TString& fsPath, const 
     }
 
     if (settings.WithContent_) {
-        auto restoreResult = RestoreFolder(fsPath, dbPath, {}, {});
+        auto restoreResult = RestoreFolder(fsPath, dbPath, {}, { { dbPath, ESchemeEntryType::SubDomain } });
         if (auto result = DelayedRestoreManager.RestoreDelayed(); !result.IsSuccess()) {
             restoreResult = result;
         }

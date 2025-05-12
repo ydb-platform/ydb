@@ -109,16 +109,16 @@ std::vector<NKikimr::TSystemThreadsMonitor::TSystemThreadPoolInfo> NKikimr::TSys
     	    info.MajorPageFaults = double(majorPageFaults) / passedSeconds;
     	    info.MinorPageFaults = double(minorPageFaults) / passedSeconds;
         } else {
-            info.MajorPageFaults = 0.0;
-            info.MinorPageFaults = 0.0;
+            info.MajorPageFaults = 0;
+            info.MinorPageFaults = 0;
         }
 
         if (ticks > 0.0 && info.Threads > 0) {
             info.SystemUsage = double(systemTime) / ticks / info.Threads;
             info.UserUsage = double(userTime) / ticks / info.Threads;
         } else {
-            info.SystemUsage = 0.0;
-            info.UserUsage = 0.0;
+            info.SystemUsage = 0.0f;
+            info.UserUsage = 0.0f;
         }
     }
     UpdateTime = now;

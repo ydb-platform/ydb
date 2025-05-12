@@ -103,49 +103,28 @@ void FillAllTypesOlap(TQueryClient& client) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
-    Y_UNIT_TEST(OltpAllTypes) {
+    Y_UNIT_TEST_TWIN(AllColumnTypes, isOlap) {
         auto kikimr = CreateOlapKikimrRunner();
         auto client = kikimr.GetQueryClient();
 
-        FillAllTypesOltp(client);
+        if (isOlap) {
+            FillAllTypesOlap(client);
+        } else {
+            FillAllTypesOltp(client);
+        }
 
-        auto messageResponse = client.ExecuteQuery(R"(
+        TString query = Sprintf(R"(
             --!syntax_v1
-            SELECT * FROM `/Root/OltpTable`;
-        )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ResultSetType(TResultSet::EType::Message)).GetValueSync();
+            SELECT * FROM `/Root/%s`;
+        )", (isOlap) ? "OlapTable" : "OltpTable");
+
+        auto messageResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
+            TExecuteQuerySettings().ResultSetType(TResultSet::EType::Message)).GetValueSync();
+
+        auto arrowResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
+            TExecuteQuerySettings().ResultSetType(TResultSet::EType::Arrow)).GetValueSync();
+
         UNIT_ASSERT_C(messageResponse.IsSuccess(), messageResponse.GetIssues().ToString());
-
-        auto arrowResponse = client.ExecuteQuery(R"(
-            --!syntax_v1
-            SELECT * FROM `/Root/OltpTable`;
-        )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ResultSetType(TResultSet::EType::Arrow)).GetValueSync();
-        UNIT_ASSERT_C(arrowResponse.IsSuccess(), arrowResponse.GetIssues().ToString());
-
-        const auto& messageResultSet = messageResponse.GetResultSet(0);
-        const auto& arrowResultSet = arrowResponse.GetResultSet(0);
-
-        std::shared_ptr<arrow::RecordBatch> batch = DeserializeArrowResultSet(arrowResultSet);
-
-        UNIT_ASSERT_VALUES_EQUAL(messageResultSet.RowsCount(), static_cast<size_t>(batch->num_rows()));
-        UNIT_ASSERT_VALUES_EQUAL(messageResultSet.ColumnsCount(), static_cast<size_t>(batch->num_columns()));
-    }
-
-    Y_UNIT_TEST(OlapAllTypes) {
-        auto kikimr = CreateOlapKikimrRunner();
-        auto client = kikimr.GetQueryClient();
-
-        FillAllTypesOlap(client);
-
-        auto messageResponse = client.ExecuteQuery(R"(
-            --!syntax_v1
-            SELECT * FROM `/Root/OlapTable`;
-        )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ResultSetType(TResultSet::EType::Message)).GetValueSync();
-        UNIT_ASSERT_C(messageResponse.IsSuccess(), messageResponse.GetIssues().ToString());
-
-        auto arrowResponse = client.ExecuteQuery(R"(
-            --!syntax_v1
-            SELECT * FROM `/Root/OlapTable`;
-        )", TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ResultSetType(TResultSet::EType::Arrow)).GetValueSync();
         UNIT_ASSERT_C(arrowResponse.IsSuccess(), arrowResponse.GetIssues().ToString());
 
         const auto& messageResultSet = messageResponse.GetResultSet(0);

@@ -1,6 +1,7 @@
 #pragma once
 #include "block_item_comparator.h"
 #include "block_item_hasher.h"
+#include <arrow/type.h>
 #include <yql/essentials/public/udf/udf_type_size_check.h>
 #include <yql/essentials/public/udf/udf_version.h>
 

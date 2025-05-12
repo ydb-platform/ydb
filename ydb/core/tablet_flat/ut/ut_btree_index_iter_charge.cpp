@@ -105,6 +105,7 @@ namespace {
             Type4,
             Type5,
             Type6,
+            Type7,
             // new types should go here
 
             UpperLoopLimit
@@ -216,6 +217,11 @@ namespace {
             }
             case TTestParams::Type6: {
                 add(9, 10);
+                break;
+            }
+            case TTestParams::Type7: {
+                add(2, 4);
+                add(17, 18);
                 break;
             }
             default:

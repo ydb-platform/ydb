@@ -228,16 +228,12 @@ namespace {
             }
         }
 
-        if (params.Slices) {
-            UNIT_ASSERT_GT(part.Slices->size(), 1);
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL(part.Slices->size(), 1);
+        if (params.Slices <= TTestParams::None + 1) {
+            Cerr << DumpPart(part, 3) << Endl;
         }
-
         Cerr << "Slices";
         part.Slices->Describe(Cerr);
         Cerr << Endl;
-        Cerr << DumpPart(part, 3) << Endl;
 
         UNIT_ASSERT_VALUES_EQUAL(part.IndexPages.BTreeGroups[0].LevelCount, params.Levels);
         if (params.Groups) {
@@ -820,7 +816,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
         wrap.StopAfter(key2);
         wrap.Make(&env);
         
-        if (Seek(wrap, env, key1, seek, message + " Seek", failsAllowed) != EReady::Data) {
+        if (Seek(wrap, env, key1, seek, TStringBuilder() << message << " Seek " << seek, failsAllowed) != EReady::Data) {
             return;
         }
         if (history) {

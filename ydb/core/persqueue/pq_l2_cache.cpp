@@ -210,7 +210,8 @@ void TPersQueueCacheL2::RegretBlobs(const TActorContext& ctx, ui64 tabletId, con
 {
     for (const TCacheBlobL2& blob : blobs) {
         LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Missed blob. tabletId '" << tabletId
-            << "' partition " << blob.Partition << " offset " << blob.Offset);
+            << "' partition " << blob.Partition << " offset " << blob.Offset <<
+            " partno " << blob.PartNo << " count " << blob.Count << " parts_count " << blob.InternalPartsCount);
     }
 
     { // counters

@@ -198,6 +198,11 @@ public:
         HasChanges_ = true;
     }
 
+    // Schedules callback when changes are confirmed to be persistent
+    void OnPersistent(std::function<void()> callback) override {
+        DB.OnPersistent(std::move(callback));
+    }
+
 protected:
     TShard& Self;
     NTable::TDatabase& DB;

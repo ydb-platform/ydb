@@ -49,6 +49,16 @@ DICT_OF_PROCESSES = {
         'start_command' : "do /Berkanavt/nemesis/bin/olap_workload --database /Root/db1",
         'stop_command' : ""
     },
+    'oltp_workload' : {
+        'status' : """
+            if ps aux | grep "/Berkanavt/nemesis/bin/oltp_workload" | grep -v grep > /dev/null; then
+                echo "Running"
+            else
+                echo "Stopped"
+            fi""",
+        'start_command' : "/Berkanavt/nemesis/bin/oltp_workload --database /Root/db1 --path oltp_workload",
+        'stop_command' : ""
+    },
     'simple_queue_column' : {
         'status' : """
             if ps aux | grep "/Berkanavt/nemesis/bin/simple" | grep column | grep -v grep > /dev/null; then
@@ -117,6 +127,7 @@ class StabilityCluster:
             self._unpack_resource('nemesis'),
             self._unpack_resource('simple_queue'),
             self._unpack_resource('olap_workload'),
+            self._unpack_resource('oltp_workload'),
             self._unpack_resource('statistics_workload'),
             self._unpack_resource('ydb_cli'),
         )
@@ -412,6 +423,7 @@ def parse_args():
             "start_workload_simple_queue_row",
             "start_workload_simple_queue_column",
             "start_workload_olap_workload",
+            "start_workload_oltp_workload",
             "start_workload_log",
             "start_workload_log_column",
             "start_workload_log_row",
@@ -603,7 +615,14 @@ def main():
                     'screen -s olap_workload -d -m bash -c "while true; do /Berkanavt/nemesis/bin/olap_workload --database /Root/db1; done"',
                     raise_on_error=True
                 )
-
+            stability_cluster.get_state()
+        if action == "start_workload_oltp_workload":
+            for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
+                node.ssh_command(
+                    'screen -s oltp_workload -d -m bash -c "while true; do /Berkanavt/nemesis/bin/oltp_workload --database /Root/db1 --path oltp_workload --duration 3600; done"',
+                    raise_on_error=True
+                )
+            stability_cluster.get_state()
         if action == "stop_workloads":
             stability_cluster.stop_workloads()
             stability_cluster.get_state()

@@ -920,18 +920,13 @@ Y_UNIT_TEST_SUITE(TOlap) {
             TActorId sender = runtime.AllocateEdgeActor();
             TString data = NTxUT::MakeTestBlob({0, rowsInBatch}, defaultYdbSchema, {}, { "timestamp" });
 
+            //some immidiate writes
             ui64 writeId = 0;
-
-            TSet<ui64> txIds;
             for (ui32 i = 0; i < 10; ++i) {
                 std::vector<ui64> writeIds;
                 ++txId;
-                NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
-                planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
-                txIds.insert(txId);
+                NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, 0);
             }
-
-            NTxUT::PlanCommit(runtime, sender, shardId, planStep, txIds);
 
             // emulate timeout
             runtime.UpdateCurrentTime(TInstant::Now());
@@ -953,8 +948,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
             UNIT_ASSERT_GT(tabletStats.GetDataSize(), 0);
             UNIT_ASSERT_GT(tabletStats.GetPartCount(), 0);
             UNIT_ASSERT_GT(tabletStats.GetRowUpdates(), 0);
-            UNIT_ASSERT_GT(tabletStats.GetImmediateTxCompleted(), 0);
-            UNIT_ASSERT_GT(tabletStats.GetPlannedTxCompleted(), 0);
+            UNIT_ASSERT_EQUAL(tabletStats.GetImmediateTxCompleted(), 10);
+            UNIT_ASSERT_EQUAL(tabletStats.GetPlannedTxCompleted(), 2);
             UNIT_ASSERT_GT(tabletStats.GetLastAccessTime(), 0);
             UNIT_ASSERT_GT(tabletStats.GetLastUpdateTime(), 0);
         }
@@ -1131,7 +1126,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             UNIT_ASSERT_GT(tabletStats.GetDataSize(), 0);
             UNIT_ASSERT_GT(tabletStats.GetPartCount(), 0);
             UNIT_ASSERT_GT(tabletStats.GetRowUpdates(), 0);
-            UNIT_ASSERT_GT(tabletStats.GetImmediateTxCompleted(), 0);
+            UNIT_ASSERT_EQUAL(tabletStats.GetImmediateTxCompleted(), 0);
             UNIT_ASSERT_GT(tabletStats.GetPlannedTxCompleted(), 0);
             UNIT_ASSERT_GT(tabletStats.GetLastAccessTime(), 0);
             UNIT_ASSERT_GT(tabletStats.GetLastUpdateTime(), 0);

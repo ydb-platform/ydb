@@ -16,9 +16,14 @@
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/threading/future/async.h>
 
+#include <util/system/env.h>
 #include <util/stream/zlib.h>
 
 #include <future>
+
+
+static const bool EnableDirectRead = !GetEnv("PQ_EXPERIMENTAL_DIRECT_READ").empty();
+
 
 namespace NYdb::NTopic::NTests {
 
@@ -95,7 +100,12 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
 }
 
 Y_UNIT_TEST_SUITE(BasicUsage) {
+
     Y_UNIT_TEST(ReadWithoutConsumerWithRestarts) {
+        if (EnableDirectRead) {
+            // TODO(qyryq) Enable the test when LOGBROKER-9364 is done.
+            return;
+        }
         TTopicSdkTestSetup setup(TEST_CASE_NAME);
         auto compressor = new TSyncExecutor();
         auto decompressor = CreateThreadPoolManagedExecutor(1);
@@ -107,7 +117,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .WithoutConsumer()
             .MaxMemoryUsageBytes(1_MB)
             .DecompressionExecutor(decompressor)
-            .AppendTopics(topic);
+            .AppendTopics(topic)
+            .DirectRead(EnableDirectRead);
 
         TWriteSessionSettings writeSettings;
         writeSettings
@@ -133,7 +144,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .ConsumerName(TEST_CONSUMER)
             .MaxMemoryUsageBytes(1_MB)
             .DecompressionExecutor(decompressor)
-            .AppendTopics(TEST_TOPIC);
+            .AppendTopics(TEST_TOPIC)
+            .DirectRead(EnableDirectRead);
 
         TWriteSessionSettings writeSettings;
         writeSettings
@@ -186,6 +198,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(stats->GetEndOffset(), count);
 
     }
+
 } // Y_UNIT_TEST_SUITE(BasicUsage)
 
 } // namespace

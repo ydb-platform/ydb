@@ -2,6 +2,7 @@
 
 #include "codecs.h"
 #include "events_common.h"
+#include "control_plane.h"
 
 #include <util/datetime/base.h>
 
@@ -41,11 +42,27 @@ public:
         return PartitionId;
     }
 
+    TMaybe<TPartitionLocation> GetLocation() const {
+        return Location;
+    }
+
+    /*TDirectReadId*/ i64 GetNextDirectReadId() const {
+        return NextDirectReadId;
+    }
+
+    TMaybe</*TDirectReadId*/ i64> GetLastDirectReadId() const {
+        return LastDirectReadId;
+    }
+
 protected:
+
     uint64_t PartitionSessionId;
     std::string TopicPath;
     std::string ReadSessionId;
     uint64_t PartitionId;
+    TMaybe<TPartitionLocation> Location;
+    /*TDirectReadId*/ i64 NextDirectReadId = 1;
+    TMaybe</*TDirectReadId*/ i64> LastDirectReadId;
 };
 
 template<>

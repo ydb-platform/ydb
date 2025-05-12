@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 
 STRESS_BINARIES_DEPLOY_PATH = '/Berkanavt/nemesis/bin/'
 
+TIMESTAMP_WRAPPER = '2>&1 | while IFS= read -r line; do printf \'[%s] %s\\n\' "$(TZ=UTC date \'+%Y-%m-%d %H:%M:%S\')" "$line"; done'
+
 DICT_OF_SERVICES = {
     'nemesis' : {
         'status': """
@@ -616,16 +618,26 @@ def main():
             stability_cluster.deploy_tools()
         if action == "start_default_workloads":
             for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
+                node.ssh_command('rm -f /tmp/simple_queue_row.out.log', raise_on_error=False)
+                node.ssh_command('rm -f /tmp/simple_queue_column.out.log', raise_on_error=False)
+                node.ssh_command('rm -f /tmp/olap_workload.out.log', raise_on_error=False)
+                node.ssh_command('rm -f /tmp/oltp_workload.out.log', raise_on_error=False)
                 node.ssh_command(
-                    'screen -S simple_queue_row -d -m -L -Logfile /tmp/simple_queue_row.out.log bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode row; done"',
+                    'screen -S simple_queue_row -d -m -L -Logfile /tmp/simple_queue_row.out.log bash -c "while true; do ' +
+                    f'TZ=UTC /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode row {TIMESTAMP_WRAPPER}; ' +
+                    f'done"',
                     raise_on_error=True
                 )
                 node.ssh_command(
-                    'screen -S simple_queue_column -d -m -L -Logfile /tmp/simple_queue_column.out.log bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode column; done"',
+                    'screen -S simple_queue_column -d -m -L -Logfile /tmp/simple_queue_column.out.log bash -c "while true; do ' +
+                    f'TZ=UTC /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode column {TIMESTAMP_WRAPPER}; ' +
+                    f'done"',
                     raise_on_error=True
                 )
                 node.ssh_command(
-                    'screen -S olap_workload -d -m -L -Logfile /tmp/olap_workload.out.log bash -c "while true; do /Berkanavt/nemesis/bin/olap_workload --database /Root/db1; done"',
+                    'screen -S olap_workload -d -m -L -Logfile /tmp/olap_workload.out.log bash -c "while true; do ' +
+                    f'TZ=UTC /Berkanavt/nemesis/bin/olap_workload --database /Root/db1 {TIMESTAMP_WRAPPER}; ' +
+                    f'done"',
                     raise_on_error=True
                 )
             stability_cluster.get_state()
@@ -691,9 +703,10 @@ def main():
                     raise_on_error=False
                 )
                 for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
+                    node.ssh_command(f'rm -f /tmp/workload_log_{store_type}.out.log', raise_on_error=False)
                     node.ssh_command([
-                        f'screen -s workload_log_{store_type} -d -m bash -c "while true; do',
-                        '/Berkanavt/nemesis/bin/ydb_cli',
+                        f'screen -S workload_log_{store_type} -d -m -L -Logfile /tmp/workload_log_{store_type}.out.log bash -c "while true; do',
+                        'TZ=UTC /Berkanavt/nemesis/bin/ydb_cli',
                         '--endpoint', f'grpc://localhost:{node.grpc_port}',
                         '--database', '/Root/db1',
                         'workload', 'log', 'run', 'bulk_upsert',
@@ -702,14 +715,16 @@ def main():
                         '--timestamp_deviation', '180',
                         '--seconds', '86400',
                         '--path', f'log_workload_{store_type}',
-                        '; done"'
+                        f'{TIMESTAMP_WRAPPER};',
+                        'done"'
                         ],
                         raise_on_error=True
                     )
 
+                    node.ssh_command(f'rm -f /tmp/workload_log_{store_type}_select.out.log', raise_on_error=False)
                     node.ssh_command([
-                        f'screen -s workload_log_{store_type}_select -d -m bash -c "while true; do',
-                        '/Berkanavt/nemesis/bin/ydb_cli',
+                        f'screen -S workload_log_{store_type}_select -d -m -L -Logfile /tmp/workload_log_{store_type}_select.out.log bash -c "while true; do',
+                        'TZ=UTC /Berkanavt/nemesis/bin/ydb_cli',
                         '--verbose',
                         '--endpoint', f'grpc://localhost:{node.grpc_port}',
                         '--database', '/Root/db1',
@@ -718,36 +733,49 @@ def main():
                         '--threads', '1',
                         '--seconds', '86400',
                         '--path', f'log_workload_{store_type}',
-                        '; done"'
+                        f'{TIMESTAMP_WRAPPER};',
+                        'done"'
                         ],
                         raise_on_error=True
                     )
             stability_cluster.get_state()
         if action == "start_workload_simple_queue_row":
             for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
+                node.ssh_command('rm -f /tmp/simple_queue_row.out.log', raise_on_error=False)
                 node.ssh_command(
-                    'screen -s simple_queue_row -d -m -L -Logfile /tmp/simple_queue_row.out.log bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode row; done"',
+                    f'screen -S simple_queue_row -d -m -L -Logfile /tmp/simple_queue_row.out.log bash -c "while true; do ' +
+                    f'TZ=UTC /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode row {TIMESTAMP_WRAPPER}; ' +
+                    f'done"',
                     raise_on_error=True
                 )
             stability_cluster.get_state()
         if action == "start_workload_simple_queue_column":
             for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
+                node.ssh_command('rm -f /tmp/simple_queue_column.out.log', raise_on_error=False)
                 node.ssh_command(
-                    'screen -s simple_queue_column -d -m -L -Logfile /tmp/simple_queue_column.out.log bash -c "while true; do /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode column; done"',
+                    f'screen -S simple_queue_column -d -m -L -Logfile /tmp/simple_queue_column.out.log bash -c "while true; do ' +
+                    f'TZ=UTC /Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode column {TIMESTAMP_WRAPPER}; ' +
+                    f'done"',
                     raise_on_error=True
                 )
             stability_cluster.get_state()
         if action == "start_workload_olap_workload":
             for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
+                node.ssh_command('rm -f /tmp/olap_workload.out.log', raise_on_error=False)
                 node.ssh_command(
-                    'screen -s olap_workload -d -m -L -Logfile /tmp/olap_workload.out.log bash -c "while true; do /Berkanavt/nemesis/bin/olap_workload --database /Root/db1; done"',
+                    f'screen -S olap_workload -d -m -L -Logfile /tmp/olap_workload.out.log bash -c "while true; do ' +
+                    f'TZ=UTC /Berkanavt/nemesis/bin/olap_workload --database /Root/db1 {TIMESTAMP_WRAPPER}; ' +
+                    f'done"',
                     raise_on_error=True
                 )
             stability_cluster.get_state()
         if action == "start_workload_oltp_workload":
             first_node = stability_cluster.kikimr_cluster.nodes[1]
+            first_node.ssh_command('rm -f /tmp/oltp_workload.out.log', raise_on_error=False)
             first_node.ssh_command(
-                'screen -S oltp_workload -d -m -L -Logfile /tmp/oltp_workload.out.log bash -c "while true; do /Berkanavt/nemesis/bin/oltp_workload --database /Root/db1 --path oltp_workload --duration 3600; done"',
+                f'screen -S oltp_workload -d -m -L -Logfile /tmp/oltp_workload.out.log bash -c "while true; do ' +
+                f'TZ=UTC /Berkanavt/nemesis/bin/oltp_workload --database /Root/db1 --path oltp_workload --duration 3600 {TIMESTAMP_WRAPPER}; ' +
+                f'done"',
                 raise_on_error=True
             )
             stability_cluster.get_state()

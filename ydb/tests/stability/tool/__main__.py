@@ -364,31 +364,48 @@ class StabilityCluster:
                 node.ssh_command(f"sudo chmod 777 {node_artifact_path}", raise_on_error=False)
 
     def get_workload_outputs(self, seconds=30, mode='err'):
-        """Capture last N seconds of output from all running workload screens.
-        
-        Args:
-            seconds: Number of seconds of history to show
-            mode: One of 'out' (stdout only), 'err' (stderr only), or 'all' (both)
-        """
+        """Capture last N seconds of output from all running workload screens."""
         logging.getLogger().setLevel(logging.WARNING)
         for node_id, node in enumerate(self.kikimr_cluster.nodes.values()):
             node_host = node.host.split(':')[0]
             print(f'\n{bcolors.BOLD}{bcolors.HEADER}=== {node_host} ==={bcolors.ENDC}')
             
+            # First check running processes to match get_state behavior
+            running_workloads = set()
+            for workload_name, workload in DICT_OF_PROCESSES.items():
+                result = node.ssh_command(workload['status'], raise_on_error=False)
+                if result and 'Running' in result.decode('utf-8'):
+                    running_workloads.add(workload_name)
+            
+            if running_workloads:
+                print(f"{bcolors.OKCYAN}Found running workloads: {', '.join(running_workloads)}{bcolors.ENDC}")
+            
             # Get list of running screen sessions
             result = node.ssh_command(
-                'screen -ls | grep "\\."',
+                'screen -ls || true',  # || true to handle case when no screens exist
                 raise_on_error=False
             )
             if not result:
-                print(f"{bcolors.WARNING}No running screens found{bcolors.ENDC}")
+                print(f"{bcolors.WARNING}No screen sessions found{bcolors.ENDC}")
                 continue
 
             screens = result.decode('utf-8').strip().split('\n')
+            print(f"{bcolors.OKCYAN}Debug: Found screen sessions:{bcolors.ENDC}")
             for screen in screens:
+                print(f"{bcolors.OKCYAN}  {screen}{bcolors.ENDC}")
+            
+            found_screens = False
+            for screen in screens:
+                if not screen.strip() or 'Socket' in screen:  # Skip socket directory line
+                    continue
                 # Extract screen name from the format "id.name"
-                screen_name = screen.strip().split('.')[1].split('\t')[0]
+                try:
+                    screen_name = screen.strip().split('.')[1].split('\t')[0]
+                except IndexError:
+                    continue
+                
                 if screen_name in DICT_OF_PROCESSES:
+                    found_screens = True
                     print(f'\n{bcolors.BOLD}{bcolors.OKCYAN}=== {screen_name} ==={bcolors.ENDC}')
                     # Configure screen to log both stdout and stderr to separate files
                     node.ssh_command(f'screen -S {screen_name} -X logfile /tmp/{screen_name}.out.log', raise_on_error=False)
@@ -404,7 +421,7 @@ class StabilityCluster:
                     # Get stdout if requested
                     if mode in ['out', 'all']:
                         result = node.ssh_command(
-                            f'tail -n 1000 /tmp/{screen_name}.out.log | grep -A 1000 "{time_filter}"',
+                            f'tail -n 1000 /tmp/{screen_name}.out.log | grep -A 1000 "{time_filter}" 2>/dev/null || true',
                             raise_on_error=False
                         )
                         print(f"\n{bcolors.BOLD}{bcolors.OKGREEN}STDOUT:{bcolors.ENDC}")
@@ -426,7 +443,7 @@ class StabilityCluster:
                     # Get stderr if requested
                     if mode in ['err', 'all']:
                         result = node.ssh_command(
-                            f'tail -n 1000 /tmp/screenlog.{screen_name} | grep -A 1000 "{time_filter}"',
+                            f'tail -n 1000 /tmp/screenlog.{screen_name} | grep -A 1000 "{time_filter}" 2>/dev/null || true',
                             raise_on_error=False
                         )
                         print(f"\n{bcolors.BOLD}{bcolors.FAIL}STDERR:{bcolors.ENDC}")
@@ -449,6 +466,15 @@ class StabilityCluster:
                                         print(line)
                         else:
                             print(f"{bcolors.WARNING}No output in the specified time window{bcolors.ENDC}")
+            
+            if not found_screens and running_workloads:
+                print(f"\n{bcolors.WARNING}Warning: Found running workloads but no matching screen sessions. The workloads might be running outside of screen.{bcolors.ENDC}")
+                print(f"{bcolors.WARNING}Try checking process output directly:{bcolors.ENDC}")
+                for workload in running_workloads:
+                    result = node.ssh_command(f'ps aux | grep "{workload}" | grep -v grep', raise_on_error=False)
+                    if result:
+                        print(f"\n{bcolors.OKCYAN}Process info for {workload}:{bcolors.ENDC}")
+                        print(result.decode('utf-8'))
 
 
 def path_type(path):

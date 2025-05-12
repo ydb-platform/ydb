@@ -242,6 +242,23 @@ namespace {
                                     "streamlookup() expects KEY VALUE... pairs"));
                         return IGraphTransformer::TStatus::Error;
                     }
+                    for (ui32 i = 1; i + 1 < child->ChildrenSize(); i += 2) {
+                        auto& name = *child->Child(i);
+                        auto& value = *child->Child(i + 1);
+                        if (!name.IsAtom({"TTL", "MaxCachedRows", "MaxDelayedRows"})) {
+                            ctx.AddError(TIssue(ctx.GetPosition(name.Pos()), TStringBuilder() <<
+                                        "streamlookup(): Unsupported option: " << name.Content()));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                        if (!EnsureAtom(value, ctx)) {
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                        if (!TryFromString<ui64>(value.Content())) {
+                            ctx.AddError(TIssue(ctx.GetPosition(name.Pos()), TStringBuilder() <<
+                                        "streamlookup(): Expected integer, but got: " << value.Content()));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                    }
                 } else {
                     if (!EnsureTupleSize(*child, 1, ctx)) {
                         return IGraphTransformer::TStatus::Error;

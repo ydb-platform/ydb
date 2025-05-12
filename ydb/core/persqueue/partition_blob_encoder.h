@@ -100,6 +100,8 @@ struct TPartitionBlobEncoder {
     TVector<TKeyLevel> DataKeysHead;
     std::deque<TDataKey> HeadKeys;
     ui64 FirstUncompactedOffset = 0;
+
+    bool HeadCleared = false;
 };
 
 }

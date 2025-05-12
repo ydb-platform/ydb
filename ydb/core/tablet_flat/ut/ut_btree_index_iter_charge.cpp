@@ -108,7 +108,7 @@ namespace {
             Type7,
             // new types should go here
 
-            UpperLoopLimit
+            End
         };
 
         const ui32 Levels = Max<ui32>();
@@ -1074,7 +1074,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
     }
 
     Y_UNIT_TEST(OneNode_Slices) {
-        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::UpperLoopLimit)) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::End)) {
             CheckPart({.Levels = 1, .Slices = TTestParams::ESlices(slices)});
         }
     }
@@ -1114,7 +1114,7 @@ Y_UNIT_TEST_SUITE(TPartBtreeIndexIteration) {
     }
 
     Y_UNIT_TEST(FewNodes_Slices) {
-        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::UpperLoopLimit)) {
+        for (auto slices : xrange<ui32>(TTestParams::ESlices::None + 1, TTestParams::ESlices::End)) {
             CheckPart({.Levels = 3, .Slices = TTestParams::ESlices(slices)});
         }
     }

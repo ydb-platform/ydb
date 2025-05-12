@@ -10,7 +10,7 @@ Y_UNIT_TEST_SUITE(TStateStorageConfig) {
     void FillStateStorageInfo(TStateStorageInfo *info, ui32 replicas, ui32 nToSelect, ui32 replicasInRing, bool useRingSpecificNodeSelection) {
         info->RingGroups.resize(info->RingGroups.size() + 1);
         auto& group = info->RingGroups.back();
-        group.writeOnly = false;
+        group.WriteOnly = false;
         group.NToSelect = nToSelect;
         group.Rings.resize(replicas);
         for (ui32 i : xrange(replicas)) {

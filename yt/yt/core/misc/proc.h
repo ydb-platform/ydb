@@ -28,6 +28,30 @@ bool IsSystemError(const TError& error);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TFileDescriptorGuard
+{
+public:
+    TFileDescriptorGuard(TFileDescriptor fd = -1) noexcept;
+
+    ~TFileDescriptorGuard();
+
+    TFileDescriptorGuard(const TFileDescriptorGuard&) = delete;
+    TFileDescriptorGuard& operator = (const TFileDescriptorGuard&) = delete;
+
+    TFileDescriptorGuard(TFileDescriptorGuard&& other) noexcept;
+    TFileDescriptorGuard& operator = (TFileDescriptorGuard&& other) noexcept;
+
+    TFileDescriptor Get() const noexcept;
+
+    TFileDescriptor Release() noexcept;
+    void Reset() noexcept;
+
+private:
+    TFileDescriptor FD_ = -1;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 std::vector<int> ListPids();
 std::vector<int> GetPidsByUid(int uid = -1);
 std::vector<int> GetPidsUnderParent(int targetPid);

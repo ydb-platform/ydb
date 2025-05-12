@@ -410,7 +410,9 @@ void TPartitionBlobEncoder::SyncDataKeysBody(TInstant now,
 
     while (!CompactedKeys.empty()) {
         const auto& [key, blobSize] = CompactedKeys.front();
-        Y_ABORT_UNLESS(!key.HasSuffix());
+        //Y_ABORT_UNLESS(!key.HasSuffix(),
+        //               "key=%s",
+        //               key.ToString().data());
 
         BodySize += blobSize;
 

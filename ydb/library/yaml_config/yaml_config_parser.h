@@ -55,9 +55,7 @@ namespace NKikimr::NYaml {
         bool allowUnknownFields = false,
         TSimpleSharedPtr<NProtobufJson::IUnknownFieldsCollector> unknownFieldsCollector = nullptr);
 
-    NKikimrConfig::TEphemeralInputFields ReadEphemeralInputFields(const TString& data);
     NKikimrBlobStorage::TConfigRequest BuildInitDistributedStorageCommand(const TString& data);
-    NKikimrBlobStorage::TConfigRequest BuildInitDistributedStorageCommand(NKikimrConfig::TEphemeralInputFields& ephemeralConfig);
     Ydb::Config::ReplaceConfigRequest BuildReplaceDistributedStorageCommand(const TString& data);
     TString ParseProtoToYaml(const NKikimrConfig::StorageConfig& protoConfig);
 

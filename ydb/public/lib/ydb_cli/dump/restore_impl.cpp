@@ -968,6 +968,17 @@ namespace {
         return Result<TRestoreResult>();
     }
 
+    NJson::TJsonArray ConvertToJson(const TVector<TFsBackupEntry>& in) {
+        NJson::TJsonArray out;
+        for (const auto& [fsPath, dbPath, type] : in) {
+            NJson::TJsonMap entry;
+            entry["type"] = TStringBuilder() << type;
+            entry["path"] = fsPath.GetPath();
+            out.AppendValue(entry);
+        }
+        return out;
+    }
+
 }
 
 TRestoreResult TRestoreClient::RestoreFolder(
@@ -980,16 +991,7 @@ TRestoreResult TRestoreClient::RestoreFolder(
     if (auto result = ListBackupEntries(fsBackupRoot, dbRestoreRoot, backupEntries); !result.IsSuccess()) {
         return result;
     }
-    LOG_D("List of entries in the backup: [ " << JoinSeq(", ",
-        std::views::transform(backupEntries,
-            [](const TFsBackupEntry& entry) {
-                NJson::TJsonMap json;
-                json["type"] = TStringBuilder() << entry.Type;
-                json["path"] = entry.FsPath.GetPath();
-                return NJson::WriteJson(json, false);
-            }
-        )) << " ]"
-    );
+    LOG_D("List of entries in the backup: " << NJson::WriteJson(ConvertToJson(backupEntries), false));
 
     for (const auto& [fsPath, dbPath, type] : backupEntries) {
         if (type == ESchemeEntryType::Directory && oldEntries.contains(dbPath)) {

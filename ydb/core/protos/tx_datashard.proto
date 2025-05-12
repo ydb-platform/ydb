@@ -269,6 +269,8 @@ message TKqpReadRangesSourceSettings {
     optional NKikimrDataEvents.ELockMode LockMode = 20;
     optional uint32 OptionalSorting = 21;
     optional bool IsBatch = 22 [default = false];
+
+    optional bool IsTableImmutable = 23 [default = false];
 }
 
 message TKqpTaskInfo {
@@ -1549,7 +1551,7 @@ message TEvLocalKMeansRequest {
     optional uint64 Seed = 9;
 
     optional EKMeansState Upload = 11;
-    
+
     optional uint32 K = 10;
     optional uint32 NeedsRounds = 14;
 

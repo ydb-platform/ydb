@@ -22,16 +22,16 @@ Logging is a critical part of {{ ydb-short-name }}'s observability. The `log_con
 | `sys_log` | bool | false | Enable system logging via syslog. |
 | `sys_log_to_stderr` | bool | false | Copy logs to stderr in addition to system log. |
 | `format` | string | "full" | Log output format. Possible values: "full", "short", "json". |
-| `cluster_name` | string | | Cluster name to include in log records. |
+| `cluster_name` | string | — | Cluster name to include in log records. |
 | `allow_drop_entries` | bool | true | Allow dropping log entries if the logging system is overloaded. |
 | `use_local_timestamps` | bool | false | Use local time zone for log timestamps (UTC is used by default). |
-| `backend_file_name` | string | | File name for log output. If specified, logs are written to this file. |
-| `sys_log_service` | string | | Service name for syslog. |
+| `backend_file_name` | string | — | File name for log output. If specified, logs are written to this file. |
+| `sys_log_service` | string | — | Service name for syslog. |
 | `time_threshold_ms` | uint64 | 1000 | Time threshold for log operations in milliseconds. |
 | `ignore_unknown_components` | bool | true | Ignore logging requests from unknown components. |
-| `tenant_name` | string | | Tenant name to include in log records. |
+| `tenant_name` | string | — | Database name to include in log records. |
 | `entry` | array | [] | Array of component-specific logging configurations. |
-| `uaclient_config` | object | | Configuration for Unified Agent client. |
+| `uaclient_config` | object | — | Configuration for the Unified Agent client. |
 
 ### Entry Objects
 
@@ -50,19 +50,19 @@ The `uaclient_config` field configures integration with [Unified Agent](https://
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `uri` | string | | URI of the Unified Agent server. |
-| `shared_secret_key` | string | | Shared secret key for authentication. |
+| `uri` | string | — | URI of the Unified Agent server. |
+| `shared_secret_key` | string | — | Shared secret key for authentication. |
 | `max_inflight_bytes` | uint64 | 100000000 | Maximum number of bytes in transit. |
-| `grpc_reconnect_delay_ms` | uint64 | | Delay between reconnection attempts in milliseconds. |
-| `grpc_send_delay_ms` | uint64 | | Delay between send attempts in milliseconds. |
-| `grpc_max_message_size` | uint64 | | Maximum gRPC message size. |
-| `client_log_file` | string | | Log file for the UA client itself. |
-| `client_log_priority` | uint32 | | Log priority for the UA client. |
-| `log_name` | string | | Log name for session metadata. |
+| `grpc_reconnect_delay_ms` | uint64 | — | Delay between reconnection attempts in milliseconds. |
+| `grpc_send_delay_ms` | uint64 | — | Delay between send attempts in milliseconds. |
+| `grpc_max_message_size` | uint64 | — | Maximum gRPC message size. |
+| `client_log_file` | string | — | Log file for the UA client itself. |
+| `client_log_priority` | uint32 | — | Log priority for the UA client. |
+| `log_name` | string | — | Log name for session metadata. |
 
-## Log Levels
+## Log Levels {#log-levels}
 
-{{ ydb-short-name }} uses the following log levels, listed from highest to lowest severity:
+{{ ydb-short-name }} uses the following log levels, listed from the highest to the lowest severity:
 
 | Level | Numeric value | Description |
 | --- | --- | --- |
@@ -74,7 +74,7 @@ The `uaclient_config` field configures integration with [Unified Agent](https://
 | NOTICE | 5 | An event essential for the system or the user has occurred. |
 | INFO | 6 | Debugging information for collecting statistics. |
 | DEBUG | 7 | Debugging information for developers. |
-| TRACE | 8 | Very detailed debugging information. |
+| TRACE | 8 | Detailed debugging information. |
 
 ## Examples
 
@@ -148,7 +148,7 @@ log_config:
 
 ## Notes
 
-1. When specifying component names in the `entry` array, the component names must be base64-encoded.
-2. Log levels are specified as numeric values rather than strings in the configuration. Use the table above to map between numeric values and their meanings.
-3. If `backend_file_name` is specified, logs are written to that file. If `sys_log` is set to true, logs are sent to the system logger.
-4. The `format` parameter determines how log entries are formatted. The "full" format includes all available information, "short" provides a more compact format, and "json" outputs logs in JSON format for easier parsing.
+- When specifying component names in the `entry` array, the component names must be base64-encoded.
+- Log levels are specified as numeric values rather than strings in the configuration. Use [the table above](#log-levels) to determine the numeric values of log levels.
+- If `backend_file_name` is specified, logs are written to that file. If `sys_log` is set to true, logs are sent to the system logger.
+- The `format` parameter determines how log entries are formatted. The "full" format includes all available information, "short" provides a more compact format, and "json" outputs logs in JSON format for easier parsing.

@@ -177,10 +177,8 @@ public:
             return makeReply("missing index or column to build");
         }
 
-        buildInfo->Limits.MaxBatchRows = settings.max_batch_rows();
-        buildInfo->Limits.MaxBatchBytes = settings.max_batch_bytes();
-        buildInfo->Limits.MaxShards = settings.max_shards_in_flight();
-        buildInfo->Limits.MaxRetries = settings.max_retries_upload_batch();
+        buildInfo->ScanSettings.CopyFrom(settings.GetScanSettings());
+        buildInfo->MaxInProgressShards = settings.max_shards_in_flight();
 
         buildInfo->CreateSender = Request->Sender;
         buildInfo->SenderCookie = Request->Cookie;

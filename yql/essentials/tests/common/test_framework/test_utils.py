@@ -144,6 +144,7 @@ def validate_cfg(result):
             "yt_file",
             "os",
             "param",
+            "langver",
             ), "Unknown command in .cfg: %s" % (r[0])
 
 

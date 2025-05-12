@@ -1475,6 +1475,12 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
+    Y_UNIT_TEST(DeleteFromTableBatchReturning) {
+        NYql::TAstParseResult res = SqlToYql("batch delete from plato.Input returning *;", 10, "kikimr");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:6: Error: BATCH DELETE is unsupported with RETURNING\n");
+    }
+
     Y_UNIT_TEST(DeleteFromTableOnValues) {
         NYql::TAstParseResult res = SqlToYql("delete from plato.Input on (key) values (1);",
             10, "kikimr");
@@ -1557,6 +1563,12 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         VerifyProgram(res, elementStat, verifyLine);
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
+    Y_UNIT_TEST(UpdateByValuesBatchReturning) {
+        NYql::TAstParseResult res = SqlToYql("batch update plato.Input set value = 'cool' where key = 200 returning key;", 10, "kikimr");
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:6: Error: BATCH UPDATE is unsupported with RETURNING\n");
     }
 
     Y_UNIT_TEST(UpdateByMultiValues) {
@@ -3001,6 +3013,22 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         );
     }
 
+    Y_UNIT_TEST(AlterTableAlterIndexSetReadReplicasSettingsUncompatIsCorrect) {
+        const auto result = SqlToYql("USE plato; ALTER TABLE table ALTER INDEX index SET READ_REPLICAS_SETTINGS \"PER_AZ:1\"");
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableAlterIndexSetReadReplicasSettingsCompatIsCorrect) {
+        const auto result = SqlToYql("USE plato; ALTER TABLE table ALTER INDEX index SET (READ_REPLICAS_SETTINGS = \"PER_AZ:1\")");
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableAlterIndexResetReadReplicasSettingsIsNotSupported) {
+        ExpectFailWithError("USE plato; ALTER TABLE table ALTER INDEX index RESET (READ_REPLICAS_SETTINGS)",
+            "<main>:1:55: Error: READ_REPLICAS_SETTINGS reset is not supported\n"
+        );
+    }
+
     Y_UNIT_TEST(AlterTableAlterColumnDropNotNullAstCorrect) {
         auto reqSetNull = SqlToYql(R"(
             USE plato;
@@ -3195,6 +3223,26 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Read"]);
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["showCreateTable"]);
+    }
+
+    Y_UNIT_TEST(ShowCreateView) {
+        NYql::TAstParseResult res = SqlToYql(R"(
+            USE plato;
+            SHOW CREATE VIEW user;
+        )");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Read") {
+                UNIT_ASSERT_STRING_CONTAINS(line, "showCreateView");
+            }
+        };
+
+        TWordCountHive elementStat = {{"Read"}, {"showCreateView"}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["Read"], 1);
+        UNIT_ASSERT_VALUES_EQUAL(elementStat["showCreateView"], 1);
     }
 
     Y_UNIT_TEST(OptionalAliases) {

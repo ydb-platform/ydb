@@ -155,6 +155,16 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         .RequiredArgument("NAME").StoreResult(&ProfileName);
     opts.AddLongOption('y', "assume-yes", "Automatic yes to prompts; assume \"yes\" as answer to all prompts and run non-interactively")
         .Optional().StoreTrue(&config.AssumeYes);
+
+    if (config.HelpCommandVerbosiltyLevel >= 2) {
+        opts.AddLongOption("no-discovery", "Do not perform discovery (client balancing) for ydb cluster connection."
+            " If this option is set the user provided endpoint (by -e option) will be used to setup a connections")
+            .Optional().StoreTrue(&config.SkipDiscovery);
+    } else {
+        opts.AddLongOption("no-discovery")
+            .Optional().Hidden().StoreTrue(&config.SkipDiscovery);
+    }
+
     TClientCommandRootBase::Config(config);
 
     TAuthMethodOption* iamTokenAuth = nullptr;
@@ -439,12 +449,13 @@ void TClientCommandRootCommon::ExtractParams(TConfig& config) {
         }
     }
 
+    config.EnableSsl = EnableSsl;
+
     ParseCaCerts(config);
     ParseClientCert(config);
     ParseStaticCredentials(config);
 
     config.Address = Address;
-    config.EnableSsl = EnableSsl;
     config.Database = Database;
     config.ChosenAuthMethod = ParseResult->GetChosenAuthMethod();
 }

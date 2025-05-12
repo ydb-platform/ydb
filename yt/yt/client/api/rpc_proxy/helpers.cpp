@@ -840,6 +840,7 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     YT_OPTIONAL_SET_PROTO(protoJob, finish_time, job.FinishTime);
 
     YT_OPTIONAL_TO_PROTO(protoJob, address, job.Address);
+    YT_OPTIONAL_TO_PROTO(protoJob, addresses, job.Addresses);
     if (job.Progress) {
         protoJob->set_progress(*job.Progress);
     }
@@ -885,6 +886,12 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     YT_OPTIONAL_TO_PROTO(protoJob, monitoring_descriptor, job.MonitoringDescriptor);
     YT_OPTIONAL_SET_PROTO(protoJob, operation_incarnation, job.OperationIncarnation);
     YT_OPTIONAL_TO_PROTO(protoJob, allocation_id, job.AllocationId);
+    if (job.Events) {
+        protoJob->set_events(job.Events.ToString());
+    }
+    if (job.Statistics) {
+        protoJob->set_statistics(job.Statistics.ToString());
+    }
 }
 
 void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
@@ -905,13 +912,16 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
     job->StartTime = YT_OPTIONAL_FROM_PROTO(protoJob, start_time, TInstant);
     job->FinishTime = YT_OPTIONAL_FROM_PROTO(protoJob, finish_time, TInstant);
     job->Address = YT_OPTIONAL_FROM_PROTO(protoJob, address);
+    if (protoJob.has_addresses()) {
+        job->Addresses = FromProto<NNodeTrackerClient::TAddressMap>(protoJob.addresses());
+    } else {
+        job->Addresses = {};
+    }
     job->Progress = YT_OPTIONAL_FROM_PROTO(protoJob, progress);
     job->StderrSize = YT_OPTIONAL_FROM_PROTO(protoJob, stderr_size);
     job->FailContextSize = YT_OPTIONAL_FROM_PROTO(protoJob, fail_context_size);
     if (protoJob.has_has_spec()) {
         job->HasSpec = protoJob.has_spec();
-    } else {
-        job->HasSpec = false;
     }
     if (protoJob.has_error()) {
         job->Error = TYsonString(protoJob.error());
@@ -950,8 +960,6 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
     }
     if (protoJob.has_has_competitors()) {
         job->HasCompetitors = protoJob.has_competitors();
-    } else {
-        job->HasCompetitors = false;
     }
     job->HasProbingCompetitors = YT_OPTIONAL_FROM_PROTO(protoJob, has_probing_competitors);
     job->IsStale = YT_OPTIONAL_FROM_PROTO(protoJob, is_stale);
@@ -959,6 +967,11 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
         job->ExecAttributes = TYsonString(protoJob.exec_attributes());
     } else {
         job->ExecAttributes = TYsonString();
+    }
+    if (protoJob.has_events()) {
+        job->Events = TYsonString(protoJob.events());
+    } else {
+        job->Events = TYsonString();
     }
     job->TaskName = YT_OPTIONAL_FROM_PROTO(protoJob, task_name);
     job->PoolTree = YT_OPTIONAL_FROM_PROTO(protoJob, pool_tree);
@@ -975,6 +988,11 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
         job->AllocationId = NScheduler::TAllocationId(FromProto<TGuid>(protoJob.allocation_id()));
     } else {
         job->AllocationId = {};
+    }
+    if (protoJob.has_statistics()) {
+        job->Statistics = TYsonString(protoJob.statistics());
+    } else {
+        job->Statistics = TYsonString();
     }
 }
 
@@ -1819,7 +1837,8 @@ bool IsDynamicTableRetriableError(const TError& error)
         error.FindMatching(NTabletClient::EErrorCode::ChunkIsNotPreloaded) ||
         error.FindMatching(NTabletClient::EErrorCode::NoInSyncReplicas) ||
         error.FindMatching(NTabletClient::EErrorCode::TabletNotMounted) ||
-        error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet);
+        error.FindMatching(NTabletClient::EErrorCode::NoSuchTablet) ||
+        error.FindMatching(NTabletClient::EErrorCode::TabletReplicationEraMismatch);
 }
 
 bool IsRetriableError(const TError& error, bool retryProxyBanned, bool retrySequoiaErrorsOnly)

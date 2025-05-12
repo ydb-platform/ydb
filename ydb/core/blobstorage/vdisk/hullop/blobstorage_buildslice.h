@@ -276,10 +276,10 @@ namespace NKikimr {
                 TMemIterator c(p.SstPtr.Get());
                 c.SeekToFirst();
                 while (c.Valid()) {
-                    TBlobType::EType type = c->MemRec.GetType();
+                    TBlobType::EType type = c.GetMemRec().GetType();
                     if (type == TBlobType::HugeBlob || type == TBlobType::ManyHugeBlobs) {
                         TDiskDataExtractor extr;
-                        c->MemRec.GetDiskData(&extr, p.SstPtr->GetOutbound());
+                        c.GetMemRec().GetDiskData(&extr, p.SstPtr->GetOutbound());
                         for (const TDiskPart *hb = extr.Begin; hb != extr.End; ++hb) {
                             func(*hb);
                         }
@@ -338,10 +338,10 @@ namespace NKikimr {
             TMemIterator c(seg.Get());
             c.SeekToFirst();
             while (c.Valid()) {
-                TBlobType::EType type = c->MemRec.GetType();
+                TBlobType::EType type = c.GetMemRec().GetType();
                 if (type == TBlobType::HugeBlob || type == TBlobType::ManyHugeBlobs) {
                     TDiskDataExtractor extr;
-                    c->MemRec.GetDiskData(&extr, seg->GetOutbound());
+                    c.GetMemRec().GetDiskData(&extr, seg->GetOutbound());
                     for (const TDiskPart *hb = extr.Begin; hb != extr.End; ++hb) {
                         func(*hb);
                     }

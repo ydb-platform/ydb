@@ -898,14 +898,26 @@ public:
         auto listType = tableContent.Input().Maybe<TYtOutput>()
             ? tableContent.Input().Ref().GetTypeAnn()
             : tableContent.Input().Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back();
-        auto itemStructType = listType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        auto tableStructType = listType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
-        TTypeAnnotationNode::TListType multiTypeItems;
-        for (auto& item: itemStructType->GetItems()) {
-            multiTypeItems.emplace_back(ctx.MakeType<TBlockExprType>(item->GetItemType()));
+        TVector<const TItemExprType*> outputStructItems;
+        for (auto item : tableStructType->GetItems()) {
+            auto itemType = item->GetItemType();
+            if (itemType->IsBlockOrScalar()) {
+                ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), "Input type should not be a block or scalar"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!EnsureSupportedAsBlockType(input.Pos(), *itemType, ctx, *State_->Types)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            outputStructItems.push_back(ctx.MakeType<TItemExprType>(item->GetName(), ctx.MakeType<TBlockExprType>(itemType)));
         }
-        multiTypeItems.push_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
-        input.Ptr()->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TMultiExprType>(multiTypeItems)));
+        outputStructItems.push_back(ctx.MakeType<TItemExprType>(BlockLengthColumnName, ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64))));
+
+        auto outputStructType = ctx.MakeType<TStructExprType>(outputStructItems);
+        input.Ptr()->SetTypeAnn(ctx.MakeType<TListExprType>(outputStructType));
 
         if (auto columnOrder = State_->Types->LookupColumnOrder(tableContent.Input().Ref())) {
             return State_->Types->SetColumnOrder(input.Ref(), *columnOrder, ctx);

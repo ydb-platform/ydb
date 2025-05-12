@@ -1426,8 +1426,10 @@ TUnversionedValue EncodeUnversionedAnyValue(
 {
     YT_ASSERT(None(value.Flags));
     switch (value.Type) {
-        case EValueType::Any:
         case EValueType::Composite:
+            value.Type = EValueType::Any;
+            [[fallthrough]];
+        case EValueType::Any:
             return value;
 
         case EValueType::Null: {
@@ -1663,6 +1665,24 @@ TUnversionedValueRangeTruncationResult TruncateUnversionedValues(
     auto sampleSize = options.UseOriginalDataWeightInSamples ? inputSize : resultSize;
 
     return {MakeSharedRange(std::move(truncatedValues), rowBuffer), sampleSize, clipped};
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool GetBit(TRef bitmap, i64 index)
+{
+    return (bitmap[index >> 3] & (1U << (index & 7))) != 0;
+}
+
+void SetBit(TMutableRef bitmap, i64 index, bool value)
+{
+    auto& byte = bitmap[index >> 3];
+    auto mask = (1U << (index & 7));
+    if (value) {
+        byte |= mask;
+    } else {
+        byte &= ~mask;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

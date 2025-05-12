@@ -2,8 +2,14 @@ PY3TEST()
 
 TEST_SRCS(
     test_tpcds.py
-    test_tpch_spilling.py
 )
+
+# https://github.com/ydb-platform/ydb/issues/15726
+IF (SANITIZER_TYPE != "memory" AND SANITIZER_TYPE != "thread")
+    TEST_SRCS(
+        test_tpch_spilling.py
+    )
+ENDIF()
 
 SIZE(LARGE)
 TAG(ya:fat)

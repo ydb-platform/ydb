@@ -244,6 +244,8 @@ struct TReplicationReaderConfig
     //! Use request batcher to reduce the number of get blocks requests.
     bool UseReadBlocksBatcher;
 
+    std::optional<i64> BlockSetSubrequestThreshold;
+
     REGISTER_YSON_STRUCT(TReplicationReaderConfig);
 
     static void Register(TRegistrar registrar);
@@ -428,19 +430,17 @@ DEFINE_REFCOUNTED_TYPE(TMultiChunkWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TMemoryTrackedWriterOptions
+struct TMemoryTrackedWriterOptions
     : public NYTree::TYsonStruct
 {
-public:
     IMemoryUsageTrackerPtr MemoryUsageTracker;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TEncodingWriterOptions
+struct TEncodingWriterOptions
     : public virtual TMemoryTrackedWriterOptions
 {
-public:
     NCompression::ECodec CompressionCodec;
     bool ChunksEden;
     bool SetChunkCreationTime;

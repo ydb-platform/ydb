@@ -10,24 +10,37 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TSignaturePtr ISignatureGenerator::Sign(std::string payload)
+TSignaturePtr ISignatureGenerator::Sign(std::string payload) const
 {
     auto signature = New<TSignature>();
     signature->Payload_ = std::move(payload);
-    Sign(signature);
+    Resign(signature);
     return signature;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
 struct TDummySignatureGenerator
     : public ISignatureGenerator
 {
-    void Sign(const TSignaturePtr& signature) override
+    void Resign(const TSignaturePtr& /*signature*/) const final
+    { }
+};
+
+struct TAlwaysThrowingSignatureGenerator
+    : public ISignatureGenerator
+{
+    void Resign(const TSignaturePtr& /*signature*/) const final
     {
-        signature->Header_ = NYson::TYsonString("DummySignature"_sb);
+        THROW_ERROR_EXCEPTION("Signature generation is unsupported");
     }
 };
+
+} // namespace
+
+////////////////////////////////////////////////////////////////////////////////
 
 ISignatureGeneratorPtr CreateDummySignatureGenerator()
 {
@@ -39,17 +52,6 @@ const ISignatureGeneratorPtr& GetDummySignatureGenerator()
     static ISignatureGeneratorPtr signatureGenerator = CreateDummySignatureGenerator();
     return signatureGenerator;
 }
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TAlwaysThrowingSignatureGenerator
-    : public ISignatureGenerator
-{
-    void Sign(const TSignaturePtr& /*signature*/) override
-    {
-        THROW_ERROR_EXCEPTION("Signature generation is unsupported");
-    }
-};
 
 ISignatureGeneratorPtr CreateAlwaysThrowingSignatureGenerator()
 {

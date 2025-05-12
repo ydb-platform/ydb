@@ -51,6 +51,7 @@ PEERDIR(
     ydb/core/tx/tx_allocator
     ydb/core/tx/tx_allocator_client
     ydb/library/aclib
+    ydb/library/login
     ydb/library/mkql_proto/protos
     ydb/public/lib/base
 )

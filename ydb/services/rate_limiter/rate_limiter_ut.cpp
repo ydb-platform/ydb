@@ -174,7 +174,7 @@ Y_UNIT_TEST_SUITE(TGRpcRateLimiterTest) {
     }
 
     Y_UNIT_TEST(UpdateResource) {
-        using NYdb::NRateLimiter::TAlterResourceSettings;
+        using namespace NYdb::NRateLimiter;
 
         TTestSetup setup;
         ASSERT_STATUS_SUCCESS(setup.RateLimiterClient.CreateResource(TTestSetup::CoordinationNodePath, "res",
@@ -203,6 +203,33 @@ Y_UNIT_TEST_SUITE(TGRpcRateLimiterTest) {
             UNIT_ASSERT_VALUES_EQUAL(describeResult.GetResourcePath(), "res");
             UNIT_ASSERT_VALUES_EQUAL(*describeResult.GetHierarchicalDrrProps().GetMaxUnitsPerSecond(), 100); // applied
             UNIT_ASSERT(!describeResult.GetHierarchicalDrrProps().GetMaxBurstSizeCoefficient());
+        }
+
+        ASSERT_STATUS_SUCCESS(setup.RateLimiterClient.AlterResource(TTestSetup::CoordinationNodePath, "res",
+            TAlterResourceSettings()
+                .MaxUnitsPerSecond(100)
+                .MeteringConfig(TMeteringConfig()
+                    .Enabled(true)
+                    .OnDemand(
+                        TMetric()
+                            .Enabled(true)
+                            .Labels({{"k", "v"}})
+                    )
+                )
+        ));
+
+        {
+            const auto describeResultFuture = setup.RateLimiterClient.DescribeResource(TTestSetup::CoordinationNodePath, "res");
+            ASSERT_STATUS_SUCCESS(describeResultFuture);
+            const auto describeResult = describeResultFuture.GetValueSync();
+            const auto& meteringConfig = describeResult.GetMeteringConfig();
+            UNIT_ASSERT(meteringConfig);
+            UNIT_ASSERT(meteringConfig->OnDemand_);
+            UNIT_ASSERT(meteringConfig->OnDemand_->Enabled_);
+            const auto& labels = meteringConfig->OnDemand_->Labels_;
+            UNIT_ASSERT(!labels.empty());
+            UNIT_ASSERT(labels.contains("k"));
+            UNIT_ASSERT_VALUES_EQUAL(labels.at("k"), "v");
         }
     }
 

@@ -232,6 +232,9 @@ private:
         case NKikimrReplication::TReplicationState::kDone:
             to.mutable_done();
             break;
+        case NKikimrReplication::TReplicationState::kPaused:
+            to.mutable_paused();
+            break;
         default:
             break;
         }

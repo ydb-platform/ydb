@@ -282,6 +282,11 @@ public:
         const TMaybe<TFormat>& format,
         const TTableReaderOptions& options = {}) = 0;
 
+    virtual std::unique_ptr<IInputStream> ReadTablePartition(
+        const TString& cookie,
+        const TMaybe<TFormat>& format,
+        const TTablePartitionReaderOptions& options = {}) = 0;
+
     virtual std::unique_ptr<IInputStream> ReadBlobTable(
         const TTransactionId& transactionId,
         const TRichYPath& path,

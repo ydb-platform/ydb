@@ -11,6 +11,7 @@ SRCS(
     federated_topic.cpp
     federation_observer.h
     federation_observer.cpp
+    federated_deferred_commit.cpp
 )
 
 PEERDIR(

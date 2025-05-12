@@ -8,10 +8,12 @@
 namespace NKikimr {
 
     TVDiskCompactionState::TVDiskCompactionState(
+            const TString& logPrefix,
             TActorId logoBlobsActorId,
             TActorId blocksActorId,
             TActorId barriersActorId)
-        : LogoBlobsActorId(logoBlobsActorId)
+        : VDiskLogPrefix(logPrefix)
+        , LogoBlobsActorId(logoBlobsActorId)
         , BlocksActorId(blocksActorId)
         , BarriersActorId(barriersActorId)
     {}
@@ -20,7 +22,7 @@ namespace NKikimr {
         ui64 requestId = ++RequestIdCounter;
         const auto mode = cReq.Mode;
         auto insRes = Requests.insert({requestId, std::move(cReq)});
-        Y_ABORT_UNLESS(insRes.second);
+        Y_VERIFY_S(insRes.second, VDiskLogPrefix);
         auto &req = insRes.first->second;
 
         if (req.CompactLogoBlobs) {
@@ -35,7 +37,7 @@ namespace NKikimr {
     }
 
     void TVDiskCompactionState::Setup(const TActorContext &ctx, std::optional<ui64> lsn, TCompactionReq cReq) {
-        Y_ABORT_UNLESS(!cReq.AllDone());
+        Y_VERIFY_S(!cReq.AllDone(), VDiskLogPrefix);
         if (!lsn && WaitQueue.empty()) {
             SendLocalCompactCmd(ctx, std::move(cReq));
         } else {
@@ -49,7 +51,7 @@ namespace NKikimr {
             EHullDbType dbType,
             const TIntrusivePtr<TVDiskContext>& vCtx) {
         auto it = Requests.find(reqId);
-        Y_ABORT_UNLESS(it != Requests.end());
+        Y_VERIFY_S(it != Requests.end(), VDiskLogPrefix);
         auto &req = it->second;
 
         switch (dbType) {

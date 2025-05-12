@@ -197,6 +197,9 @@ IOutputStream& operator<<(IOutputStream& out, TFederatedDbState const& state) {
         }
         out << " ]";
     }
+    if (!state.ControlPlaneEndpoint.empty()) {
+        out << " ControlPlaneEndpoint: " << state.ControlPlaneEndpoint;
+    }
     return out << " }";
 }
 

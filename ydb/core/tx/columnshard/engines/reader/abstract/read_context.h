@@ -7,12 +7,14 @@
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
+#include <ydb/core/tx/conveyor/usage/config.h>
 
 #include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NOlap::NReader {
 
 class TPartialReadResult;
+class TPartialSourceAddress;
 
 class TComputeShardingPolicy {
 private:
@@ -147,7 +149,7 @@ public:
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const NColumnShard::TConcreteScanCounters& counters, const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId,
         const TActorId& resourceSubscribeActorId, const TActorId& readCoordinatorActorId, const TComputeShardingPolicy& computeShardingPolicy,
-        const ui64 scanId);
+        const ui64 scanId, const NConveyor::TCPULimitsConfig& cpuLimits);
 };
 
 class IDataReader {
@@ -170,7 +172,7 @@ public:
         Started = true;
         return DoStart();
     }
-    virtual void OnSentDataFromInterval(const ui32 intervalIdx) const = 0;
+    virtual void OnSentDataFromInterval(const TPartialSourceAddress& address) = 0;
 
     const TReadContext& GetContext() const {
         return *Context;

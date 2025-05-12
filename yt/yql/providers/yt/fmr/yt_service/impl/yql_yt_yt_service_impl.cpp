@@ -32,9 +32,13 @@ public:
     ) override {
         auto client = CreateClient(clusterConnection);
         auto transaction = client->AttachTransaction(GetGuid(clusterConnection.TransactionId));
-        auto path = NYT::TRichYPath(NYT::AddPathPrefix(ytTable.Path, "//"));
-        auto richPath = NYT::TRichYPath(path).Append(writerSetttings.AppendMode);
-        return transaction->CreateRawWriter(richPath, NYT::TFormat::YsonBinary());
+        TString ytPath = NYT::AddPathPrefix(ytTable.Path, "//");
+        auto richPath = NYT::TRichYPath(ytPath).Append(true);
+        auto writerOptions = NYT::TTableWriterOptions();
+        if (writerSetttings.MaxRowWeight) {
+            writerOptions.Config(NYT::TNode()("max_row_weight", *writerSetttings.MaxRowWeight));
+        }
+        return transaction->CreateRawWriter(richPath, NYT::TFormat::YsonBinary(), writerOptions);
     }
 
 private:

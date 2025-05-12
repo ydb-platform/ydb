@@ -92,6 +92,7 @@ enum EToken
     TOKEN_TZDATETIME64 = -57,
     TOKEN_TZTIMESTAMP64 = -58,
     TOKEN_MULTI = -59,
+    TOKEN_ERROR = -60,
 
     // identifiers
     TOKEN_IDENTIFIER = -100,
@@ -164,6 +165,7 @@ EToken TokenTypeFromStr(TStringBuf str)
         { TStringBuf("TzDate32"), TOKEN_TZDATE32 },
         { TStringBuf("TzDatetime64"), TOKEN_TZDATETIME64},
         { TStringBuf("TzTimestamp64"), TOKEN_TZTIMESTAMP64 },
+        { TStringBuf("Error"), TOKEN_ERROR},
     };
 
     auto it = map.find(str);
@@ -341,6 +343,10 @@ private:
 
         case TOKEN_SCALAR:
             type = ParseScalarType();
+            break;
+
+        case TOKEN_ERROR:
+            type = ParseErrorType();
             break;
 
         default:
@@ -703,6 +709,51 @@ private:
         return MakeScalarType(itemType);
     }
 
+    TAstNode* ParseErrorType() {
+        GetNextToken(); // eat keyword
+        EXPECT_AND_SKIP_TOKEN('<', nullptr);
+
+        TString file;
+        if (Token == TOKEN_IDENTIFIER ||
+            Token == TOKEN_ESCAPED_IDENTIFIER)
+        {
+            file = Identifier;
+        } else {
+            return AddError("Expected file name");
+        }
+
+        GetNextToken(); // eat file name
+        EXPECT_AND_SKIP_TOKEN(':', nullptr);
+        ui32 line;
+        if (!(Token == TOKEN_IDENTIFIER ||
+            Token == TOKEN_ESCAPED_IDENTIFIER) || !TryFromString(Identifier, line)) {
+            return AddError("Expected line");
+        }
+
+        GetNextToken();
+        EXPECT_AND_SKIP_TOKEN(':', nullptr);
+        ui32 column;
+        if (!(Token == TOKEN_IDENTIFIER ||
+            Token == TOKEN_ESCAPED_IDENTIFIER) || !TryFromString(Identifier, column)) {
+            return AddError("Expected column");
+        }
+
+        GetNextToken();
+        EXPECT_AND_SKIP_TOKEN(':', nullptr);
+        TString message;
+        if (Token == TOKEN_IDENTIFIER ||
+            Token == TOKEN_ESCAPED_IDENTIFIER)
+        {
+            message = Identifier;
+        } else {
+            return AddError("Expected message");
+        }
+
+        GetNextToken();
+        EXPECT_AND_SKIP_TOKEN('>', nullptr);
+        return MakeErrorType(file, line, column, message);
+    }
+
     TAstNode* ParseDecimalType() {
         GetNextToken(); // eat keyword
         EXPECT_AND_SKIP_TOKEN('(', nullptr);
@@ -970,6 +1021,17 @@ private:
         TAstNode* items[] = {
             MakeLiteralAtom(TStringBuf("ScalarType")),
             itemType,
+        };
+        return MakeList(items, Y_ARRAY_SIZE(items));
+    }
+
+    TAstNode* MakeErrorType(TStringBuf file, ui32 row, ui32 column, TStringBuf message) {
+        TAstNode* items[] = {
+            MakeLiteralAtom(TStringBuf("ErrorType")),
+            MakeQuotedAtom(ToString(row)),
+            MakeQuotedAtom(ToString(column)),
+            MakeQuotedAtom(file, TNodeFlags::ArbitraryContent),
+            MakeQuotedAtom(message, TNodeFlags::ArbitraryContent)
         };
         return MakeList(items, Y_ARRAY_SIZE(items));
     }

@@ -102,7 +102,7 @@ public:
     }
 
 protected:
-    THolder<IInputState> MakeState() const override {
+    THolder<TFileInputState> MakeState() const override {
         return MakeHolder<TFileInputStateWithTableState>(Spec, HolderFactory, MakeTextYsonInputs(TablePaths_),
             0u, 1_MB, TTableState(TableState_));
     }

@@ -537,6 +537,7 @@ void Deserialize(TMultiTablePartition& partition, const TNode& node)
     const auto& nodeMap = node.AsMap();
     DESERIALIZE_ITEM("table_ranges", partition.TableRanges);
     DESERIALIZE_ITEM("aggregate_statistics", partition.AggregateStatistics);
+    DESERIALIZE_ITEM("cookie", partition.Cookie)
 }
 
 void Deserialize(TMultiTablePartitions& partitions, const TNode& node)

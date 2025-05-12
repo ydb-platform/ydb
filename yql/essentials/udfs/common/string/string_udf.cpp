@@ -1,6 +1,7 @@
 #include <yql/essentials/public/udf/udf_allocator.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
+#include <yql/essentials/public/langver/yql_langver.h>
 
 #include <library/cpp/deprecated/split/split_iterator.h>
 #include <library/cpp/html/pcdata/pcdata.h>
@@ -85,18 +86,20 @@ namespace {
                                                                                         \
     END_SIMPLE_ARROW_UDF(T##udfName, T##udfName##KernelExec::Do)
 
-#define STROKA_UDF(udfName, function)                                   \
-    SIMPLE_STRICT_UDF(T##udfName, TOptional<char*>(TOptional<char*>)) { \
-        EMPTY_RESULT_ON_EMPTY_ARG(0)                                    \
-        const TString input(args[0].AsStringRef());                     \
-        try {                                                           \
-            TUtf16String wide = UTF8ToWide(input);                      \
-            function(wide);                                             \
-            return valueBuilder->NewString(WideToUTF8(wide));           \
-        } catch (yexception&) {                                         \
-            return TUnboxedValue();                                     \
-        }                                                               \
+// NOTE: The functions below are marked as deprecated, so block implementation
+// is not required for them
+SIMPLE_STRICT_UDF_OPTIONS(TReverse, TOptional<char*>(TOptional<char*>),
+    builder.SetMaxLangVer(NYql::MakeLangVersion(2025, 1))) {
+    EMPTY_RESULT_ON_EMPTY_ARG(0)
+    const TString input(args[0].AsStringRef());
+    try {
+        TUtf16String wide = UTF8ToWide(input);
+        ReverseInPlace(wide);
+        return valueBuilder->NewString(WideToUTF8(wide));
+    } catch (yexception&) {
+        return TUnboxedValue();
     }
+}
 
 #define STROKA_CASE_UDF(udfName, function)                              \
     SIMPLE_STRICT_UDF(T##udfName, TOptional<char*>(TOptional<char*>)) { \
@@ -150,17 +153,53 @@ namespace {
         }                                                              \
     }
 
-#define STRING_TWO_ARGS_UDF(udfName, function)                          \
-    SIMPLE_STRICT_UDF(T##udfName, bool(TOptional<char*>, char*)) {      \
-        Y_UNUSED(valueBuilder);                                         \
-        if (args[0]) {                                                  \
-            const TString haystack(args[0].AsStringRef());              \
-            const TString needle(args[1].AsStringRef());                \
-            return TUnboxedValuePod(function(haystack, needle));        \
-        } else {                                                        \
-            return TUnboxedValuePod(false);                             \
-        }                                                               \
+#define STRING_TWO_ARGS_UDF_DEPRECATED_2025_02(udfName, function)        \
+    SIMPLE_STRICT_UDF_OPTIONS(T##udfName, bool(TOptional<char*>, char*), \
+        builder.SetMaxLangVer(NYql::MakeLangVersion(2025, 1)))           \
+    {                                                                    \
+        Y_UNUSED(valueBuilder);                                          \
+        if (args[0]) {                                                   \
+            const TString haystack(args[0].AsStringRef());               \
+            const TString needle(args[1].AsStringRef());                 \
+            return TUnboxedValuePod(function(haystack, needle));         \
+        } else {                                                         \
+            return TUnboxedValuePod(false);                              \
+        }                                                                \
     }
+
+#define STRING_ASCII_CMP_IGNORE_CASE_UDF(udfName, function)                    \
+    BEGIN_SIMPLE_STRICT_ARROW_UDF_OPTIONS(T##udfName,                          \
+        bool(TOptional<char*>, char*),                                         \
+        builder.SetMinLangVer(NYql::MakeLangVersion(2025, 2)))                 \
+    {                                                                          \
+        Y_UNUSED(valueBuilder);                                                \
+        if (args[0]) {                                                         \
+            const TString haystack(args[0].AsStringRef());                     \
+            const TString needle(args[1].AsStringRef());                       \
+            return TUnboxedValuePod(function(haystack, needle));               \
+        } else {                                                               \
+            return TUnboxedValuePod(false);                                    \
+        }                                                                      \
+    }                                                                          \
+                                                                               \
+    struct T##udfName##KernelExec                                              \
+        : public TBinaryKernelExec<T##udfName##KernelExec>                     \
+    {                                                                          \
+        template <typename TSink>                                              \
+        static void Process(const IValueBuilder*, TBlockItem arg1,             \
+                            TBlockItem arg2, const TSink& sink)                \
+        {                                                                      \
+            if (arg1) {                                                        \
+                const TString haystack(arg1.AsStringRef());                    \
+                const TString needle(arg2.AsStringRef());                      \
+                sink(TBlockItem(function(haystack, needle)));                  \
+            } else {                                                           \
+                sink(TBlockItem(false));                                       \
+            }                                                                  \
+        }                                                                      \
+    };                                                                         \
+                                                                               \
+    END_SIMPLE_ARROW_UDF(T##udfName, T##udfName##KernelExec::Do)
 
 #define IS_ASCII_UDF(function)                                                           \
     BEGIN_SIMPLE_STRICT_ARROW_UDF(T##function, bool(TOptional<char*>)) {                \
@@ -359,13 +398,17 @@ namespace {
     XX(HasSuffix, EndsWith)
 
 // NOTE: The functions below are marked as deprecated, so block implementation
-// is not required for them. Hence, STRING_TWO_ARGS_UDF provides only the
-// scalar one at the moment.
-#define STRING_TWO_ARGS_UDF_MAP(XX)                    \
+// is not required for them. Hence, STRING_TWO_ARGS_UDF_DEPRECATED_2025_02
+// provides only the scalar one at the moment.
+#define STRING_TWO_ARGS_UDF_MAP_DEPRECATED_2025_02(XX) \
     XX(StartsWithIgnoreCase, AsciiHasPrefixIgnoreCase) \
     XX(EndsWithIgnoreCase, AsciiHasSuffixIgnoreCase)   \
     XX(HasPrefixIgnoreCase, AsciiHasPrefixIgnoreCase)  \
     XX(HasSuffixIgnoreCase, AsciiHasSuffixIgnoreCase)
+
+#define STRING_ASCII_CMP_IGNORE_CASE_UDF_MAP(XX)            \
+    XX(AsciiStartsWithIgnoreCase, AsciiHasPrefixIgnoreCase) \
+    XX(AsciiEndsWithIgnoreCase, AsciiHasSuffixIgnoreCase)
 
 // NOTE: The functions below are marked as deprecated, so block implementation
 // is not required for them. Hence, STROKA_UDF provides only the scalar one at
@@ -876,11 +919,11 @@ namespace {
 
     STRING_UDF_MAP(STRING_UDF)
     STRING_UNSAFE_UDF_MAP(STRING_UNSAFE_UDF)
-    STROKA_UDF_MAP(STROKA_UDF)
     STROKA_CASE_UDF_MAP(STROKA_CASE_UDF)
     STROKA_ASCII_CASE_UDF_MAP(STROKA_ASCII_CASE_UDF)
     STROKA_FIND_UDF_MAP(STROKA_FIND_UDF)
-    STRING_TWO_ARGS_UDF_MAP(STRING_TWO_ARGS_UDF)
+    STRING_TWO_ARGS_UDF_MAP_DEPRECATED_2025_02(STRING_TWO_ARGS_UDF_DEPRECATED_2025_02)
+    STRING_ASCII_CMP_IGNORE_CASE_UDF_MAP(STRING_ASCII_CMP_IGNORE_CASE_UDF)
     IS_ASCII_UDF_MAP(IS_ASCII_UDF)
 
     static constexpr ui64 padLim = 1000000;
@@ -896,12 +939,14 @@ namespace {
         STROKA_CASE_UDF_MAP(STRING_REGISTER_UDF)
         STROKA_ASCII_CASE_UDF_MAP(STRING_REGISTER_UDF)
         STROKA_FIND_UDF_MAP(STRING_REGISTER_UDF)
-        STRING_TWO_ARGS_UDF_MAP(STRING_REGISTER_UDF)
+        STRING_TWO_ARGS_UDF_MAP_DEPRECATED_2025_02(STRING_REGISTER_UDF)
+        STRING_ASCII_CMP_IGNORE_CASE_UDF_MAP(STRING_REGISTER_UDF)
         IS_ASCII_UDF_MAP(STRING_REGISTER_UDF)
         STRING_STREAM_PAD_FORMATTER_UDF_MAP(STRING_REGISTER_UDF)
         STRING_STREAM_NUM_FORMATTER_UDF_MAP(STRING_REGISTER_UDF)
         STRING_STREAM_TEXT_FORMATTER_UDF_MAP(STRING_REGISTER_UDF)
         STRING_STREAM_HRSZ_FORMATTER_UDF_MAP(STRING_REGISTER_UDF)
+        TReverse,
         TCollapseText,
         TReplaceAll,
         TReplaceFirst,

@@ -5,12 +5,10 @@ import os
 import sys
 from logging import config as logging_config
 
-import yaml
-
 from ydb.tools.cfg.configurator_setup import get_parser, parse_optional_arguments
 from ydb.tools.cfg.dynamic import DynamicConfigGenerator
 from ydb.tools.cfg.static import StaticConfigGenerator
-from ydb.tools.cfg.utils import write_to_file, backport
+from ydb.tools.cfg.utils import write_to_file, backport, load_yaml
 from ydb.tools.cfg.walle import NopHostsInformationProvider, WalleHostsInformationProvider
 from ydb.tools.cfg.k8s_api import K8sApiHostsInformationProvider
 
@@ -46,8 +44,7 @@ def cfg_generate(args):
     else:
         cfg_cls = StaticConfigGenerator
 
-    with open(args.cluster_description, "r") as yaml_template:
-        cluster_template = yaml.safe_load(yaml_template)
+    cluster_template = load_yaml(args.cluster_description)
 
     host_info_provider = NopHostsInformationProvider()
 

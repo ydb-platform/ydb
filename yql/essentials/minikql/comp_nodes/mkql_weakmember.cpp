@@ -26,6 +26,11 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        auto result = DoCalculateImpl(ctx);
+        return result.Release();
+    }
+
+    NUdf::TUnboxedValue DoCalculateImpl(TComputationContext& ctx) const {
         if (const auto& restDict = RestDict->GetValue(ctx)) {
             if (const auto& tryMember = restDict.Lookup(MemberName)) {
                 return SimpleValueFromYson(SchemeType, tryMember.AsStringRef());
@@ -46,7 +51,7 @@ public:
                         stringStream.DoWrite(ref.Data(), size);
                         return stringStream.Value();
                     } else if (SchemeType == NUdf::EDataSlot::String) {
-                        return tryMember.Release();
+                        return tryMember;
                     } else {
                         return {};
                     }

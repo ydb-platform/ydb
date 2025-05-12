@@ -189,42 +189,9 @@ public:
         return TStatus::Ok;
     }
 
-    TStatus HandleBlockTableContent(TExprBase input, TExprContext& ctx) {
+    TStatus HandleBlockTableContent(TExprBase input, TExprContext& /*ctx*/) {
         TYtBlockTableContent tableContent = input.Cast<TYtBlockTableContent>();
-
-        auto listType = tableContent.Input().Maybe<TYtOutput>()
-            ? tableContent.Input().Ref().GetTypeAnn()
-            : tableContent.Input().Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back();
-        auto itemStructType = listType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-
-        auto pathRename = [&](TPartOfConstraintBase::TPathType path) -> std::vector<TPartOfConstraintBase::TPathType> {
-            YQL_ENSURE(!path.empty());
-
-            auto fieldIndex = itemStructType->FindItem(path[0]);
-            YQL_ENSURE(fieldIndex.Defined());
-
-            path[0] = ctx.GetIndexAsString(*fieldIndex);
-            return { path };
-        };
-
-        TConstraintSet wideConstraints;
-        for (auto constraint : tableContent.Input().Ref().GetAllConstraints()) {
-            if (auto empty = dynamic_cast<const TEmptyConstraintNode*>(constraint)) {
-                wideConstraints.AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
-            } else if (auto sorted = dynamic_cast<const TSortedConstraintNode*>(constraint)) {
-                wideConstraints.AddConstraint(sorted->RenameFields(ctx, pathRename));
-            } else if (auto chopped = dynamic_cast<const TChoppedConstraintNode*>(constraint)) {
-                wideConstraints.AddConstraint(chopped->RenameFields(ctx, pathRename));
-            } else if (auto unique = dynamic_cast<const TUniqueConstraintNode*>(constraint)) {
-                wideConstraints.AddConstraint(unique->RenameFields(ctx, pathRename));
-            } else if (auto distinct = dynamic_cast<const TDistinctConstraintNode*>(constraint)) {
-                wideConstraints.AddConstraint(distinct->RenameFields(ctx, pathRename));
-            } else {
-                YQL_ENSURE(false, "unexpected constraint");
-            }
-        }
-
-        input.Ptr()->SetConstraints(wideConstraints);
+        input.Ptr()->CopyConstraints(tableContent.Input().Ref());
         return TStatus::Ok;
     }
 

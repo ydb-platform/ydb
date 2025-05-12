@@ -205,9 +205,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
         ui32 bigStrSize[2] = {151, 151};
 
 
-        GraceJoin::TTable bigTable(1,1,1,1);
-        GraceJoin::TTable smallTable(1,1,1,1);
-        GraceJoin::TTable joinTable(1,1,1,1);
+        GraceJoin::TTable bigTable(nullptr,0,1,1,1,1);
+        GraceJoin::TTable smallTable(nullptr,0,1,1,1,1);
+        GraceJoin::TTable joinTable(nullptr,0,1,1,1,1);
 
         const ui64 TupleSize = 1024;
 
@@ -269,9 +269,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
             NMemInfo::TMemInfo mi = NMemInfo::GetMemInfo();
             CTEST << "Mem usage before tables tuples added (MB): " << mi.RSS / (1024 * 1024) << Endl;
 
-            GraceJoin::TTable bigTable(1,1,1,1);
-            GraceJoin::TTable smallTable(1,1,1,1);
-            GraceJoin::TTable joinTable(1,1,1,1);
+            GraceJoin::TTable bigTable(nullptr,0,1,1,1,1);
+            GraceJoin::TTable smallTable(nullptr,0,1,1,1,1);
+            GraceJoin::TTable joinTable(nullptr,0,1,1,1,1);
 
             std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
@@ -442,9 +442,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinImpTest) {
             NMemInfo::TMemInfo mi = NMemInfo::GetMemInfo();
             CTEST << "Mem usage before tables tuples added (MB): " << mi.RSS / (1024 * 1024) << Endl;
 
-            GraceJoin::TTable bigTable(1,1,1,1);
-            GraceJoin::TTable smallTable(1,1,1,1);
-            GraceJoin::TTable joinTable(1,1,1,1);
+            GraceJoin::TTable bigTable(nullptr,0,1,1,1,1);
+            GraceJoin::TTable smallTable(nullptr,0,1,1,1,1);
+            GraceJoin::TTable joinTable(nullptr,0,1,1,1,1);
 
             std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 
@@ -625,9 +625,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinAnyTest) {
 
 
 
-            GraceJoin::TTable bigTable  (1,1,1,1,0,0,1, nullptr, true);
-            GraceJoin::TTable smallTable(1,1,1,1,0,0,1, nullptr, true);
-            GraceJoin::TTable joinTable (1,1,1,1,0,0,1, nullptr, true);
+            GraceJoin::TTable bigTable  (nullptr, 0, 1,1,1,1,0,0,1, nullptr, true);
+            GraceJoin::TTable smallTable(nullptr, 0, 1,1,1,1,0,0,1, nullptr, true);
+            GraceJoin::TTable joinTable (nullptr, 0, 1,1,1,1,0,0,1, nullptr, true);
 
             std::mt19937_64 rng;
             std::uniform_int_distribution<ui64> dist(0, 10000 - 1);
@@ -763,9 +763,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceSelfJoinTest) {
 
 
 
-            GraceJoin::TTable bigTable  (1,1,1,1,0,0,1, nullptr, false);
-            GraceJoin::TTable smallTable(1,1,1,1,0,0,1, nullptr, false);
-            GraceJoin::TTable joinTable (1,1,1,1,0,0,1, nullptr, false);
+            GraceJoin::TTable bigTable  (nullptr, 0, 1,1,1,1,0,0,1, nullptr, false);
+            GraceJoin::TTable smallTable(nullptr, 0, 1,1,1,1,0,0,1, nullptr, false);
+            GraceJoin::TTable joinTable (nullptr, 0, 1,1,1,1,0,0,1, nullptr, false);
 
             std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
 

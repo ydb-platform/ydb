@@ -34,12 +34,6 @@ _python_argcomplete%(function_suffix)s() {
     local IFS=$'\013'
     local script="%(argcomplete_script)s"
     if [[ -n "${ZSH_VERSION-}" ]]; then
-        if [[ "${_matcher_num-}" -gt 1 ]]; then
-            # Return early if the completer is called multiple times in the same completion run.
-            # Currently the only known occurrence of this is in zsh when a matcher-list zstyle is declared.
-            # When this happens, _matcher_num is incremented past 1.
-            return
-        fi
         local completions
         completions=($(IFS="$IFS" \
             COMP_LINE="$BUFFER" \
@@ -166,7 +160,8 @@ def shellcode(executables, use_defaults=True, shell="bash", complete_arguments=N
         executables_list = " ".join(quoted_executables)
         script = argcomplete_script
         if script:
-            function_suffix = "_" + script
+            # If the script path contain a space, this would generate an invalid function name.
+            function_suffix = "_" + script.replace(" ", "_SPACE_")
         else:
             script = ""
             function_suffix = ""

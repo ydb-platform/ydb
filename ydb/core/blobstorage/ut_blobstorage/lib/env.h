@@ -56,6 +56,9 @@ struct TEnvironmentSetup {
         const ui32 MaxNumOfSlowDisks = 2;
         const ui32 ReplMaxQuantumBytes = 0;
         const ui32 ReplMaxDonorNotReadyCount = 0;
+        const ui64 PDiskSize = 10_TB;
+        const ui64 PDiskChunkSize = 0;
+        const bool TrackSharedQuotaInPDiskMock = false;
     };
 
     const TSettings Settings;
@@ -73,8 +76,12 @@ struct TEnvironmentSetup {
             const auto key = std::make_pair(nodeId, pdiskId);
             TIntrusivePtr<TPDiskMockState>& state = Env.PDiskMockStates[key];
             if (!state) {
-                state.Reset(new TPDiskMockState(nodeId, pdiskId, cfg->PDiskGuid, ui64(10) << 40, cfg->ChunkSize,
-                        cfg->ReadOnly, Env.Settings.DiskType));
+                ui64 chunkSize = Env.Settings.PDiskChunkSize ? Env.Settings.PDiskChunkSize : cfg->ChunkSize;
+                TPDiskMockState::ESpaceColorPolicy spaceColorPolicy = Env.Settings.TrackSharedQuotaInPDiskMock
+                        ? TPDiskMockState::ESpaceColorPolicy::SharedQuota
+                        : TPDiskMockState::ESpaceColorPolicy::None;
+                state.Reset(new TPDiskMockState(nodeId, pdiskId, cfg->PDiskGuid, Env.Settings.PDiskSize, chunkSize,
+                        cfg->ReadOnly, Env.Settings.DiskType, spaceColorPolicy));
             }
             const TActorId& actorId = ctx.Register(CreatePDiskMockActor(state), TMailboxType::HTSwap, poolId);
             const TActorId& serviceId = MakeBlobStoragePDiskID(nodeId, pdiskId);
@@ -1000,8 +1007,9 @@ struct TEnvironmentSetup {
         return SyncQueryFactory<TResult>(actorId, [&] { return std::make_unique<TQuery>(args...); });
     }
 
-    ui64 AggregateVDiskCounters(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
-            const std::vector<ui32>& pdiskLayout, TString subsystem, TString counter, bool derivative = false) {
+    ui64 AggregateVDiskCountersBase(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
+            const std::vector<ui32>& pdiskLayout, TString subsgroupName, TString subgroupValue, 
+            TString counter, bool derivative = false) {
         ui64 ctr = 0;
 
         for (ui32 nodeId = 1; nodeId <= nodesCount; ++nodeId) {
@@ -1019,12 +1027,24 @@ struct TEnvironmentSetup {
                         GetSubgroup("orderNumber", orderNumber)->
                         GetSubgroup("pdisk", pdisk)->
                         GetSubgroup("media", "rot")->
-                        GetSubgroup("subsystem", subsystem)->
+                        GetSubgroup(subsgroupName, subgroupValue)->
                         GetCounter(counter, derivative)->Val();
             }
         }
         return ctr;
-    };
+    }
+
+    ui64 AggregateVDiskCounters(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
+        const std::vector<ui32>& pdiskLayout, TString subsystem, TString counter, bool derivative = false) {
+        return AggregateVDiskCountersBase(storagePool, nodesCount, groupSize, groupId, pdiskLayout, 
+            "subsystem", subsystem, counter, derivative);
+    }
+
+    ui64 AggregateVDiskCountersWithHandleClass(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
+        const std::vector<ui32>& pdiskLayout, TString handleclass, TString counter) {
+        return AggregateVDiskCountersBase(storagePool, nodesCount, groupSize, groupId, pdiskLayout, 
+            "handleclass", handleclass, counter);
+    }
 
     void SetIcbControl(ui32 nodeId, TString controlName, ui64 value) {
         if (nodeId == 0) {

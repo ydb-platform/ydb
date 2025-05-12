@@ -127,13 +127,13 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
   {
       ProducerId = "ProducerId_Example"
   }.Build();
-  
+
   await using var reader = new ReaderBuilder<string>(driver)
   {
       ConsumerName = "Consumer_Example",
       SubscribeSettings = { new SubscribeSettings(topicName) }
   }.Build();
-  ```  
+  ```
 
 {% endlist %}
 
@@ -205,7 +205,7 @@ The topic path is mandatory. Other parameters are optional.
                           .build())
                   .build());
   ```
-  
+
 - С#
 
   Example of creating a topic with a list of supported codecs and a minimum number of partitions:
@@ -788,7 +788,7 @@ Only connections with matching [producer and message group](../../concepts/topic
   ```c#
   var writeCts = new CancellationTokenSource();
   writeCts.CancelAfter(TimeSpan.FromSeconds(3));
-  
+
   await writer.WriteAsync("Hello, Example YDB Topics!", writeCts.Token);
   ```
 
@@ -1005,6 +1005,54 @@ All the metadata provided when writing a message is sent to a consumer with the 
   })
   ```
 
+- Python
+
+  To write to a topic within a transaction, create a transactional writer by calling `topic_client.tx_writer` with the `tx` argument. Once created, you can send messages as usual. There's no need to close the transactional writer manually, as it will be closed automatically when the transaction ends.
+
+  In the example below, there is no explicit call to `tx.commit()`; it occurs implicitly upon the successful execution of the `callee` lambda.
+
+  [Example on GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_example.py)
+
+  ```python
+  with ydb.QuerySessionPool(driver) as session_pool:
+
+      def callee(tx: ydb.QueryTxContext):
+          tx_writer: ydb.TopicTxWriter = driver.topic_client.tx_writer(tx, topic)
+
+          for i in range(message_count):
+              result_stream = tx.execute(query=f"select {i} as res;")
+              for result_set in result_stream:
+                  message = str(result_set.rows[0]["res"])
+                  tx_writer.write(ydb.TopicWriterMessage(message))
+                  print(f"Message {message} was written with tx.")
+
+      session_pool.retry_tx_sync(callee)
+  ```
+
+- Python (asyncio)
+
+  To write to a topic within a transaction, create a transactional writer by calling `topic_client.tx_writer` with the `tx` argument. Once created, you can send messages as usual. There's no need to close the transactional writer manually, as it will be closed automatically when the transaction ends.
+
+  In the example below, there is no explicit call to `tx.commit()`; it occurs implicitly upon the successful execution of the `callee` lambda.
+
+  [Example on GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_async_example.py)
+
+  ```python
+  async with ydb.aio.QuerySessionPool(driver) as session_pool:
+
+      async def callee(tx: ydb.aio.QueryTxContext):
+          tx_writer: ydb.TopicTxWriterAsyncIO = driver.topic_client.tx_writer(tx, topic)
+
+          for i in range(message_count):
+              async with await tx.execute(query=f"select {i} as res;") as result_stream:
+                  async for result_set in result_stream:
+                      message = str(result_set.rows[0]["res"])
+                      await tx_writer.write(ydb.TopicWriterMessage(message))
+                      print(f"Message {result_set.rows[0]['res']} was written with tx.")
+
+      await session_pool.retry_tx_async(callee)
+  ```
+
 - Java (sync)
 
   [Example on GitHub](https://github.com/ydb-platform/ydb-java-examples/blob/develop/ydb-cookbook/src/main/java/tech/ydb/examples/topic/transactions/TransactionWriteSync.java)
@@ -1136,7 +1184,8 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
 ### Connecting to a topic for message reads {#start-reader}
 
-To be able to read messages from topic, a Consumer on this topic should exist.
+Reading messages from a topic can be done by specifying a Consumer associated with that topic, as well as without a Consumer. If a Consumer is not specified, the client application must calculate the offset for reading messages on its own. A more detailed example of reading without a Consumer is discussed in the [relevant section](#no-consumer).
+
 A Consumer can be created on [creating](#create-topic) or [altering](#alter-topic) a topic.
 Topic can have several Consumers and for each of them server stores its own reading progress.
 
@@ -1174,7 +1223,7 @@ Topic can have several Consumers and for each of them server stores its own read
   To establish a connection to the existing `my-topic` topic using the added `my-consumer` consumer, use the following code:
 
   ```python
-  reader = driver.topic_client.reader(topic="topic-path", consumer="consumer_name")
+  reader = driver.topic_client.reader(topic="my-topic", consumer="my-consumer")
   ```
 
 - Java (sync)
@@ -1285,7 +1334,7 @@ Topic can have several Consumers and for each of them server stores its own read
   {
       ConsumerName = "Consumer_Example",
       SubscribeSettings = { new SubscribeSettings(topicName) }
-  }.Build(); 
+  }.Build();
   ```
 
 {% endlist %}
@@ -1360,7 +1409,7 @@ To establish a connection to the `my-topic` and `my-specific-topic` topics using
       }
   }.Build();
   ```
-  
+
 {% endlist %}
 
 ### Reading messages {#reading-messages}
@@ -1465,7 +1514,7 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
   {
   }
   ```
-  
+
 {% endlist %}
 
 #### Reading message batches
@@ -1544,7 +1593,7 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 
           foreach (var message in batchMessages.Batch)
           {
-              logger.LogInformation("Received message: [{MessageData}]", message.Data);    
+              logger.LogInformation("Received message: [{MessageData}]", message.Data);
           }
       }
   }
@@ -1644,7 +1693,7 @@ If a commit fails with an error, the application should log it and continue; it 
   {
   }
   ```
-  
+
 {% endlist %}
 
 #### Reading message batches with commits
@@ -1736,7 +1785,7 @@ If a commit fails with an error, the application should log it and continue; it 
 
           foreach (var message in batchMessages.Batch)
           {
-              logger.LogInformation("Received message: [{MessageData}]", message.Data);    
+              logger.LogInformation("Received message: [{MessageData}]", message.Data);
           }
 
           try
@@ -1880,6 +1929,32 @@ Reading progress is usually saved on a server for each Consumer. However, such p
   }
   ```
 
+- Python
+
+  To read without a `Consumer`, create a reader using the `reader` method with specifying these arguments:
+  * `topic` - `ydb.TopicReaderSelector` object with defined `path` and `partitions` list;
+  * `consumer` - should be `None`;
+  * `event_handler` - inheritor of `ydb.TopicReaderEvents.EventHandler` that implements the `on_partition_get_start_offset` function. This function is responsible for returning the initial offset for reading messages when the reader starts and during reconnections. The client application must specify this offset in the parameter `ydb.TopicReaderEvents.OnPartitionGetStartOffsetResponse.start_offset`. The function can also be implemented as asynchronous.
+
+  Example:
+
+  ```python
+  class CustomEventHandler(ydb.TopicReaderEvents.EventHandler):
+      def on_partition_get_start_offset(self, event: ydb.TopicReaderEvents.OnPartitionGetStartOffsetRequest):
+          return ydb.TopicReaderEvents.OnPartitionGetStartOffsetResponse(
+              start_offset=0,
+          )
+
+  reader = driver.topic_client.reader(
+      topic=ydb.TopicReaderSelector(
+          path="topic-path",
+          partitions=[0, 1, 2],
+      ),
+      consumer=None,
+      event_handler=CustomEventHandler(),
+  )
+  ```
+
 {% endlist %}
 
 ### Reading in a transaction {#read-tx}
@@ -1961,6 +2036,42 @@ Reading progress is usually saved on a server for each Consumer. However, such p
       handleError(err)
     }
   }
+  ```
+
+- Python
+
+  To read messages from a topic within a transaction, use the `reader.receive_batch_with_tx` method. It reads a batch of messages and adds their commit to the transaction, so there's no need to commit them separately. The reader can be reused across different transactions. However, it's essential to commit transactions in the same order as the messages are read from the reader, as message commits in the topic must be performed strictly in order - otherwise transaction will get an error during commit. The simplest way to ensure this is by using the reader within a loop.
+
+  [Example on GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_example.py)
+
+  ```python
+  with driver.topic_client.reader(topic, consumer) as reader:
+      with ydb.QuerySessionPool(driver) as session_pool:
+          for _ in range(message_count):
+
+              def callee(tx: ydb.QueryTxContext):
+                  batch = reader.receive_batch_with_tx(tx, max_messages=1)
+                  print(f"Message {batch.messages[0].data.decode()} was read with tx.")
+
+              session_pool.retry_tx_sync(callee)
+  ```
+
+- Python (asyncio)
+
+  To read messages from a topic within a transaction, use the `reader.receive_batch_with_tx` method. It reads a batch of messages and adds their commit to the transaction, so there's no need to commit them separately. The reader can be reused across different transactions. However, it's essential to commit transactions in the same order as the messages are read from the reader, as message commits in the topic must be performed strictly in order - otherwise transaction will get an error during commit. The simplest way to ensure this is by using the reader within a loop.
+
+  [Example on GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_async_example.py)
+
+  ```python
+  async with driver.topic_client.reader(topic, consumer) as reader:
+      async with ydb.aio.QuerySessionPool(driver) as session_pool:
+          for _ in range(message_count):
+
+              async def callee(tx: ydb.aio.QueryTxContext):
+                  batch = await reader.receive_batch_with_tx(tx, max_messages=1)
+                  print(f"Message {batch.messages[0].data.decode()} was read with tx.")
+
+              await session_pool.retry_tx_async(callee)
   ```
 
 - Java (sync)
@@ -2237,5 +2348,26 @@ In case of a _hard interruption_, the client receives a notification that it is 
   ```
 
   From a practical perspective, these modes do not differ for the end user. However, the full support mode differs from the compatibility mode in terms of who guarantees the order of reading—the client or the server. Compatibility mode is achieved through server-side processing and generally operates slower.
+
+{% endlist %}
+
+### Commit outside the reader {#commit-outside-the-reader}
+
+Most often, committing is conveniently done within the reader that has read the messages. However, there are scenarios where committing needs to be performed by a separate process. In such cases, a method of committing outside the reader is necessary.
+
+{% list tabs group=lang %}
+
+- Python
+
+  Commit outside the reader is done using the `topic_client.commit_offset` method:
+
+  ```python
+  driver.topic_client.commit_offset(
+      topic_path,
+      consumer_name,
+      partition_id,
+      offset,
+  )
+  ```
 
 {% endlist %}

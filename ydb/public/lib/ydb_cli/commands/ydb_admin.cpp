@@ -31,7 +31,7 @@ public:
     TCommandDatabase()
         : TClientCommandTree("database", {}, "Database-wide administration")
     {
-        AddCommand(std::make_unique<NDynamicConfig::TCommandConfig>());
+        AddCommand(std::make_unique<NDynamicConfig::TCommandConfig>(false));
         AddCommand(std::make_unique<TCommandDatabaseDump>());
         AddCommand(std::make_unique<TCommandDatabaseRestore>());
     }
@@ -109,6 +109,7 @@ TCommandAdmin::TCommandAdmin()
     UseOnlyExplicitProfile();
     // keep old commands "safe", to keep old behavior
     AddHiddenCommand(std::make_unique<NDynamicConfig::TCommandConfig>(
+                         true,
                          NDynamicConfig::TCommandFlagsOverrides{.Dangerous = false, .OnlyExplicitProfile = false},
                          false));
     AddHiddenCommand(std::make_unique<NDynamicConfig::TCommandVolatileConfig>());

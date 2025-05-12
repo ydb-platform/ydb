@@ -21,10 +21,14 @@ namespace NYql {
 
 constexpr TStringBuf YtUnspecifiedCluster = "$runtime";
 
+// Equivalent to Derive* with mode=Auto
 TString GetClusterFromSection(const NNodes::TYtSection& section);
 TString GetClusterFromSectionList(const NNodes::TYtSectionList& sectionList);
-TString DeriveClusterFromSectionList(const NNodes::TYtSectionList& sectionList, ERuntimeClusterSelectionMode mode);
-TString DeriveClusterFromInput(const NNodes::TExprBase& input, ERuntimeClusterSelectionMode mode);
+
+// Derive cluster according to mode. Will return empty optional for mode=Disable if input contains multiple clusters
+TMaybe<TString> DeriveClusterFromSectionList(const NNodes::TYtSectionList& sectionList, ERuntimeClusterSelectionMode mode);
+TMaybe<TString> DeriveClusterFromInput(const NNodes::TExprBase& input, ERuntimeClusterSelectionMode mode);
+
 TString GetRuntimeCluster(const TExprNode& op, const TYtState::TPtr& state);
 
 bool UpdateUsedCluster(TString& usedCluster, const TString& newCluster, ERuntimeClusterSelectionMode mode);

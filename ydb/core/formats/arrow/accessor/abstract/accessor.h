@@ -1,5 +1,7 @@
 #pragma once
 
+#include "common.h"
+
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/accessor/validator.h>
 #include <ydb/library/formats/arrow/splitter/similar_packer.h>
@@ -36,15 +38,17 @@ public:
 
 class IChunkedArray {
 public:
+// PERSISTENT ENUM!!. DONT CHANGE ELEMENT'S IDS
     enum class EType : ui8 {
         Undefined = 0,
-        Array,
-        ChunkedArray,
-        SerializedChunkedArray,
-        CompositeChunkedArray,
-        SparsedArray,
-        SubColumnsArray,
-        SubColumnsPartialArray
+        Array = 1,
+        ChunkedArray = 2,
+        SerializedChunkedArray = 3,
+        CompositeChunkedArray = 4,
+        SparsedArray = 5,
+        SubColumnsArray = 6,
+        SubColumnsPartialArray = 7,
+        Dictionary = 8
     };
 
     using TValuesSimpleVisitor = std::function<void(std::shared_ptr<arrow::Array>)>;
@@ -264,6 +268,8 @@ private:
     virtual void DoVisitValues(const TValuesSimpleVisitor& visitor) const = 0;
 
 protected:
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const;
+
     std::shared_ptr<arrow::Schema> GetArraySchema() const {
         const arrow::FieldVector fields = { std::make_shared<arrow::Field>("val", GetDataType()) };
         return std::make_shared<arrow::Schema>(fields);
@@ -344,7 +350,6 @@ public:
     }
 
     virtual void Reallocate() {
-
     }
 
     void VisitValues(const TValuesSimpleVisitor& visitor) const {
@@ -444,7 +449,8 @@ public:
         return *result;
     }
 
-    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray() const;
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray(
+        const TColumnConstructionContext& context = Default<TColumnConstructionContext>()) const;
     virtual ~IChunkedArray() = default;
 
     std::shared_ptr<arrow::ChunkedArray> Slice(const ui32 offset, const ui32 count) const;
@@ -463,6 +469,7 @@ public:
             case EType::SubColumnsArray:
             case EType::SubColumnsPartialArray:
             case EType::Array:
+            case EType::Dictionary:
                 return true;
             case EType::Undefined:
                 AFL_VERIFY(false);

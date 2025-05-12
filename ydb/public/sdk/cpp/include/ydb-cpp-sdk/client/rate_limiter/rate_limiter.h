@@ -176,6 +176,8 @@ struct TCreateResourceSettings
     : public TOperationRequestSettings<TCreateResourceSettings>
     , public THierarchicalDrrSettings<TCreateResourceSettings>
 {
+    using TSelf = TCreateResourceSettings;
+
     TCreateResourceSettings() = default;
     TCreateResourceSettings(const Ydb::RateLimiter::CreateResourceRequest&);
 
@@ -187,6 +189,8 @@ struct TAlterResourceSettings
     : public TOperationRequestSettings<TAlterResourceSettings>
     , public THierarchicalDrrSettings<TAlterResourceSettings>
 {
+    using TSelf = TAlterResourceSettings;
+
     FLUENT_SETTING_OPTIONAL(TMeteringConfig, MeteringConfig);
 };
 

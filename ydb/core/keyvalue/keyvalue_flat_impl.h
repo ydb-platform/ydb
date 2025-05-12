@@ -53,7 +53,7 @@ protected:
         TTxType GetTxType() const override { return TXTYPE_INIT; }
 
         void ApplyLogBatching(const TActorContext &ctx, auto &alter) {
-            if (NKikimr::AppData(ctx)->FeatureFlags.GetEnableKeyvalueLogBatching()) { 
+            if (NKikimr::AppData(ctx)->FeatureFlags.GetEnableKeyvalueLogBatching()) {
                 alter.SetExecutorAllowLogBatching(true);
                 alter.SetExecutorLogFlushPeriod(TDuration::MicroSeconds(500));
             } else {
@@ -553,7 +553,7 @@ protected:
                 << " Handle TEvCleanUpDataRequest " << ev->Get()->ToString());
         ui64 generation = ev->Get()->Record.generation();
         if (generation == 0) {
-            Send(ev->Sender, TEvKeyValue::TEvCleanUpDataResponse::MakeError(generation, "generation can't be 0", generation));
+            Send(ev->Sender, TEvKeyValue::TEvCleanUpDataResponse::MakeError(generation, "generation can't be 0", generation, TabletID()));
             return;
         }
         if (ev->Get()->Record.reset_actual_generation()) {

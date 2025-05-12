@@ -149,8 +149,8 @@ public:
         }
     }
 
-    bool IsEmptyFiltered() const {
-        return Table->IsEmptyFiltered();
+    bool IsEmptyWithData() const {
+        return Table->HasDataAndResultIsEmpty();
     }
 
     void Clear() {
@@ -177,12 +177,35 @@ public:
     }
 };
 
+class TSourceChunkToReply {
+private:
+    YDB_READONLY(ui32, StartIndex, 0);
+    YDB_READONLY(ui32, RecordsCount, 0);
+    std::shared_ptr<arrow::Table> Table;
+
+public:
+    const std::shared_ptr<arrow::Table>& GetTable() const {
+        AFL_VERIFY(Table);
+        return Table;
+    }
+
+    bool HasData() const {
+        return !!Table && Table->num_rows();
+    }
+
+    TSourceChunkToReply(const ui32 startIndex, const ui32 recordsCount, const std::shared_ptr<arrow::Table>& table)
+        : StartIndex(startIndex)
+        , RecordsCount(recordsCount)
+        , Table(table) {
+    }
+};
+
 class TFetchedResult {
 private:
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Batch);
     YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, NotAppliedFilter);
     std::optional<std::deque<TPortionDataAccessor::TReadPage>> PagesToResult;
-    std::optional<std::shared_ptr<arrow::Table>> ChunkToReply;
+    std::optional<TSourceChunkToReply> ChunkToReply;
 
     TFetchedResult() = default;
 
@@ -225,7 +248,7 @@ public:
         AFL_VERIFY(page.GetIndexStart() == indexStart)("real", page.GetIndexStart())("expected", indexStart);
         AFL_VERIFY(page.GetRecordsCount() == recordsCount)("real", page.GetRecordsCount())("expected", recordsCount);
         AFL_VERIFY(!ChunkToReply);
-        ChunkToReply = std::move(table);
+        ChunkToReply = TSourceChunkToReply(indexStart, recordsCount, std::move(table));
     }
 
     bool IsFinished() const {
@@ -236,7 +259,7 @@ public:
         return !!ChunkToReply;
     }
 
-    std::shared_ptr<arrow::Table> ExtractResultChunk() {
+    std::optional<TSourceChunkToReply> ExtractResultChunk() {
         AFL_VERIFY(!!ChunkToReply);
         auto result = std::move(*ChunkToReply);
         ChunkToReply.reset();

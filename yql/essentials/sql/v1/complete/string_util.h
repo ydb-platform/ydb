@@ -1,17 +1,4 @@
 #pragma once
 
-#include <util/charset/unidata.h>
-
-#include <string_view>
-
-namespace NSQLComplete {
-
-    static const char WordBreakCharacters[] = " \t\v\f\a\b\r\n`~!@#$%^&*-=+[](){}\\|;:'\".,<>/?";
-
-    bool IsWordBoundary(char ch);
-
-    size_t LastWordIndex(TStringBuf text);
-
-    TStringBuf LastWord(TStringBuf text);
-
-} // namespace NSQLComplete
+// TODO(YQL-19747): Migrate YDB CLI to yql/essentials/sql/v1/complete/text/word.h
+#include <yql/essentials/sql/v1/complete/text/word.h>

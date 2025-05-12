@@ -1,4 +1,4 @@
-## Designing YDB: Constructing a Distributed cloud-native DBMS for OLTP and OLAP from the Ground Up {#2023-conf-hl-serbia-scale}
+## Designing YDB: Constructing a Distributed cloud-native DBMS for OLTP and OLAP from the Ground Up {#2025-conf-fosdem}
 
 {% include notitle [database_internals_tag](../../tags.md#database_internals) %}
 

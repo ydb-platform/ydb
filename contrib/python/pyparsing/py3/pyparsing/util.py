@@ -1,5 +1,6 @@
 # util.py
 import contextlib
+import re
 from functools import lru_cache, wraps
 import inspect
 import itertools
@@ -193,7 +194,7 @@ class _GroupConsecutive:
             (3, iter(['p', 'q', 'r', 's']))
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.prev = 0
         self.counter = itertools.count()
         self.value = -1
@@ -303,7 +304,11 @@ def _flatten(ll: Iterable) -> list:
 
 
 def make_compressed_re(
-    word_list: Iterable[str], max_level: int = 2, _level: int = 1
+    word_list: Iterable[str],
+    max_level: int = 2,
+    *,
+    non_capturing_groups: bool = True,
+    _level: int = 1,
 ) -> str:
     """
     Create a regular expression string from a list of words, collapsing by common
@@ -320,14 +325,37 @@ def make_compressed_re(
         else:
             yield namelist[0][0], [namelist[0][1:]]
 
+    if _level == 1:
+        if not word_list:
+            raise ValueError("no words given to make_compressed_re()")
+
+        if "" in word_list:
+            raise ValueError("word list cannot contain empty string")
+    else:
+        # internal recursive call, just return empty string if no words
+        if not word_list:
+            return ""
+
+    # dedupe the word list
+    word_list = list({}.fromkeys(word_list))
+
     if max_level == 0:
-        return "|".join(sorted(word_list, key=len, reverse=True))
+        if any(len(wd) > 1 for wd in word_list):
+            return "|".join(
+                sorted([re.escape(wd) for wd in word_list], key=len, reverse=True)
+            )
+        else:
+            return f"[{''.join(_escape_regex_range_chars(wd) for wd in word_list)}]"
 
     ret = []
     sep = ""
+    ncgroup = "?:" if non_capturing_groups else ""
+
     for initial, suffixes in get_suffixes_from_common_prefixes(sorted(word_list)):
         ret.append(sep)
         sep = "|"
+
+        initial = re.escape(initial)
 
         trailing = ""
         if "" in suffixes:
@@ -336,21 +364,33 @@ def make_compressed_re(
 
         if len(suffixes) > 1:
             if all(len(s) == 1 for s in suffixes):
-                ret.append(f"{initial}[{''.join(suffixes)}]{trailing}")
+                ret.append(
+                    f"{initial}[{''.join(_escape_regex_range_chars(s) for s in suffixes)}]{trailing}"
+                )
             else:
                 if _level < max_level:
                     suffix_re = make_compressed_re(
-                        sorted(suffixes), max_level, _level + 1
+                        sorted(suffixes),
+                        max_level,
+                        non_capturing_groups=non_capturing_groups,
+                        _level=_level + 1,
                     )
-                    ret.append(f"{initial}({suffix_re}){trailing}")
+                    ret.append(f"{initial}({ncgroup}{suffix_re}){trailing}")
                 else:
-                    suffixes.sort(key=len, reverse=True)
-                    ret.append(f"{initial}({'|'.join(suffixes)}){trailing}")
+                    if all(len(s) == 1 for s in suffixes):
+                        ret.append(
+                            f"{initial}[{''.join(_escape_regex_range_chars(s) for s in suffixes)}]{trailing}"
+                        )
+                    else:
+                        suffixes.sort(key=len, reverse=True)
+                        ret.append(
+                            f"{initial}({ncgroup}{'|'.join(re.escape(s) for s in suffixes)}){trailing}"
+                        )
         else:
             if suffixes:
-                suffix = suffixes[0]
+                suffix = re.escape(suffixes[0])
                 if len(suffix) > 1 and trailing:
-                    ret.append(f"{initial}({suffix}){trailing}")
+                    ret.append(f"{initial}({ncgroup}{suffix}){trailing}")
                 else:
                     ret.append(f"{initial}{suffix}{trailing}")
             else:

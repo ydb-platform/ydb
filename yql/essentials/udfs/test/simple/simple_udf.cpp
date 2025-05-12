@@ -1,4 +1,4 @@
-#include <util/generic/bt_exception.h>
+#include <util/generic/yexception.h>
 #include <util/generic/hash.h>
 #include <util/string/cast.h>
 #include <yql/essentials/public/udf/udf_helpers.h>

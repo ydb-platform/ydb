@@ -4,6 +4,7 @@
 #include "private.h"
 
 #include <yt/yt/core/actions/invoker_util.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <algorithm>
 

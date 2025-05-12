@@ -304,9 +304,10 @@ message TKqpPhyCnStreamLookup {
     bool KeepRowsOrder = 7;
     bool AllowNullKeys = 8;
     uint32 AllowNullKeysPrefixSize = 9;
-    TKqpPhyTableId Index = 10;
-    repeated string IndexKeyColumns = 11;
-    repeated string IndexColumns = 12;
+    bool IsTableImmutable = 10;
+    TKqpPhyTableId Index = 11;
+    repeated string IndexKeyColumns = 12;
+    repeated string IndexColumns = 13;
 }
 
 message TKqpPhyCnSequencer {
@@ -351,6 +352,7 @@ message TKqpReadRangesSource {
 
     repeated string SkipNullKeys = 8;
     uint64 SequentialInFlightShards = 9;
+    bool IsTableImmutable = 10;
 }
 
 message TKqpExternalSource {

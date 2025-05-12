@@ -80,6 +80,7 @@ public:
     void Handle(TEvYdbCompute::TEvCreateDatabaseRequest::TPtr& ev) {
         const auto& request = *ev.Get()->Get();
         auto forwardRequest = std::make_unique<TEvPrivate::TEvCreateDatabaseRequest>();
+        forwardRequest->Request.mutable_operation_params()->set_operation_mode(Ydb::Operations::OperationParams::SYNC);
         forwardRequest->Request.mutable_serverless_resources()->set_shared_database_path(request.BasePath);
         forwardRequest->Request.set_path(request.Path);
         SetYdbRequestToken(*forwardRequest, CredentialsProvider->GetAuthInfo());

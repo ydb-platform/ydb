@@ -5,14 +5,19 @@
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
+#include <library/cpp/protobuf/json/proto2json.h>
+
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <util/string/cast.h>
 
 static ui64 TryParseTabletId(TStringBuf tabletIdParam) {
-    if (tabletIdParam.StartsWith("0x"))
-        return IntFromString<ui64, 16>(tabletIdParam.substr(2));
-    else
-        return FromStringWithDefault<ui64>(tabletIdParam, ui64(NKikimr::NSchemeShard::InvalidTabletId));
+    ui64 tabletId = ui64(NKikimr::NSchemeShard::InvalidTabletId);
+    if (tabletIdParam.StartsWith("0x")) {
+        TryIntFromString<16>(tabletIdParam.substr(2), tabletId);
+    } else {
+        TryFromString(tabletIdParam, tabletId);
+    }
+    return tabletId;
 }
 
 namespace NKikimr {
@@ -79,6 +84,7 @@ struct TCgi {
     static const TParam BuildIndexId;
     static const TParam UpdateCoordinatorsConfig;
     static const TParam UpdateCoordinatorsConfigDryRun;
+    static const TParam Action;
 
     struct TPages {
         static constexpr TStringBuf MainPage = "Main";
@@ -90,6 +96,10 @@ struct TCgi {
         static constexpr TStringBuf ShardInfoByTabletId = "ShardInfoByTabletId";
         static constexpr TStringBuf ShardInfoByShardIdx = "ShardInfoByShardIdx";
         static constexpr TStringBuf BuildIndexInfo = "BuildIndexInfo";
+    };
+
+    struct TActions {
+        static constexpr TStringBuf SplitOneToOne = "SplitOneToOne";
     };
 };
 
@@ -111,6 +121,7 @@ const TCgi::TParam TCgi::Page = TStringBuf("Page");
 const TCgi::TParam TCgi::BuildIndexId = TStringBuf("BuildIndexId");
 const TCgi::TParam TCgi::UpdateCoordinatorsConfig = TStringBuf("UpdateCoordinatorsConfig");
 const TCgi::TParam TCgi::UpdateCoordinatorsConfigDryRun = TStringBuf("UpdateCoordinatorsConfigDryRun");
+const TCgi::TParam TCgi::Action = TStringBuf("Action");
 
 
 class TUpdateCoordinatorsConfigActor : public TActorBootstrapped<TUpdateCoordinatorsConfigActor> {
@@ -231,6 +242,93 @@ private:
     THashMap<ui64, const TItem*> InFlight;
 };
 
+class TMonitoringShardSplitOneToOne : public TActorBootstrapped<TMonitoringShardSplitOneToOne> {
+public:
+    TMonitoringShardSplitOneToOne(NMon::TEvRemoteHttpInfo::TPtr&& ev, ui64 schemeShardId, const TPathId& pathId, TTabletId shardId)
+        : Ev(std::move(ev))
+        , SchemeShardId(schemeShardId)
+        , PathId(pathId)
+        , ShardId(shardId)
+    {}
+
+    void Bootstrap() {
+        Send(MakeTxProxyID(), new TEvTxUserProxy::TEvAllocateTxId);
+        Become(&TThis::StateWaitTxId);
+    }
+
+    STFUNC(StateWaitTxId) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
+        }
+    }
+
+    void Handle(TEvTxUserProxy::TEvAllocateTxIdResult::TPtr& ev) {
+        TxId = ev->Get()->TxId;
+
+        auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(TxId, SchemeShardId);
+
+        auto& modifyScheme = *propose->Record.AddTransaction();
+        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions);
+        modifyScheme.SetInternal(true);
+
+        auto& info = *modifyScheme.MutableSplitMergeTablePartitions();
+        info.SetTableOwnerId(PathId.OwnerId);
+        info.SetTableLocalId(PathId.LocalPathId);
+        info.AddSourceTabletId(ui64(ShardId));
+        info.SetAllowOneToOneSplitMerge(true);
+
+        PipeCache = MakePipePerNodeCacheID(EPipePerNodeCache::Leader);
+        Send(PipeCache, new TEvPipeCache::TEvForward(propose.Release(), SchemeShardId, /* subscribe */ true));
+        Become(&TThis::StateWaitProposed);
+    }
+
+    STFUNC(StateWaitProposed) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvSchemeShard::TEvModifySchemeTransactionResult, Handle);
+            hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
+        }
+    }
+
+    void Handle(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev) {
+        TString text;
+        try {
+            NProtobufJson::Proto2Json(ev->Get()->Record, text, {
+                .EnumMode = NProtobufJson::TProto2JsonConfig::EnumName,
+                .FieldNameMode = NProtobufJson::TProto2JsonConfig::FieldNameSnakeCaseDense,
+                .MapAsObject = true,
+            });
+        } catch (const std::exception& e) {
+            Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(
+                "HTTP/1.1 500 Internal Error\r\nConnection: Close\r\n\r\nUnexpected failure to serialize the response\r\n"));
+            PassAway();
+        }
+
+        Send(Ev->Sender, new NMon::TEvRemoteJsonInfoRes(text));
+        PassAway();
+    }
+
+    void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
+        Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(
+            TStringBuilder() << "HTTP/1.1 502 Bad Gateway\r\nConnection: Close\r\n\r\nSchemeShard tablet disconnected\r\n"));
+        PassAway();
+    }
+
+    void PassAway() override {
+        if (PipeCache) {
+            Send(PipeCache, new TEvPipeCache::TEvUnlink(0));
+        }
+        TActorBootstrapped::PassAway();
+    }
+
+private:
+    NMon::TEvRemoteHttpInfo::TPtr Ev;
+    ui64 SchemeShardId;
+    TPathId PathId;
+    TTabletId ShardId;
+    ui64 TxId = 0;
+    TActorId PipeCache;
+};
+
 struct TSchemeShard::TTxMonitoring : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     NMon::TEvRemoteHttpInfo::TPtr Ev;
     TStringStream Answer;
@@ -242,10 +340,17 @@ public:
     {
     }
 
+    TTxType GetTxType() const override { return TXTYPE_MONITORING; }
+
     bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
         Y_UNUSED(txc);
 
         const TCgiParameters& cgi = Ev->Get()->Cgi();
+
+        if (cgi.Has(TCgi::Action)) {
+            HandleAction(cgi.Get(TCgi::Action), cgi, ctx);
+            return true;
+        }
 
         const TString page = cgi.Has(TCgi::Page) ? cgi.Get(TCgi::Page) : ToString(TCgi::TPages::MainPage);
 
@@ -311,7 +416,7 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        if (Answer) {
+        if (Ev && Answer) {
             ctx.Send(Ev->Sender, new NMon::TEvRemoteHttpInfoRes(Answer.Str()));
         }
     }
@@ -1360,7 +1465,44 @@ private:
         }
     }
 
-    TTxType GetTxType() const override { return TXTYPE_MONITORING; }
+private:
+    void SendBadRequest(const TString& details, const TActorContext& ctx) {
+        ctx.Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(
+            TStringBuilder() << "HTTP/1.1 400 Bad Request\r\nConnection: Close\r\n\r\n" << details << "\r\n"));
+    }
+
+private:
+    void HandleAction(const TString& action, const TCgiParameters& cgi, const TActorContext& ctx) {
+        if (Ev->Get()->GetMethod() != HTTP_METHOD_POST) {
+            SendBadRequest("Action requires a POST method", ctx);
+            return;
+        }
+
+        if (action == TCgi::TActions::SplitOneToOne) {
+            TTabletId tabletId = TTabletId(TryParseTabletId(cgi.Get(TCgi::ShardID)));
+            TShardIdx shardIdx = Self->GetShardIdx(tabletId);
+            if (!shardIdx) {
+                SendBadRequest("Cannot find the specified shard", ctx);
+                return;
+            }
+            auto* info = Self->ShardInfos.FindPtr(shardIdx);
+            if (!info) {
+                SendBadRequest("Cannot find the specified shard info", ctx);
+                return;
+            }
+            TPathId pathId = info->PathId;
+            auto* table = Self->Tables.FindPtr(pathId);
+            if (!table) {
+                SendBadRequest("Cannot find the specified shard's table", ctx);
+                return;
+            }
+
+            ctx.Register(new TMonitoringShardSplitOneToOne(std::move(Ev), Self->TabletID(), pathId, tabletId));
+            return;
+        }
+
+        SendBadRequest("Action not supported", ctx);
+    }
 };
 
 bool TSchemeShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) {

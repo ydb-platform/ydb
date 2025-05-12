@@ -876,6 +876,7 @@ def onadd_pytest_bin(fields, unit, *args):
         df.TestEnv.value,
         df.TestData.java_test,
         df.ForkMode.test_fork_mode,
+        df.TestExperimentalFork.value,
         df.SplitFactor.from_unit,
         df.CustomDependencies.test_depends_only,
         df.Tag.from_macro_args_and_unit,
@@ -1082,9 +1083,7 @@ def on_add_py_linter_check(fields, unit, *args):
         "GLOBAL_RESOURCES": unlimited,
         "FILE_PROCESSING_TIME": 1,
         "EXTRA_PARAMS": unlimited,
-        "PROJECT_TO_CONFIG_MAP": 1,
         "FLAKE_MIGRATIONS_CONFIG": 1,
-        "CUSTOM_CONFIG": 1,
         "CONFIG_TYPE": 1,
     }
     _, spec_args = _common.sort_by_keywords(keywords, args)

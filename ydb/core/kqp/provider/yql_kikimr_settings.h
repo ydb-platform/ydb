@@ -158,7 +158,6 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     NKikimrConfig::TFeatureFlags FeatureFlags;
 
     bool EnableKqpScanQuerySourceRead = false;
-    bool EnableKqpDataQueryStreamLookup = false;
     bool EnableKqpScanQueryStreamIdxLookupJoin = false;
     bool EnableKqpDataQueryStreamIdxLookupJoin = false;
     NSQLTranslation::EBindingsMode BindingsMode = NSQLTranslation::EBindingsMode::ENABLED;
@@ -178,11 +177,15 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableSpilling = true;
     ui32 DefaultCostBasedOptimizationLevel = 4;
     bool EnableConstantFolding = true;
+    bool EnableFoldUdfs = true;
     ui64 DefaultEnableSpillingNodes = 0;
     bool EnableAntlr4Parser = false;
     bool EnableSnapshotIsolationRW = false;
     bool AllowMultiBroadcasts = false;
     bool DefaultEnableShuffleElimination = false;
+    bool FilterPushdownOverJoinOptionalSide = false;
+    THashSet<TString> YqlCoreOptimizerFlags;
+    bool EnableNewRBO = false;
 
     void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;

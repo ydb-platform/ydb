@@ -11,7 +11,7 @@
 Имя метрики<br/>Тип, единицы измерения | Описание<br/>Метки
 ----- | -----
 `resources.storage.used_bytes`<br/>`IGAUGE`, байты  | Размер пользовательских и служебных данных, сохраненных в распределенном сетевом хранилище. `resources.storage.used_bytes` = `resources.storage.table.used_bytes` + `resources.storage.topic.used_bytes`.
-`resources.storage.table.used_bytes`<br/>`IGAUGE`, байты  | Размер пользовательских и служебных данных, сохраненных таблицами в распределенном сетевом хранилище. К служебным данным относятся данные первичного и [вторичных индексов](../../../concepts/secondary_indexes.md).
+`resources.storage.table.used_bytes`<br/>`IGAUGE`, байты  | Размер пользовательских и служебных данных, сохраненных таблицами в распределенном сетевом хранилище. К служебным данным относятся данные первичного, [вторичных индексов](../../../concepts/glossary.md#secondary-index) и [векторных индексов](../../../concepts/glossary.md#vector-index).
 `resources.storage.topic.used_bytes`<br/>`IGAUGE`, байты  | Размер распределенного сетевого хранилища, используемого топиками. Равен сумме значений `topic.storage_bytes` всех топиков.
 `resources.storage.limit_bytes`<br/>`IGAUGE`, байты  | Ограничение на размер пользовательских и служебных данных, которые база данных может сохранить в распределенном сетевом хранилище.
 

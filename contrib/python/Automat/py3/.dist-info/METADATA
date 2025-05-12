@@ -1,6 +1,6 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: Automat
-Version: 24.8.1
+Version: 25.4.16
 Summary: Self-service finite-state machines for the programmer on the go.
 Author-email: Glyph <code@glyph.im>
 License: Copyright (c) 2014
@@ -33,18 +33,20 @@ Classifier: License :: OSI Approved :: MIT License
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
-Requires-Python: >=3.8
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Typing :: Typed
+Requires-Python: >=3.9
 Description-Content-Type: text/markdown
 License-File: LICENSE
-Requires-Dist: typing-extensions; python_version < "3.10"
+Requires-Dist: typing_extensions; python_version < "3.10"
 Provides-Extra: visualize
 Requires-Dist: graphviz>0.5.1; extra == "visualize"
 Requires-Dist: Twisted>=16.1.1; extra == "visualize"
+Dynamic: license-file
 
 # Automat #
 

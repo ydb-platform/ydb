@@ -5,6 +5,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/yson/node
     yt/yql/providers/yt/fmr/coordinator/interface
     yt/yql/providers/yt/fmr/proto
     yt/yql/providers/yt/fmr/request_options/proto_helpers

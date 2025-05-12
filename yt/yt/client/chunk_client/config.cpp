@@ -177,6 +177,8 @@ void TReplicationReaderConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("use_read_blocks_batcher", &TThis::UseReadBlocksBatcher)
         .Default(false);
+    registrar.Parameter("block_set_subrequest_threshold", &TThis::BlockSetSubrequestThreshold)
+        .Default();
 
     registrar.Postprocessor([] (TThis* config) {
         // Seems unreasonable to make backoff greater than half of total session timeout.
@@ -229,7 +231,7 @@ void TErasureReaderConfig::Register(TRegistrar registrar)
     registrar.Parameter("slow_reader_expiration_timeout", &TThis::SlowReaderExpirationTimeout)
         .Default(TDuration::Minutes(2));
     registrar.Parameter("replication_reader_timeout", &TThis::ReplicationReaderTimeout)
-        .Default(TDuration::Seconds(60));
+        .Default(TDuration::Seconds(300));
     registrar.Parameter("replication_reader_failure_timeout", &TThis::ReplicationReaderFailureTimeout)
         .Default(TDuration::Minutes(10));
 }

@@ -79,11 +79,15 @@ void TConfigsManager::ValidateMainConfig(TUpdateConfigOpContext& opCtx) {
             auto resolved = NYamlConfig::ResolveAll(tree);
 
             if (ClusterName != opCtx.Cluster) {
-                ythrow yexception() << "ClusterName mismatch";
+                ythrow yexception() << "ClusterName mismatch"
+                    << " expected " << ClusterName
+                    << " but got " << opCtx.Cluster;
             }
 
             if (opCtx.Version != YamlVersion) {
-                ythrow yexception() << "Version mismatch";
+                ythrow yexception() << "Version mismatch"
+                    << " expected " << YamlVersion
+                    << " but got " << opCtx.Version;
             }
 
             TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> unknownFieldsCollector = new NYamlConfig::TBasicUnknownFieldsCollector;
@@ -174,15 +178,20 @@ void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opC
             auto resolved = NYamlConfig::ResolveAll(tree);
 
             errors.clear();
+
+            auto* csk = AppData()->ConfigSwissKnife;
+
             for (auto& [_, config] : resolved.Configs) {
                 auto cfg = NYamlConfig::YamlToProto(
                     config.second,
                     true,
                     true,
                     unknownFieldsCollector);
-                NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateConfig(cfg, errors);
-                if (result == NKikimr::NConfig::EValidationResult::Error) {
-                    ythrow yexception() << errors.front();
+                if (csk) {
+                    auto result = csk->ValidateConfig(cfg, errors);
+                    if (result == NYamlConfig::EValidationResult::Error) {
+                        ythrow yexception() << errors.front();
+                    }
                 }
             }
 
@@ -213,7 +222,7 @@ void TConfigsManager::Bootstrap(const TActorContext &ctx)
                                                          ctx,
                                                          false,
                                                          NKikimrServices::CMS_CONFIGS);
-    ConfigsProvider = ctx.Register(new TConfigsProvider(ctx.SelfID));
+    ConfigsProvider = ctx.Register(new TConfigsProvider(ctx.SelfID, Counters));
 
     ui32 item = (ui32)NKikimrConsole::TConfigItem::AllowEditYamlInUiItem;
     ctx.Send(MakeConfigsDispatcherID(SelfId().NodeId()),
@@ -1068,11 +1077,15 @@ void TConfigsManager::Handle(TEvConsole::TEvAddVolatileConfigRequest::TPtr &ev, 
             }
 
             if (ClusterName != clusterName) {
-                ythrow yexception() << "ClusterName mismatch";
+                ythrow yexception() << "ClusterName mismatch"
+                    << " expected " << ClusterName
+                    << " but got " << clusterName;
             }
 
             if (YamlVersion != version) {
-                ythrow yexception() << "Version mismatch";
+                ythrow yexception() << "Version mismatch"
+                    << " expected " << YamlVersion
+                    << " but got " << version;
             }
 
             VolatileYamlConfigs.try_emplace(id, cfg);
@@ -1103,11 +1116,15 @@ void TConfigsManager::Handle(TEvConsole::TEvRemoveVolatileConfigRequest::TPtr &e
     try {
         if (!rec.force()) {
             if (ClusterName != rec.identity().cluster()) {
-                ythrow yexception() << "ClusterName mismatch";
+                ythrow yexception() << "ClusterName mismatch"
+                    << " expected " << ClusterName
+                    << " but got " << rec.identity().cluster();
             }
 
             if (YamlVersion != rec.identity().version()) {
-                ythrow yexception() << "Version mismatch";
+                ythrow yexception() << "Version mismatch"
+                    << " expected " << YamlVersion
+                    << " but got " << rec.identity().version();
             }
         }
 

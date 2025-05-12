@@ -27,14 +27,8 @@
                                       "args":
                                         [
                                           {
-                                            "op_name":"HashShuffle",
-                                            "args":
-                                              [
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/catalog_sales"
-                                                }
-                                              ]
+                                            "op_name":"TableFullScan",
+                                            "table":"test\/ds\/catalog_sales"
                                           },
                                           {
                                             "op_name":"HashShuffle",
@@ -89,14 +83,8 @@
                                                                           "args":
                                                                             [
                                                                               {
-                                                                                "op_name":"HashShuffle",
-                                                                                "args":
-                                                                                  [
-                                                                                    {
-                                                                                      "op_name":"TableFullScan",
-                                                                                      "table":"test\/ds\/customer_address"
-                                                                                    }
-                                                                                  ]
+                                                                                "op_name":"TableFullScan",
+                                                                                "table":"test\/ds\/customer_address"
                                                                               },
                                                                               {
                                                                                 "op_name":"HashShuffle",
@@ -107,14 +95,8 @@
                                                                                       "args":
                                                                                         [
                                                                                           {
-                                                                                            "op_name":"HashShuffle",
-                                                                                            "args":
-                                                                                              [
-                                                                                                {
-                                                                                                  "op_name":"TableFullScan",
-                                                                                                  "table":"test\/ds\/customer_demographics"
-                                                                                                }
-                                                                                              ]
+                                                                                            "op_name":"TableFullScan",
+                                                                                            "table":"test\/ds\/customer_demographics"
                                                                                           },
                                                                                           {
                                                                                             "op_name":"HashShuffle",
@@ -133,14 +115,8 @@
                                                                                                               "args":
                                                                                                                 [
                                                                                                                   {
-                                                                                                                    "op_name":"HashShuffle",
-                                                                                                                    "args":
-                                                                                                                      [
-                                                                                                                        {
-                                                                                                                          "op_name":"TableFullScan",
-                                                                                                                          "table":"test\/ds\/customer"
-                                                                                                                        }
-                                                                                                                      ]
+                                                                                                                    "op_name":"TableFullScan",
+                                                                                                                    "table":"test\/ds\/customer"
                                                                                                                   },
                                                                                                                   {
                                                                                                                     "op_name":"HashShuffle",
@@ -151,14 +127,8 @@
                                                                                                                           "args":
                                                                                                                             [
                                                                                                                               {
-                                                                                                                                "op_name":"HashShuffle",
-                                                                                                                                "args":
-                                                                                                                                  [
-                                                                                                                                    {
-                                                                                                                                      "op_name":"TableFullScan",
-                                                                                                                                      "table":"test\/ds\/customer_demographics"
-                                                                                                                                    }
-                                                                                                                                  ]
+                                                                                                                                "op_name":"TableFullScan",
+                                                                                                                                "table":"test\/ds\/customer_demographics"
                                                                                                                               },
                                                                                                                               {
                                                                                                                                 "op_name":"HashShuffle",
@@ -169,14 +139,8 @@
                                                                                                                                       "args":
                                                                                                                                         [
                                                                                                                                           {
-                                                                                                                                            "op_name":"HashShuffle",
-                                                                                                                                            "args":
-                                                                                                                                              [
-                                                                                                                                                {
-                                                                                                                                                  "op_name":"TableFullScan",
-                                                                                                                                                  "table":"test\/ds\/customer_address"
-                                                                                                                                                }
-                                                                                                                                              ]
+                                                                                                                                            "op_name":"TableFullScan",
+                                                                                                                                            "table":"test\/ds\/customer_address"
                                                                                                                                           },
                                                                                                                                           {
                                                                                                                                             "op_name":"HashShuffle",
@@ -187,14 +151,8 @@
                                                                                                                                                   "args":
                                                                                                                                                     [
                                                                                                                                                       {
-                                                                                                                                                        "op_name":"HashShuffle",
-                                                                                                                                                        "args":
-                                                                                                                                                          [
-                                                                                                                                                            {
-                                                                                                                                                              "op_name":"TableFullScan",
-                                                                                                                                                              "table":"test\/ds\/store_returns"
-                                                                                                                                                            }
-                                                                                                                                                          ]
+                                                                                                                                                        "op_name":"TableFullScan",
+                                                                                                                                                        "table":"test\/ds\/store_returns"
                                                                                                                                                       },
                                                                                                                                                       {
                                                                                                                                                         "op_name":"HashShuffle",
@@ -271,22 +229,16 @@
                                                     ]
                                                 },
                                                 {
-                                                  "op_name":"HashShuffle",
+                                                  "op_name":"InnerJoin (MapJoin)",
                                                   "args":
                                                     [
                                                       {
-                                                        "op_name":"InnerJoin (MapJoin)",
-                                                        "args":
-                                                          [
-                                                            {
-                                                              "op_name":"TableFullScan",
-                                                              "table":"test\/ds\/household_demographics"
-                                                            },
-                                                            {
-                                                              "op_name":"TableFullScan",
-                                                              "table":"test\/ds\/income_band"
-                                                            }
-                                                          ]
+                                                        "op_name":"TableFullScan",
+                                                        "table":"test\/ds\/household_demographics"
+                                                      },
+                                                      {
+                                                        "op_name":"TableFullScan",
+                                                        "table":"test\/ds\/income_band"
                                                       }
                                                     ]
                                                 }
@@ -295,22 +247,16 @@
                                         ]
                                     },
                                     {
-                                      "op_name":"HashShuffle",
+                                      "op_name":"InnerJoin (MapJoin)",
                                       "args":
                                         [
                                           {
-                                            "op_name":"InnerJoin (MapJoin)",
-                                            "args":
-                                              [
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/household_demographics"
-                                                },
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/income_band"
-                                                }
-                                              ]
+                                            "op_name":"TableFullScan",
+                                            "table":"test\/ds\/household_demographics"
+                                          },
+                                          {
+                                            "op_name":"TableFullScan",
+                                            "table":"test\/ds\/income_band"
                                           }
                                         ]
                                     }
@@ -349,14 +295,8 @@
                                       "args":
                                         [
                                           {
-                                            "op_name":"HashShuffle",
-                                            "args":
-                                              [
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/catalog_sales"
-                                                }
-                                              ]
+                                            "op_name":"TableFullScan",
+                                            "table":"test\/ds\/catalog_sales"
                                           },
                                           {
                                             "op_name":"HashShuffle",
@@ -411,14 +351,8 @@
                                                                           "args":
                                                                             [
                                                                               {
-                                                                                "op_name":"HashShuffle",
-                                                                                "args":
-                                                                                  [
-                                                                                    {
-                                                                                      "op_name":"TableFullScan",
-                                                                                      "table":"test\/ds\/customer_address"
-                                                                                    }
-                                                                                  ]
+                                                                                "op_name":"TableFullScan",
+                                                                                "table":"test\/ds\/customer_address"
                                                                               },
                                                                               {
                                                                                 "op_name":"HashShuffle",
@@ -429,14 +363,8 @@
                                                                                       "args":
                                                                                         [
                                                                                           {
-                                                                                            "op_name":"HashShuffle",
-                                                                                            "args":
-                                                                                              [
-                                                                                                {
-                                                                                                  "op_name":"TableFullScan",
-                                                                                                  "table":"test\/ds\/customer_demographics"
-                                                                                                }
-                                                                                              ]
+                                                                                            "op_name":"TableFullScan",
+                                                                                            "table":"test\/ds\/customer_demographics"
                                                                                           },
                                                                                           {
                                                                                             "op_name":"HashShuffle",
@@ -455,14 +383,8 @@
                                                                                                               "args":
                                                                                                                 [
                                                                                                                   {
-                                                                                                                    "op_name":"HashShuffle",
-                                                                                                                    "args":
-                                                                                                                      [
-                                                                                                                        {
-                                                                                                                          "op_name":"TableFullScan",
-                                                                                                                          "table":"test\/ds\/customer"
-                                                                                                                        }
-                                                                                                                      ]
+                                                                                                                    "op_name":"TableFullScan",
+                                                                                                                    "table":"test\/ds\/customer"
                                                                                                                   },
                                                                                                                   {
                                                                                                                     "op_name":"HashShuffle",
@@ -473,14 +395,8 @@
                                                                                                                           "args":
                                                                                                                             [
                                                                                                                               {
-                                                                                                                                "op_name":"HashShuffle",
-                                                                                                                                "args":
-                                                                                                                                  [
-                                                                                                                                    {
-                                                                                                                                      "op_name":"TableFullScan",
-                                                                                                                                      "table":"test\/ds\/customer_demographics"
-                                                                                                                                    }
-                                                                                                                                  ]
+                                                                                                                                "op_name":"TableFullScan",
+                                                                                                                                "table":"test\/ds\/customer_demographics"
                                                                                                                               },
                                                                                                                               {
                                                                                                                                 "op_name":"HashShuffle",
@@ -491,14 +407,8 @@
                                                                                                                                       "args":
                                                                                                                                         [
                                                                                                                                           {
-                                                                                                                                            "op_name":"HashShuffle",
-                                                                                                                                            "args":
-                                                                                                                                              [
-                                                                                                                                                {
-                                                                                                                                                  "op_name":"TableFullScan",
-                                                                                                                                                  "table":"test\/ds\/customer_address"
-                                                                                                                                                }
-                                                                                                                                              ]
+                                                                                                                                            "op_name":"TableFullScan",
+                                                                                                                                            "table":"test\/ds\/customer_address"
                                                                                                                                           },
                                                                                                                                           {
                                                                                                                                             "op_name":"HashShuffle",
@@ -509,14 +419,8 @@
                                                                                                                                                   "args":
                                                                                                                                                     [
                                                                                                                                                       {
-                                                                                                                                                        "op_name":"HashShuffle",
-                                                                                                                                                        "args":
-                                                                                                                                                          [
-                                                                                                                                                            {
-                                                                                                                                                              "op_name":"TableFullScan",
-                                                                                                                                                              "table":"test\/ds\/store_returns"
-                                                                                                                                                            }
-                                                                                                                                                          ]
+                                                                                                                                                        "op_name":"TableFullScan",
+                                                                                                                                                        "table":"test\/ds\/store_returns"
                                                                                                                                                       },
                                                                                                                                                       {
                                                                                                                                                         "op_name":"HashShuffle",
@@ -593,22 +497,16 @@
                                                     ]
                                                 },
                                                 {
-                                                  "op_name":"HashShuffle",
+                                                  "op_name":"InnerJoin (MapJoin)",
                                                   "args":
                                                     [
                                                       {
-                                                        "op_name":"InnerJoin (MapJoin)",
-                                                        "args":
-                                                          [
-                                                            {
-                                                              "op_name":"TableFullScan",
-                                                              "table":"test\/ds\/household_demographics"
-                                                            },
-                                                            {
-                                                              "op_name":"TableFullScan",
-                                                              "table":"test\/ds\/income_band"
-                                                            }
-                                                          ]
+                                                        "op_name":"TableFullScan",
+                                                        "table":"test\/ds\/household_demographics"
+                                                      },
+                                                      {
+                                                        "op_name":"TableFullScan",
+                                                        "table":"test\/ds\/income_band"
                                                       }
                                                     ]
                                                 }
@@ -617,22 +515,16 @@
                                         ]
                                     },
                                     {
-                                      "op_name":"HashShuffle",
+                                      "op_name":"InnerJoin (MapJoin)",
                                       "args":
                                         [
                                           {
-                                            "op_name":"InnerJoin (MapJoin)",
-                                            "args":
-                                              [
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/household_demographics"
-                                                },
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/income_band"
-                                                }
-                                              ]
+                                            "op_name":"TableFullScan",
+                                            "table":"test\/ds\/household_demographics"
+                                          },
+                                          {
+                                            "op_name":"TableFullScan",
+                                            "table":"test\/ds\/income_band"
                                           }
                                         ]
                                     }

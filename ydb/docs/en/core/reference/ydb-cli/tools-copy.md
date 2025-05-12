@@ -19,9 +19,9 @@ View a description of the command to copy a table:
 
 ## Parameters of the subcommand {#options}
 
-| Parameter name | Parameter description |
----|---
-| `--timeout` | The time within which the operation should be completed on the server. |
+| Parameter name                  | Parameter description                                                                                                                                                                                                                                                                                                                                                                         |
+|---------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `--timeout`                     | The time within which the operation should be completed on the server.                                                                                                                                                                                                                                                                                                                        |
 | `--item <property>=<value>,...` | Operation properties. You can specify the parameter more than once to copy several tables in a single transaction.<br/>Required properties:<ul><li>`destination`, `dst`, `d`: Path to target table. If the destination path contains folders, they must be created in advance. No table with the destination name should exist.</li><li>`source`, `src`, `s`: Path to source table.</li></ul> |
 
 ## Examples {#examples}

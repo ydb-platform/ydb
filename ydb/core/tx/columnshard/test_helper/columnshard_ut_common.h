@@ -25,6 +25,8 @@ struct TIndexInfo;
 
 namespace NKikimr::NTxUT {
 
+using TPlanStep = TPositiveIncreasingControlInteger;
+
 // Private events of different actors reuse the same ES_PRIVATE range
 // So in order to capture the right private event we need to check its type via dynamic_cast
 template <class TPrivateEvent>
@@ -47,7 +49,7 @@ using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
 
 struct TTestSchema {
-    static inline const TString DefaultTtlColumn = "saved_at";
+    static inline const TString DefaultTtlColumn = "timestamp";
 
     struct TStorageTier {
         TString TtlColumn = DefaultTtlColumn;
@@ -295,9 +297,18 @@ struct TTestSchema {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableInitShard()->AddTables();
         tx.MutableInitShard()->SetOwnerPath(ownerPath);
+        tx.MutableInitShard()->SetOwnerPathId(pathId);
         table->SetPathId(pathId);
 
-        InitSchema(columns, pk, specials, table->MutableSchema());
+        {   // preset
+            auto* preset = table->MutableSchemaPreset();
+            preset->SetId(1);
+            preset->SetName("default");
+
+            // schema
+            InitSchema(columns, pk, specials, preset->MutableSchema());
+        }
+
         InitTiersAndTtl(specials, table->MutableTtlSettings());
 
         Cerr << "CreateInitShard: " << tx << "\n";
@@ -308,9 +319,11 @@ struct TTestSchema {
     }
 
     static TString CreateStandaloneTableTxBody(ui64 pathId, const std::vector<NArrow::NTest::TTestColumn>& columns,
-        const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specials = {}) {
+        const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specials = {}, const TString& path = "/Root/olap") {
         NKikimrTxColumnShard::TSchemaTxBody tx;
-        auto* table = tx.MutableEnsureTables()->AddTables();
+        auto* table = tx.MutableInitShard()->AddTables();
+        tx.MutableInitShard()->SetOwnerPath(path);
+        tx.MutableInitShard()->SetOwnerPathId(pathId);
         table->SetPathId(pathId);
 
         InitSchema(columns, pk, specials, table->MutableSchema());
@@ -323,11 +336,17 @@ struct TTestSchema {
         return out;
     }
 
-    static TString AlterTableTxBody(ui64 pathId, ui32 version, const TTableSpecials& specials) {
+    static TString AlterTableTxBody(ui64 pathId, ui32 version, const std::vector<NArrow::NTest::TTestColumn>& columns,
+        const std::vector<NArrow::NTest::TTestColumn>& pk, const TTableSpecials& specials) {
         NKikimrTxColumnShard::TSchemaTxBody tx;
         auto* table = tx.MutableAlterTable();
         table->SetPathId(pathId);
         tx.MutableSeqNo()->SetRound(version);
+
+        auto* preset = table->MutableSchemaPreset();
+        preset->SetId(1);
+        preset->SetName("default");
+        InitSchema(columns, pk, specials, preset->MutableSchema());
 
         auto* ttlSettings = table->MutableTtlSettings();
         if (!InitTiersAndTtl(specials, ttlSettings)) {
@@ -395,7 +414,8 @@ struct TTestSchema {
 
 void RefreshTiering(TTestBasicRuntime& runtime, const TActorId& sender);
 
-bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, NOlap::TSnapshot snap);
+void ProposeSchemaTxFail(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId);
+[[nodiscard]] TPlanStep ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId);
 void PlanSchemaTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap);
 
 void PlanWriteTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap, bool waitResult = true);
@@ -418,14 +438,14 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vec
 
 void ProposeCommitFail(
      TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId = 1);
-void ProposeCommit(
+[[nodiscard]] TPlanStep ProposeCommit(
     TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId = 1);
-void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId = 1);
+[[nodiscard]] TPlanStep ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, const ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId = 1);
 
-void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 planStep, const TSet<ui64>& txIds);
-void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, const TSet<ui64>& txIds);
+void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, TPlanStep planStep, const TSet<ui64>& txIds);
+void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, TPlanStep planStep, const TSet<ui64>& txIds);
 
-inline void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, ui64 txId) {
+inline void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, TPlanStep planStep, ui64 txId) {
     TSet<ui64> ids;
     ids.insert(txId);
     PlanCommit(runtime, sender, planStep, ids);
@@ -557,12 +577,12 @@ struct TestTableDescription {
     }
 };
 
-void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId, const TestTableDescription& table = {}, TString codec = "none");
-void SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const NOlap::TSnapshot& snapshot, bool succeed = true);
+[[nodiscard]] NTxUT::TPlanStep SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId, const TestTableDescription& table = {},
+    TString codec = "none", const ui64 txId = 10);
+[[nodiscard]] NTxUT::TPlanStep SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId);
 
-void PrepareTablet(
+[[nodiscard]] NTxUT::TPlanStep PrepareTablet(
     TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize = 1);
-void PrepareTablet(TTestBasicRuntime& runtime, const TString& schemaTxBody, bool succeed);
 
 std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(
     TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<NArrow::NTest::TTestColumn>& schema);

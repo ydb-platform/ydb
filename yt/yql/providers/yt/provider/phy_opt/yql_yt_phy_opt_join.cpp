@@ -50,7 +50,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EquiJoin(TExprBase node
         } else {
             hasYtInput = true;
             auto cluster = DeriveClusterFromInput(list, selectionMode);
-            if (!UpdateUsedCluster(inputClusters[i], cluster, selectionMode)) {
+            if (!cluster || !UpdateUsedCluster(inputClusters[i], *cluster, selectionMode)) {
                 return node;
             }
         }

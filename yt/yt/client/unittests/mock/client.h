@@ -38,7 +38,7 @@ public:
 
     MOCK_METHOD(IConnectionPtr, GetConnection, (), (override));
 
-    MOCK_METHOD(std::optional<std::string>, GetClusterName, (bool fetchIfNull), (override));
+    MOCK_METHOD(TFuture<std::optional<std::string>>, GetClusterName, (bool fetchIfNull), (override));
 
     MOCK_METHOD(TFuture<ITransactionPtr>, StartTransaction, (
         NTransactionClient::ETransactionType type,
@@ -376,6 +376,11 @@ public:
     MOCK_METHOD(ITransactionPtr, AttachTransaction, (
         NTransactionClient::TTransactionId transactionId,
         const TTransactionAttachOptions& options),
+        (override));
+
+    MOCK_METHOD(IPrerequisitePtr, AttachPrerequisite, (
+        NPrerequisiteClient::TPrerequisiteId prerequisiteId,
+        const TPrerequisiteAttachOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<void>, MountTable, (
@@ -852,6 +857,13 @@ public:
         const NYPath::TYPath& pipelinePath,
         const NYPath::TYPath& viewPath,
         const TGetFlowViewOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<TFlowExecuteResult>, FlowExecute, (
+        const NYPath::TYPath& pipelinePath,
+        const TString& command,
+        const NYson::TYsonString& argument,
+        const TFlowExecuteOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TDistributedWriteSessionWithCookies>, StartDistributedWriteSession, (

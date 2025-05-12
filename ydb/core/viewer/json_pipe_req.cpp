@@ -451,8 +451,16 @@ TViewerPipeClient::TRequestResponse<TEvHive::TEvResponseHiveNodeStats> TViewerPi
     TActorId pipeClient = ConnectTabletPipe(hiveId);
     auto response = MakeRequestToPipe<TEvHive::TEvResponseHiveNodeStats>(pipeClient, request, hiveId);
     if (response.Span) {
-        auto hive_id = "#" + ::ToString(hiveId);
-        response.Span.Attribute("hive_id", hive_id);
+        response.Span.Attribute("hive_id", TStringBuilder() << '#' << hiveId);
+        if (request->Record.GetFilterTabletsBySchemeShardId()) {
+            response.Span.Attribute("schemeshard_id", TStringBuilder() << '#' << request->Record.GetFilterTabletsBySchemeShardId());
+        }
+        if (request->Record.GetFilterTabletsByPathId()) {
+            response.Span.Attribute("path_id", TStringBuilder() << '#' << request->Record.GetFilterTabletsByPathId());
+        }
+        if (request->Record.HasFilterTabletsByObjectDomain()) {
+            response.Span.Attribute("object_domain", TStringBuilder() << TSubDomainKey(request->Record.GetFilterTabletsByObjectDomain()));
+        }
     }
     return response;
 }
@@ -737,6 +745,7 @@ THolder<NSchemeCache::TSchemeCacheNavigate> TViewerPipeClient::SchemeCacheNaviga
 ) {
     THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
     entry.RedirectRequired = false;
+    entry.ShowPrivatePath = true;
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
     request->ResultSet.emplace_back(std::move(entry));
     return request;
@@ -763,6 +772,7 @@ TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResu
     NSchemeCache::TSchemeCacheNavigate::TEntry entry;
     entry.Path = SplitPath(path);
     entry.RedirectRequired = false;
+    entry.ShowPrivatePath = true;
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
     request->ResultSet.emplace_back(entry);
     auto response = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0 /*flags*/, cookie);
@@ -778,6 +788,7 @@ TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResu
     entry.TableId.PathId = pathId;
     entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
     entry.RedirectRequired = false;
+    entry.ShowPrivatePath = true;
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
     request->ResultSet.emplace_back(entry);
     auto response = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0 /*flags*/, cookie);
@@ -822,9 +833,10 @@ TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResu
     return response;
 }
 
-void TViewerPipeClient::RequestTxProxyDescribe(const TString& path) {
+void TViewerPipeClient::RequestTxProxyDescribe(const TString& path, const NKikimrSchemeOp::TDescribeOptions& options) {
     THolder<TEvTxUserProxy::TEvNavigate> request(new TEvTxUserProxy::TEvNavigate());
     request->Record.MutableDescribePath()->SetPath(path);
+    request->Record.MutableDescribePath()->MutableOptions()->CopyFrom(options);
     if (Event && !Event->Get()->UserToken.empty()) {
         request->Record.SetUserToken(Event->Get()->UserToken);
     }
@@ -896,10 +908,13 @@ void TViewerPipeClient::InitConfig(const TCgiParameters& params) {
     }
     if (!FromStringWithDefault<bool>(params.Get("ui64"), false)) {
         Proto2JsonConfig.StringifyNumbers = TProto2JsonConfig::EStringifyNumbersMode::StringifyInt64Always;
+        Proto2JsonConfig.StringifyNumbersRepeated = TProto2JsonConfig::EStringifyNumbersMode::StringifyInt64Always;
     }
     Proto2JsonConfig.MapAsObject = true;
     Proto2JsonConfig.ConvertAny = true;
     Proto2JsonConfig.WriteNanAsString = true;
+    Proto2JsonConfig.DoubleNDigits = 17;
+    Proto2JsonConfig.FloatNDigits = 9;
     Timeout = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("timeout"), Timeout.MilliSeconds()));
     UseCache = FromStringWithDefault<bool>(params.Get("use_cache"), UseCache);
 }
@@ -973,8 +988,8 @@ TString TViewerPipeClient::GetHTTPOKJSON(TString response, TInstant lastModified
 }
 
 TString TViewerPipeClient::GetHTTPOKJSON(const NJson::TJsonValue& response, TInstant lastModified) {
-    constexpr ui32 doubleNDigits = std::numeric_limits<double>::max_digits10;
-    constexpr ui32 floatNDigits = std::numeric_limits<float>::max_digits10;
+    constexpr ui32 doubleNDigits = 17;
+    constexpr ui32 floatNDigits = 9;
     constexpr EFloatToStringMode floatMode = EFloatToStringMode::PREC_NDIGITS;
     TStringStream content;
     NJson::WriteJson(&content, &response, {

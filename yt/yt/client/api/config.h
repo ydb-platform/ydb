@@ -209,6 +209,9 @@ struct TJournalWriterConfig
 
     TDuration PrerequisiteTransactionProbePeriod;
 
+    bool EnableChecksums;
+    bool ValidateErasureCoding;
+
     // For testing purposes only.
     bool DontClose;
     bool DontSeal;
@@ -225,10 +228,9 @@ DEFINE_REFCOUNTED_TYPE(TJournalWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TJournalChunkWriterOptions
+struct TJournalChunkWriterOptions
     : public NYTree::TYsonStruct
 {
-public:
     int ReplicationFactor;
     NErasure::ECodec ErasureCodec;
 

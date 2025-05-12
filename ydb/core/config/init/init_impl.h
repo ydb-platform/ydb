@@ -1158,15 +1158,14 @@ public:
 
         TenantName = FillTenantPoolConfig(CommonAppOptions);
 
+        FillData(CommonAppOptions);
+
         std::vector<TString> errors;
-        EValidationResult result = ValidateConfig(AppConfig, errors);
-        if (result == EValidationResult::Error) {
+        if (csk && csk->ValidateConfig(AppConfig, errors) == NYamlConfig::EValidationResult::Error) {
             ythrow yexception() << errors.front();
         }
 
         Logger.Out() << "configured" << Endl;
-
-        FillData(CommonAppOptions);
     }
 
     void FillData(const NConfig::TCommonAppOptions& cf) {

@@ -1006,18 +1006,18 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        TTypeAnnotationNode::TListType itemTypes;
-        if (!EnsureWideStreamBlockType(input->Head(), itemTypes, ctx.Expr)) {
+        TVector<const TItemExprType*> structItems;
+        if (!EnsureBlockListType(input->Head(), structItems, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto streamItemType = input->Head().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType();
+        auto listItemType = input->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
         input->SetTypeAnn(ctx.Expr.MakeType<TResourceExprType>(TStringBuilder() <<
-                NKikimr::NMiniKQL::BlockStorageResourcePrefix << FormatType(streamItemType)));
+                NKikimr::NMiniKQL::BlockStorageResourcePrefix << FormatType(listItemType)));
         return IGraphTransformer::TStatus::Ok;
     }
 
-    bool EnsureBlockStorageResource(const TExprNode* resource, const TMultiExprType*& streamItemType, TExtContext& ctx) {
+    bool EnsureBlockStorageResource(const TExprNode* resource, const TStructExprType*& listItemType, TExtContext& ctx) {
         using NKikimr::NMiniKQL::BlockStorageResourcePrefix;
 
         if (!EnsureResourceType(*resource, ctx.Expr)) {
@@ -1045,7 +1045,7 @@ namespace NTypeAnnImpl {
             return false;
         }
 
-        streamItemType = typeNode->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->UserCast<TMultiExprType>(ctx.Expr.GetPosition(resource->Pos()), ctx.Expr);
+        listItemType = typeNode->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->UserCast<TStructExprType>(ctx.Expr.GetPosition(resource->Pos()), ctx.Expr);
         return true;
     }
 
@@ -1059,25 +1059,25 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        const TMultiExprType* expectedStreamItemType = nullptr;
-        if (!EnsureBlockStorageResource(input->Child(0), expectedStreamItemType, ctx)) {
+        const TStructExprType* expectedListItemType = nullptr;
+        if (!EnsureBlockStorageResource(input->Child(0), expectedListItemType, ctx)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        TTypeAnnotationNode::TListType itemTypes;
+        TVector<const TItemExprType*> structItems;
         if (!EnsureType(*input->Child(1), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
         auto inputType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-        if (!EnsureWideBlockType(input->Child(1)->Pos(), *inputType, itemTypes, ctx.Expr)) {
+        if (!EnsureBlockStructType(input->Child(1)->Pos(), *inputType, structItems, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
-        auto streamItemType = inputType->Cast<TMultiExprType>();
+        auto listItemType = inputType->Cast<TStructExprType>();
 
-        if (!IsSameAnnotation(*streamItemType, *expectedStreamItemType)) {
+        if (!IsSameAnnotation(*listItemType, *expectedListItemType)) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                TStringBuilder() << "Mismatch between provided stream item type " << static_cast<const TTypeAnnotationNode&>(*streamItemType)
-                << "and block storage item type " << static_cast<const TTypeAnnotationNode&>(*expectedStreamItemType)));
+                TStringBuilder() << "Mismatch between provided list item type " << static_cast<const TTypeAnnotationNode&>(*listItemType)
+                << "and block storage item type " << static_cast<const TTypeAnnotationNode&>(*expectedListItemType)));
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -1085,34 +1085,47 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        TVector<ui32> keyColumns;
+        TVector<TStringBuf> keyColumns;
         for (const auto& keyColumnNode : input->Child(2)->Children()) {
-            auto position = GetWideBlockFieldPosition(*streamItemType, keyColumnNode->Content());
-            if (!position) {
+            if (!listItemType->FindItem(keyColumnNode->Content())) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(keyColumnNode->Pos()), TStringBuilder() << "Unknown key column: " << keyColumnNode->Content()));
                 return IGraphTransformer::TStatus::Error;
             }
-            keyColumns.push_back(*position);
+            keyColumns.push_back(keyColumnNode->Content());
         }
 
         auto settingsValidator = [&](TStringBuf settingName, TExprNode& node, TExprContext& ctx) {
-            if (node.ChildrenSize() != 1) {
-                ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
-                    TStringBuilder() << "No extra parameters are expected by setting '" << settingName << "'"));
-                return false;
+            if (settingName == "any") {
+                if (node.ChildrenSize() != 1) {
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+                        TStringBuilder() << "No extra parameters are expected by setting '" << settingName << "'"));
+                    return false;
+                }
+            } else if (settingName == "rowCount") {
+                if (node.ChildrenSize() != 2) {
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+                        TStringBuilder() << "Setting '" << settingName << "' requires 1 extra parameter"));
+                    return false;
+                }
+                if (!node.Child(1)->IsAtom()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), "Expected atom"));
+                    return false;
+                }
+            } else {
+                YQL_ENSURE(false, "unknown setting");
             }
             return true;
         };
-        if (!EnsureValidSettings(input->Tail(), {"any"}, settingsValidator, ctx.Expr)) {
+        if (!EnsureValidSettings(input->Tail(), {"any", "rowCount"}, settingsValidator, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
         input->SetTypeAnn(ctx.Expr.MakeType<TResourceExprType>(TStringBuilder() <<
-                BlockMapJoinIndexResourcePrefix << FormatType(streamItemType) << BlockMapJoinIndexResourceSeparator << JoinSeq(",", keyColumns)));
+                BlockMapJoinIndexResourcePrefix << FormatType(listItemType) << BlockMapJoinIndexResourceSeparator << JoinSeq(",", keyColumns)));
         return IGraphTransformer::TStatus::Ok;
     }
 
-    bool EnsureBlockMapJoinIndexResource(const TExprNode* resource, const TMultiExprType*& streamItemType, TVector<TStringBuf>& keyColumns, TExtContext& ctx) {
+    bool EnsureBlockMapJoinIndexResource(const TExprNode* resource, const TStructExprType*& listItemType, TVector<TStringBuf>& keyColumns, TExtContext& ctx) {
         using NKikimr::NMiniKQL::BlockMapJoinIndexResourcePrefix;
         using NKikimr::NMiniKQL::BlockMapJoinIndexResourceSeparator;
 
@@ -1145,7 +1158,7 @@ namespace NTypeAnnImpl {
             return false;
         }
 
-        streamItemType = resourceTypeNode->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->UserCast<TMultiExprType>(ctx.Expr.GetPosition(resource->Pos()), ctx.Expr);
+        listItemType = resourceTypeNode->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->UserCast<TStructExprType>(ctx.Expr.GetPosition(resource->Pos()), ctx.Expr);
         return true;
     }
 
@@ -1160,7 +1173,7 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
         const auto joinKind = input->Child(3)->Content();
-        if (joinKind != "Inner" && joinKind != "Left" && joinKind != "LeftSemi" && joinKind != "LeftOnly"&& joinKind != "Cross") {
+        if (joinKind != "Inner" && joinKind != "Left" && joinKind != "LeftSemi" && joinKind != "LeftOnly" && joinKind != "Cross") {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(3)->Pos()), TStringBuilder() << "Unknown join kind: " << joinKind
                 << ", supported: Inner, Left, LeftSemi, LeftOnly, Cross"));
             return IGraphTransformer::TStatus::Error;
@@ -1173,33 +1186,32 @@ namespace NTypeAnnImpl {
         leftItemTypes.pop_back();
         auto leftStreamItemType = input->Head().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>();
 
-        const TMultiExprType* expectedRightStreamItemType = nullptr;
+        const TStructExprType* expectedRightListItemType = nullptr;
         TVector<TStringBuf> expectedRightKeyColumns;
         if (joinKind != "Cross") {
-            if (!EnsureBlockMapJoinIndexResource(input->Child(1), expectedRightStreamItemType, expectedRightKeyColumns, ctx)) {
+            if (!EnsureBlockMapJoinIndexResource(input->Child(1), expectedRightListItemType, expectedRightKeyColumns, ctx)) {
                 return IGraphTransformer::TStatus::Error;
             }
         } else {
-            if (!EnsureBlockStorageResource(input->Child(1), expectedRightStreamItemType, ctx)) {
+            if (!EnsureBlockStorageResource(input->Child(1), expectedRightListItemType, ctx)) {
                 return IGraphTransformer::TStatus::Error;
             }
         }
 
-        TTypeAnnotationNode::TListType rightItemTypes;
+        TVector<const TItemExprType*> rightStructItems;
         if (!EnsureType(*input->Child(2), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
         auto rightInputType = input->Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-        if (!EnsureWideBlockType(input->Child(2)->Pos(), *rightInputType, rightItemTypes, ctx.Expr)) {
+        if (!EnsureBlockStructType(input->Child(2)->Pos(), *rightInputType, rightStructItems, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
-        rightItemTypes.pop_back();
-        auto rightStreamItemType = rightInputType->Cast<TMultiExprType>();
+        auto rightListItemType = rightInputType->Cast<TStructExprType>();
 
-        if (!IsSameAnnotation(*rightStreamItemType, *expectedRightStreamItemType)) {
+        if (!IsSameAnnotation(*rightListItemType, *expectedRightListItemType)) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                TStringBuilder() << "Mismatch between provided right stream item type " << static_cast<const TTypeAnnotationNode&>(*rightStreamItemType)
-                << "and right block storage item type " << static_cast<const TTypeAnnotationNode&>(*expectedRightStreamItemType)));
+                TStringBuilder() << "Mismatch between provided right list item type " << static_cast<const TTypeAnnotationNode&>(*rightListItemType)
+                << "and right block storage item type " << static_cast<const TTypeAnnotationNode&>(*expectedRightListItemType)));
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -1208,69 +1220,78 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto checkKeyColumns = [&](std::unordered_set<ui32>& keyColumns, bool isLeft, const TExprNode& keyColumnsNode, const TMultiExprType* itemType) {
-            if (joinKind == "Cross" && !keyColumnsNode.Children().empty()) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(keyColumnsNode.Pos()), "Specifying key columns is not allowed for cross join"));
-                return false;
-            }
-            for (const auto& keyColumnNode : keyColumnsNode.Children()) {
-                auto position = GetWideBlockFieldPosition(*itemType, keyColumnNode->Content());
-                if (!position) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(keyColumnNode->Pos()), TStringBuilder() << "Unknown " << (isLeft ? "left" : "right") << " key column: " << keyColumnNode->Content()));
-                    return false;
-                }
-                keyColumns.insert(*position);
-            }
-            return true;
-        };
-
-        auto checkKeyDrops = [&](std::unordered_set<ui32>& keyDrops, bool isLeft, const std::unordered_set<ui32>& keyColumns, const TExprNode& keyDropsNode, const TMultiExprType* itemType) {
-            if (joinKind == "Cross" && !keyDropsNode.Children().empty()) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(keyDropsNode.Pos()), "Specifying key drops is not allowed for cross join"));
-                return false;
-            }
-            for (const auto& keyDropNode : keyDropsNode.Children()) {
-                auto position = GetWideBlockFieldPosition(*itemType, keyDropNode->Content());
-                if (!position) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(keyDropNode->Pos()), TStringBuilder() << "Unknown " << (isLeft ? "left" : "right") << " key column: " << keyDropNode->Content()));
-                    return false;
-                }
-                if (!keyColumns.contains(*position)) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(keyDropNode->Pos()), TStringBuilder() << "Attempted to drop " << (isLeft ? "left" : "right") << " non-key column: " << keyDropNode->Content()));
-                    return false;
-                }
-                if (!keyDrops.insert(*position).second) {
-                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(keyDropNode->Pos()), TStringBuilder() << "Duplicated " << (isLeft ? "left" : "right") << " key drop: " << keyDropNode->Content()));
-                    return false;
-                }
-            }
-            return true;
-        };
-
         for (size_t childIdx = 4; childIdx <= 7; childIdx++) {
             if (!EnsureTupleOfAtoms(*input->Child(childIdx), ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
         }
 
+        const auto& leftKeyColumnsNode = *input->Child(4);
+        const auto& leftKeyDropsNode = *input->Child(5);
+        const auto& rightKeyColumnsNode = *input->Child(6);
+        const auto& rightKeyDropsNode = *input->Child(7);
+
+        if (joinKind == "Cross") {
+            if (!leftKeyColumnsNode.Children().empty() || !rightKeyColumnsNode.Children().empty()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Specifying key columns is not allowed for cross join"));
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (!leftKeyDropsNode.Children().empty() || !rightKeyDropsNode.Children().empty()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Specifying key drops is not allowed for cross join"));
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
         std::unordered_set<ui32> leftKeyColumns;
-        if (!checkKeyColumns(leftKeyColumns, true, *input->Child(4), leftStreamItemType)) {
-            return IGraphTransformer::TStatus::Error;
+        for (const auto& keyColumnNode : leftKeyColumnsNode.Children()) {
+            auto position = GetWideBlockFieldPosition(*leftStreamItemType, keyColumnNode->Content());
+            if (!position) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(keyColumnNode->Pos()), TStringBuilder() << "Unknown left key column: " << keyColumnNode->Content()));
+                return IGraphTransformer::TStatus::Error;
+            }
+            leftKeyColumns.insert(*position);
         }
 
         std::unordered_set<ui32> leftKeyDrops;
-        if (!checkKeyDrops(leftKeyDrops, true, leftKeyColumns, *input->Child(5), leftStreamItemType)) {
-            return IGraphTransformer::TStatus::Error;
+        for (const auto& keyDropNode : leftKeyDropsNode.Children()) {
+            auto position = GetWideBlockFieldPosition(*leftStreamItemType, keyDropNode->Content());
+            if (!position) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(keyDropNode->Pos()), TStringBuilder() << "Unknown left key column: " << keyDropNode->Content()));
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (!leftKeyColumns.contains(*position)) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(keyDropNode->Pos()), TStringBuilder() << "Attempted to drop left non-key column: " << keyDropNode->Content()));
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (!leftKeyDrops.insert(*position).second) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(keyDropNode->Pos()), TStringBuilder() << "Duplicated left key drop: " << keyDropNode->Content()));
+                return IGraphTransformer::TStatus::Error;
+            }
         }
 
-        std::unordered_set<ui32> rightKeyColumns;
-        if (!checkKeyColumns(rightKeyColumns, true, *input->Child(6), rightStreamItemType)) {
-            return IGraphTransformer::TStatus::Error;
+        THashSet<TStringBuf> rightKeyColumns;
+        for (const auto& keyColumnNode : rightKeyColumnsNode.Children()) {
+            if (!rightListItemType->FindItem(keyColumnNode->Content())) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(keyColumnNode->Pos()), TStringBuilder() << "Unknown right key column: " << keyColumnNode->Content()));
+                return IGraphTransformer::TStatus::Error;
+            }
+            rightKeyColumns.insert(keyColumnNode->Content());
         }
 
-        std::unordered_set<ui32> rightKeyDrops;
-        if (!checkKeyDrops(rightKeyDrops, false, rightKeyColumns, *input->Child(7), rightStreamItemType)) {
-            return IGraphTransformer::TStatus::Error;
+        THashSet<TStringBuf> rightKeyDrops;
+        for (const auto& keyDropNode : rightKeyDropsNode.Children()) {
+            if (!rightListItemType->FindItem(keyDropNode->Content())) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(keyDropNode->Pos()), TStringBuilder() << "Unknown right key column: " << keyDropNode->Content()));
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (!rightKeyColumns.contains(keyDropNode->Content())) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(keyDropNode->Pos()), TStringBuilder() << "Attempted to drop right non-key column: " << keyDropNode->Content()));
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (!rightKeyDrops.insert(keyDropNode->Content()).second) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(keyDropNode->Pos()), TStringBuilder() << "Duplicated right key drop: " << keyDropNode->Content()));
+                return IGraphTransformer::TStatus::Error;
+            }
         }
 
         if (input->Child(6)->ChildrenSize() != expectedRightKeyColumns.size()) {
@@ -1296,13 +1317,13 @@ namespace NTypeAnnImpl {
         }
 
         if (joinKind != "LeftSemi" && joinKind != "LeftOnly") {
-            for (ui32 pos = 0; pos < rightItemTypes.size(); pos++) {
-                if (rightKeyDrops.contains(pos)) {
+            for (auto item : rightStructItems) {
+                if (rightKeyDrops.contains(item->GetName())) {
                     continue;
                 }
 
-                auto columnType = rightItemTypes[pos];
-                if (joinKind == "Left" && !rightItemTypes[pos]->IsOptionalOrNull()) {
+                auto columnType = item->GetItemType();
+                if (joinKind == "Left" && !columnType->IsOptionalOrNull()) {
                     columnType = ctx.Expr.MakeType<TOptionalExprType>(columnType);
                 }
 

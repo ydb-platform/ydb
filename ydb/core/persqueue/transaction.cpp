@@ -77,7 +77,7 @@ void TDistributedTransaction::InitPartitions(const google::protobuf::RepeatedPtr
     Partitions.clear();
 
     for (auto& o : operations) {
-        if (!o.HasBegin()) {
+        if (!o.HasCommitOffsetsBegin()) {
             HasWriteOperations = true;
         }
 
@@ -185,16 +185,16 @@ void TDistributedTransaction::OnProposeTransaction(const NKikimrPQ::TConfigTrans
             continue;
         }
 
-        if (node->Children.empty()) {
-            for (const auto* r : node->Parents) {
+        if (node->DirectChildren.empty()) {
+            for (const auto* r : node->DirectParents) {
                 if (extractTabletId != r->TabletId) {
                     PredicatesReceived[r->TabletId].SetTabletId(r->TabletId);
                 }
             }
         }
 
-        for (const auto* r : node->Children) {
-            if (r->Children.empty()) {
+        for (const auto* r : node->DirectChildren) {
+            if (r->DirectChildren.empty()) {
                 if (extractTabletId != r->TabletId) {
                     PredicateRecipients[r->TabletId] = false;
                 }
@@ -312,8 +312,13 @@ void TDistributedTransaction::OnReadSetAck(const NKikimrTx::TEvReadSetAck& event
     Y_ABORT_UNLESS(event.HasStep() && (Step == event.GetStep()));
     Y_ABORT_UNLESS(event.HasTxId() && (TxId == event.GetTxId()));
 
-    if (PredicateRecipients.contains(event.GetTabletConsumer())) {
-        PredicateRecipients[event.GetTabletConsumer()] = true;
+    OnReadSetAck(event.GetTabletConsumer());
+}
+
+void TDistributedTransaction::OnReadSetAck(ui64 tabletId)
+{
+    if (PredicateRecipients.contains(tabletId)) {
+        PredicateRecipients[tabletId] = true;
         ++PredicateAcksCount;
 
         PQ_LOG_D("Predicate acks " << PredicateAcksCount << "/" << PredicateRecipients.size());

@@ -1,4 +1,5 @@
 #include "yql_yt_coordinator_proto_helpers.h"
+#include <library/cpp/yson/node/node_io.h>
 
 namespace NYql::NFmr {
 
@@ -69,8 +70,13 @@ NProto::TStartOperationRequest StartOperationRequestToProto(const TStartOperatio
         protoStartOperationRequest.SetIdempotencyKey(*startOperationRequest.IdempotencyKey);
     }
     protoStartOperationRequest.SetNumRetries(startOperationRequest.NumRetries);
-    auto protoClusterConnection = ClusterConnectionToProto(startOperationRequest.ClusterConnection);
-    protoStartOperationRequest.MutableClusterConnection()->Swap(&protoClusterConnection);
+    auto clusterConnections = *protoStartOperationRequest.MutableClusterConnections();
+    for (auto& [tableName, conn]: startOperationRequest.ClusterConnections) {
+        clusterConnections[tableName.Id] = ClusterConnectionToProto(conn);
+    }
+    if (startOperationRequest.FmrOperationSpec) {
+        protoStartOperationRequest.SetFmrOperationSpec(NYT::NodeToYsonString(*startOperationRequest.FmrOperationSpec));
+    }
     return protoStartOperationRequest;
 }
 
@@ -83,7 +89,14 @@ TStartOperationRequest StartOperationRequestFromProto(const NProto::TStartOperat
         startOperationRequest.IdempotencyKey = protoStartOperationRequest.GetIdempotencyKey();
     }
     startOperationRequest.NumRetries = protoStartOperationRequest.GetNumRetries();
-    startOperationRequest.ClusterConnection = ClusterConnectionFromProto(protoStartOperationRequest.GetClusterConnection());
+    std::unordered_map<TFmrTableId, TClusterConnection> startOperationRequestClusterConnections;
+    for (auto& [tableName, conn]: protoStartOperationRequest.GetClusterConnections()) {
+        startOperationRequestClusterConnections[tableName] = ClusterConnectionFromProto(conn);
+    }
+    startOperationRequest.ClusterConnections = startOperationRequestClusterConnections;
+    if (protoStartOperationRequest.HasFmrOperationSpec()) {
+        startOperationRequest.FmrOperationSpec = NYT::NodeFromYsonString(protoStartOperationRequest.GetFmrOperationSpec());
+    }
     return startOperationRequest;
 }
 

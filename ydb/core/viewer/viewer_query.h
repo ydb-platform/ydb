@@ -472,17 +472,7 @@ private:
                     if (valueParser.IsNull()) {
                         jsonOptional = NJson::JSON_NULL;
                     } else {
-                        switch(valueParser.GetKind()) {
-                            case NYdb::TTypeParser::ETypeKind::Primitive:
-                                jsonOptional = ColumnPrimitiveValueToJsonValue(valueParser);
-                                break;
-                            case NYdb::TTypeParser::ETypeKind::Decimal:
-                                jsonOptional = valueParser.GetDecimal().ToString();
-                                break;
-                            default:
-                                jsonOptional = NJson::JSON_UNDEFINED;
-                                break;
-                        }
+                        jsonOptional = ColumnValueToJsonValue(valueParser);
                     }
                     valueParser.CloseOptional();
                     return jsonOptional;
@@ -865,12 +855,13 @@ private:
     }
 
     void StreamJsonResponse(const NJson::TJsonValue& json) {
-        constexpr EFloatToStringMode floatMode = EFloatToStringMode::PREC_NDIGITS;
         TStringStream content;
         NJson::WriteJson(&content, &json, {
-            .FloatToStringMode = floatMode,
+            .DoubleNDigits = Proto2JsonConfig.DoubleNDigits,
+            .FloatNDigits = Proto2JsonConfig.FloatNDigits,
+            .FloatToStringMode = Proto2JsonConfig.FloatToStringMode,
             .ValidateUtf8 = false,
-            .WriteNanAsString = true,
+            .WriteNanAsString = Proto2JsonConfig.WriteNanAsString,
         });
         TStringBuilder data;
         data << "--boundary\r\nContent-Type: application/json\r\nContent-Length: " << content.Size() << "\r\n\r\n" << content.Str() << "\r\n";

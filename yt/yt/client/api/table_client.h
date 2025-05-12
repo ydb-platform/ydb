@@ -141,6 +141,7 @@ struct TAlterTableReplicaOptions
     std::optional<NTransactionClient::EAtomicity> Atomicity;
     std::optional<bool> EnableReplicatedTableTracker;
     std::optional<NYPath::TYPath> ReplicaPath;
+    bool Force = false;
 };
 
 struct TGetTablePivotKeysOptions
@@ -319,6 +320,12 @@ struct TPartitionTablesOptions
 
     //! Whether to return cookies that can be fed to CreateTablePartitionReader.
     bool EnableCookies = false;
+
+    //! COMPAT(apollo1321): remove in 25.2 release.
+    bool UseNewSlicingImplementationInOrderedPool = true;
+
+    //! COMPAT(apollo1321): remove in 25.2 release.
+    bool UseNewSlicingImplementationInUnorderedPool = true;
 };
 
 struct TReadTablePartitionOptions

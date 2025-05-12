@@ -24,6 +24,7 @@ namespace {
 
 static constexpr TDuration SCHEME_CACHE_REQUEST_TIMEOUT = TDuration::Seconds(10);
 NActors::TActorId MainPipeCacheId = NKikimr::MakePipePerNodeCacheID(false);
+NActors::TActorId FollowersPipeCacheId = NKikimr::MakePipePerNodeCacheID(true);
 
 class TKqpStreamLookupActor : public NActors::TActorBootstrapped<TKqpStreamLookupActor>, public NYql::NDq::IDqComputeActorAsyncInput {
 public:
@@ -38,6 +39,8 @@ public:
         , HolderFactory(args.HolderFactory)
         , Snapshot(settings.GetSnapshot().GetStep(), settings.GetSnapshot().GetTxId())
         , AllowInconsistentReads(settings.GetAllowInconsistentReads())
+        , UseFollowers(settings.GetAllowUseFollowers())
+        , PipeCacheId(UseFollowers ? FollowersPipeCacheId : MainPipeCacheId)
         , LockTxId(settings.HasLockTxId() ? settings.GetLockTxId() : TMaybe<ui64>())
         , NodeLockId(settings.HasLockNodeId() ? settings.GetLockNodeId() : TMaybe<ui32>())
         , LockMode(settings.HasLockMode() ? settings.GetLockMode() : TMaybe<NKikimrDataEvents::ELockMode>())
@@ -230,11 +233,11 @@ private:
                 Counters->SentIteratorCancels->Inc();
                 auto cancel = MakeHolder<TEvDataShard::TEvReadCancel>();
                 cancel->Record.SetReadId(id);
-                Send(MainPipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state.ShardId, false));
+                Send(PipeCacheId, new TEvPipeCache::TEvForward(cancel.Release(), state.ShardId, false));
             }
         }
 
-        Send(MainPipeCacheId, new TEvPipeCache::TEvUnlink(0));
+        Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
         TActorBootstrapped<TKqpStreamLookupActor>::PassAway();
 
         LookupActorSpan.End();
@@ -369,6 +372,14 @@ private:
             Locks.push_back(lock);
         }
 
+        if (UseFollowers) {
+            YQL_ENSURE(Locks.empty());
+            if (!record.GetFinished()) {
+                RuntimeError("read from follower returned partial data.", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+                return;
+            }
+        }
+
         if (!Snapshot.IsValid()) {
             Snapshot = IKqpGateway::TKqpSnapshot(record.GetSnapshot().GetStep(), record.GetSnapshot().GetTxId());
         }
@@ -454,7 +465,7 @@ private:
             request->Record.SetMaxRows(defaultSettings.GetMaxRows());
             request->Record.SetMaxBytes(defaultSettings.GetMaxBytes());
 
-            Send(MainPipeCacheId, new TEvPipeCache::TEvForward(request.Release(), read.ShardId, true),
+            Send(PipeCacheId, new TEvPipeCache::TEvForward(request.Release(), read.ShardId, true),
                 IEventHandle::FlagTrackDelivery);
 
             CA_LOG_D("TEvReadAck was sent to shard: " << read.ShardId);
@@ -606,7 +617,7 @@ private:
             << ", lockTxId=" << record.GetLockTxId()
             << ", lockNodeId=" << record.GetLockNodeId());
 
-        Send(MainPipeCacheId, new TEvPipeCache::TEvForward(request.Release(), shardId, true),
+        Send(PipeCacheId, new TEvPipeCache::TEvForward(request.Release(), shardId, true),
             IEventHandle::FlagTrackDelivery, 0, LookupActorSpan.GetTraceId());
 
         read.State = EReadState::Running;
@@ -745,6 +756,8 @@ private:
     const NMiniKQL::THolderFactory& HolderFactory;
     IKqpGateway::TKqpSnapshot Snapshot;
     const bool AllowInconsistentReads;
+    const bool UseFollowers;
+    const TActorId PipeCacheId;
     const TMaybe<ui64> LockTxId;
     const TMaybe<ui32> NodeLockId;
     const TMaybe<NKikimrDataEvents::ELockMode> LockMode;

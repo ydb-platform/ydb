@@ -72,6 +72,7 @@ public:
 
     void Progress(const TActorContext& ctx) override;
     void Shutdown(const TActorContext& ctx) override;
+    void Reset(TActorId& actorId);
 
     void UpdateConfig(const NKikimrReplication::TReplicationConfig&) override;
 

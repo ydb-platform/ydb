@@ -82,11 +82,7 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
 
         if (EPhase::Content == Phase_ || EPhase::All == Phase_) {
             return [&, name, useBlocks](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
-                if (useBlocks) {
-                    YQL_ENSURE(callable.GetInputsCount() == 4, "Expected 4 args");
-                } else {
-                    YQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args");
-                }
+                YQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args");
 
                 const TString cluster = ExecCtx_.Cluster_;
                 const TString tmpFolder = GetTablesTmpFolder(*Settings_);
@@ -331,7 +327,6 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
                     callable.GetType()->GetReturnType());
                 if (useBlocks) {
                     call.Add(PgmBuilder_.NewDataLiteral<NUdf::EDataSlot::String>(uniqueId));
-                    call.Add(callable.GetInput(3));  // orig struct type
                     call.Add(PgmBuilder_.NewDataLiteral(tableList->GetItemsCount()));
                     call.Add(PgmBuilder_.NewDataLiteral<NUdf::EDataSlot::String>(NYT::NodeToYsonString(specNode)));
                     call.Add(PgmBuilder_.NewDataLiteral(ETableContentDeliveryMode::File == deliveryMode)); // use compression

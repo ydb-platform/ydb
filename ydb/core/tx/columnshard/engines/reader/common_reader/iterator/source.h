@@ -114,8 +114,9 @@ public:
     }
 };
 
-class IDataSource: public ICursorEntity, public NArrow::NSSA::IDataSource, public NColumnShard::TMonitoringObjectsCounter<IDataSource> {
+class IDataSource: public ICursorEntity, public NArrow::NSSA::IDataSource {
 private:
+    TAtomic SyncSectionFlag = 1;
     YDB_READONLY(ui64, SourceId, 0);
     YDB_READONLY(ui32, SourceIdx, 0);
     YDB_READONLY(TSnapshot, RecordSnapshotMin, TSnapshot::Zero());
@@ -153,20 +154,37 @@ private:
         const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) = 0;
 
-    NEvLog::TLogsThread Events;
+    std::optional<NEvLog::TLogsThread> Events;
+    std::unique_ptr<TFetchedData> StageData;
 
 protected:
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
-    std::unique_ptr<TFetchedData> StageData;
     std::unique_ptr<TFetchedResult> StageResult;
 
 public:
+    void StartAsyncSection() {
+        AFL_VERIFY(AtomicCas(&SyncSectionFlag, 0, 1));
+    }
+
+    void CheckAsyncSection() {
+        AFL_VERIFY(AtomicGet(SyncSectionFlag) == 0);
+    }
+
+    void StartSyncSection() {
+        AFL_VERIFY(AtomicCas(&SyncSectionFlag, 1, 0));
+    }
+
+    bool IsSyncSection() const {
+        return AtomicGet(SyncSectionFlag) == 1;
+    }
+
     void AddEvent(const TString& evDescription) {
-        Events.AddEvent(evDescription);
+        AFL_VERIFY(!!Events);
+        Events->AddEvent(evDescription);
     }
 
     TString GetEventsReport() const {
-        return Events.DebugString();
+        return Events ? Events->DebugString() : Default<TString>();
     }
 
     TExecutionContext& MutableExecutionContext() {
@@ -212,6 +230,7 @@ public:
         , RecordsCount(recordsCount)
         , ShardingVersionOptional(shardingVersion)
         , HasDeletions(hasDeletions) {
+        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Events.emplace(NEvLog::TLogsThread()));
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, AddEvent("c"));
     }
 
@@ -272,6 +291,10 @@ public:
         return DoStartFetchingColumns(sourcePtr, step, columns);
     }
 
+    void ResetSourceFinishedFlag() {
+        AFL_VERIFY(AtomicCas(&SourceFinishedSafeFlag, 0, 1));
+    }
+
     void OnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<IDataSource>& sourcePtr) {
         AFL_VERIFY(AtomicCas(&SourceFinishedSafeFlag, 1, 0));
         AFL_VERIFY(sourcePtr);
@@ -315,13 +338,29 @@ public:
         return false;
     }
 
-    bool HasStageData() const {
-        return !!StageData;
+    void InitStageData(std::unique_ptr<TFetchedData>&& data) {
+        AFL_VERIFY(!StageData);
+        StageData = std::move(data);
+    }
+
+    std::unique_ptr<TFetchedData> ExtractStageData() {
+        AFL_VERIFY(StageData);
+        auto result = std::move(StageData);
+        StageData.reset();
+        return std::move(result);
+    }
+
+    void ClearStageData() {
+        StageData.reset();
     }
 
     const TFetchedData& GetStageData() const {
         AFL_VERIFY(StageData);
         return *StageData;
+    }
+
+    bool HasStageData() const {
+        return !!StageData;
     }
 
     TFetchedData& MutableStageData() {

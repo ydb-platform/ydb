@@ -428,14 +428,28 @@ struct TMetadataHeader {
         *this = header;
     }
 
-    bool CheckHash() const {
+    bool CheckHash(ui64 *magic) const {
         TPDiskHashCalculator hasher;
+#ifdef DISABLE_PDISK_ENCRYPTION
+	if (magic) {
+            hasher.Hash(magic, sizeof(ui64));
+	}
+#else 
+	Y_UNUSED(magic);
+#endif
         hasher.Hash(this, sizeof(TMetadataHeader) - sizeof(THash));
         return hasher.GetHashResult() == HeaderHash;
     }
 
-    void SetHash() {
+    void SetHash(const ui64 *magic) {
         TPDiskHashCalculator hasher;
+#ifdef DISABLE_PDISK_ENCRYPTION
+	if (magic) {
+            hasher.Hash(magic, sizeof(ui64));
+	}
+#else 
+	Y_UNUSED(magic);
+#endif
         hasher.Hash(this, sizeof(TMetadataHeader) - sizeof(THash));
         HeaderHash = hasher.GetHashResult();
     }
@@ -512,17 +526,17 @@ struct TChunkTrimInfo {
     {}
 
     void SetChunkTrimmed(ui8 idx) {
-        Y_ABORT_UNLESS(idx < ChunksPerRecord);
+        Y_VERIFY(idx < ChunksPerRecord);
         TrimMask |= (1 << idx);
     }
 
     void SetChunkUntrimmed(ui8 idx) {
-        Y_ABORT_UNLESS(idx < ChunksPerRecord);
+        Y_VERIFY(idx < ChunksPerRecord);
         TrimMask &= ~(1 << idx);
     }
 
     bool IsChunkTrimmed(ui8 idx) {
-        Y_ABORT_UNLESS(idx < ChunksPerRecord);
+        Y_VERIFY(idx < ChunksPerRecord);
         return TrimMask & (1 << idx);
     }
 };
@@ -565,6 +579,8 @@ enum EFormatFlags {
     FormatFlagEncryptFormat = 1 << 5,  // Always on, flag is useless
     FormatFlagEncryptData = 1 << 6,  // Always on, flag is useless
     FormatFlagFormatInProgress = 1 << 7,  // Not implemented (Must be OFF for a formatted disk)
+
+    FormatFlagPlainDataChunks = 1 << 8,  // Default is off, means "encrypted", for backward compatibility
 };
 
 struct TDiskFormat {
@@ -611,6 +627,7 @@ struct TDiskFormat {
         isFirst = NText::OutFlag(isFirst, flags & FormatFlagEncryptFormat, "EncryptFormat", str);
         isFirst = NText::OutFlag(isFirst, flags & FormatFlagEncryptData, "EncryptData", str);
         isFirst = NText::OutFlag(isFirst, flags & FormatFlagFormatInProgress, "FormatFlagFormatInProgress", str);
+        isFirst = NText::OutFlag(isFirst, flags & FormatFlagPlainDataChunks, "FormatFlagPlainDataChunks", str);
         NText::OutFlag(isFirst, isFirst, "Unknown", str);
         return str.Str();
     }
@@ -680,10 +697,26 @@ struct TDiskFormat {
         return FormatFlags & FormatFlagFormatInProgress;
     }
 
+    bool IsPlainDataChunks() const {
+        return FormatFlags & FormatFlagPlainDataChunks;
+    }
+
+    size_t GetAppendBlockSize() const {
+        return IsPlainDataChunks() ? SectorSize : SectorPayloadSize();
+    }
+
     void SetFormatInProgress(bool isInProgress) {
         FormatFlags &= ~FormatFlagFormatInProgress;
         if (isInProgress) {
             FormatFlags |= FormatFlagFormatInProgress;
+        }
+    }
+
+    void SetPlainDataChunks(bool plain) {
+        if (plain) {
+            FormatFlags |= FormatFlagPlainDataChunks;
+        } else {
+            FormatFlags &= ~FormatFlagPlainDataChunks;
         }
     }
 
@@ -767,7 +800,7 @@ struct TDiskFormat {
     }
 
     ui64 RoundUpToSectorSize(ui64 size) const { // assuming SectorSize is a power of 2
-        Y_DEBUG_ABORT_UNLESS(IsPowerOf2(SectorSize));
+        Y_VERIFY_DEBUG(IsPowerOf2(SectorSize));
         return (size + SectorSize - 1) & ~ui64(SectorSize - 1);
     }
 
@@ -805,7 +838,7 @@ struct TDiskFormat {
         // Set Hash
         {
             NPDisk::TPDiskHashCalculator hashCalculator;
-            Y_ABORT_UNLESS(DiskFormatSize > sizeof(THash));
+            Y_VERIFY(DiskFormatSize > sizeof(THash));
             ui64 size = DiskFormatSize - sizeof(THash);
             hashCalculator.Hash(this, size);
             Hash = hashCalculator.GetHashResult();
@@ -834,6 +867,7 @@ struct TDiskFormat {
             FormatFlagErasureEncodeNextChunkReference |
             FormatFlagEncryptFormat |
             FormatFlagEncryptData;
+
         Hash = 0;
 
         memset(FormatText, 0, sizeof(FormatText));
@@ -853,8 +887,10 @@ struct TDiskFormat {
             FormatFlagErasureEncodeNextChunkReference |
             FormatFlagEncryptFormat |
             FormatFlagEncryptData;
-        Y_ABORT_UNLESS(format.Version <= Version);
-        Y_ABORT_UNLESS(format.GetUsedSize() <= sizeof(TDiskFormat));
+        SetPlainDataChunks(format.IsPlainDataChunks());
+
+        Y_VERIFY(format.Version <= Version);
+        Y_VERIFY(format.GetUsedSize() <= sizeof(TDiskFormat));
         memcpy(this, &format, format.GetUsedSize());
     }
 
@@ -886,4 +922,3 @@ struct TPDiskFormatBigChunkException : public yexception {
 
 } // NPDisk
 } // NKikimr
-

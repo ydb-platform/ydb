@@ -20,6 +20,10 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
+        return DoCalculateImpl(compCtx).Release();
+    }
+
+    NUdf::TUnboxedValue DoCalculateImpl(TComputationContext& compCtx) const {
         auto value = Optional()->GetValue(compCtx);
         if (value) {
             return value.GetOptionalValue();

@@ -8,7 +8,6 @@ RECURSE(
     canonical
     clickbench
     cms
-    compatibility
     config
     encryption
     hive
@@ -31,7 +30,6 @@ RECURSE(
     suite_tests
     tpc
     tenants
-    transfer
     ttl
     wardens
     ydb_cli

@@ -332,6 +332,9 @@ protected:
         const ERuntimeClusterSelectionMode selectionMode =
             State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
         auto cluster = DeriveClusterFromInput(input, selectionMode);
+        if (!cluster) {
+            return node;
+        }
 
         for (auto handler: aggregate.Handlers()) {
             auto trait = handler.Trait();
@@ -346,12 +349,12 @@ protected:
                     t.FinishHandler(),
                 };
                 for (auto lambda : lambdas) {
-                    if (!IsYtCompleteIsolatedLambda(lambda.Ref(), syncList, cluster, false, selectionMode)) {
+                    if (!IsYtCompleteIsolatedLambda(lambda.Ref(), syncList, *cluster, false, selectionMode)) {
                         return node;
                     }
                 }
             } else if (trait.Ref().IsCallable("AggApply")) {
-                if (!IsYtCompleteIsolatedLambda(*trait.Ref().Child(2), syncList, cluster, false, selectionMode)) {
+                if (!IsYtCompleteIsolatedLambda(*trait.Ref().Child(2), syncList, *cluster, false, selectionMode)) {
                     return node;
                 }
             }

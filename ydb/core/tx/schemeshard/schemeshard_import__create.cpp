@@ -3,7 +3,7 @@
 #include "schemeshard_import.h"
 #include "schemeshard_import_flow_proposals.h"
 #include "schemeshard_import_helpers.h"
-#include "schemeshard_import_scheme_getter.h"
+#include "schemeshard_import_getters.h"
 #include "schemeshard_import_scheme_query_executor.h"
 #include "schemeshard_xxport__helpers.h"
 #include "schemeshard_xxport__tx_base.h"
@@ -65,6 +65,42 @@ bool IsCreatedByQuery(const TItem& item) {
 
 TString GetDatabase(TSchemeShard& ss) {
     return CanonizePath(ss.RootPathElements);
+}
+
+bool ValidateDstPath(const TString& dstPath, TSchemeShard* ss, TString& explain) {
+    const TPath path = TPath::Resolve(dstPath, ss);
+    TPath::TChecker checks = path.Check();
+    checks
+        .IsAtLocalSchemeShard()
+        .HasResolvedPrefix()
+        .FailOnRestrictedCreateInTempZone();
+
+    if (path.IsResolved()) {
+        checks
+            .IsResolved()
+            .IsDeleted();
+    } else {
+        checks
+            .NotEmpty()
+            .NotResolved();
+    }
+
+    if (checks) {
+        checks
+            .IsValidLeafName()
+            .DepthLimit()
+            .PathsLimit();
+
+        if (path.Parent().IsResolved()) {
+            checks.DirChildrenLimit();
+        }
+    }
+
+    if (!checks) {
+        explain = checks.GetError();
+        return false;
+    }
+    return true;
 }
 
 }
@@ -141,6 +177,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         }
 
         TImportInfo::TPtr importInfo = nullptr;
+        TImportInfo::EState initialState = TImportInfo::EState::Waiting;
 
         switch (request.GetRequest().GetSettingsCase()) {
         case NKikimrImport::TCreateImportRequest::kImportFromS3Settings:
@@ -148,6 +185,10 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 auto settings = request.GetRequest().GetImportFromS3Settings();
                 if (!settings.scheme()) {
                     settings.set_scheme(Ydb::Import::ImportFromS3Settings::HTTPS);
+                }
+
+                if (!settings.source_prefix().empty() && AppData()->FeatureFlags.GetEnableEncryptedExport()) {
+                    initialState = TImportInfo::EState::DownloadExportMetadata;
                 }
 
                 importInfo = new TImportInfo(id, uid, TImportInfo::EKind::S3, settings, domainPath.Base()->PathId, request.GetPeerName());
@@ -172,7 +213,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistCreateImport(db, importInfo);
 
-        importInfo->State = TImportInfo::EState::Waiting;
+        importInfo->State = initialState;
         importInfo->StartTime = TAppData::TimeProvider->Now();
         Self->PersistImportState(db, importInfo);
 
@@ -232,42 +273,13 @@ private:
                 return false;
             }
 
-            const TPath path = TPath::Resolve(dstPath, Self);
-            {
-                TPath::TChecker checks = path.Check();
-                checks
-                    .IsAtLocalSchemeShard()
-                    .HasResolvedPrefix()
-                    .FailOnRestrictedCreateInTempZone();
-
-                if (path.IsResolved()) {
-                    checks
-                        .IsResolved()
-                        .IsDeleted();
-                } else {
-                    checks
-                        .NotEmpty()
-                        .NotResolved();
-                }
-
-                if (checks) {
-                    checks
-                        .IsValidLeafName()
-                        .DepthLimit()
-                        .PathsLimit();
-
-                    if (path.Parent().IsResolved()) {
-                        checks.DirChildrenLimit();
-                    }
-                }
-
-                if (!checks) {
-                    explain = checks.GetError();
-                    return false;
-                }
+            if (!ValidateDstPath(dstPath, Self, explain)) {
+                return false;
             }
 
-            importInfo->Items.emplace_back(dstPath);
+            auto& item = importInfo->Items.emplace_back(dstPath);
+            item.SrcPrefix = settings.items(itemIdx).source_prefix();
+            item.SrcPath = settings.items(itemIdx).source_path();
         }
 
         return true;
@@ -284,6 +296,7 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     ui64 Id;
     TMaybe<ui32> ItemIdx;
     TEvPrivate::TEvImportSchemeReady::TPtr SchemeResult = nullptr;
+    TEvPrivate::TEvImportSchemaMappingReady::TPtr SchemaMappingResult = nullptr;
     TEvPrivate::TEvImportSchemeQueryResult::TPtr SchemeQueryResult = nullptr;
     TEvTxAllocatorClient::TEvAllocateResult::TPtr AllocateResult = nullptr;
     TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult = nullptr;
@@ -300,6 +313,13 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     explicit TTxProgress(TSelf* self, TEvPrivate::TEvImportSchemeReady::TPtr& ev)
         : TXxport::TTxBase(self)
         , SchemeResult(ev)
+    {
+    }
+
+    explicit TTxProgress(TSelf* self, TEvPrivate::TEvImportSchemaMappingReady::TPtr& ev)
+        : TXxport::TTxBase(self)
+        , Id(ev->Get()->ImportId)
+        , SchemaMappingResult(ev)
     {
     }
 
@@ -342,6 +362,8 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
 
         if (SchemeResult) {
             OnSchemeResult(txc, ctx);
+        } else if (SchemaMappingResult) {
+            OnSchemaMappingResult(txc, ctx);
         } else if (SchemeQueryResult) {
             OnSchemeQueryPreparation(txc, ctx);
         } else if (AllocateResult) {
@@ -372,8 +394,16 @@ private:
             << ": info# " << importInfo->ToString()
             << ", item# " << item.ToString(itemIdx));
 
-        item.SchemeGetter = ctx.RegisterWithSameMailbox(CreateSchemeGetter(Self->SelfId(), importInfo, itemIdx));
+        item.SchemeGetter = ctx.RegisterWithSameMailbox(CreateSchemeGetter(Self->SelfId(), importInfo, itemIdx, item.ExportItemIV));
         Self->RunningImportSchemeGetters.emplace(item.SchemeGetter);
+    }
+
+    void GetSchemaMapping(TImportInfo::TPtr importInfo, const TActorContext& ctx) {
+        LOG_I("TImport::TTxProgress: Download schema mapping"
+            << ": info# " << importInfo->ToString());
+
+        importInfo->SchemaMappingGetter = ctx.RegisterWithSameMailbox(CreateSchemaMappingGetter(Self->SelfId(), importInfo));
+        Self->RunningImportSchemeGetters.emplace(importInfo->SchemaMappingGetter);
     }
 
     void CreateTable(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
@@ -685,14 +715,26 @@ private:
     }
 
     void Cancel(TImportInfo::TPtr importInfo, ui32 itemIdx, TStringBuf marker) {
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        const auto& item = importInfo->Items.at(itemIdx);
+        const TItem* item = nullptr;
+        if (itemIdx != ui32(-1)) {
+            Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+            item = &importInfo->Items.at(itemIdx);
+        }
 
+        TStringBuilder itemLogStr;
+        if (item) {
+            itemLogStr << ", item# " << item->ToString(itemIdx);
+        }
         LOG_N("TImport::TTxProgress: " << marker << ", cancelling"
             << ", info# " << importInfo->ToString()
-            << ", item# " << item.ToString(itemIdx));
+            << itemLogStr);
 
         importInfo->State = EState::Cancelled;
+
+        if (auto schemaMappingGetter = std::exchange(importInfo->SchemaMappingGetter, {})) {
+            Send(schemaMappingGetter, new TEvents::TEvPoisonPill());
+            Self->RunningImportSchemeGetters.erase(schemaMappingGetter);
+        }
 
         for (ui32 i : xrange(importInfo->Items.size())) {
             KillChildActors(importInfo->Items[i]);
@@ -720,14 +762,16 @@ private:
     }
 
     void CancelAndPersist(NIceDb::TNiceDb& db, TImportInfo::TPtr importInfo, ui32 itemIdx, TStringBuf itemIssue, TStringBuf marker) {
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        auto& item = importInfo->Items[itemIdx];
+        if (itemIdx != ui32(-1)) {
+            Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+            auto& item = importInfo->Items[itemIdx];
 
-        item.Issue = itemIssue;
-        PersistImportItemState(db, importInfo, itemIdx);
+            item.Issue = itemIssue;
+            PersistImportItemState(db, importInfo, itemIdx);
 
-        if (importInfo->State != EState::Waiting) {
-            return;
+            if (importInfo->State != EState::Waiting) {
+                return;
+            }
         }
 
         Cancel(importInfo, itemIdx, marker);
@@ -801,11 +845,20 @@ private:
             << ": id# " << Id
             << ", itemIdx# " << ItemIdx);
 
-        if (ItemIdx) {
-            Resume(importInfo, *ItemIdx, txc, ctx);
-        } else {
-            for (ui32 itemIdx : xrange(importInfo->Items.size())) {
-                Resume(importInfo, itemIdx, txc, ctx);
+        switch (importInfo->State) {
+            case EState::DownloadExportMetadata: {
+                GetSchemaMapping(importInfo, ctx);
+                break;
+            }
+            default: {
+                if (ItemIdx) {
+                    Resume(importInfo, *ItemIdx, txc, ctx);
+                } else {
+                    for (ui32 itemIdx : xrange(importInfo->Items.size())) {
+                        Resume(importInfo, itemIdx, txc, ctx);
+                    }
+                }
+                break;
             }
         }
     }
@@ -943,7 +996,7 @@ private:
             // Send the creation query to KQP to prepare.
             const auto database = GetDatabase(*Self);
             const TString source = TStringBuilder()
-                << importInfo->Settings.items(msg.ItemIdx).source_prefix() << NYdb::NDump::NFiles::CreateView().FileName;
+                << importInfo->GetItemSrcPrefix(msg.ItemIdx) << NYdb::NDump::NFiles::CreateView().FileName;
 
             NYql::TIssues issues;
             if (!NYdb::NDump::RewriteCreateViewQuery(item.CreationQuery, database, true, item.DstPathName, issues)) {
@@ -963,6 +1016,110 @@ private:
         if (!IsCreatedByQuery(item)) {
             AllocateTxId(importInfo, msg.ItemIdx);
         }
+    }
+
+    void OnSchemaMappingResult(TTransactionContext& txc, const TActorContext& ctx) {
+        Y_ABORT_UNLESS(SchemaMappingResult);
+
+        const auto& msg = *SchemaMappingResult->Get();
+
+        LOG_D("TImport::TTxProgress: OnSchemaMappingResult"
+            << ": id# " << msg.ImportId
+            << ", success# " << msg.Success
+        );
+
+        if (!Self->Imports.contains(msg.ImportId)) {
+            LOG_E("TImport::TTxProgress: OnSchemaMappingResult received unknown id"
+                << ": id# " << msg.ImportId);
+            return;
+        }
+
+        TImportInfo::TPtr importInfo = Self->Imports.at(msg.ImportId);
+
+        NIceDb::TNiceDb db(txc.DB);
+
+        Self->RunningImportSchemeGetters.erase(std::exchange(importInfo->SchemaMappingGetter, {}));
+
+        if (!msg.Success) {
+            return CancelAndPersist(db, importInfo, -1, {}, TStringBuilder() << "cannot get schema mapping: " << msg.Error);
+        }
+
+        if (!importInfo->SchemaMapping->Items.empty()) {
+            if (importInfo->Settings.has_encryption_settings() != importInfo->SchemaMapping->Items[0].IV.Defined()) {
+                return CancelAndPersist(db, importInfo, -1, {}, "incorrect schema mapping");
+            }
+        }
+
+        // Path in database for import
+        TString dstRoot;
+        if (importInfo->Settings.destination_path().empty()) {
+            dstRoot = CanonizePath(Self->RootPathElements);
+        } else {
+            dstRoot = CanonizePath(importInfo->Settings.destination_path());
+        }
+        TString sourcePrefix = importInfo->Settings.source_prefix();
+        if (sourcePrefix && sourcePrefix.back() != '/') {
+            sourcePrefix.push_back('/');
+        }
+        auto combineDstPath = [&](const TString& path) -> TString {
+            TString objectPath = CanonizePath(path);
+            if (objectPath.size() > dstRoot.size() && objectPath.StartsWith(dstRoot) && objectPath[dstRoot.size()] == '/') {
+                return objectPath;
+            } else {
+                return dstRoot + objectPath;
+            }
+        };
+        auto init = [&](const NBackup::TSchemaMapping::TItem& schemaMappingItem, NSchemeShard::TImportInfo::TItem& item) {
+            TStringBuf exportPrefix(schemaMappingItem.ExportPrefix);
+            exportPrefix.SkipPrefix("/");
+            item.SrcPrefix = TStringBuilder() << sourcePrefix << exportPrefix;
+            item.SrcPath = schemaMappingItem.ObjectPath;
+            item.ExportItemIV = schemaMappingItem.IV;
+        };
+        if (importInfo->Items.empty()) { // Fill the whole list from schema mapping
+            for (const auto& schemaMappingItem : importInfo->SchemaMapping->Items) {
+                TString dstPath = combineDstPath(schemaMappingItem.ObjectPath);
+                TString explain;
+                if (!ValidateDstPath(dstPath, Self, explain)) {
+                    return CancelAndPersist(db, importInfo, -1, {}, TStringBuilder() << "cannot validate mapping: " << explain);
+                }
+
+                auto& item = importInfo->Items.emplace_back(dstPath);
+                init(schemaMappingItem, item);
+            }
+        } else { // Take existing items from items list
+            using TMapping = THashMap<TString, size_t>;
+            TMapping schemaMappingPrefixIndex;
+            TMapping schemaMappingObjectPathIndex;
+            for (size_t i = 0; i < importInfo->SchemaMapping->Items.size(); ++i) {
+                const auto& schemaMappingItem = importInfo->SchemaMapping->Items[i];
+                schemaMappingPrefixIndex[schemaMappingItem.ExportPrefix] = i;
+                schemaMappingObjectPathIndex[CanonizePath(schemaMappingItem.ObjectPath)] = i;
+            }
+            for (auto& item : importInfo->Items) {
+                TString dstPath = CanonizePath(item.DstPathName);
+                TMapping::iterator mappingIt;
+                if (item.SrcPrefix) {
+                    mappingIt = schemaMappingPrefixIndex.find(item.SrcPrefix);
+                    if (mappingIt == schemaMappingPrefixIndex.end()) {
+                        return CancelAndPersist(db, importInfo, -1, {}, TStringBuilder() << "cannot find prefix \"" << item.SrcPrefix << "\" in schema mapping");
+                    }
+                } else if (item.SrcPath) {
+                    mappingIt = schemaMappingObjectPathIndex.find(CanonizePath(item.SrcPath));
+                    if (mappingIt == schemaMappingObjectPathIndex.end()) {
+                        return CancelAndPersist(db, importInfo, -1, {}, TStringBuilder() << "cannot find source path \"" << item.SrcPath << "\" in schema mapping");
+                    }
+                }
+
+                const auto& schemaMappingItem = importInfo->SchemaMapping->Items[mappingIt->second];
+                init(schemaMappingItem, item);
+            }
+        }
+
+        importInfo->State = EState::Waiting;
+        PersistImportState(db, importInfo);
+        PersistSchemaMappingImportFields(db, importInfo);
+        Resume(txc, ctx);
     }
 
     void OnSchemeQueryPreparation(TTransactionContext& txc, const TActorContext& ctx) {
@@ -1405,6 +1562,10 @@ ITransaction* TSchemeShard::CreateTxProgressImport(ui64 id, const TMaybe<ui32>& 
 }
 
 ITransaction* TSchemeShard::CreateTxProgressImport(TEvPrivate::TEvImportSchemeReady::TPtr& ev) {
+    return new TImport::TTxProgress(this, ev);
+}
+
+ITransaction* TSchemeShard::CreateTxProgressImport(TEvPrivate::TEvImportSchemaMappingReady::TPtr& ev) {
     return new TImport::TTxProgress(this, ev);
 }
 

@@ -45,7 +45,7 @@ private:
     std::unique_ptr<NYdbGrpc::TGRpcServer> GRpcServer;
 
     bool Initialize_ = false;
-    std::string Database, Endpoint, Token, CA;
+    std::string Database, Endpoint, Token, CA, Folder;
     ui16 ListeningPort = 2379U;
     std::string Root, Cert, Key;
     std::string ImportFrom_, ImportPrefix_;

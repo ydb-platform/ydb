@@ -9,6 +9,7 @@ To remove the restriction two tasks must be done:
 And other todo's:
 - Add merics.
 - Add logging.
-- Implement retries on "Transaction lock invslideted" error.
+- Add retry policies.
 - Implement compaction with control of a requested revision.
 - Implement the watches for ranges. (Now the watches work only with a single key or a prefix.)
+- Add unit tests for watches.

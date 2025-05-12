@@ -3,12 +3,27 @@
 
 #include <yql/essentials/core/yql_type_annotation.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
+
+#include <util/string/builder.h>
 
 namespace NYql {
 
 using namespace NNodes;
+
+TNodeHashCalculator::TNodeHashCalculator(const TTypeAnnotationContext& types, std::unordered_map<ui64, TString>& nodeHash, const TString& salt)
+    : Types(types)
+    , NodeHash(nodeHash)
+    , FullSalt(TStringBuilder() << salt << '|' << ToString(types.LangVer))
+{
+}
+
+TString TNodeHashCalculator::GetHash(const TExprNode& node) const {
+    TArgIndex argIndex;
+    return GetHashImpl(node, argIndex, 0);
+}
 
 void TNodeHashCalculator::UpdateFileHash(THashBuilder& builder, TStringBuf alias) const {
     auto block = Types.UserDataStorage->FindUserDataBlock(alias);
@@ -48,7 +63,7 @@ TString TNodeHashCalculator::GetHashImpl(const TExprNode& node, TArgIndex& argIn
     TString myHash;
     ui32 typeNum = node.Type();
     THashBuilder builder;
-    builder << Salt << typeNum;
+    builder << FullSalt << typeNum;
     switch (node.Type()) {
     case TExprNode::List: {
         if (!UpdateChildrenHash(builder, node, argIndex, frameLevel)) {
@@ -81,10 +96,34 @@ TString TNodeHashCalculator::GetHashImpl(const TExprNode& node, TArgIndex& argIn
                     isHashable = false;
                 }
                 else {
-                    if (TCoUdf::Match(&node) && node.ChildrenSize() > TCoUdf::idx_FileAlias && !node.Child(TCoUdf::idx_FileAlias)->Content().empty()) {
-                        // an udf from imported file, use hash of file
-                        auto alias = node.Child(TCoUdf::idx_FileAlias)->Content();
-                        UpdateFileHash(builder, alias);
+                    if (TCoUdf::Match(&node)) {
+                        if (node.ChildrenSize() > TCoUdf::idx_FileAlias && !node.Child(TCoUdf::idx_FileAlias)->Content().empty()) {
+                            // an udf from imported file, use hash of file
+                            auto alias = node.Child(TCoUdf::idx_FileAlias)->Content();
+                            UpdateFileHash(builder, alias);
+                        } else {
+                            // preinstalled
+                            TStringBuf moduleName, funcName;
+                            YQL_ENSURE(SplitUdfName(node.Head().Content(), moduleName, funcName));
+                            const auto res = Types.UdfResolver->GetSystemModulePath(moduleName);
+                            YQL_ENSURE(res, "Expected either file alias or system module");
+                            builder << moduleName << res->Md5;
+                        }
+                    } else if (TCoScriptUdf::Match(&node)) {
+                        if (node.ChildrenSize() > TCoScriptUdf::idx_FileAlias && !node.Child(TCoScriptUdf::idx_FileAlias)->Content().empty()) {
+                            // an udf from imported file, use hash of file
+                            auto alias = node.Child(TCoScriptUdf::idx_FileAlias)->Content();
+                            UpdateFileHash(builder, alias);
+                        } else {
+                            auto moduleName = node.Head().Content();
+                            auto scriptType = NKikimr::NMiniKQL::CanonizeScriptType(NKikimr::NMiniKQL::ScriptTypeFromStr(moduleName));
+                            if (!NKikimr::NMiniKQL::IsCustomPython(scriptType)) {
+                                moduleName = NKikimr::NMiniKQL::ScriptTypeAsStr(scriptType);
+                            }
+                            const auto res = Types.UdfResolver->GetSystemModulePath(moduleName);
+                            YQL_ENSURE(res, "Expected either file alias or system module");
+                            builder << moduleName << res->Md5;
+                        }
                     } else if (node.Content() == "FilePath" || node.Content() == "FileContent") {
                         auto alias = node.Child(0)->Content();
                         UpdateFileHash(builder, alias);

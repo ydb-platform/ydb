@@ -65,7 +65,8 @@ struct TKqpExecuterEvents {
         EvProgress,
         EvStreamDataAck,
         EvTableResolveStatus,
-        EvShardsResolveStatus
+        EvShardsResolveStatus,
+        EvDelayedExecution
     };
 };
 
@@ -94,6 +95,7 @@ struct TKqpComputeEvents {
         EvScanInitActor,
         EvRemoteScanData,
         EvRemoteScanDataAck,
+        EvScanPing,
     };
 
     static_assert(Unused0 == EventSpaceBegin(TKikimrEvents::ES_KQP) + 200);

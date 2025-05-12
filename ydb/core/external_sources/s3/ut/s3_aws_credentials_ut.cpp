@@ -333,6 +333,22 @@ Y_UNIT_TEST_SUITE(S3AwsCredentials) {
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetUtf8(), "2");
             UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(1).GetUtf8(), "hello world");
         }
+
+        {
+            auto scriptExecutionOperation = db.ExecuteScript(fmt::format(R"(
+                SELECT * FROM `{external_source}`.`{path}/` WITH (
+                    format="csv_with_names",
+                    `with_infer`="true",
+                    `data.datetime.format`="%Y-%m-%dT%H-%M"
+                )
+            )", "external_source"_a = externalDataSourceName, "path"_a = path)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+            UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
+
+            NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+            UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Failed, readyOp.Status().GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(readyOp.Status().GetIssues().ToString(), "parameter is not supported with type inference: data.datetime.format", readyOp.Status().GetIssues().ToString());
+        }
     }
 }
 

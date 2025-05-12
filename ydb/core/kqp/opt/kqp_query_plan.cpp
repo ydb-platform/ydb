@@ -65,13 +65,12 @@ std::string RemoveForbiddenChars(std::string s) {
     return NYql::IsUtf8(s)? s: "Non-UTF8 string";
 }
 
-struct TTableRead {
+struct TTableRead: public NYql::TSortingOperator<NYql::ERequestSorting::ASC> {
     EPlanTableReadType Type = EPlanTableReadType::Unspecified;
     TVector<TString> LookupBy;
     TVector<TString> ScanBy;
     TVector<TString> Columns;
     TMaybe<TString> Limit;
-    bool Reverse = false;
 };
 
 struct TTableWrite {
@@ -97,13 +96,15 @@ struct TExprScope {
 };
 
 struct TSerializerCtx {
-    TSerializerCtx(TExprContext& exprCtx, const TString& cluster,
+    TSerializerCtx(TExprContext& exprCtx, const TString& database,
+        const TString& cluster,
         const TIntrusivePtr<NYql::TKikimrTablesData> tablesData,
         const TKikimrConfiguration::TPtr config, ui32 txCount,
         TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults,
         TTypeAnnotationContext& typeCtx,
         TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx)
         : ExprCtx(exprCtx)
+        , Database(database)
         , Cluster(cluster)
         , TablesData(tablesData)
         , Config(config)
@@ -121,6 +122,7 @@ struct TSerializerCtx {
     ui32 PlanNodeId = 0;
 
     const TExprContext& ExprCtx;
+    const TString Database;
     const TString& Cluster;
     const TIntrusivePtr<NYql::TKikimrTablesData> TablesData;
     const TKikimrConfiguration::TPtr Config;
@@ -314,7 +316,7 @@ private:
         TMaybe<TString> CteRefName;
         TMap<TString, NJson::TJsonValue> NodeInfo;
         TVector<TOperator> Operators;
-        THashSet<ui32> Plans;
+        TSet<ui32> Plans;
         const NKqpProto::TKqpPhyStage* StageProto;
         TMap<TString, TString> OptEstimates;
     };
@@ -345,7 +347,7 @@ private:
 
         for (const auto& [key, value] : planNode.NodeInfo) {
             writer.WriteKey(key);
-            writer.WriteJsonValue(&value, true);
+            writer.WriteJsonValue(&value, true, PREC_NDIGITS, 17);
         }
 
         if (!planNode.Operators.empty()) {
@@ -356,7 +358,7 @@ private:
                 writer.BeginObject();
                 for (const auto& [key, value] : op.Properties) {
                     writer.WriteKey(key);
-                    writer.WriteJsonValue(&value, true);
+                    writer.WriteJsonValue(&value, true, PREC_NDIGITS, 17);
                 }
 
                 writer.WriteKey("Inputs");
@@ -814,6 +816,7 @@ private:
         if (dataSinkCategory == NYql::KqpTableSinkName) {
             auto settings = sink.Settings().Cast<TKqpTableSinkSettings>();
 
+            TString tablePath;
             TTableWrite writeInfo;
             if (settings.Mode().StringValue() == "replace") {
                 op.Properties["Name"] = "Replace";
@@ -830,24 +833,44 @@ private:
             } else if (settings.Mode().StringValue() == "update") {
                 op.Properties["Name"] = "Update";
                 writeInfo.Type = EPlanTableWriteType::MultiUpdate;
+            } else if (settings.Mode().StringValue() == "fill_table") {
+                op.Properties["Name"] = "FillTable";
+                writeInfo.Type = EPlanTableWriteType::MultiReplace;
             } else {
                 YQL_ENSURE(false, "Unsupported sink mode");
             }
 
-            const auto tablePath = settings.Table().Path().StringValue();
-            const auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, tablePath);
-            op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : tablePath;
-            op.Properties["Path"] = tablePath;
+            if (settings.Mode().StringValue() != "fill_table") {
+                tablePath = settings.Table().Path().StringValue();
+                const auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, tablePath);
+                op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : tablePath;
+                op.Properties["Path"] = tablePath;
+            } else {
+                const auto originalPathNode = GetSetting(settings.Settings().Ref(), "OriginalPath");
+                AFL_ENSURE(originalPathNode);
+                tablePath = TCoNameValueTuple(originalPathNode).Value().Cast<TCoAtom>().StringValue();
+                op.Properties["Path"] = tablePath;
 
-            const auto& tupleType = stage.Ref().GetTypeAnn()->Cast<TTupleExprType>();
-            YQL_ENSURE(tupleType);
-            YQL_ENSURE(tupleType->GetSize() == 1);
-            const auto& listType = tupleType->GetItems()[0]->Cast<TListExprType>();
-            YQL_ENSURE(listType);
-            const auto& structType = listType->GetItemType()->Cast<TStructExprType>();
-            YQL_ENSURE(structType);
-            for (const auto& item : structType->GetItems()) {
-                writeInfo.Columns.push_back(TString(item->GetName()));
+                TString error;
+                std::pair<TString, TString> pathPair;
+                if (NKikimr::TrySplitPathByDb(tablePath, SerializerCtx.Database, pathPair, error)) {
+                    op.Properties["Table"]= pathPair.second;
+                } else {
+                    op.Properties["Table"] = tablePath;
+                }
+            }
+
+            if (writeInfo.Type != EPlanTableWriteType::MultiErase) {
+                const auto& tupleType = stage.Ref().GetTypeAnn()->Cast<TTupleExprType>();
+                YQL_ENSURE(tupleType);
+                YQL_ENSURE(tupleType->GetSize() == 1);
+                const auto& listType = tupleType->GetItems()[0]->Cast<TListExprType>();
+                YQL_ENSURE(listType);
+                const auto& structType = listType->GetItemType()->Cast<TStructExprType>();
+                YQL_ENSURE(structType);
+                for (const auto& item : structType->GetItems()) {
+                    writeInfo.Columns.push_back(TString(item->GetName()));
+                }
             }
 
             SerializerCtx.Tables[tablePath].Writes.push_back(writeInfo);
@@ -1037,6 +1060,8 @@ private:
             return {CurrentArgContext.AddArg(node.Get())};
         } else if (auto maybeCrossJoin = TMaybeNode<TDqPhyCrossJoin>(node)) {
             operatorId = Visit(maybeCrossJoin.Cast(), planNode);
+        } else if (auto maybeCombineByKey = TMaybeNode<TCoCombineByKey>(node)) {
+            operatorId = Visit(maybeCombineByKey.Cast(), planNode);
         }
 
         TVector<std::variant<ui32, TArgContext>> inputIds;
@@ -1351,6 +1376,28 @@ private:
             op.Properties["ToFlow"] = *planNode.CteRefName;
         } else {
             auto inputs = Visit(toflow.Input().Ptr(), planNode);
+            if (inputs.size() == 1) {
+                return inputs[0];
+            } else {
+                return TMaybe<std::variant<ui32, TArgContext>> ();
+            }
+        }
+
+        return AddOperator(planNode, "ConstantExpr", std::move(op));
+    }
+
+    TMaybe<std::variant<ui32, TArgContext>> Visit(const TCoCombineByKey& combineByKey, TQueryPlanNode& planNode) {
+        const auto combineByKeyValue = NPlanUtils::PrettyExprStr(combineByKey.Input());
+
+        TOperator op;
+        op.Properties["Name"] = "CombineByKey";
+
+        if (auto maybeResultBinding = ContainResultBinding(combineByKeyValue)) {
+            auto [txId, resId] = *maybeResultBinding;
+            planNode.CteRefName = TStringBuilder() << "precompute_" << txId << "_" << resId;
+            op.Properties["CombineByKey"] = *planNode.CteRefName;
+        } else {
+            auto inputs = Visit(combineByKey.Input().Ptr(), planNode);
             if (inputs.size() == 1) {
                 return inputs[0];
             } else {
@@ -1912,9 +1959,11 @@ private:
             readInfo.Limit = limit;
             op.Properties["ReadLimit"] = limit;
         }
-        if (settings.Reverse) {
-            readInfo.Reverse = true;
+        readInfo.SetSorting(settings.GetSorting());
+        if (settings.GetSorting() == ERequestSorting::DESC) {
             op.Properties["Reverse"] = true;
+        } else if (settings.GetSorting() == ERequestSorting::ASC) {
+            op.Properties["Reverse"] = false;
         }
 
         if (settings.SequentialInFlight) {
@@ -2004,7 +2053,7 @@ void WriteCommonTablesInfo(NJsonWriter::TBuf& writer, TMap<TString, TTableInfo>&
                 if (read.Limit) {
                     writer.WriteKey("limit").WriteString(*read.Limit);
                 }
-                if (read.Reverse) {
+                if (read.IsReverse()) {
                     writer.WriteKey("reverse").WriteBool(true);
                 }
 
@@ -2310,11 +2359,14 @@ struct TQueryPlanReconstructor {
             op.GetMapSafe().erase("Inputs");
         }
 
-        if (op.GetMapSafe().contains("Input")
+        if (
+            op.GetMapSafe().contains("Input")
             || op.GetMapSafe().contains("ToFlow")
             || op.GetMapSafe().contains("Member")
             || op.GetMapSafe().contains("AssumeSorted")
-            || op.GetMapSafe().contains("Iterator")) {
+            || op.GetMapSafe().contains("Iterator")
+            || op.GetMapSafe().contains("CombineByKey")
+        ) {
 
             TString maybePrecompute = "";
             if (op.GetMapSafe().contains("Input")) {
@@ -2327,6 +2379,8 @@ struct TQueryPlanReconstructor {
                 maybePrecompute = op.GetMapSafe().at("AssumeSorted").GetStringSafe();
             } else if (op.GetMapSafe().contains("Iterator")) {
                 maybePrecompute = op.GetMapSafe().at("Iterator").GetStringSafe();
+            } else if (op.GetMapSafe().contains("CombineByKey")) {
+                maybePrecompute = op.GetMapSafe().at("CombineByKey").GetStringSafe();
             }
 
             if (Precomputes.contains(maybePrecompute) && planInputs.empty()) {
@@ -2520,7 +2574,8 @@ NJson::TJsonValue SimplifyQueryPlan(NJson::TJsonValue& plan) {
         "PartitionByKey",
         "ToFlow",
         "Member",
-        "AssumeSorted"
+        "AssumeSorted",
+        "CombineByKey"
     };
 
     THashMap<int, NJson::TJsonValue> planIndex;
@@ -2576,7 +2631,7 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NO
         NJson::ReadJsonTree(commonPlanInfo, &commonPlanJson, true);
 
         writer.WriteKey("tables");
-        writer.WriteJsonValue(&commonPlanJson);
+        writer.WriteJsonValue(&commonPlanJson, false, PREC_NDIGITS, 17);
     }
 
     writer.WriteKey("Plan");
@@ -2589,7 +2644,7 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NO
         NJson::ReadJsonTree(queryStats, &queryStatsJson, true);
 
         writer.WriteKey("Stats");
-        writer.WriteJsonValue(&queryStatsJson);
+        writer.WriteJsonValue(&queryStatsJson, false, PREC_NDIGITS, 17);
     }
 
     writer.WriteKey("Plans");
@@ -2612,7 +2667,7 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NO
 
         for (auto& subplan : txPlanJson.GetMapSafe().at("Plans").GetArraySafe()) {
             ModifyPlan(subplan, removeStageGuid);
-            writer.WriteJsonValue(&subplan, true);
+            writer.WriteJsonValue(&subplan, true, PREC_NDIGITS, 17);
         }
     }
 
@@ -2629,11 +2684,11 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NO
 // TODO(sk): check prepared statements params in read ranges
 // TODO(sk): check params from correlated subqueries // lookup join
 void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQuery& query,
-    TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, TExprContext& ctx, const TString& cluster,
-    const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TKikimrConfiguration::TPtr config,
+    TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, TExprContext& ctx, const TString& database,
+    const TString& cluster, const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TKikimrConfiguration::TPtr config,
     TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx)
 {
-    TSerializerCtx serializerCtx(ctx, cluster, tablesData, config, query.Transactions().Size(), std::move(pureTxResults), typeCtx, optCtx);
+    TSerializerCtx serializerCtx(ctx, database, cluster, tablesData, config, query.Transactions().Size(), std::move(pureTxResults), typeCtx, optCtx);
 
     /* bindingName -> stage */
     auto collectBindings = [&serializerCtx, &query] (auto id, const auto& phase) {
@@ -2890,6 +2945,9 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 stats["PhysicalStageId"] = (*stat)->GetStageId();
                 stats["Tasks"] = (*stat)->GetTotalTasksCount();
                 stats["FinishedTasks"] = (*stat)->GetFinishedTasksCount();
+                if (auto updateTimeUs = (*stat)->GetUpdateTimeMs(); updateTimeUs) {
+                    stats["UpdateTimeMs"] = updateTimeUs;
+                }
 
                 stats["StageDurationUs"] = (*stat)->GetStageDurationUs();
 
@@ -3131,7 +3189,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
     ModifyPlan(root, addStatsToPlanNode);
 
     NJsonWriter::TBuf txWriter;
-    txWriter.WriteJsonValue(&root, true);
+    txWriter.WriteJsonValue(&root, true, PREC_NDIGITS, 17);
     auto resultPlan = txWriter.Str();
     return AddSimplifiedPlan(resultPlan, optCtx, true);
 }
@@ -3199,14 +3257,14 @@ TString SerializeScriptPlan(const TVector<const TString>& queryPlans) {
         writer.BeginObject();
         if (auto tableAccesses = planMap.FindPtr("tables")) {
             writer.WriteKey("tables");
-            writer.WriteJsonValue(tableAccesses);
+            writer.WriteJsonValue(tableAccesses, false, PREC_NDIGITS, 17);
         }
         if (auto dqPlan = planMap.FindPtr("Plan")) {
             writer.WriteKey("Plan");
-            writer.WriteJsonValue(dqPlan);
+            writer.WriteJsonValue(dqPlan, false, PREC_NDIGITS, 17);
             writer.WriteKey("SimplifiedPlan");
             auto simplifiedPlan = SimplifyQueryPlan(*dqPlan);
-            writer.WriteJsonValue(&simplifiedPlan);
+            writer.WriteJsonValue(&simplifiedPlan, false, PREC_NDIGITS, 17);
         }
         writer.EndObject();
     }

@@ -3144,6 +3144,11 @@
                 "ColumnId": 18,
                 "ColumnName": "EnablePermissions",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 19,
+                "ColumnName": "ExportMetadata",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -3167,7 +3172,8 @@
                     15,
                     16,
                     17,
-                    18
+                    18,
+                    19
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6253,6 +6259,21 @@
                 "ColumnId": 16,
                 "ColumnName": "NextChangefeedIdx",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 17,
+                "ColumnName": "SrcPrefix",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 18,
+                "ColumnName": "EncryptionIV",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 19,
+                "ColumnName": "SrcPath",
+                "ColumnType": "Utf8"
             }
         ],
         "ColumnsDropped": [],
@@ -6274,7 +6295,10 @@
                     13,
                     14,
                     15,
-                    16
+                    16,
+                    17,
+                    18,
+                    19
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -7358,6 +7382,21 @@
                 "ColumnId": 34,
                 "ColumnName": "ByKeyFilterSize",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 35,
+                "ColumnName": "LocksAcquired",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 36,
+                "ColumnName": "LocksWholeShard",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 37,
+                "ColumnName": "LocksBroken",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -7397,7 +7436,10 @@
                     31,
                     32,
                     33,
-                    34
+                    34,
+                    35,
+                    36,
+                    37
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -8148,6 +8190,26 @@
                 "ColumnId": 4,
                 "ColumnName": "Parent",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "ParentBegin",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "Child",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "ChildBegin",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "TableSize",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -8157,7 +8219,11 @@
                     1,
                     2,
                     3,
-                    4
+                    4,
+                    5,
+                    6,
+                    7,
+                    8
                 ],
                 "RoomID": 0,
                 "Codec": 0,

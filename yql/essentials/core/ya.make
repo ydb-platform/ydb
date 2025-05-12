@@ -71,9 +71,11 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/minikql/jsonpath/parser
     yql/essentials/core/minsketch
+    yql/essentials/core/histogram
     yql/essentials/protos
     yql/essentials/public/udf
     yql/essentials/public/udf/tz
+    yql/essentials/public/langver
     yql/essentials/sql/settings
     yql/essentials/sql
     yql/essentials/utils
@@ -102,6 +104,7 @@ RECURSE(
     dqs_expr_nodes
     file_storage
     issue
+    langver
     minsketch
     pg_ext
     pg_settings

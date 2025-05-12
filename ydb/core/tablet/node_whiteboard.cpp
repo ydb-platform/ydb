@@ -9,6 +9,7 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/util/cpuinfo.h>
 #include <ydb/core/util/tuples.h>
 
 #include <util/string/split.h>
@@ -46,6 +47,7 @@ public:
             SystemStateInfo.SetNodeName(nodeName);
         }
         SystemStateInfo.SetNumberOfCpus(NSystemInfo::NumberOfCpus());
+        SystemStateInfo.SetRealNumberOfCpus(NKikimr::RealNumberOfCpus());
         auto version = GetProgramRevision();
         if (!version.empty()) {
             SystemStateInfo.SetVersion(version);
@@ -56,8 +58,13 @@ public:
         SystemStateInfo.SetStartTime(ctx.Now().MilliSeconds());
         ctx.Send(ctx.SelfID, new TEvPrivate::TEvUpdateRuntimeStats());
 
-        auto group = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils")
-            ->GetSubgroup("subsystem", "whiteboard");
+        auto utils = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils");
+        UserTime = utils->GetCounter("Process/UserTime", true);
+        SysTime = utils->GetCounter("Process/SystemTime", true);
+        MinorPageFaults = utils->GetCounter("Process/MinorPageFaults", true);
+        MajorPageFaults = utils->GetCounter("Process/MajorPageFaults", true);
+        NumThreads = utils->GetCounter("Process/NumThreads", false);
+        auto group = utils->GetSubgroup("subsystem", "whiteboard");
         MaxClockSkewWithPeerUsCounter = group->GetCounter("MaxClockSkewWithPeerUs");
         MaxClockSkewPeerIdCounter = group->GetCounter("MaxClockSkewPeerId");
 
@@ -78,8 +85,19 @@ protected:
     NKikimrWhiteboard::TSystemStateInfo SystemStateInfo;
     THolder<NTracing::ITraceCollection> TabletIntrospectionData;
 
-    ::NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewWithPeerUsCounter;
-    ::NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewPeerIdCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewWithPeerUsCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr MaxClockSkewPeerIdCounter;
+    NMonitoring::TDynamicCounters::TCounterPtr UserTime;
+    ui64 SavedUserTime = 0;
+    NMonitoring::TDynamicCounters::TCounterPtr SysTime;
+    ui64 SavedSysTime = 0;
+    NMonitoring::TDynamicCounters::TCounterPtr MinorPageFaults;
+    ui64 SavedMinorPageFaults = 0;
+    NMonitoring::TDynamicCounters::TCounterPtr MajorPageFaults;
+    ui64 SavedMajorPageFaults = 0;
+    NMonitoring::TDynamicCounters::TCounterPtr NumThreads;
+
+    TSystemThreadsMonitor ThreadsMonitor;
 
     template <typename PropertyType>
     static ui64 GetDifference(PropertyType a, PropertyType b) {
@@ -688,11 +706,6 @@ protected:
         } else {
             SystemStateInfo.ClearMemoryUsed();
         }
-        if (memoryStats.HasHardLimit()) {
-            SystemStateInfo.SetMemoryLimit(memoryStats.GetHardLimit());
-        } else {
-            SystemStateInfo.ClearMemoryLimit();
-        }
         if (memoryStats.HasAllocatedMemory()) {
             SystemStateInfo.SetMemoryUsedInAlloc(memoryStats.GetAllocatedMemory());
         } else {
@@ -1099,7 +1112,10 @@ protected:
     }
 
     void Handle(TEvPrivate::TEvUpdateRuntimeStats::TPtr &, const TActorContext &ctx) {
-        static constexpr TDuration UPDATE_PERIOD = TDuration::Seconds(15);
+        static constexpr int UPDATE_PERIOD_SECONDS = 15;
+        static constexpr TDuration UPDATE_PERIOD = TDuration::Seconds(UPDATE_PERIOD_SECONDS);
+        auto now = TActivationContext::Now();
+
         {
             NKikimrWhiteboard::TSystemStateInfo systemStatsUpdate;
             TVector<double> loadAverage = GetLoadAverage();
@@ -1107,7 +1123,7 @@ protected:
                 systemStatsUpdate.AddLoadAverage(d);
             }
             if (CheckedMerge(SystemStateInfo, systemStatsUpdate)) {
-                SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
+                SystemStateInfo.SetChangeTime(now.MilliSeconds());
             }
         }
 
@@ -1124,12 +1140,24 @@ protected:
             SystemStateInfo.SetNetworkUtilization(MaxNetworkUtilization);
             MaxNetworkUtilization = 0;
         }
-
         {
-            SystemStateInfo.SetNetworkWriteThroughput(SumNetworkWriteThroughput / UPDATE_PERIOD.Seconds());
+            SystemStateInfo.SetNetworkWriteThroughput(SumNetworkWriteThroughput / UPDATE_PERIOD_SECONDS);
             SumNetworkWriteThroughput = 0;
         }
-
+        auto threadPools = ThreadsMonitor.GetThreadPools(now);
+        SystemStateInfo.ClearThreads();
+        for (const auto& threadPool : threadPools) {
+            auto* threadInfo = SystemStateInfo.AddThreads();
+            threadInfo->SetName(threadPool.Name);
+            threadInfo->SetThreads(threadPool.Threads);
+            threadInfo->SetSystemUsage(threadPool.SystemUsage);
+            threadInfo->SetUserUsage(threadPool.UserUsage);
+            threadInfo->SetMajorPageFaults(threadPool.MajorPageFaults);
+            threadInfo->SetMinorPageFaults(threadPool.MinorPageFaults);
+            for (const auto& state : threadPool.States) {
+                threadInfo->MutableStates()->emplace(state.first, state.second);
+            }
+        }
         UpdateSystemState(ctx);
         ctx.Schedule(UPDATE_PERIOD, new TEvPrivate::TEvUpdateRuntimeStats());
     }

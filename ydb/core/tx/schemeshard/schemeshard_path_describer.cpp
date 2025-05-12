@@ -42,6 +42,10 @@ static void FillTableStats(NKikimrTableStats::TTableStats* stats, const TPartiti
     stats->SetRangeReads(tableStats.RangeReads);
     stats->SetRangeReadRows(tableStats.RangeReadRows);
 
+    stats->SetLocksAcquired(tableStats.LocksAcquired);
+    stats->SetLocksWholeShard(tableStats.LocksWholeShard);
+    stats->SetLocksBroken(tableStats.LocksBroken);
+
     stats->SetPartCount(tableStats.PartCount);
     stats->SetHasSchemaChanges(tableStats.HasSchemaChanges);
 
@@ -1274,6 +1278,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             DescribeDir(path);
             DescribeBackupCollection(base->PathId, base);
             break;
+        case NKikimrSchemeOp::EPathTypeSysView:
         case NKikimrSchemeOp::EPathTypeInvalid:
             Y_UNREACHABLE();
         }

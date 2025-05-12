@@ -1003,7 +1003,7 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     }
 
     ui64 GetNodeRestartsForPenalty() const {
-        return CurrentConfig.GetNodeRestartsForPenalty();
+        return CurrentConfig.GetNodeRestartsForPenalty() ?: Max<ui64>();
     }
 
     static void ActualizeRestartStatistics(google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);

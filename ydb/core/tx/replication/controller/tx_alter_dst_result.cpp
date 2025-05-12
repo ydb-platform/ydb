@@ -56,7 +56,8 @@ public:
 
             if (Replication->CheckAlterDone()) {
                 CLOG_N(ctx, "Replication altered"
-                    << ": rid# " << rid);
+                    << ": rid# " << rid
+                    << ", state# " << Replication->GetDesiredState());
                 Replication->SetState(Replication->GetDesiredState());
             }
         } else {
@@ -102,6 +103,8 @@ public:
             return TReplication::EDstState::Error;
         case TReplication::EState::Removing:
             return TReplication::EDstState::Removing;
+        case TReplication::EState::Paused:
+            return TReplication::EDstState::Paused;
         }
     }
 

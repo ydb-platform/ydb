@@ -10,6 +10,7 @@
 #include <yql/essentials/minikql/dom/json.h>
 #include <yql/essentials/minikql/dom/yson.h>
 #include <yql/essentials/minikql/jsonpath/parser/parser.h>
+#include <yql/essentials/core/sql_types/block.h>
 #include <yql/essentials/core/sql_types/simple_types.h>
 #include "yql/essentials/parser/pg_catalog/catalog.h"
 #include <yql/essentials/parser/pg_wrapper/interface/utils.h>
@@ -3269,6 +3270,52 @@ bool EnsureWideBlockType(TPositionHandle position, const TTypeAnnotationNode& ty
     return true;
 }
 
+bool EnsureBlockStructType(TPositionHandle position, const TTypeAnnotationNode& type, TVector<const TItemExprType*>& structItems, TExprContext& ctx) {
+    if (HasError(&type, ctx)) {
+        return false;
+    }
+
+    if (type.GetKind() != ETypeAnnotationKind::Struct) {
+        ctx.AddError(TIssue(ctx.GetPosition(position), TStringBuilder() << "Expected struct, but got: " << type));
+        return false;
+    }
+
+    auto& items = type.Cast<TStructExprType>()->GetItems();
+    if (items.empty()) {
+        ctx.AddError(TIssue(ctx.GetPosition(position), "Expected at least one column"));
+        return false;
+    }
+
+    bool hasBlockLengthColumn = false;
+    for (auto item : items) {
+        auto blockType = item->GetItemType();
+        if (!EnsureBlockOrScalarType(position, *blockType, ctx)) {
+            return false;
+        }
+
+        bool isScalar = false;
+        auto itemType = GetBlockItemType(*blockType, isScalar);
+
+        if (item->GetName() == BlockLengthColumnName) {
+            if (!isScalar) {
+                ctx.AddError(TIssue(ctx.GetPosition(position), "Block length column should be a scalar"));
+                return false;
+            }
+            if (!EnsureSpecificDataType(position, *itemType, EDataSlot::Uint64, ctx)) {
+                return false;
+            }
+            hasBlockLengthColumn = true;
+        } else {
+            structItems.push_back(ctx.MakeType<TItemExprType>(item->GetName(), itemType));
+        }
+    }
+    if (!hasBlockLengthColumn) {
+        ctx.AddError(TIssue(ctx.GetPosition(position), "Block struct must contain block length column"));
+        return false;
+    }
+    return true;
+}
+
 bool EnsureWideFlowBlockType(const TExprNode& node, TTypeAnnotationNode::TListType& blockItemTypes, TExprContext& ctx, bool allowScalar) {
     if (!EnsureWideFlowType(node, ctx)) {
         return false;
@@ -3283,6 +3330,14 @@ bool EnsureWideStreamBlockType(const TExprNode& node, TTypeAnnotationNode::TList
     }
 
     return EnsureWideBlockType(node.Pos(), *node.GetTypeAnn()->Cast<TStreamExprType>()->GetItemType(), blockItemTypes, ctx, allowScalar);
+}
+
+bool EnsureBlockListType(const TExprNode& node, TVector<const TItemExprType*>& structItems, TExprContext& ctx) {
+    if (!EnsureListType(node, ctx)) {
+        return false;
+    }
+
+    return EnsureBlockStructType(node.Pos(), *node.GetTypeAnn()->Cast<TListExprType>()->GetItemType(), structItems, ctx);
 }
 
 bool EnsureOptionalType(const TExprNode& node, TExprContext& ctx) {
@@ -4313,7 +4368,7 @@ bool IsDataTypeTzDate(EDataSlot dataSlot) {
 }
 
 bool IsDataTypeBigDate(EDataSlot dataSlot) {
-    return (NUdf::GetDataTypeInfo(dataSlot).Features & NUdf::BigDateType);
+    return (NUdf::GetDataTypeInfo(dataSlot).Features & NUdf::ExtDateType);
 }
 
 EDataSlot WithTzDate(EDataSlot dataSlot) {

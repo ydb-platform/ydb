@@ -26,7 +26,7 @@
                         "subkey",
                         "value"
                     ],
-                    "type": "MultiUpsert"
+                    "type": "MultiReplace"
                 }
             ]
         },
@@ -40,7 +40,7 @@
                         "Group",
                         "Name"
                     ],
-                    "type": "MultiUpsert"
+                    "type": "MultiReplace"
                 },
                 {
                     "columns": [
@@ -49,7 +49,7 @@
                         "Group",
                         "Name"
                     ],
-                    "type": "MultiUpsert"
+                    "type": "MultiReplace"
                 }
             ]
         }

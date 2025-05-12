@@ -161,7 +161,7 @@ std::pair<int, const char**> TClientCommand::TOptsParseOneLevelResult::GetArgv(T
 }
 
 TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& config, std::pair<int, const char**> argv)
-    : TOptionsParseResult(config.Opts, argv.first, argv.second)
+    : TOptionsParseResult(config.Opts, argv.first, argv.second, config.ThrowOnOptsParseError)
 {
 }
 
@@ -236,7 +236,7 @@ int TClientCommand::Process(TConfig& config) {
 }
 
 void TClientCommand::SaveParseResult(TConfig& config) {
-    ParseResult = std::make_shared<TOptionsParseResult>(config.Opts, config.ArgC, (const char**)config.ArgV);
+    ParseResult = std::make_shared<TOptionsParseResult>(config.Opts, config.ArgC, (const char**)config.ArgV, config.ThrowOnOptsParseError);
 
     // Parse options from env and apply default parameters.
     // Parsing from profiles is only supported at high level commands and occure in ExtractParams() stage.

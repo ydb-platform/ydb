@@ -158,10 +158,11 @@ TKqpReadTableSettings ParseInternal(const TCoNameValueTupleList& node) {
             settings.ItemsLimit = tuple.Value().Cast().Ptr();
         } else if (name == TKqpReadTableSettings::ReverseSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
-            settings.Reverse = true;
+            settings.SetSorting(ERequestSorting::DESC);
         } else if (name == TKqpReadTableSettings::SortedSettingName) {
-            YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
-            settings.Sorted = true;
+            if (settings.GetSorting() == ERequestSorting::NONE) {
+                settings.SetSorting(ERequestSorting::ASC);
+            }
         } else if (name == TKqpReadTableSettings::SequentialSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 2);
             settings.SequentialInFlight = FromString<ui64>(tuple.Value().Cast<TCoAtom>().Value());
@@ -224,7 +225,7 @@ NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx
                 .Done());
     }
 
-    if (Reverse) {
+    if (IsReverse()) {
         settings.emplace_back(
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name()
@@ -240,7 +241,7 @@ NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx
                 .Done());
     }
 
-    if (Sorted) {
+    if (IsSorted()) {
         settings.emplace_back(
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name()

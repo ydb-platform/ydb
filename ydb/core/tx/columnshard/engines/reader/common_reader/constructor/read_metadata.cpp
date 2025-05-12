@@ -21,11 +21,13 @@ TConclusionStatus TReadMetadata::Init(
     SelectInfo = dataAccessor.Select(readDescription, !!LockId);
     if (LockId) {
         for (auto&& i : SelectInfo->Portions) {
-            if (i->HasInsertWriteId() && !i->HasCommitSnapshot()) {
-                if (owner->HasLongTxWrites(i->GetInsertWriteIdVerified())) {
+            if (!i->IsCommitted()) {
+                AFL_VERIFY(i->GetPortionType() == EPortionType::Written);
+                auto* written = static_cast<const TWrittenPortionInfo*>(i.get());
+                if (owner->HasLongTxWrites(written->GetInsertWriteId())) {
                 } else {
-                    auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(i->GetInsertWriteIdVerified());
-                    AddWriteIdToCheck(i->GetInsertWriteIdVerified(), op->GetLockId());
+                    auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(written->GetInsertWriteId());
+                    AddWriteIdToCheck(written->GetInsertWriteId(), op->GetLockId());
                 }
             }
         }
@@ -43,8 +45,8 @@ TConclusionStatus TReadMetadata::Init(
 }
 
 TReadMetadata::TReadMetadata(const std::shared_ptr<TVersionedIndex>& schemaIndex, const TReadDescription& read)
-    : TBase(schemaIndex, read.PKRangesFilter->IsReverse() ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC,
-          read.GetProgram(), schemaIndex->GetSchemaVerified(read.GetSnapshot()), read.GetSnapshot(), read.GetScanCursorOptional())
+    : TBase(schemaIndex, read.GetSorting(), read.GetProgram(), schemaIndex->GetSchemaVerified(read.GetSnapshot()), read.GetSnapshot(),
+          read.GetScanCursorOptional(), read.GetTabletId())
     , PathId(read.PathId)
     , ReadStats(std::make_shared<TReadStats>()) {
 }
@@ -69,8 +71,8 @@ std::set<ui32> TReadMetadata::GetPKColumnIds() const {
     return result;
 }
 
-NArrow::NMerger::TSortableBatchPosition TReadMetadata::BuildSortedPosition(const NArrow::TReplaceKey& key) const {
-    return NArrow::NMerger::TSortableBatchPosition(key.ToBatch(GetReplaceKey()), 0, GetReplaceKey()->field_names(), {}, IsDescSorted());
+NArrow::NMerger::TSortableBatchPosition TReadMetadata::BuildSortedPosition(const NArrow::TSimpleRow& key) const {
+    return NArrow::NMerger::TSortableBatchPosition(key.ToBatch(), 0, GetReplaceKey()->field_names(), {}, IsDescSorted());
 }
 
 void TReadMetadata::DoOnReadFinished(NColumnShard::TColumnShard& owner) const {

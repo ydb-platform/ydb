@@ -479,89 +479,33 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
 
     LOG_I("Cleanup");
 
-    // cleanup
-    auto newDirectoryList = RecursiveList(SchemeClient, dbBasePath);
-    if (!newDirectoryList.Status.IsSuccess()) {
+    auto newListing = RecursiveList(SchemeClient, dbBasePath);
+    if (!newListing.Status.IsSuccess()) {
         return restoreResult;
     }
 
-    TVector<const TSchemeEntry*> entriesToDropInSecondPass;
+    // Why don't we use the built-in RecursiveList filter?
+    // TSchemeEntry::Name is rewritten in the RecursiveList to become the full path to the object.
+    // Until it is rewritten, we can only use the entry name to filter it out, which is not enough.
+    std::erase_if(newListing.Entries, [&oldEntries](const TSchemeEntry& entry) {
+        return oldEntries.contains(entry.Name);
+    });
 
-    for (const auto& entry : newDirectoryList.Entries) {
-        if (oldEntries.contains(entry.Name)) {
-            continue;
-        }
-
-        const auto& fullPath = entry.Name; // RecursiveList returns full path instead of entry's name
-        TMaybe<TStatus> result;
-
-        switch (entry.Type) {
-            case ESchemeEntryType::Directory:
-                result = RemoveDirectoryRecursive(SchemeClient, TableClient, &TopicClient, &QueryClient, &CoordinationNodeClient,
-                    TString{fullPath}, ERecursiveRemovePrompt::Never, {}, true, false);
-                break;
-            case ESchemeEntryType::Table:
-                result = TableClient.RetryOperationSync([&path = fullPath](TSession session) {
-                    return session.DropTable(path).GetValueSync();
-                });
-                break;
-            case ESchemeEntryType::View:
-                result = QueryClient.RetryQuerySync([&path = fullPath](NQuery::TSession session) {
-                    return session.ExecuteQuery(std::format("DROP VIEW `{}`;", path),
-                        NQuery::TTxControl::NoTx()).ExtractValueSync();
-                });
-                break;
-            case ESchemeEntryType::Topic:
-                result = RetryFunction([&client = TopicClient, &path = fullPath]() {
-                    return client.DropTopic(path).ExtractValueSync();
-                });
-                break;
-            case ESchemeEntryType::CoordinationNode:
-                result = RetryFunction([&client = CoordinationNodeClient, &path = fullPath]() {
-                    return client.DropNode(path).ExtractValueSync();
-                });
-                break;
-            case ESchemeEntryType::ExternalDataSource:
-                entriesToDropInSecondPass.emplace_back(&entry);
-                continue;
-            case ESchemeEntryType::ExternalTable:
-                result = QueryClient.RetryQuerySync([&path = fullPath](NQuery::TSession session) {
-                    return session.ExecuteQuery(std::format("DROP EXTERNAL TABLE `{}`;", path),
-                        NQuery::TTxControl::NoTx()).ExtractValueSync();
-                });
-                break;
-            default:
-                break;
-        }
-
-        if (!result) {
-            LOG_E("Error removing unexpected object: " << TString{fullPath}.Quote());
-            return restoreResult;
-        } else if (!result->IsSuccess()) {
-            LOG_E("Error removing " << entry.Type << ": " << TString{fullPath}.Quote()
-                << ", issues: " << result->GetIssues().ToOneLineString());
-            return restoreResult;
-        }
-    }
-
-    for (const auto* entry : entriesToDropInSecondPass) {
-        TMaybe<TStatus> result;
-        switch (entry->Type) {
-            case ESchemeEntryType::ExternalDataSource:
-                result = QueryClient.RetryQuerySync([&path = entry->Name](NQuery::TSession session) {
-                    return session.ExecuteQuery(std::format("DROP EXTERNAL DATA SOURCE `{}`;", path),
-                        NQuery::TTxControl::NoTx()).ExtractValueSync();
-                });
-                break;
-            default:
-                break;
-        }
-        Y_ENSURE(result, "Unexpected entry to drop in the second pass");
-        if (!result->IsSuccess()) {
-            LOG_E("Error removing " << entry->Type << ": " << TString{entry->Name}.Quote()
-                << ", issues: " << result->GetIssues().ToOneLineString());
-            return restoreResult;
-        }
+    // Why do we reverse the list?
+    // RecursiveList outputs elements in pre-order: root, root's children, ...
+    // We reverse it to delete scheme objects before directories.
+    auto cleanupResult = RemovePathsRecursive(
+        SchemeClient,
+        TableClient,
+        TopicClient,
+        QueryClient,
+        CoordinationNodeClient,
+        newListing.Entries.rbegin(),
+        newListing.Entries.rend()
+    );
+    if (!cleanupResult.IsSuccess()) {
+        LOG_E("Error on cleanup, issues: " << cleanupResult.GetIssues().ToOneLineString());
+        return restoreResult;
     }
 
     return restoreResult;
@@ -691,7 +635,10 @@ TRestoreResult TRestoreClient::RestoreUsers(TTableClient& client, const TFsPath&
             auto alterStatementResult = client.RetryOperationSync([&](TSession session) {
                 return session.ExecuteSchemeQuery(alterStatement).ExtractValueSync();
             });
-            if (!alterStatementResult.IsSuccess()) {
+            if (alterStatementResult.GetStatus() == EStatus::UNAUTHORIZED) {
+                LOG_W("Not enough rights to restore user from statement " << alterStatement.Quote() << ", skipping");
+                continue;
+            } else if (!alterStatementResult.IsSuccess()) {
                 LOG_E("Failed to execute statement for restoring user: "
                     << alterStatement.Quote() << ", error: "
                     << alterStatementResult.GetIssues().ToOneLineString());

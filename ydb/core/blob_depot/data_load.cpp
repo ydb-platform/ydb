@@ -159,7 +159,7 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
-    bool TData::EnsureKeyLoaded(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc) {
+    bool TData::EnsureKeyLoaded(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc, bool *progress) {
         if (IsKeyLoaded(key)) {
             return true;
         }
@@ -174,6 +174,9 @@ namespace NKikimr::NBlobDepot {
                 AddDataOnLoad(key, row.GetValue<Table::Value>(), row.GetValueOrDefault<Table::UncertainWrite>());
             }
             Self->Data->LoadedKeys |= {key, key};
+            if (progress) {
+                *progress = true;
+            }
             return true;
         }
     }

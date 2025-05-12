@@ -1,0 +1,21 @@
+package NAnalytics;
+
+message TFieldData {
+    optional string Key = 1;
+    optional double Value = 2;
+}
+
+message TRowData {
+    optional string Name = 1;
+    repeated TFieldData Fields = 2;
+}
+
+message TAttributeData {
+    optional string Attribute = 1;
+    optional string Value = 2;
+}
+
+message TTableData {
+    repeated TRowData Rows = 1;
+    repeated TAttributeData Attributes = 2;
+}

@@ -90,8 +90,13 @@ void TTopicData::SendPQReadRequest() {
 
     auto cmdRead = request.MutablePartitionRequest()->MutableCmdRead();
     cmdRead->SetClientId(NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER);
-    cmdRead->SetCount(Limit);
+    cmdRead->SetCount(TruncateLongMessages ? Limit : 1);
     cmdRead->SetOffset(Offset);
+    if (LastOffset) {
+        cmdRead->SetLastOffset(LastOffset);
+    }
+    cmdRead->SetReadTimestampMs(Timestamp);
+
     cmdRead->SetTimeoutMs(READ_TIMEOUT_MS);
     cmdRead->SetExternalOperation(true);
 
@@ -129,36 +134,34 @@ void TTopicData::HandlePQResponse(TEvPersQueue::TEvResponse::TPtr& ev) {
     RequestDone();
 }
 
-void TTopicData::FillProtoResponse(ui64 maxSingleMessageSize, ui64 maxTotalSize) {
+void TTopicData::FillProtoResponse(ui64 maxTotalSize) {
     ui64 totalSize = 0;
     const auto& response = ReadResponse->Record.GetPartitionResponse();
     if(!response.HasCmdReadResult()) {
         return;
     }
     const auto& cmdRead = response.GetCmdReadResult();
-
+    bool isTruncated = false;
     auto setData = [&](NKikimrViewer::TTopicDataResponse::TMessage& protoMessage, TString&& data) {
         protoMessage.SetOriginalSize(data.size());
-        if (data.size() > maxSingleMessageSize) {
-            data.resize(maxSingleMessageSize);
+        if (data.size() > MaxSingleMessageSize && TruncateLongMessages) {
+            isTruncated = true;
+            data.resize(MaxSingleMessageSize);
         }
         totalSize += data.size();
         protoMessage.SetMessage(std::move(Base64Encode(data)));
     };
     ProtoResponse.SetStartOffset(cmdRead.GetStartOffset());
-    bool truncated = true;
     ProtoResponse.SetEndOffset(cmdRead.GetEndOffset());
 
     for (auto& r : cmdRead.GetResult()) {
         if (totalSize >= maxTotalSize) {
+            isTruncated = true;
             break;
         }
         auto dataChunk = (NKikimr::GetDeserializedData(r.GetData()));
         auto* messageProto = ProtoResponse.AddMessages();
         messageProto->SetOffset(r.GetOffset());
-
-        if (r.GetOffset() == cmdRead.GetEndOffset() - 1)
-            truncated = false;
 
         messageProto->SetCreateTimestamp(r.GetCreateTimestampMS());
         messageProto->SetWriteTimestamp(r.GetWriteTimestampMS());
@@ -179,7 +182,11 @@ void TTopicData::FillProtoResponse(ui64 maxSingleMessageSize, ui64 maxTotalSize)
             setData(*messageProto, std::move(*dataChunk.MutableData()));
         }
         messageProto->SetCodec(dataChunk.GetCodec());
-        messageProto->SetProducerId(r.GetSourceId());
+        TString decodedSrcId;
+        if (!r.GetSourceId().empty()) {
+            decodedSrcId = NPQ::NSourceIdEncoding::Decode(r.GetSourceId());
+        }
+        messageProto->SetProducerId(decodedSrcId);
         messageProto->SetSeqNo(r.GetSeqNo());
 
         if (dataChunk.MessageMetaSize() > 0) {
@@ -191,7 +198,7 @@ void TTopicData::FillProtoResponse(ui64 maxSingleMessageSize, ui64 maxTotalSize)
             }
         }
     }
-    ProtoResponse.SetTruncated(truncated);
+    ProtoResponse.SetTruncated(isTruncated);
 }
 
 void TTopicData::ReplyAndPassAway() {
@@ -232,23 +239,6 @@ void TTopicData::StateRequestedDescribe(TAutoPtr<::NActors::IEventHandle>& ev) {
     }
 }
 
-bool TTopicData::GetIntegerParam(const TString& name, i64& value) {
-    const auto& params(Event->Get()->Request.GetParams());
-    if (params.Has(name)) {
-        value = FromStringWithDefault<i32>(params.Get(name), -1);
-        if (value == -1) {
-            auto error = TStringBuilder() << "field ' "<< name << "' has invalid value, an interger >= 0 is expected";
-            ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", error));
-            return false;
-        }
-        return true;
-    } else {
-        auto error = TStringBuilder() << "field ' "<< name << "' is required";
-        ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", error));
-        return false;
-    }
-}
-
 void TTopicData::Bootstrap() {
     if (!Database.empty() && TBase::NeedToRedirect()) {
         return;
@@ -256,13 +246,32 @@ void TTopicData::Bootstrap() {
     const auto& params(Event->Get()->Request.GetParams());
     Timeout = TDuration::Seconds(std::min((ui32)Timeout.Seconds(), 30u));
 
+    TruncateLongMessages = FromStringWithDefault<bool>(params.Get("truncate"), true);
+    MaxSingleMessageSize = FromStringWithDefault<ui64>(params.Get("message_size_limit"), MaxSingleMessageSize);
 
-    if (!GetIntegerParam("partition", PartitionId))
-        return;
-    if (!GetIntegerParam("offset", Offset))
-        return;
+    if (!params.Has("partition")) {
+        return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Parameter 'partition' is necessary"));
+    }
+    PartitionId = FromStringWithDefault(params.Get("partition"), PartitionId);
 
-    Limit = FromStringWithDefault<ui32>(params.Get("limit"), 10);
+    Offset = FromStringWithDefault(params.Get("offset"), Offset);
+    LastOffset = FromStringWithDefault(params.Get("last_offset"), LastOffset);
+    Timestamp = FromStringWithDefault(params.Get("read_timestamp"), Timestamp);
+
+    Limit = FromStringWithDefault(params.Get("limit"), Limit);
+
+    // Only allow timestamp XOR offset to be defined
+    if (Offset > 0 && Timestamp > 0) {
+        return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Only read_timestamp or offset parameter may be specified, not both"));
+    }
+
+    // No truncate is available with on offset specified and limit = 1 or undefined
+    if (!TruncateLongMessages && Limit > 1) {
+        return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "truncate=false can only be specified with limit = 1"));
+    }
+    if (!TruncateLongMessages && Timestamp > 0) {
+        return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "truncate=false can only be specified with an offset, not a timestamp"));
+    }
     if (Limit > MAX_MESSAGES_LIMIT) {
         return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Too many messages requested"));
     }

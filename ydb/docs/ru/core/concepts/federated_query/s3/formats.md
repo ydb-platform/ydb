@@ -6,15 +6,15 @@
 
 Список поддерживаемых в {{ ydb-short-name }} форматов данных приведен в таблице ниже.
 
-|Формат|Чтение|Запись|
-|----|-----|------|
-|[`csv_with_names`](#csv_with_names)|✓|✓|
-|[`tsv_with_names`](#tsv_with_names)|✓||
-|[`json_list`](#json_list)|✓||
-|[`json_each_row`](#json_each_row)|✓||
-|[`json_as_string`](#json_as_string)|✓||
-|[`parquet`](#parquet)|✓|✓|
-|[`raw`](#raw)|✓||
+| Формат                              | Чтение | Запись |
+|-------------------------------------|--------|--------|
+| [`csv_with_names`](#csv_with_names) | ✓      | ✓      |
+| [`tsv_with_names`](#tsv_with_names) | ✓      |        |
+| [`json_list`](#json_list)           | ✓      |        |
+| [`json_each_row`](#json_each_row)   | ✓      |        |
+| [`json_as_string`](#json_as_string) | ✓      |        |
+| [`parquet`](#parquet)               | ✓      | ✓      |
+| [`raw`](#raw)                       | ✓      |        |
 
 ### Формат csv_with_names {#csv_with_names}
 
@@ -52,7 +52,7 @@ WITH
 |#|Manufacturer|Model|Price|Year|
 |-|-|-|-|-|
 |1|Man_1|Model_1|3000|1997|
-|2|Man_2|Model_2|4900|1999
+|2|Man_2|Model_2|4900|1999|
 
 
 {% endcut %}
@@ -93,7 +93,7 @@ WITH
 |#|Manufacturer|Model|Price|Year|
 |-|-|-|-|-|
 |1|Man_1|Model_1|3000|1997|
-|2|Man_2|Model_2|4900|1999
+|2|Man_2|Model_2|4900|1999|
 
 
 {% endcut %}
@@ -153,7 +153,7 @@ WITH
 |#|Manufacturer|Model|Price|Year|
 |-|-|-|-|-|
 |1|Man_1|Model_1|3000|1997|
-|2|Man_2|Model_2|4900|1999
+|2|Man_2|Model_2|4900|1999|
 
 
 {% endcut %}

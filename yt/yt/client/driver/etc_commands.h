@@ -184,10 +184,9 @@ struct TExecuteBatchOptions
     int Concurrency;
 };
 
-class TExecuteBatchCommandRequest
+struct TExecuteBatchCommandRequest
     : public NYTree::TYsonStruct
 {
-public:
     TString Command;
     NYTree::IMapNodePtr Parameters;
     NYTree::INodePtr Input;
@@ -231,8 +230,8 @@ public:
 
 private:
     NApi::EProxyKind Kind;
-    std::string Role;
-    NApi::NRpcProxy::EAddressType AddressType;
+    std::optional<std::string> Role;
+    std::optional<NApi::NRpcProxy::EAddressType> AddressType;
     std::string NetworkName;
     bool IgnoreBalancers;
 

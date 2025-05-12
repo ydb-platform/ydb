@@ -239,6 +239,7 @@ public:
         , CountersProvider(opts.CountersProvider)
         , SecureParamsProvider(opts.SecureParamsProvider)
         , LogProvider(opts.LogProvider)
+        , LangVer(opts.LangVer)
         , Factory(opts.Factory)
         , FunctionRegistry(*opts.FunctionRegistry)
         , ValidateMode(opts.ValidateMode)
@@ -465,6 +466,7 @@ private:
                 CountersProvider,
                 SecureParamsProvider,
                 LogProvider,
+                LangVer,
                 *NodeFactory,
                 *PatternNodes->HolderFactory,
                 PatternNodes->ValueBuilder.Get(),
@@ -562,6 +564,7 @@ private:
     NUdf::ICountersProvider* CountersProvider;
     const NUdf::ISecureParamsProvider* SecureParamsProvider;
     const NUdf::ILogProvider* LogProvider;
+    const NYql::TLangVersion LangVer;
     const TComputationNodeFactory Factory;
     const IFunctionRegistry& FunctionRegistry;
     TIntrusivePtr<TMemoryUsageInfo> MemInfo;

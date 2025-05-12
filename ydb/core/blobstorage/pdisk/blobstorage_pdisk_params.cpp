@@ -27,7 +27,7 @@ namespace NKikimr {
         , GlueRequestDistanceBytes(CalculateGlueRequestDistanceBytes(seekTimeUs, readSpeedBps))
         , TrueMediaType(trueMediaType)
     {
-        Y_DEBUG_ABORT_UNLESS(AppendBlockSize <= ChunkSize);
+        Y_VERIFY_DEBUG(AppendBlockSize <= ChunkSize);
     }
 
     // Read size that allows pdisk to spend at least 50% actually reading the data (not seeking)

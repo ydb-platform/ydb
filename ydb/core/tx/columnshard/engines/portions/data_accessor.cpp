@@ -1,3 +1,4 @@
+#include "compacted.h"
 #include "constructor_meta.h"
 #include "data_accessor.h"
 
@@ -19,31 +20,6 @@ namespace NKikimr::NOlap {
 
 namespace {
 
-void FillDefaultColumn(TPortionDataAccessor::TColumnAssemblingInfo& column, const TPortionInfo& portionInfo, const TSnapshot& defaultSnapshot) {
-    if (column.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::PLAN_STEP) {
-        column.AddBlobInfo(0, portionInfo.GetRecordsCount(),
-            TPortionDataAccessor::TAssembleBlobInfo(
-                portionInfo.GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>(defaultSnapshot.GetPlanStep())));
-    }
-    if (column.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::TX_ID) {
-        column.AddBlobInfo(0, portionInfo.GetRecordsCount(),
-            TPortionDataAccessor::TAssembleBlobInfo(
-                portionInfo.GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>(defaultSnapshot.GetTxId())));
-    }
-    if (column.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::WRITE_ID) {
-        column.AddBlobInfo(0, portionInfo.GetRecordsCount(),
-            TPortionDataAccessor::TAssembleBlobInfo(
-                portionInfo.GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>((ui64)portionInfo.GetInsertWriteIdVerified())));
-    }
-    if (column.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG) {
-        AFL_VERIFY(portionInfo.GetRecordsCount() == portionInfo.GetMeta().GetDeletionsCount() || portionInfo.GetMeta().GetDeletionsCount() == 0)("deletes",
-                                                          portionInfo.GetMeta().GetDeletionsCount())("count", portionInfo.GetRecordsCount());
-        column.AddBlobInfo(0, portionInfo.GetRecordsCount(),
-            TPortionDataAccessor::TAssembleBlobInfo(
-                portionInfo.GetRecordsCount(), std::make_shared<arrow::BooleanScalar>((bool)portionInfo.GetMeta().GetDeletionsCount())));
-    }
-}
-
 template <class TExternalBlobInfo>
 TPortionDataAccessor::TPreparedBatchData PrepareForAssembleImpl(const TPortionDataAccessor& portionData, const TPortionInfo& portionInfo,
     const ISnapshotSchema& dataSchema, const ISnapshotSchema& resultSchema, THashMap<TChunkAddress, TExternalBlobInfo>& blobsData,
@@ -52,13 +28,6 @@ TPortionDataAccessor::TPreparedBatchData PrepareForAssembleImpl(const TPortionDa
     columns.reserve(resultSchema.GetColumnIds().size());
     const ui32 rowsCount = portionInfo.GetRecordsCount();
     auto it = portionData.GetRecordsVerified().begin();
-
-    TSnapshot defaultSnapshotLocal = TSnapshot::Zero();
-    if (portionInfo.HasCommitSnapshot()) {
-        defaultSnapshotLocal = portionInfo.GetCommitSnapshotVerified();
-    } else if (defaultSnapshot) {
-        defaultSnapshotLocal = *defaultSnapshot;
-    }
 
     for (auto&& i : resultSchema.GetColumnIds()) {
         while (it != portionData.GetRecordsVerified().end() && it->GetColumnId() < i) {
@@ -69,10 +38,7 @@ TPortionDataAccessor::TPreparedBatchData PrepareForAssembleImpl(const TPortionDa
             if (restoreAbsent || IIndexInfo::IsSpecialColumn(i)) {
                 columns.emplace_back(rowsCount, dataSchema.GetColumnLoaderOptional(i), resultSchema.GetColumnLoaderVerified(i));
             }
-            if (!portionInfo.HasInsertWriteId()) {
-                continue;
-            }
-            FillDefaultColumn(columns.back(), portionInfo, defaultSnapshotLocal);
+            portionInfo.FillDefaultColumn(columns.back(), defaultSnapshot);
         }
         if (it == portionData.GetRecordsVerified().end()) {
             continue;
@@ -734,7 +700,8 @@ TConclusion<TPortionDataAccessor> TPortionDataAccessor::BuildFromProto(
     if (!constructor.LoadMetadata(proto.GetMeta(), indexInfo, groupSelector)) {
         return TConclusionStatus::Fail("cannot parse meta");
     }
-    std::shared_ptr<TPortionInfo> resultPortion(new TPortionInfo(constructor.Build()));
+    std::shared_ptr<TPortionInfo> resultPortion = std::make_shared<TCompactedPortionInfo>(constructor.Build());
+
     {
         auto parse = resultPortion->DeserializeFromProto(proto);
         if (!parse) {
@@ -766,10 +733,10 @@ TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> TPortionDataAcces
     return builder.Finish();
 }
 
-std::shared_ptr<NArrow::NAccessor::TDeserializeChunkedArray> TPortionDataAccessor::TPreparedColumn::AssembleForSeqAccess() const {
+std::shared_ptr<NArrow::NAccessor::IChunkedArray> TPortionDataAccessor::TPreparedColumn::AssembleForSeqAccess() const {
     Y_ABORT_UNLESS(!Blobs.empty());
 
-    std::vector<NArrow::NAccessor::TDeserializeChunkedArray::TChunk> chunks;
+    std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> chunks;
     chunks.reserve(Blobs.size());
     ui64 recordsCount = 0;
     for (auto& blob : Blobs) {
@@ -781,20 +748,22 @@ std::shared_ptr<NArrow::NAccessor::TDeserializeChunkedArray> TPortionDataAccesso
         }
     }
 
-    return std::make_shared<NArrow::NAccessor::TDeserializeChunkedArray>(recordsCount, Loader, std::move(chunks));
+    if (chunks.size() == 1) {
+        return chunks.front();
+    } else {
+        return std::make_shared<NArrow::NAccessor::TCompositeChunkedArray>(std::move(chunks), recordsCount, Loader->GetResultField()->type());
+    }
 }
 
-NArrow::NAccessor::TDeserializeChunkedArray::TChunk TPortionDataAccessor::TAssembleBlobInfo::BuildDeserializeChunk(
+std::shared_ptr<NArrow::NAccessor::IChunkedArray> TPortionDataAccessor::TAssembleBlobInfo::BuildDeserializeChunk(
     const std::shared_ptr<TColumnLoader>& loader) const {
     if (DefaultRowsCount) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "build_trivial");
         Y_ABORT_UNLESS(!Data);
-        auto col = std::make_shared<NArrow::NAccessor::TTrivialArray>(
-            NArrow::TThreadSimpleArraysCache::Get(loader->GetField()->type(), DefaultValue, DefaultRowsCount));
-        return NArrow::NAccessor::TDeserializeChunkedArray::TChunk(col);
+        return std::make_shared<NArrow::NAccessor::TSparsedArray>(DefaultValue, loader->GetField()->type(), DefaultRowsCount);
     } else {
         AFL_VERIFY(ExpectedRowsCount);
-        return NArrow::NAccessor::TDeserializeChunkedArray::TChunk(*ExpectedRowsCount, Data);
+        return std::make_shared<NArrow::NAccessor::TDeserializeChunkedArray>(*ExpectedRowsCount, loader, Data);
     }
 }
 

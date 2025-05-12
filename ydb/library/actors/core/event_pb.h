@@ -202,8 +202,9 @@ namespace NActors {
             return CalculateSerializedSizeImpl(Payload, Record.ByteSize());
         }
 
-        static IEventBase* Load(TEventSerializedData *input) {
-            THolder<TEventPBBase> ev(new TEv());
+        static TEv* Load(const TEventSerializedData *input) {
+            THolder<TEv> holder(new TEv());
+            TEventPBBase* ev = holder.Get();
             if (!input->GetSize()) {
                 Y_ENSURE(ev->Record.ParseFromString(TString()),
                     "Failed to parse protobuf event type " << TEventType << " class " << TypeName(ev->Record));
@@ -222,7 +223,7 @@ namespace NActors {
                 }
             }
             ev->CachedByteSize = input->GetSize();
-            return ev.Release();
+            return holder.Release();
         }
 
         size_t GetCachedByteSize() const {

@@ -41,7 +41,7 @@ public:
 
     virtual void Reallocate() override;
 
-    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray() const override {
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const override {
         return std::make_shared<arrow::ChunkedArray>(Array);
     }
 
@@ -93,6 +93,16 @@ public:
             AFL_VERIFY(NArrow::Append<TArrowDataType>(*Builder, arrow::util::string_view(value.data(), value.size())));
         }
 
+        void AddNull(const ui32 recordIndex) {
+            if (LastRecordIndex) {
+                AFL_VERIFY(*LastRecordIndex < recordIndex)("last", LastRecordIndex)("index", recordIndex);
+                TStatusValidator::Validate(Builder->AppendNulls(recordIndex - *LastRecordIndex));
+            } else {
+                TStatusValidator::Validate(Builder->AppendNulls(recordIndex + 1));
+            }
+            LastRecordIndex = recordIndex;
+        }
+
         std::shared_ptr<IChunkedArray> Finish(const ui32 recordsCount) {
             if (LastRecordIndex) {
                 AFL_VERIFY(*LastRecordIndex < recordsCount)("last", LastRecordIndex)("count", recordsCount);
@@ -120,6 +130,10 @@ private:
         }
     }
 
+    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArrayTrivial() const override {
+        return Array;
+    }
+
 protected:
     virtual ui32 DoGetValueRawBytes() const override;
     virtual ui32 DoGetNullsCount() const override {
@@ -139,10 +153,6 @@ protected:
     virtual std::shared_ptr<arrow::Scalar> DoGetMaxScalar() const override;
 
 public:
-    virtual std::shared_ptr<arrow::ChunkedArray> GetChunkedArray() const override {
-        return Array;
-    }
-
     TTrivialChunkedArray(const std::shared_ptr<arrow::ChunkedArray>& data)
         : TBase(data->length(), EType::ChunkedArray, data->type())
         , Array(data) {

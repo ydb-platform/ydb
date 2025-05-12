@@ -4,11 +4,11 @@
         "text": "1\n"
     },
     "test.test_operations_list": {
-        "next_page_token": "1",
+        "next_page_token": "0",
         "status": "SUCCESS"
     },
     "test.test_operations_list_page": {
-        "next_page_token": "1",
+        "next_page_token": "0",
         "status": "SUCCESS"
     },
     "test.test_operations_list_page_bad": {
@@ -55,6 +55,271 @@
                     "Type": "PersQueueReadBalancer"
                 }
             ]
+        }
+    },
+    "test.test_scheme_directory": {
+        "1-get": {
+            "children": [
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": ".metadata",
+                    "owner": "metadata@system",
+                    "type": "DIRECTORY"
+                },
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": "topic1",
+                    "owner": "root@builtin",
+                    "type": "TOPIC"
+                },
+                {
+                    "created_at": {},
+                    "name": ".sys",
+                    "type": "DIRECTORY"
+                }
+            ],
+            "self": {
+                "created_at": {
+                    "tx_id": "not-zero-number-text"
+                },
+                "effective_permissions": [
+                    {
+                        "permission_names": [
+                            "ydb.database.connect"
+                        ],
+                        "subject": "USERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.list"
+                        ],
+                        "subject": "METADATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.select_row"
+                        ],
+                        "subject": "DATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.tables.modify"
+                        ],
+                        "subject": "DATA-WRITERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.create_directory",
+                            "ydb.granular.write_attributes",
+                            "ydb.granular.create_table",
+                            "ydb.granular.remove_schema",
+                            "ydb.granular.create_queue",
+                            "ydb.granular.alter_schema"
+                        ],
+                        "subject": "DDL-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.access.grant"
+                        ],
+                        "subject": "ACCESS-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.manage"
+                        ],
+                        "subject": "DATABASE-ADMINS"
+                    }
+                ],
+                "name": "Root/dedicated_db",
+                "owner": "root@builtin",
+                "type": "DATABASE"
+            }
+        },
+        "2-post": {},
+        "3-get": {
+            "children": [
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": ".metadata",
+                    "owner": "metadata@system",
+                    "type": "DIRECTORY"
+                },
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": "test_dir",
+                    "owner": "root@builtin",
+                    "type": "DIRECTORY"
+                },
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": "topic1",
+                    "owner": "root@builtin",
+                    "type": "TOPIC"
+                },
+                {
+                    "created_at": {},
+                    "name": ".sys",
+                    "type": "DIRECTORY"
+                }
+            ],
+            "self": {
+                "created_at": {
+                    "tx_id": "not-zero-number-text"
+                },
+                "effective_permissions": [
+                    {
+                        "permission_names": [
+                            "ydb.database.connect"
+                        ],
+                        "subject": "USERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.list"
+                        ],
+                        "subject": "METADATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.select_row"
+                        ],
+                        "subject": "DATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.tables.modify"
+                        ],
+                        "subject": "DATA-WRITERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.create_directory",
+                            "ydb.granular.write_attributes",
+                            "ydb.granular.create_table",
+                            "ydb.granular.remove_schema",
+                            "ydb.granular.create_queue",
+                            "ydb.granular.alter_schema"
+                        ],
+                        "subject": "DDL-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.access.grant"
+                        ],
+                        "subject": "ACCESS-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.manage"
+                        ],
+                        "subject": "DATABASE-ADMINS"
+                    }
+                ],
+                "name": "Root/dedicated_db",
+                "owner": "root@builtin",
+                "type": "DATABASE"
+            }
+        },
+        "4-delete": {},
+        "5-get": {
+            "children": [
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": ".metadata",
+                    "owner": "metadata@system",
+                    "type": "DIRECTORY"
+                },
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": "topic1",
+                    "owner": "root@builtin",
+                    "type": "TOPIC"
+                },
+                {
+                    "created_at": {},
+                    "name": ".sys",
+                    "type": "DIRECTORY"
+                }
+            ],
+            "self": {
+                "created_at": {
+                    "tx_id": "not-zero-number-text"
+                },
+                "effective_permissions": [
+                    {
+                        "permission_names": [
+                            "ydb.database.connect"
+                        ],
+                        "subject": "USERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.list"
+                        ],
+                        "subject": "METADATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.select_row"
+                        ],
+                        "subject": "DATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.tables.modify"
+                        ],
+                        "subject": "DATA-WRITERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.create_directory",
+                            "ydb.granular.write_attributes",
+                            "ydb.granular.create_table",
+                            "ydb.granular.remove_schema",
+                            "ydb.granular.create_queue",
+                            "ydb.granular.alter_schema"
+                        ],
+                        "subject": "DDL-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.access.grant"
+                        ],
+                        "subject": "ACCESS-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.manage"
+                        ],
+                        "subject": "DATABASE-ADMINS"
+                    }
+                ],
+                "name": "Root/dedicated_db",
+                "owner": "root@builtin",
+                "type": "DATABASE"
+            }
         }
     },
     "test.test_storage_groups": {
@@ -519,58 +784,87 @@
         "TotalGroups": 5
     },
     "test.test_topic_data": {
+        "both_offset_and_ts": {
+            "status_code": 400,
+            "text": "Only read_timestamp or offset parameter may be specified, not both"
+        },
+        "no_partition": {
+            "status_code": 400,
+            "text": "Parameter 'partition' is necessary"
+        },
         "response_compressed": {
             "EndOffset": 21,
             "Messages": [
                 {
                     "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
                     "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTA=",
                     "Offset": 11,
                     "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
                     "SeqNo": 12,
-                    "StorageSize": 38
+                    "StorageSize": 38,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
                 },
                 {
                     "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
                     "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTE=",
                     "Offset": 12,
                     "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
                     "SeqNo": 13,
-                    "StorageSize": 38
+                    "StorageSize": 38,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
                 },
                 {
                     "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
                     "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTI=",
                     "Offset": 13,
                     "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
                     "SeqNo": 14,
-                    "StorageSize": 38
+                    "StorageSize": 38,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
                 },
                 {
                     "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
                     "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTM=",
                     "Offset": 14,
                     "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
                     "SeqNo": 15,
-                    "StorageSize": 38
+                    "StorageSize": 38,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
                 },
                 {
                     "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
                     "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTQ=",
                     "Offset": 15,
                     "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
                     "SeqNo": 16,
-                    "StorageSize": 38
+                    "StorageSize": 38,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
                 }
             ],
             "StartOffset": 0,
-            "Truncated": true
+            "Truncated": false
         },
         "response_metadata": {
             "EndOffset": 21,
             "Messages": [
                 {
                     "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
                     "Message": "bWVzc2FnZV93aXRoX21ldGE=",
                     "MessageMetadata": [
                         {
@@ -584,23 +878,92 @@
                     ],
                     "Offset": 10,
                     "OriginalSize": 17,
+                    "ProducerId": "not-zero-number-text",
                     "SeqNo": 11,
-                    "StorageSize": 37
+                    "StorageSize": 37,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
                 }
             ],
             "StartOffset": 0,
-            "Truncated": true
+            "Truncated": false
         },
         "response_not_truncated": {
             "EndOffset": 21,
             "Messages": [
                 {
                     "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
                     "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTk=",
                     "Offset": 20,
                     "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
                     "SeqNo": 21,
-                    "StorageSize": 38
+                    "StorageSize": 38,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
+        },
+        "response_truncated": {
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "Y29tcHI=",
+                    "Offset": 20,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 21,
+                    "StorageSize": 38,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": true
+        },
+        "response_last_offset": {
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0w",
+                    "Offset": 0,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 1,
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0x",
+                    "Offset": 1,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 2,
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0y",
+                    "Offset": 2,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 3,
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
                 }
             ],
             "StartOffset": 0,
@@ -611,50 +974,69 @@
             "Messages": [
                 {
                     "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
                     "Message": "bWVzc2FnZS0w",
                     "Offset": 0,
                     "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
                     "SeqNo": 1,
-                    "StorageSize": 9
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
                 },
                 {
                     "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
                     "Message": "bWVzc2FnZS0x",
                     "Offset": 1,
                     "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
                     "SeqNo": 2,
-                    "StorageSize": 9
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
                 },
                 {
                     "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
                     "Message": "bWVzc2FnZS0y",
                     "Offset": 2,
                     "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
                     "SeqNo": 3,
-                    "StorageSize": 9
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
                 },
                 {
                     "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
                     "Message": "bWVzc2FnZS0z",
                     "Offset": 3,
                     "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
                     "SeqNo": 4,
-                    "StorageSize": 9
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
                 },
                 {
                     "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
                     "Message": "bWVzc2FnZS00",
                     "Offset": 4,
                     "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
                     "SeqNo": 5,
-                    "StorageSize": 9
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
                 }
             ],
             "StartOffset": 0,
-            "Truncated": true
+            "Truncated": false
         }
     },
-
     "test.test_transfer_describe": {
         "connection_params": {
             "connection_string": "text",
@@ -665,7 +1047,7 @@
         "error": {
             "issues": [
                 {
-                    "message": "Discovery error: /Root/dedicated_db/TopicNotExists: SCHEME_ERROR ({ <main>: Error: Path not found })",
+                    "message": "Discovery error: /Root/dedicated_db/TableNotExists: SCHEME_ERROR ({ <main>: Error: Path not found })",
                     "severity": 1
                 }
             ]
@@ -725,9 +1107,9 @@
                     "subject": "DATABASE-ADMINS"
                 }
             ],
-            "name": "TestTransfer",
+            "name": "TestAsyncReplication",
             "owner": "root@builtin",
-            "type": "TRANSFER"
+            "type": "REPLICATION"
         }
     },
     "test.test_viewer_acl": {
@@ -1636,8 +2018,8 @@
         "Hosts": "2",
         "LoadAverage": "not-zero-number",
         "MapDataCenters": {
-            "1": 1,
-            "value": 2
+            "": 2,
+            "1": 1
         },
         "MapNodeRoles": {
             "Bootstrapper": 1,
@@ -1732,7 +2114,7 @@
                         "PathId": "not-zero-number-text",
                         "PathState": 2,
                         "PathType": 1,
-                        "SchemeshardId": "72075186232723360"
+                        "SchemeshardId": "72057594046678944"
                     },
                     {
                         "ACL": "",
@@ -1745,7 +2127,7 @@
                         "PathId": "not-zero-number-text",
                         "PathState": 2,
                         "PathType": 10,
-                        "SchemeshardId": "72075186232723360"
+                        "SchemeshardId": "72057594046678944"
                     },
                     {
                         "ACL": "",
@@ -1758,7 +2140,7 @@
                         "PathId": "not-zero-number-text",
                         "PathState": 3,
                         "PathType": 10,
-                        "SchemeshardId": "72075186232723360"
+                        "SchemeshardId": "72057594046678944"
                     },
                     {
                         "ACL": "",
@@ -1771,7 +2153,7 @@
                         "PathId": "not-zero-number-text",
                         "PathState": 2,
                         "PathType": 10,
-                        "SchemeshardId": "72075186232723360"
+                        "SchemeshardId": "72057594046678944"
                     },
                     {
                         "CreateFinished": true,
@@ -1779,14 +2161,14 @@
                         "CreateTxId": "0",
                         "Name": ".sys",
                         "PathType": 1,
-                        "SchemeshardId": "72075186232723360"
+                        "SchemeshardId": "72057594046678944"
                     }
                 ],
                 "DomainDescription": {
                     "DiskSpaceUsage": "not-empty-object",
                     "DomainKey": {
                         "PathId": "not-zero-number-text",
-                        "SchemeShard": "72075186232723360"
+                        "SchemeShard": "72057594046678944"
                     },
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
@@ -1805,9 +2187,9 @@
                     },
                     "ResourcesDomainKey": {
                         "PathId": "not-zero-number-text",
-                        "SchemeShard": "72075186232723360"
+                        "SchemeShard": "72057594046678944"
                     },
-                    "SchemeShardId_Depricated": "72075186232723360",
+                    "SchemeShardId_Depricated": "72057594046678944",
                     "SecurityState": {
                         "Audience": "/Root",
                         "Sids": [
@@ -1905,11 +2287,11 @@
                     "PathSubType": 0,
                     "PathType": 1,
                     "PathVersion": "12",
-                    "SchemeshardId": "72075186232723360"
+                    "SchemeshardId": "72057594046678944"
                 }
             },
             "PathId": "not-zero-number-text",
-            "PathOwnerId": "72075186232723360",
+            "PathOwnerId": "72057594046678944",
             "Source": 1,
             "Status": "StatusSuccess"
         },
@@ -1945,7 +2327,7 @@
                     "DiskSpaceUsage": "not-empty-object",
                     "DomainKey": {
                         "PathId": "not-zero-number-text",
-                        "SchemeShard": "72075186232723360"
+                        "SchemeShard": "72057594046678944"
                     },
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
@@ -1972,9 +2354,9 @@
                     },
                     "ResourcesDomainKey": {
                         "PathId": "not-zero-number-text",
-                        "SchemeShard": "72075186232723360"
+                        "SchemeShard": "72057594046678944"
                     },
-                    "SchemeShardId_Depricated": "72075186232723360",
+                    "SchemeShardId_Depricated": "72057594046678944",
                     "SecurityState": {
                         "Audience": "/Root/dedicated_db"
                     },
@@ -2027,7 +2409,7 @@
                     "DiskSpaceUsage": "not-empty-object",
                     "DomainKey": {
                         "PathId": "not-zero-number-text",
-                        "SchemeShard": "72075186232723360"
+                        "SchemeShard": "72057594046678944"
                     },
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
@@ -2050,9 +2432,9 @@
                     },
                     "ResourcesDomainKey": {
                         "PathId": "not-zero-number-text",
-                        "SchemeShard": "72075186232723360"
+                        "SchemeShard": "72057594046678944"
                     },
-                    "SchemeShardId_Depricated": "72075186232723360",
+                    "SchemeShardId_Depricated": "72057594046678944",
                     "SecurityState": {
                         "Audience": "/Root/serverless_db"
                     },
@@ -2121,7 +2503,7 @@
                     "DiskSpaceUsage": "not-empty-object",
                     "DomainKey": {
                         "PathId": "not-zero-number-text",
-                        "SchemeShard": "72075186232723360"
+                        "SchemeShard": "72057594046678944"
                     },
                     "PQPartitionsInside": "0",
                     "PQPartitionsLimit": "1000000",
@@ -2148,9 +2530,9 @@
                     },
                     "ResourcesDomainKey": {
                         "PathId": "not-zero-number-text",
-                        "SchemeShard": "72075186232723360"
+                        "SchemeShard": "72057594046678944"
                     },
-                    "SchemeShardId_Depricated": "72075186232723360",
+                    "SchemeShardId_Depricated": "72057594046678944",
                     "SecurityState": {
                         "Audience": "/Root/shared_db"
                     },
@@ -2274,7 +2656,7 @@
                             "PeerNodeId": 50000,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72075186232723360",
+                                "X1": "72057594046678944",
                                 "X2": "6"
                             },
                             "Utilization": "number"
@@ -2291,7 +2673,7 @@
                             "PeerNodeId": 50001,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72075186232723360",
+                                "X1": "72057594046678944",
                                 "X2": "7"
                             },
                             "Utilization": "number"
@@ -2402,6 +2784,7 @@
                                 "Usage": "number"
                             }
                         ],
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -2638,7 +3021,7 @@
                             "PeerNodeId": 50001,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72075186232723360",
+                                "X1": "72057594046678944",
                                 "X2": "7"
                             },
                             "Utilization": "number"
@@ -2662,7 +3045,7 @@
                             "PeerNodeId": 50000,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72075186232723360",
+                                "X1": "72057594046678944",
                                 "X2": "6"
                             },
                             "Utilization": "number"
@@ -2679,7 +3062,7 @@
                             "PeerNodeId": 50000,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72075186232723360",
+                                "X1": "72057594046678944",
                                 "X2": "6"
                             },
                             "Utilization": "number"
@@ -2744,6 +3127,7 @@
                                 "Usage": "number"
                             }
                         ],
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -2838,7 +3222,7 @@
                             "PeerNodeId": 50000,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72075186232723360",
+                                "X1": "72057594046678944",
                                 "X2": "6"
                             },
                             "Utilization": "number"
@@ -2862,7 +3246,7 @@
                             "PeerNodeId": 50001,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72075186232723360",
+                                "X1": "72057594046678944",
                                 "X2": "7"
                             },
                             "Utilization": "number"
@@ -2879,7 +3263,7 @@
                             "PeerNodeId": 50001,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72075186232723360",
+                                "X1": "72057594046678944",
                                 "X2": "7"
                             },
                             "Utilization": "number"
@@ -2944,6 +3328,7 @@
                                 "Usage": "number"
                             }
                         ],
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -2954,32 +3339,22 @@
                     },
                     "Tablets": [
                         {
-                            "Count": 4,
+                            "Count": 1,
                             "State": "Green",
                             "Type": "Coordinator"
                         },
                         {
-                            "Count": 1,
-                            "State": "Green",
-                            "Type": "Hive"
-                        },
-                        {
-                            "Count": 6,
+                            "Count": 3,
                             "State": "Green",
                             "Type": "Mediator"
                         },
                         {
-                            "Count": 2,
+                            "Count": 1,
                             "State": "Green",
                             "Type": "SchemeShard"
                         },
                         {
                             "Count": 1,
-                            "State": "Green",
-                            "Type": "StatisticsAggregator"
-                        },
-                        {
-                            "Count": 2,
                             "State": "Green",
                             "Type": "SysViewProcessor"
                         }
@@ -3038,7 +3413,7 @@
                             "PeerNodeId": 50000,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72075186232723360",
+                                "X1": "72057594046678944",
                                 "X2": "6"
                             },
                             "Utilization": "number"
@@ -3062,7 +3437,7 @@
                             "PeerNodeId": 50001,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72075186232723360",
+                                "X1": "72057594046678944",
                                 "X2": "7"
                             },
                             "Utilization": "number"
@@ -3079,7 +3454,7 @@
                             "PeerNodeId": 50001,
                             "PingTimeUs": "text",
                             "ScopeId": {
-                                "X1": "72075186232723360",
+                                "X1": "72057594046678944",
                                 "X2": "7"
                             },
                             "Utilization": "number"
@@ -3144,6 +3519,7 @@
                                 "Usage": "number"
                             }
                         ],
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -3154,7 +3530,7 @@
                     },
                     "Tablets": [
                         {
-                            "Count": 4,
+                            "Count": 3,
                             "State": "Green",
                             "Type": "Coordinator"
                         },
@@ -3164,12 +3540,12 @@
                             "Type": "Hive"
                         },
                         {
-                            "Count": 6,
+                            "Count": 3,
                             "State": "Green",
                             "Type": "Mediator"
                         },
                         {
-                            "Count": 2,
+                            "Count": 1,
                             "State": "Green",
                             "Type": "SchemeShard"
                         },
@@ -3179,7 +3555,7 @@
                             "Type": "StatisticsAggregator"
                         },
                         {
-                            "Count": 2,
+                            "Count": 1,
                             "State": "Green",
                             "Type": "SysViewProcessor"
                         }
@@ -3262,6 +3638,7 @@
                                 "Usage": "number"
                             }
                         ],
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -3329,6 +3706,7 @@
                                 "Usage": "number"
                             }
                         ],
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -3399,6 +3777,7 @@
                                 "Usage": "number"
                             }
                         ],
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -4001,7 +4380,7 @@
                         "NodeId": 1,
                         "Overall": 1,
                         "State": 10,
-                        "TabletId": "72075186232723360",
+                        "TabletId": "72057594046678944",
                         "Type": 16
                     }
                 ]
@@ -4023,7 +4402,7 @@
                         "TabletId": "72075186224037888",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 14
                     },
@@ -4039,7 +4418,7 @@
                         "TabletId": "72075186224037889",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 5
                     },
@@ -4055,7 +4434,7 @@
                         "TabletId": "72075186224037890",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 5
                     },
@@ -4071,7 +4450,7 @@
                         "TabletId": "72075186224037891",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 32
                     },
@@ -4087,7 +4466,7 @@
                         "TabletId": "72075186224037892",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 5
                     },
@@ -4103,7 +4482,7 @@
                         "TabletId": "72075186224037893",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 13
                     },
@@ -4119,7 +4498,7 @@
                         "TabletId": "72075186224037894",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 40
                     },
@@ -4135,7 +4514,7 @@
                         "TabletId": "72075186224037895",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 13
                     },
@@ -4151,7 +4530,7 @@
                         "TabletId": "72075186224037896",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 13
                     },
@@ -4167,7 +4546,7 @@
                         "TabletId": "72075186224037897",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 16
                     }
@@ -4190,7 +4569,7 @@
                         "TabletId": "72075186224038899",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 16
                     },
@@ -4206,7 +4585,7 @@
                         "TabletId": "72075186224038900",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 13
                     },
@@ -4222,7 +4601,7 @@
                         "TabletId": "72075186224038901",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 5
                     },
@@ -4238,7 +4617,7 @@
                         "TabletId": "72075186224038902",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 5
                     },
@@ -4254,7 +4633,7 @@
                         "TabletId": "72075186224038903",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 5
                     },
@@ -4270,7 +4649,7 @@
                         "TabletId": "72075186224038904",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 32
                     }
@@ -4293,7 +4672,7 @@
                         "TabletId": "72075186224038889",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 14
                     },
@@ -4309,7 +4688,7 @@
                         "TabletId": "72075186224038890",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 40
                     },
@@ -4325,7 +4704,7 @@
                         "TabletId": "72075186224038891",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 5
                     },
@@ -4341,7 +4720,7 @@
                         "TabletId": "72075186224038892",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 5
                     },
@@ -4357,7 +4736,7 @@
                         "TabletId": "72075186224038893",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 32
                     },
@@ -4373,7 +4752,7 @@
                         "TabletId": "72075186224038894",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 13
                     },
@@ -4389,7 +4768,7 @@
                         "TabletId": "72075186224038895",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 13
                     },
@@ -4405,7 +4784,7 @@
                         "TabletId": "72075186224038896",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 13
                     },
@@ -4421,7 +4800,7 @@
                         "TabletId": "72075186224038897",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 5
                     },
@@ -4437,7 +4816,7 @@
                         "TabletId": "72075186224038898",
                         "TenantId": {
                             "PathId": "not-zero-number-text",
-                            "SchemeShard": "72075186232723360"
+                            "SchemeShard": "72057594046678944"
                         },
                         "Type": 16
                     }
@@ -4578,7 +4957,7 @@
                 "CoresTotal": "not-zero-number",
                 "CoresUsed": "not-zero-number",
                 "CreateTime": "not-zero-number-text",
-                "Id": "72075186232723360-1",
+                "Id": "72057594046678944-1",
                 "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": {},
@@ -4625,7 +5004,7 @@
                 "CoresTotal": "not-zero-number",
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "72075186232723360-6",
+                "Id": "72057594046678944-6",
                 "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": "not-empty-object",
@@ -4692,12 +5071,12 @@
             {
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "72075186232723360-8",
+                "Id": "72057594046678944-8",
                 "Metrics": "not-empty-object",
                 "Name": "/Root/serverless_db",
                 "Overall": "Green",
                 "Owner": "root@builtin",
-                "ResourceId": "72075186232723360-7",
+                "ResourceId": "72057594046678944-7",
                 "State": "RUNNING",
                 "StateStats": [
                     {
@@ -4712,7 +5091,7 @@
                 "CoresTotal": "not-zero-number",
                 "CoresUsed": "not-zero-number",
                 "DatabaseQuotas": {},
-                "Id": "72075186232723360-7",
+                "Id": "72057594046678944-7",
                 "MemoryLimit": "not-zero-number-text",
                 "MemoryStats": {},
                 "Metrics": "not-empty-object",
@@ -4779,7 +5158,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "CreateTime": "not-zero-number-text",
-                    "Id": "72075186232723360-1",
+                    "Id": "72057594046678944-1",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": {},
@@ -4830,7 +5209,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72075186232723360-6",
+                    "Id": "72057594046678944-6",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",
@@ -4901,11 +5280,11 @@
                 {
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72075186232723360-8",
+                    "Id": "72057594046678944-8",
                     "Metrics": "not-empty-object",
                     "Name": "/Root/serverless_db",
                     "Owner": "root@builtin",
-                    "ResourceId": "72075186232723360-7",
+                    "ResourceId": "72057594046678944-7",
                     "State": "RUNNING",
                     "StateStats": [
                         {
@@ -4924,7 +5303,7 @@
                     "CoresTotal": "not-zero-number",
                     "CoresUsed": "not-zero-number",
                     "DatabaseQuotas": {},
-                    "Id": "72075186232723360-7",
+                    "Id": "72057594046678944-7",
                     "MemoryLimit": "not-zero-number-text",
                     "MemoryStats": {},
                     "Metrics": "not-empty-object",

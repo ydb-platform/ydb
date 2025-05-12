@@ -157,6 +157,10 @@ TExprBase KqpApplyExtractMembersToReadOlapTable(TExprBase node, TExprContext& ct
 
     auto read = node.Cast<TKqpReadOlapTableRangesBase>();
 
+    if (read.Columns().Size() == 1) {
+        return node;
+    }
+
     auto usedColumns = GetUsedColumns(read, read.Columns(), parentsMap, allowMultiUsage, ctx);
     if (!usedColumns) {
         return node;
@@ -214,6 +218,18 @@ TExprBase KqpApplyExtractMembersToLookupTable(TExprBase node, TExprContext& ctx,
     auto usedColumns = GetUsedColumns(lookup, lookup.Columns(), parentsMap, allowMultiUsage, ctx);
     if (!usedColumns) {
         return node;
+    }
+
+    if (auto maybeStreamLookup = lookup.Maybe<TKqlStreamLookupIndex>()) {
+        auto streamLookup = maybeStreamLookup.Cast();
+
+        return Build<TKqlStreamLookupIndex>(ctx, lookup.Pos())
+            .Table(streamLookup.Table())
+            .LookupKeys(streamLookup.LookupKeys())
+            .Columns(usedColumns.Cast())
+            .Index(streamLookup.Index())
+            .Settings(streamLookup.Settings())
+            .Done();
     }
 
     if (auto maybeIndexLookup = lookup.Maybe<TKqlLookupIndexBase>()) {

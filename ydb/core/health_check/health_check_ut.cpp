@@ -71,12 +71,19 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
     struct TTestVSlotInfo {
         std::optional<NKikimrBlobStorage::EVDiskStatus> Status;
         ui32 Generation = DEFAULT_GROUP_GENERATION;
+        std::optional<NKikimrBlobStorage::TPDiskState::E> PDiskState;
         NKikimrBlobStorage::EDriveStatus PDiskStatus = NKikimrBlobStorage::ACTIVE;
 
         TTestVSlotInfo(std::optional<NKikimrBlobStorage::EVDiskStatus> status = NKikimrBlobStorage::READY,
                        ui32 generation = DEFAULT_GROUP_GENERATION)
             : Status(status)
             , Generation(generation)
+        {
+        }
+
+        TTestVSlotInfo(NKikimrBlobStorage::EVDiskStatus status, NKikimrBlobStorage::TPDiskState::E pDiskState)
+            : Status(status)
+            , PDiskState(pDiskState)
         {
         }
 
@@ -235,15 +242,28 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         record.clear_entries();
         auto pdiskId = PDISK_START_ID;
         const size_t totalSize = 3'200'000'000'000ull;
-        const auto *descriptor = NKikimrBlobStorage::EDriveStatus_descriptor();
+        const auto *descriptorState = NKikimrBlobStorage::TPDiskState::E_descriptor();
+        const auto *descriptorStatusV2 = NKikimrBlobStorage::EDriveStatus_descriptor();
         for (const auto& vslot : vslots) {
             auto* entry = record.add_entries();
             entry->CopyFrom(entrySample);
             entry->mutable_key()->set_pdiskid(pdiskId);
             entry->mutable_info()->set_totalsize(totalSize);
             entry->mutable_info()->set_availablesize((1 - occupancy) * totalSize);
-            entry->mutable_info()->set_statusv2(descriptor->FindValueByNumber(vslot.PDiskStatus)->name());
+            if (vslot.PDiskState) {
+                entry->mutable_info()->set_state(descriptorState->FindValueByNumber(*vslot.PDiskState)->name());
+            }
+            entry->mutable_info()->set_statusv2(descriptorStatusV2->FindValueByNumber(vslot.PDiskStatus)->name());
             ++pdiskId;
+        }
+    }
+
+    void SetPDisksStateNormalToSysViewResponse(NSysView::TEvSysView::TEvGetPDisksResponse::TPtr* ev) {
+        auto& record = (*ev)->Get()->Record;
+        const auto *descriptor = NKikimrBlobStorage::TPDiskState::E_descriptor();
+        const TString state = descriptor->FindValueByNumber(NKikimrBlobStorage::TPDiskState::Normal)->name();
+        for (auto& entry: *record.mutable_entries()) {
+            entry.mutable_info()->set_state(state);
         }
     }
 
@@ -552,10 +572,10 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 issuesCount++;
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(issuesCount, total);
+        UNIT_ASSERT_VALUES_EQUAL_C(issuesCount, total, "Wrong issues count for " << type << " with expecting status " << expectingStatus);
     }
 
-     void StorageTest(ui64 usage, ui64 quota, ui64 storageIssuesNumber, Ydb::Monitoring::StatusFlag::Status status = Ydb::Monitoring::StatusFlag::GREEN) {
+    void StorageTest(ui64 usage, ui64 quota, ui64 storageIssuesNumber, Ydb::Monitoring::StatusFlag::Status status = Ydb::Monitoring::StatusFlag::GREEN) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -719,25 +739,30 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
     }
 
-    Y_UNIT_TEST(YellowGroupIssueOnYellowSpace) {
+    Y_UNIT_TEST(OnlyDiskIssueOnSpaceIssues) {
         auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, NKikimrBlobStorage::READY}, false, 0.9);
         Cerr << result.ShortDebugString() << Endl;
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 0);
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0);
+        CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::YELLOW, 3, "");
     }
 
-    Y_UNIT_TEST(RedGroupIssueOnRedSpace) {
-        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, NKikimrBlobStorage::READY}, false, 0.95);
+    Y_UNIT_TEST(OnlyDiskIssueOnInitialPDisks) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, {NKikimrBlobStorage::READY, NKikimrBlobStorage::TPDiskState::DeviceIoError}});
         Cerr << result.ShortDebugString() << Endl;
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 1);
-    }
-
-    Y_UNIT_TEST(YellowIssueReadyVDisksOnFaultyPDisks) {
-        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, {NKikimrBlobStorage::READY, NKikimrBlobStorage::FAULTY}});
-        Cerr << result.ShortDebugString() << Endl;
-        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 1);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 0);
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0);
         CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0);
+        CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::RED, 3, "");
+    }
+
+    Y_UNIT_TEST(OnlyDiskIssueOnFaultyPDisks) {
+        auto result = RequestHcWithVdisks(NKikimrBlobStorage::TGroupStatus::PARTIAL, TVDisks{3, {NKikimrBlobStorage::READY, NKikimrBlobStorage::FAULTY}});
+        Cerr << result.ShortDebugString() << Endl;
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::YELLOW, 0);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::ORANGE, 0);
+        CheckHcResultHasIssuesWithStatus(result, "STORAGE_GROUP", Ydb::Monitoring::StatusFlag::RED, 0);
+        CheckHcResultHasIssuesWithStatus(result, "PDISK", Ydb::Monitoring::StatusFlag::RED, 3, "");
     }
 
     /* HC currently infers group status on its own, so it's never unknown
@@ -941,6 +966,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     AddGroupsToSysViewResponse(x);
                     break;
                 }
+                case NSysView::TEvSysView::EvGetPDisksResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetPDisksResponse::TPtr*>(&ev);
+                    SetPDisksStateNormalToSysViewResponse(x);
+                    break;
+                }
                 case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr*>(&ev);
                     AddStoragePoolsToSysViewResponse(x);
@@ -1044,6 +1074,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr*>(&ev);
                     AddStoragePoolsToSysViewResponse(x);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetPDisksResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetPDisksResponse::TPtr*>(&ev);
+                    SetPDisksStateNormalToSysViewResponse(x);
                     break;
                 }
                 case TEvWhiteboard::EvSystemStateResponse: {
@@ -1150,6 +1185,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 case NSysView::TEvSysView::EvGetGroupsResponse: {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
                     AddGroupsToSysViewResponse(x);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetPDisksResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetPDisksResponse::TPtr*>(&ev);
+                    SetPDisksStateNormalToSysViewResponse(x);
                     break;
                 }
                 case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
@@ -1353,6 +1393,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     AddStoragePoolsToSysViewResponse(x);
                     break;
                 }
+                case NSysView::TEvSysView::EvGetPDisksResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetPDisksResponse::TPtr*>(&ev);
+                    SetPDisksStateNormalToSysViewResponse(x);
+                    break;
+                }
                 case TEvWhiteboard::EvSystemStateResponse: {
                     auto *x = reinterpret_cast<TEvWhiteboard::TEvSystemStateResponse::TPtr*>(&ev);
                     ClearLoadAverage(x);
@@ -1444,6 +1489,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr*>(&ev);
                     AddStoragePoolsToSysViewResponse(x);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetPDisksResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetPDisksResponse::TPtr*>(&ev);
+                    SetPDisksStateNormalToSysViewResponse(x);
                     break;
                 }
                 case TEvWhiteboard::EvSystemStateResponse: {
@@ -1555,6 +1605,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr*>(&ev);
                     AddStoragePoolsToSysViewResponse(x);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetPDisksResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetPDisksResponse::TPtr*>(&ev);
+                    SetPDisksStateNormalToSysViewResponse(x);
                     break;
                 }
                 case TEvWhiteboard::EvSystemStateResponse: {
@@ -1699,6 +1754,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                 case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr*>(&ev);
                     AddStoragePoolsToSysViewResponse(x);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetPDisksResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetPDisksResponse::TPtr*>(&ev);
+                    SetPDisksStateNormalToSysViewResponse(x);
                     break;
                 }
                 case TEvWhiteboard::EvSystemStateResponse: {
@@ -2219,7 +2279,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         TestConfigUpdateNodeRestartsPerPeriod(runtime, sender, nodeRestarts / 5, nodeRestarts / 2, nodeId, Ydb::Monitoring::StatusFlag::ORANGE);
     }
 
-    Y_UNIT_TEST(LayoutIncorrect) {
+    void LayoutCorrectTest(bool layoutCorrect) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -2241,13 +2301,11 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
                     auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
                     auto& record = (*x)->Get()->Record;
                     for (auto& entry : *record.mutable_entries()) {
-                        entry.mutable_info()->set_layoutcorrect(false);
+                        entry.mutable_info()->set_layoutcorrect(layoutCorrect);
                     }
-
                     break;
                 }
             }
-
             return TTestActorRuntime::EEventAction::PROCESS;
         };
         runtime.SetObserverFunc(observerFunc);
@@ -2258,32 +2316,151 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
         auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
 
-        UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::MAINTENANCE_REQUIRED);
-        UNIT_ASSERT_VALUES_EQUAL(result.database_status_size(), 1);
-        const auto &database_status = result.database_status(0);
+        if (layoutCorrect) {
+            UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
+            UNIT_ASSERT_VALUES_EQUAL(result.database_status_size(), 1);
+            const auto &database_status = result.database_status(0);
 
-        UNIT_ASSERT_VALUES_EQUAL(database_status.overall(), Ydb::Monitoring::StatusFlag::ORANGE);
-        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::ORANGE);
-        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].overall(), Ydb::Monitoring::StatusFlag::ORANGE);
-        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].groups().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].groups()[0].overall(), Ydb::Monitoring::StatusFlag::ORANGE);
+            UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::GREEN);
+            UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].overall(), Ydb::Monitoring::StatusFlag::GREEN);
+            UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].groups().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].groups()[0].overall(), Ydb::Monitoring::StatusFlag::GREEN);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::MAINTENANCE_REQUIRED);
+            UNIT_ASSERT_VALUES_EQUAL(result.database_status_size(), 1);
+            const auto &database_status = result.database_status(0);
 
-        for (const auto &issue_log : result.issue_log()) {
-            if (issue_log.level() == 1 && issue_log.type() == "DATABASE") {
-                UNIT_ASSERT_VALUES_EQUAL(issue_log.location().database().name(), "/Root");
-                UNIT_ASSERT_VALUES_EQUAL(issue_log.message(), "Database has storage issues");
-            } else if (issue_log.level() == 2 && issue_log.type() == "STORAGE") {
-                UNIT_ASSERT_VALUES_EQUAL(issue_log.location().database().name(), "/Root");
-                UNIT_ASSERT_VALUES_EQUAL(issue_log.message(), "Storage has no redundancy");
-            } else if (issue_log.level() == 3 && issue_log.type() == "STORAGE_POOL") {
-                UNIT_ASSERT_VALUES_EQUAL(issue_log.location().storage().pool().name(), "static");
-                UNIT_ASSERT_VALUES_EQUAL(issue_log.message(), "Pool has no redundancy");
-            } else if (issue_log.level() == 4 && issue_log.type() == "STORAGE_GROUP") {
-                UNIT_ASSERT_VALUES_EQUAL(issue_log.location().storage().pool().name(), "static");
-                UNIT_ASSERT_VALUES_EQUAL(issue_log.message(), "Group layout is incorrect");
+            UNIT_ASSERT_VALUES_EQUAL(database_status.overall(), Ydb::Monitoring::StatusFlag::ORANGE);
+            UNIT_ASSERT_VALUES_EQUAL(database_status.storage().overall(), Ydb::Monitoring::StatusFlag::ORANGE);
+            UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].overall(), Ydb::Monitoring::StatusFlag::ORANGE);
+            UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].groups().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(database_status.storage().pools()[0].groups()[0].overall(), Ydb::Monitoring::StatusFlag::ORANGE);
+
+            for (const auto &issue_log : result.issue_log()) {
+                if (issue_log.level() == 1 && issue_log.type() == "DATABASE") {
+                    UNIT_ASSERT_VALUES_EQUAL(issue_log.location().database().name(), "/Root");
+                } else if (issue_log.level() == 2 && issue_log.type() == "STORAGE") {
+                    UNIT_ASSERT_VALUES_EQUAL(issue_log.location().database().name(), "/Root");
+                    UNIT_ASSERT_VALUES_EQUAL(issue_log.message(), "Storage has no redundancy");
+                } else if (issue_log.level() == 3 && issue_log.type() == "STORAGE_POOL") {
+                    UNIT_ASSERT_VALUES_EQUAL(issue_log.location().storage().pool().name(), "static");
+                    UNIT_ASSERT_VALUES_EQUAL(issue_log.message(), "Pool has no redundancy");
+                } else if (issue_log.level() == 4 && issue_log.type() == "STORAGE_GROUP") {
+                    UNIT_ASSERT_VALUES_EQUAL(issue_log.location().storage().pool().name(), "static");
+                    UNIT_ASSERT_VALUES_EQUAL(issue_log.message(), "Group layout is incorrect");
+                }
             }
         }
+    }
+
+    Y_UNIT_TEST(LayoutIncorrect) {
+        LayoutCorrectTest(false);
+    }
+
+    Y_UNIT_TEST(LayoutCorrect) {
+        LayoutCorrectTest(true);
+    }
+
+    Y_UNIT_TEST(UnknowPDiskState) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetDynamicNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case NSysView::TEvSysView::EvGetVSlotsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
+                    auto& record = (*x)->Get()->Record;
+                    for (auto& entry : *record.mutable_entries()) {
+                        entry.mutable_info()->set_statusv2("ERROR");
+                    }
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetPDisksResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetPDisksResponse::TPtr*>(&ev);
+                    auto& record = (*x)->Get()->Record;
+                    for (auto& entry : *record.mutable_entries()) {
+                        entry.mutable_info()->set_state("UNKNOWN_STATE?");
+                    }
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        TAutoPtr<IEventHandle> handle;
+        auto *request = new NHealthCheck::TEvSelfCheckRequest;
+        request->Request.set_return_verbose_status(true);
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+
+        bool pdiskIssueFoundInResult = false;
+        for (const auto &issue_log : result.issue_log()) {
+            if (issue_log.type() == "PDISK") {
+                pdiskIssueFoundInResult = true;
+            }
+        }
+        UNIT_ASSERT(!pdiskIssueFoundInResult);
+    }
+
+    Y_UNIT_TEST(TestSystemStateRetriesAfterReceivingResponse) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetDynamicNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        std::optional<TActorId> targetActor;
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvWhiteboard::EvSystemStateResponse: {
+                    if (ev->Cookie == 1) {
+                        if (!targetActor) {
+                            targetActor = ev->Recipient;
+                            runtime.Send(ev.Release());
+                            runtime.Send(new IEventHandle(
+                                *targetActor,
+                                sender,
+                                new NHealthCheck::TEvPrivate::TEvRetryNodeWhiteboard(1, TEvWhiteboard::TEvSystemStateRequest::EventType)
+                            ));
+
+                        }
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, new NHealthCheck::TEvSelfCheckRequest(), 0));
+
+        auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+        UNIT_ASSERT_VALUES_EQUAL(result.self_check_result(), Ydb::Monitoring::SelfCheck::GOOD);
     }
 }
 }

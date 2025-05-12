@@ -85,7 +85,7 @@ bool TBaseMergeTask::DoOnAllocated(
         return false;
     }
     AllocationGuard = std::move(guard);
-    NConveyor::TScanServiceOperator::SendTaskToExecute(static_pointer_cast<TBaseMergeTask>(allocation));
+    NConveyor::TScanServiceOperator::SendTaskToExecute(static_pointer_cast<TBaseMergeTask>(allocation), Context->GetCommonContext()->GetConveyorProcessId());
     return true;
 }
 
@@ -142,7 +142,7 @@ TConclusionStatus TStartMergeTask::DoExecuteImpl() {
         }
     }
     Merger->PutControlPoint(MergingContext->GetFinish(), false);
-    Merger->SkipToLowerBound(MergingContext->GetStart(), MergingContext->GetIncludeStart());
+    Merger->SkipToBound(MergingContext->GetStart(), MergingContext->GetIncludeStart());
     const ui32 originalSourcesCount = Sources.size();
     Sources.clear();
 

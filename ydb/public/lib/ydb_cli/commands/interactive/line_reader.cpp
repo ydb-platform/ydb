@@ -1,11 +1,13 @@
 #include "line_reader.h"
 
-#include "yql_highlight.h"
+#include <ydb/public/lib/ydb_cli/commands/interactive/complete/yql_completer.h>
+#include <ydb/public/lib/ydb_cli/commands/interactive/highlight/yql_highlighter.h>
 
 #include <yql/essentials/sql/v1/complete/sql_complete.h>
 #include <yql/essentials/sql/v1/complete/string_util.h>
 
 #include <util/generic/string.h>
+#include <util/generic/hash.h>
 #include <util/system/file.h>
 
 #include <contrib/restricted/patched/replxx/include/replxx.hxx>
@@ -37,10 +39,6 @@ std::optional<FileHandlerLockGuard> LockFile(TFileHandle& fileHandle) {
     return FileHandlerLockGuard(&fileHandle);
 }
 
-replxx::Replxx::Color ReplxxColorOf(NSQLComplete::ECandidateKind /* kind */) {
-    return replxx::Replxx::Color::DEFAULT;
-}
-
 class TLineReader: public ILineReader {
 public:
     TLineReader(std::string prompt, std::string historyFilePath);
@@ -53,7 +51,8 @@ private:
     std::string Prompt;
     std::string HistoryFilePath;
     TFileHandle HistoryFileHandle;
-    NSQLComplete::ISqlCompletionEngine::TPtr CompletionEngine;
+    IYQLCompleter::TPtr YQLCompleter;
+    IYQLHighlighter::TPtr YQLHighlighter;
     replxx::Replxx Rx;
 };
 
@@ -61,43 +60,55 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath)
     : Prompt(std::move(prompt))
     , HistoryFilePath(std::move(historyFilePath))
     , HistoryFileHandle(HistoryFilePath.c_str(), EOpenModeFlag::OpenAlways | EOpenModeFlag::RdWr | EOpenModeFlag::AW | EOpenModeFlag::ARUser | EOpenModeFlag::ARGroup)
-    , CompletionEngine(NSQLComplete::MakeSqlCompletionEngine())
+    , YQLCompleter(MakeYQLCompleter(TColorSchema::Monaco()))
+    , YQLHighlighter(MakeYQLHighlighter(TColorSchema::Monaco()))
 {
     Rx.install_window_change_handler();
 
-    auto completion_callback = [this](const std::string& prefix, size_t contextLen) {
-        auto completion = CompletionEngine->Complete({
-            .Text = prefix,
-            .CursorPosition = prefix.length(),
-        });
-
-        contextLen = completion.CompletedToken.SourcePosition;
-
-        replxx::Replxx::completions_t entries;
-        for (auto& candidate : completion.Candidates) {
-            candidate.Content += ' ';
-            entries.emplace_back(std::move(candidate.Content), ReplxxColorOf(candidate.Kind));
-        }
-        return entries;
-    };
-
-    auto highlighter_callback = [](const auto& text, auto& colors) {
-        return YQLHighlight(YQLHighlight::ColorSchema::Monaco()).Apply(text, colors);
-    };
-
-    Rx.set_completion_callback(completion_callback);
-    Rx.set_highlighter_callback(highlighter_callback);
-    Rx.enable_bracketed_paste();
-    Rx.set_unique_history(true);
     Rx.set_complete_on_empty(true);
     Rx.set_word_break_characters(NSQLComplete::WordBreakCharacters);
-    Rx.bind_key(replxx::Replxx::KEY::control('N'), [&](char32_t code) { return Rx.invoke(replxx::Replxx::ACTION::HISTORY_NEXT, code); });
-    Rx.bind_key(replxx::Replxx::KEY::control('P'), [&](char32_t code) { return Rx.invoke(replxx::Replxx::ACTION::HISTORY_PREVIOUS, code); });
-    Rx.bind_key(replxx::Replxx::KEY::control('D'), [](char32_t) { return replxx::Replxx::ACTION_RESULT::BAIL; });
-    auto commit_action = [&](char32_t code) {
+    Rx.set_completion_callback([this](const std::string& prefix, int& contextLen) {
+        return YQLCompleter->Apply(prefix, contextLen);
+    });
+    Rx.set_hint_callback([this](const std::string& prefix, int& contextLen, TColor&) {
+        replxx::Replxx::hints_t hints;
+        for (auto& candidate : YQLCompleter->Apply(prefix, contextLen)) {
+            hints.emplace_back(std::move(candidate.text()));
+        }
+        return hints;
+    });
+
+    Rx.set_highlighter_callback([this](const auto& text, auto& colors) {
+        YQLHighlighter->Apply(text, colors);
+    });
+
+    Rx.bind_key(replxx::Replxx::KEY::control('N'), [&](char32_t code) { 
+        return Rx.invoke(replxx::Replxx::ACTION::HISTORY_NEXT, code); 
+    });
+    Rx.bind_key(replxx::Replxx::KEY::control('P'), [&](char32_t code) { 
+        return Rx.invoke(replxx::Replxx::ACTION::HISTORY_PREVIOUS, code); 
+    });
+    Rx.bind_key(replxx::Replxx::KEY::control('D'), [](char32_t) { 
+        return replxx::Replxx::ACTION_RESULT::BAIL; 
+    });
+    Rx.bind_key(replxx::Replxx::KEY::control('J'), [&](char32_t code) {
         return Rx.invoke(replxx::Replxx::ACTION::COMMIT_LINE, code);
-    };
-    Rx.bind_key(replxx::Replxx::KEY::control('J'), commit_action);
+    });
+
+    for (const auto [lhs, rhs] : THashMap<char, char>{
+        {'(', ')'},
+        {'[', ']'},
+        {'{', '}'},
+        {'`', '`'},
+        {'\'', '\''},
+        {'"', '"'},
+    }) {
+        Rx.bind_key(lhs, [&, lhs, rhs](char32_t) {
+            Rx.invoke(replxx::Replxx::ACTION::INSERT_CHARACTER, lhs);
+            Rx.invoke(replxx::Replxx::ACTION::INSERT_CHARACTER, rhs);
+            return Rx.invoke(replxx::Replxx::ACTION::MOVE_CURSOR_LEFT, 0);
+        });
+    }
 
     auto fileLockGuard = LockFile(HistoryFileHandle);
     if (!fileLockGuard) {
@@ -105,6 +116,8 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath)
         return;
     }
 
+    Rx.enable_bracketed_paste();
+    Rx.set_unique_history(true);
     if (!Rx.history_load(HistoryFilePath)) {
         Rx.print("Loading history failed: %s\n", strerror(errno));
     }

@@ -151,6 +151,11 @@ void TJournalWriterConfig::Register(TRegistrar registrar)
     registrar.Parameter("prerequisite_transaction_probe_period", &TThis::PrerequisiteTransactionProbePeriod)
         .Default(TDuration::Seconds(60));
 
+    registrar.Parameter("enable_checksums", &TThis::EnableChecksums)
+        .Default(false);
+    registrar.Parameter("validate_erasure_coding", &TThis::ValidateErasureCoding)
+        .Default(false);
+
     registrar.Parameter("dont_close", &TThis::DontClose)
         .Default(false);
     registrar.Parameter("dont_seal", &TThis::DontSeal)

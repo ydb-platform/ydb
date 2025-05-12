@@ -230,7 +230,6 @@ public:
                 .SetMapAsObject(true)
                 .SetEnumMode(NProtobufJson::TProto2JsonConfig::EnumValueMode::EnumName);
 
-
         std::unordered_map<TString, const yandex::cloud::priv::ydb::v1::Database*> indexDatabaseById;
         std::unordered_map<TString, const yandex::cloud::priv::ydb::v1::Database*> indexDatabaseByName;
         std::unordered_map<TString, NJson::TJsonValue*> indexJsonDatabaseById;
@@ -245,16 +244,23 @@ public:
         databases.SetType(NJson::JSON_ARRAY);
 
         NJson::TJsonValue::TArray tenantArray(TenantInfo["TenantInfo"].GetArray());
-        std::sort(tenantArray.begin(), tenantArray.end(), [](const NJson::TJsonValue& a, const NJson::TJsonValue& b) -> bool {
-            return a["Name"].GetStringRobust() < b["Name"].GetStringRobust();
-        });
+        TString filterDatabase = Request.Parameters["database_name"];
+        if (!filterDatabase) {
+            std::sort(tenantArray.begin(), tenantArray.end(), [](const NJson::TJsonValue& a, const NJson::TJsonValue& b) -> bool {
+                return a["Name"].GetStringRobust() < b["Name"].GetStringRobust();
+            });
+        }
         for (const NJson::TJsonValue& tenant : tenantArray) {
+            if (filterDatabase && tenant["Name"].GetStringRobust() != filterDatabase) {
+                continue;
+            }
             NJson::TJsonValue& jsonDatabase = databases.AppendValue(NJson::TJsonValue());
             jsonDatabase = std::move(tenant);
             TString id = jsonDatabase["Id"].GetStringRobust();
             if (!id.empty()) {
                 indexJsonDatabaseById[id] = &jsonDatabase;
             }
+            bool foundDatabase = false;
             NJson::TJsonValue* jsonUserAttributes;
             if (jsonDatabase.GetValuePointer("UserAttributes", &jsonUserAttributes)) {
                 NJson::TJsonValue* jsonDatabaseId;
@@ -263,16 +269,26 @@ public:
                         auto itDatabase = indexDatabaseById.find(jsonDatabaseId->GetStringRobust());
                         if (itDatabase != indexDatabaseById.end()) {
                             NProtobufJson::Proto2Json(*itDatabase->second, jsonDatabase["ControlPlane"], proto2JsonConfig);
+                            foundDatabase = true;
+                        }
+                        if (!foundDatabase) {
+                            auto itDatabase = indexDatabaseByName.find(jsonDatabaseId->GetStringRobust());
+                            if (itDatabase != indexDatabaseByName.end()) {
+                                NProtobufJson::Proto2Json(*itDatabase->second, jsonDatabase["ControlPlane"], proto2JsonConfig);
+                                foundDatabase = true;
+                            }
                         }
                     }
                 }
             }
-            NJson::TJsonValue* jsonName;
-            if (jsonDatabase.GetValuePointer("Name", &jsonName)) {
-                if (jsonName->GetType() == NJson::JSON_STRING) {
-                    auto itDatabase = indexDatabaseByName.find(jsonName->GetStringRobust());
-                    if (itDatabase != indexDatabaseByName.end()) {
-                        NProtobufJson::Proto2Json(*itDatabase->second, jsonDatabase["ControlPlane"], proto2JsonConfig);
+            if (!foundDatabase) {
+                NJson::TJsonValue* jsonName;
+                if (jsonDatabase.GetValuePointer("Name", &jsonName)) {
+                    if (jsonName->GetType() == NJson::JSON_STRING) {
+                        auto itDatabase = indexDatabaseByName.find(jsonName->GetStringRobust());
+                        if (itDatabase != indexDatabaseByName.end()) {
+                            NProtobufJson::Proto2Json(*itDatabase->second, jsonDatabase["ControlPlane"], proto2JsonConfig);
+                        }
                     }
                 }
             }

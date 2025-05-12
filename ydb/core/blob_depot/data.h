@@ -405,6 +405,19 @@ namespace NKikimr::NBlobDepot {
 #endif
         };
 
+        struct TAssimilatedBlobInfo {
+            struct TDrop {};
+
+            struct TUpdate {
+                TBlobSeqId BlobSeqId;
+                bool Keep = false;
+                bool DoNotKeep = false;
+            };
+
+            TKey Key;
+            std::variant<TDrop, TUpdate> Action;
+        };
+
     private:
         struct TRecordWithTrash {};
 
@@ -730,7 +743,7 @@ namespace NKikimr::NBlobDepot {
         bool IsLoaded() const { return Loaded; }
         bool IsKeyLoaded(const TKey& key) const { return Loaded || LoadedKeys[key]; }
 
-        bool EnsureKeyLoaded(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc);
+        bool EnsureKeyLoaded(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc, bool *progress = nullptr);
 
         template<typename TRecord>
         bool LoadMissingKeys(const TRecord& record, NTabletFlatExecutor::TTransactionContext& txc);
@@ -745,8 +758,11 @@ namespace NKikimr::NBlobDepot {
         IActor *CreateResolveDecommitActor(TEvBlobDepot::TEvResolve::TPtr ev);
 
         class TTxCommitAssimilatedBlob;
-        void ExecuteTxCommitAssimilatedBlob(NKikimrProto::EReplyStatus status, TBlobSeqId blobSeqId, TData::TKey key,
-            ui32 notifyEventType, TActorId parentId, ui64 cookie, bool keep = false, bool doNotKeep = false);
+        void ExecuteTxCommitAssimilatedBlob(std::vector<TAssimilatedBlobInfo>&& blobs, ui32 notifyEventType,
+            TActorId parentId, ui64 cookie);
+
+        class TTxHardCollectAssimilatedBlobs;
+        void ExecuteTxHardCollectAssimilatedBlobs(ui64 tabletId, ui8 channel, TGenStep barrier, TActorId parentId);
 
         class TTxResolve;
         void ExecuteTxResolve(TEvBlobDepot::TEvResolve::TPtr ev, THashSet<TLogoBlobID>&& resolutionErrors = {});

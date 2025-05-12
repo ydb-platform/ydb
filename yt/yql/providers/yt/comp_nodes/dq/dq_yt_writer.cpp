@@ -87,7 +87,7 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsFinish()) {
-            return NUdf::TUnboxedValuePod::MakeFinish();
+            return state;
         } else if (state.IsInvalid())
             MakeState(ctx, state);
 
@@ -100,7 +100,7 @@ public:
             case EFetchResult::Finish:
                 ptr->Finish();
                 state = NUdf::TUnboxedValuePod::MakeFinish();
-                return NUdf::TUnboxedValuePod::MakeFinish();
+                return state;
         }
     }
 #ifndef MKQL_DISABLE_CODEGEN
@@ -183,7 +183,7 @@ public:
             const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
             const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, structPtrType, "state_arg", block);
 
-            const auto finishFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TWriterState::Finish));
+            const auto finishFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWriterState::Finish>());
             const auto finishType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType()}, false);
             const auto finishPtr = CastInst::Create(Instruction::IntToPtr, finishFunc, PointerType::getUnqual(finishType), "finish", block);
             CallInst::Create(finishType, finishPtr, {stateArg}, "", block);

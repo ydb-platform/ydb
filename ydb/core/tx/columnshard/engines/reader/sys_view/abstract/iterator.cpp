@@ -44,8 +44,9 @@ TConclusion<std::shared_ptr<TPartialReadResult>> TStatsIteratorBase::GetBatch() 
         auto lastKey = keyBatch->Slice(keyBatch->num_rows() - 1, 1);
 
         {
-            NArrow::TColumnFilter filter = ReadMetadata->GetPKRangesFilter().BuildFilter(originalBatch);
-            AFL_VERIFY(filter.Apply(originalBatch));
+            NArrow::TColumnFilter filter =
+                ReadMetadata->GetPKRangesFilter().BuildFilter(std::make_shared<NArrow::TGeneralContainer>(originalBatch));
+            filter.Apply(originalBatch);
         }
 
         // Leave only requested columns
@@ -61,7 +62,7 @@ TConclusion<std::shared_ptr<TPartialReadResult>> TStatsIteratorBase::GetBatch() 
             continue;
         }
         auto table = collection->ToTable({}, &resolver, false);
-        return std::make_shared<TPartialReadResult>(table, std::make_shared<TPlainScanCursor>(lastKey), Context, std::nullopt);
+        return std::make_shared<TPartialReadResult>(table, std::make_shared<TPlainScanCursor>(std::make_shared<NArrow::TSimpleRow>(lastKey, 0)), Context, std::nullopt);
     }
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "finished_iterator");
     return std::shared_ptr<TPartialReadResult>();

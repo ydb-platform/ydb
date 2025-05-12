@@ -4008,6 +4008,9 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
 }
 
 TExprNode::TPtr ExpandPgSelect(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    if (optCtx.Types != nullptr && optCtx.Types->IgnoreExpandPg) {
+        return node;
+    }
     return ExpandPgSelectImpl(node, ctx, optCtx, Nothing(), {}, {});
 }
 

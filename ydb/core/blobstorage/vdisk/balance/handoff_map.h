@@ -62,7 +62,7 @@ namespace NKikimr {
         void Transform(const TKey& /*key*/, TMemRec& /*memRec*/, TDataMerger& dataMerger) {
             // do nothing by default, all work is done in template specialization for logo blobs
             Counter++;
-            Y_DEBUG_ABORT_UNLESS(dataMerger.Empty());
+            Y_VERIFY_DEBUG_S(dataMerger.Empty(), HullCtx->VCtx->VDiskLogPrefix);
         }
 
     private:
@@ -85,7 +85,7 @@ namespace NKikimr {
             return;
         }
 
-        Y_VERIFY(Counter < DelMap.size());
+        Y_VERIFY_S(Counter < DelMap.size(), HullCtx->VCtx->VDiskLogPrefix);
         TIngress ingress = memRec.GetIngress(); // ingress we are going to change
         ui8 vecSize = Top->GType.TotalPartCount();
 

@@ -77,6 +77,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableDatabaseAdmin, std::nullopt);
         OPTION(std::optional<bool>, EnablePermissionsExport, std::nullopt);
         OPTION(std::optional<bool>, EnableChecksumsExport, std::nullopt);
+        OPTION(TVector<TIntrusivePtr<NFake::TProxyDS>>, DSProxies, {});
 
         #undef OPTION
     };
@@ -100,7 +101,7 @@ namespace NSchemeShardUT_Private {
         static bool ENABLE_SCHEMESHARD_LOG;
 
         TTestEnv(TTestActorRuntime& runtime, ui32 nchannels = 4, bool enablePipeRetries = true,
-            TSchemeShardFactory ssFactory = &CreateFlatTxSchemeShard, bool enableSystemViews = false);
+            TSchemeShardFactory ssFactory = &CreateFlatTxSchemeShard);
         TTestEnv(TTestActorRuntime& runtime, const TTestEnvOptions& opts,
             TSchemeShardFactory ssFactory = &CreateFlatTxSchemeShard, std::shared_ptr<NKikimr::NDataShard::IExportFactory> dsExportFactory = {});
 

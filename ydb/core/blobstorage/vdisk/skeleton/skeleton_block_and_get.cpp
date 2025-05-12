@@ -30,9 +30,9 @@ public:
         , VDiskIncarnationGuid(vDiskIncarnationGuid)
         , GInfo(gInfo)
     {
-        Y_ABORT_UNLESS(ev->Get()->Record.HasForceBlockTabletData());
-        Y_ABORT_UNLESS(ev->Get()->Record.GetForceBlockTabletData().HasId());
-        Y_ABORT_UNLESS(ev->Get()->Record.GetForceBlockTabletData().HasGeneration());
+        Y_VERIFY_S(ev->Get()->Record.HasForceBlockTabletData(), VCtx->VDiskLogPrefix);
+        Y_VERIFY_S(ev->Get()->Record.GetForceBlockTabletData().HasId(), VCtx->VDiskLogPrefix);
+        Y_VERIFY_S(ev->Get()->Record.GetForceBlockTabletData().HasGeneration(), VCtx->VDiskLogPrefix);
         Request = std::move(ev);
     }
 

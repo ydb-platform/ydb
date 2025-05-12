@@ -35,6 +35,10 @@ public:
         , Behaviour(behaviour) {
     }
 
+    const TInternalPathId& GetPathId() const {
+        return PathId;
+    }
+
     const TMonotonic& GetCreatedMonotonic() const {
         return Created;
     }
@@ -45,7 +49,7 @@ public:
 class TWriteTasksQueue {
 private:
     bool WriteTasksOverloadCheckerScheduled = false;
-    std::deque<TWriteTask> WriteTasks;
+    THashMap<TInternalPathId, std::deque<TWriteTask>> WriteTasks;
     i64 PredWriteTasksSize = 0;
     TColumnShard* Owner;
 

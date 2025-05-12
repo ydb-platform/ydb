@@ -1,6 +1,7 @@
 RECURSE(
     kv
     log
+    mixedpy
     olap_workload
     oltp_workload
     simple_queue

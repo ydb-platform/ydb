@@ -22,9 +22,10 @@ ui64 IFetchingStep::GetProcessingDataSize(const std::shared_ptr<NCommon::IDataSo
 
 TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(
-        source->GetStageData().GetTable()->ToTable(source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(
-                                                       source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()),
-            source->GetContext()->GetCommonContext()->GetResolver(), true));
+        source->GetStageData().GetTable()->ToGeneralContainer(source->GetContext()->GetCommonContext()->GetResolver(),
+            source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(
+                source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()),
+            true));
     source->MutableStageData().AddFilter(filter);
     return true;
 }
@@ -99,8 +100,9 @@ TConclusion<bool> TDetectInMem::DoExecuteInplace(const std::shared_ptr<IDataSour
     source->InitFetchingPlan(plan);
     TFetchingScriptCursor cursor(plan, 0);
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("sdmem"));
-    auto task = std::make_shared<TStepAction>(source, std::move(cursor), source->GetContext()->GetCommonContext()->GetScanActorId());
-    NConveyor::TScanServiceOperator::SendTaskToExecute(task);
+    const auto& commonContext = *source->GetContext()->GetCommonContext();
+    auto task = std::make_shared<TStepAction>(source, std::move(cursor), commonContext.GetScanActorId(), false);
+    NConveyor::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
     return false;
 }
 
@@ -108,25 +110,19 @@ namespace {
 class TApplySourceResult: public IDataTasksProcessor::ITask {
 private:
     using TBase = IDataTasksProcessor::ITask;
-    YDB_READONLY_DEF(std::shared_ptr<arrow::Table>, Result);
     YDB_READONLY_DEF(std::shared_ptr<IDataSource>, Source);
-    YDB_READONLY(ui32, StartIndex, 0);
-    YDB_READONLY(ui32, OriginalRecordsCount, 0);
     NColumnShard::TCounterGuard Guard;
     TFetchingScriptCursor Step;
 
 public:
-    TString GetTaskClassIdentifier() const override {
+    virtual TString GetTaskClassIdentifier() const override {
         return "TApplySourceResult";
     }
 
-    TApplySourceResult(const std::shared_ptr<IDataSource>& source, std::shared_ptr<arrow::Table>&& result, const ui32 startIndex,
-        const ui32 originalRecordsCount, const TFetchingScriptCursor& step)
+    TApplySourceResult(
+        const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step)
         : TBase(NActors::TActorId())
-        , Result(result)
         , Source(source)
-        , StartIndex(startIndex)
-        , OriginalRecordsCount(originalRecordsCount)
         , Guard(source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard())
         , Step(step) {
     }
@@ -137,9 +133,9 @@ public:
     }
     virtual bool DoApply(IDataReader& indexedDataRead) const override {
         auto* plainReader = static_cast<TPlainReadData*>(&indexedDataRead);
-        auto resultCopy = Result;
         Source->SetCursor(Step);
-        plainReader->MutableScanner().OnSourceReady(Source, std::move(resultCopy), StartIndex, OriginalRecordsCount, *plainReader);
+        Source->StartSyncSection();
+        plainReader->MutableScanner().GetResultSyncPoint()->OnSourcePrepared(Source, *plainReader);
         return true;
     }
 };
@@ -155,40 +151,56 @@ TConclusion<bool> TBuildResultStep::DoExecuteInplace(const std::shared_ptr<IData
         AFL_VERIFY(StartIndex == 0);
         AFL_VERIFY(RecordsCount == source->GetRecordsCount())("records_count", RecordsCount)("source", source->GetRecordsCount());
     }
+    contextTableConstruct.SetFilter(source->GetStageResult().GetNotAppliedFilter());
     std::shared_ptr<arrow::Table> resultBatch;
     if (!source->GetStageResult().IsEmpty()) {
         resultBatch = source->GetStageResult().GetBatch()->BuildTableVerified(contextTableConstruct);
-        if (auto filter = source->GetStageResult().GetNotAppliedFilter()) {
-            AFL_VERIFY(filter->Apply(resultBatch, NArrow::TColumnFilter::TApplyContext(StartIndex, RecordsCount).SetTrySlices(true)));
+        if (!resultBatch->num_rows()) {
+            resultBatch = nullptr;
         }
     }
-
+    const ui32 recordsCount = resultBatch ? resultBatch->num_rows() : 0;
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TBuildResultStep")("source_id", source->GetSourceId())("count", recordsCount);
+    context->GetCommonContext()->GetCounters().OnSourceFinished(source->GetRecordsCount(), source->GetUsedRawBytes(), recordsCount);
+    source->MutableResultRecordsCount() += recordsCount;
+    if (!resultBatch || !resultBatch->num_rows()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("empty_source", source->DebugJson().GetStringRobust());
+    }
+    source->MutableStageResult().SetResultChunk(std::move(resultBatch), StartIndex, RecordsCount);
     NActors::TActivationContext::AsActorContext().Send(context->GetCommonContext()->GetScanActorId(),
-        new NColumnShard::TEvPrivate::TEvTaskProcessedResult(
-            std::make_shared<TApplySourceResult>(source, std::move(resultBatch), StartIndex, RecordsCount, step)));
+        new NColumnShard::TEvPrivate::TEvTaskProcessedResult(std::make_shared<TApplySourceResult>(source, step)));
     return false;
 }
 
 TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    NCommon::TFetchingScriptBuilder acc(*source->GetContext());
+    const auto context = source->GetContext();
+    NCommon::TFetchingScriptBuilder acc(*context);
     if (source->IsSourceInMemory()) {
         AFL_VERIFY(source->GetStageResult().GetPagesToResultVerified().size() == 1);
     }
+    AFL_VERIFY(!source->GetStageResult().IsEmpty());
     for (auto&& i : source->GetStageResult().GetPagesToResultVerified()) {
-        if (source->GetIsStartedByCursor() && !source->GetContext()->GetCommonContext()->GetScanCursor()->CheckSourceIntervalUsage(
+        if (source->GetIsStartedByCursor() && !context->GetCommonContext()->GetScanCursor()->CheckSourceIntervalUsage(
                                                   source->GetSourceId(), i.GetIndexStart(), i.GetRecordsCount())) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TPrepareResultStep_ResultStep_SKIP_CURSOR")("source_id", source->GetSourceId());
             continue;
+        } else {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TPrepareResultStep_ResultStep")("source_id", source->GetSourceId());
         }
         acc.AddStep(std::make_shared<TBuildResultStep>(i.GetIndexStart(), i.GetRecordsCount()));
     }
     auto plan = std::move(acc).Build();
     AFL_VERIFY(!plan->IsFinished(0));
     source->InitFetchingPlan(plan);
-
-    TFetchingScriptCursor cursor(plan, 0);
-    auto task = std::make_shared<TStepAction>(source, std::move(cursor), source->GetContext()->GetCommonContext()->GetScanActorId());
-    NConveyor::TScanServiceOperator::SendTaskToExecute(task);
-    return false;
+    if (source->NeedFullAnswer()) {
+        TFetchingScriptCursor cursor(plan, 0);
+        const auto& commonContext = *context->GetCommonContext();
+        auto task = std::make_shared<TStepAction>(source, std::move(cursor), commonContext.GetScanActorId(), false);
+        NConveyor::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
+        return false;
+    } else {
+        return true;
+    }
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

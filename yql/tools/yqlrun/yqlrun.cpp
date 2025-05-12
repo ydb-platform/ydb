@@ -81,8 +81,9 @@ void CommonInit(const NLastGetopt::TOptsParseResult& res, const TString& udfReso
         udfResolver = NCommon::CreateOutProcUdfResolver(funcRegistry.Get(), fileStorage, udfResolverPath, {}, {}, filterSysCalls, {});
 
         Cerr << TInstant::Now().ToStringLocalUpToSeconds() << " Udf scanning started for " << udfsPaths.size() << " udfs ..." << Endl;
+        THoldingFileStorage storage(fileStorage);
         udfIndex = new TUdfIndex();
-        LoadRichMetadataToUdfIndex(*udfResolver, udfsPaths, false, TUdfIndex::EOverrideMode::RaiseError, *udfIndex);
+        LoadRichMetadataToUdfIndex(*udfResolver, udfsPaths, false, TUdfIndex::EOverrideMode::RaiseError, *udfIndex, storage);
         Cerr << TInstant::Now().ToStringLocalUpToSeconds() << " UdfIndex done." << Endl;
 
         udfResolver = NCommon::CreateUdfResolverWithIndex(udfIndex, udfResolver, fileStorage);
@@ -116,6 +117,7 @@ int RunUI(int argc, const char* argv[])
 
     NYql::NBacktrace::RegisterKikimrFatalActions();
     NYql::NBacktrace::EnableKikimrSymbolize();
+    EnableKikimrBacktraceFormat();
 
     TVector<TString> udfsPaths;
     TString udfsDir;

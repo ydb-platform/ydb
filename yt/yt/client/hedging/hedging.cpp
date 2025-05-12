@@ -66,10 +66,10 @@ public:
         return Executor_->GetClient(0)->GetConnection();
     }
 
-    std::optional<std::string> GetClusterName(bool fetchIfNull = true) override
+    TFuture<std::optional<std::string>> GetClusterName(bool fetchIfNull = true) override
     {
         Y_UNUSED(fetchIfNull);
-        return {};
+        return MakeFuture<std::optional<std::string>>({});
     }
 
     RETRYABLE_METHOD(TFuture<TUnversionedLookupRowsResult>, LookupRows, (const TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TUnversionedRow>&, const TLookupRowsOptions&));
@@ -120,6 +120,7 @@ public:
     UNSUPPORTED_METHOD(const NChaosClient::IReplicationCardCachePtr&, GetReplicationCardCache, ());
     UNSUPPORTED_METHOD(const NTransactionClient::ITimestampProviderPtr&, GetTimestampProvider, ());
     UNSUPPORTED_METHOD(ITransactionPtr, AttachTransaction, (NTransactionClient::TTransactionId, const TTransactionAttachOptions&));
+    UNSUPPORTED_METHOD(IPrerequisitePtr, AttachPrerequisite, (NPrerequisiteClient::TPrerequisiteId, const TPrerequisiteAttachOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, MountTable, (const TYPath&, const TMountTableOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, UnmountTable, (const TYPath&, const TUnmountTableOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, RemountTable, (const TYPath&, const TRemountTableOptions&));
@@ -232,6 +233,7 @@ public:
     UNSUPPORTED_METHOD(TFuture<void>, PausePipeline, (const TYPath&, const TPausePipelineOptions&));
     UNSUPPORTED_METHOD(TFuture<TPipelineState>, GetPipelineState, (const TYPath&, const TGetPipelineStateOptions&));
     UNSUPPORTED_METHOD(TFuture<TGetFlowViewResult>, GetFlowView, (const NYPath::TYPath&, const NYPath::TYPath&, const TGetFlowViewOptions&));
+    UNSUPPORTED_METHOD(TFuture<TFlowExecuteResult>, FlowExecute, (const NYPath::TYPath&, const TString&, const NYson::TYsonString&, const TFlowExecuteOptions&));
     UNSUPPORTED_METHOD(TFuture<TShuffleHandlePtr>, StartShuffle, (const std::string&, int, NObjectClient::TTransactionId, const TStartShuffleOptions&));
     UNSUPPORTED_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (const TShuffleHandlePtr&, int, const NTableClient::TTableReaderConfigPtr&));
     UNSUPPORTED_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (const TShuffleHandlePtr&, const std::string&, const NTableClient::TTableWriterConfigPtr&));

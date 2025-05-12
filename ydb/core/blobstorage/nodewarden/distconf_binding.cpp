@@ -386,6 +386,12 @@ namespace NKikimr::NStorage {
         STLOG(PRI_DEBUG, BS_NODE, NWDC02, "TEvNodeConfigPush", (NodeId, senderNodeId), (Cookie, ev->Cookie),
             (SessionId, ev->InterconnectSession), (Binding, Binding), (Record, record));
 
+        if (!NodeIdsSet.contains(senderNodeId)) {
+            // node has been already deleted from the config, but new subscription is coming through -- ignoring it
+            SendEvent(*ev, TEvNodeConfigReversePush::MakeRejected());
+            return;
+        }
+
         // check if we can't accept this message (or else it would make a cycle)
         if (record.GetInitial() && senderNodeId == GetRootNodeId()) {
             STLOG(PRI_DEBUG, BS_NODE, NWDC28, "TEvNodeConfigPush rejected", (NodeId, senderNodeId),

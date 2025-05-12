@@ -203,7 +203,7 @@ struct TIndexDescription {
             case EType::GlobalAsync:
                 return false;
             case EType::GlobalSyncVectorKMeansTree:
-                return true;
+                return false;
         }
     }
 
@@ -669,6 +669,11 @@ struct TKikimrTableMetadata : public TThrRefBase {
     }
 };
 
+struct TAlterDatabaseSettings {
+    TString DatabasePath;
+    std::optional<TString> Owner;
+};
+
 struct TCreateUserSettings {
     TString UserName;
     TString Password;
@@ -837,6 +842,8 @@ struct TReplicationSettingsBase {
     TMaybe<TOAuthToken> OAuthToken;
     TMaybe<TStaticCredentials> StaticCredentials;
     TMaybe<TStateDone> StateDone;
+    bool StatePaused = false;
+    bool StateStandBy = false;
 
     using EFailoverMode = TStateDone::EFailoverMode;
     TStateDone& EnsureStateDone(EFailoverMode mode = EFailoverMode::Consistent) {
@@ -916,7 +923,7 @@ struct TTransferSettings : public TReplicationSettingsBase {
 
     struct TBatching {
         TDuration FlushInterval;
-        ui64 BatchSizeBytes;
+        std::optional<ui64> BatchSizeBytes;
     };
 
     TMaybe<TString> ConsumerName;
@@ -1146,6 +1153,8 @@ public:
 
     virtual NThreading::TFuture<TTableMetadataResult> LoadTableMetadata(
         const TString& cluster, const TString& table, TLoadTableMetadataSettings settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> AlterDatabase(const TString& cluster, const TAlterDatabaseSettings& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk = false, bool replaceIfExists = false) = 0;
 

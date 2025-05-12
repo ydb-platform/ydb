@@ -8,6 +8,7 @@
 #include <ydb/core/mon_alloc/profiler.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/tablet/tablet_impl.h>
+#include <ydb/core/testlib/mock_transfer_writer_factory.h>
 
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/executor_pool_io.h>
@@ -16,11 +17,12 @@
 
 #include <ydb/core/base/wilson_tracing_control.h>
 #include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/key.pb.h>
 #include <ydb/core/protos/netclassifier.pb.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/stream.pb.h>
-#include <ydb/core/protos/feature_flags.pb.h>
+#include <ydb/core/protos/workload_manager_config.pb.h>
 
 /**** ACHTUNG: Do not make here any new dependecies on kikimr ****/
 
@@ -182,6 +184,9 @@ namespace NActors {
             nodeAppData->EnableMvccSnapshotWithLegacyDomainRoot = app0->EnableMvccSnapshotWithLegacyDomainRoot;
             nodeAppData->IoContextFactory = app0->IoContextFactory;
             nodeAppData->SchemeOperationFactory = app0->SchemeOperationFactory;
+            nodeAppData->WorkloadManagerConfig = app0->WorkloadManagerConfig;
+            nodeAppData->QueryServiceConfig = app0->QueryServiceConfig;
+            nodeAppData->TransferWriterFactory = std::make_shared<NKikimr::Tests::MockTransferWriterFactory>();
             if (nodeIndex < egg.Icb.size()) {
                 nodeAppData->Icb = std::move(egg.Icb[nodeIndex]);
                 nodeAppData->InFlightLimiterRegistry.Reset(new NKikimr::NGRpcService::TInFlightLimiterRegistry(nodeAppData->Icb));

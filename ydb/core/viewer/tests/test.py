@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+import logging
 import ydb
 from ydb._topic_writer.topic_writer import PublicMessage
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -34,9 +35,19 @@ cluster.wait_tenant_up(serverless_db)
 databases = [domain_name, dedicated_db, shared_db, serverless_db]
 
 
-def call_viewer_api(url):
+def call_viewer_api_get(url):
     port = cluster.nodes[1].mon_port
     return requests.get("http://localhost:%s%s" % (port, url))
+
+
+def call_viewer_api_post(url):
+    port = cluster.nodes[1].mon_port
+    return requests.post("http://localhost:%s%s" % (port, url))
+
+
+def call_viewer_api_delete(url):
+    port = cluster.nodes[1].mon_port
+    return requests.delete("http://localhost:%s%s" % (port, url))
 
 
 def get_result(result):
@@ -48,7 +59,19 @@ def get_result(result):
 def call_viewer(url, params=None):
     if params is None:
         params = {}
-    return get_result(call_viewer_api(url + '?' + urlencode(params)))
+    return get_result(call_viewer_api_get(url + '?' + urlencode(params)))
+
+
+def call_viewer_post(url, params=None):
+    if params is None:
+        params = {}
+    return get_result(call_viewer_api_post(url + '?' + urlencode(params)))
+
+
+def call_viewer_delete(url, params=None):
+    if params is None:
+        params = {}
+    return get_result(call_viewer_api_delete(url + '?' + urlencode(params)))
 
 
 def call_viewer_db(url, params=None):
@@ -61,16 +84,28 @@ def call_viewer_db(url, params=None):
     return result
 
 
+def get_viewer_db(url, params=None):
+    if params is None:
+        params = {}
+    return call_viewer_db(url, params)
+
+
 def get_viewer(url, params=None):
     if params is None:
         params = {}
     return call_viewer(url, params)
 
 
-def get_viewer_db(url, params=None):
+def post_viewer(url, params=None):
     if params is None:
         params = {}
-    return call_viewer_db(url, params)
+    return call_viewer_post(url, params)
+
+
+def delete_viewer(url, params=None):
+    if params is None:
+        params = {}
+    return call_viewer_delete(url, params)
 
 
 wait_good = False
@@ -359,6 +394,7 @@ def normalize_result_nodes(result):
                                           'NumberOfCpus',
                                           'CoresUsed',
                                           'CoresTotal',
+                                          'RealNumberOfCpus',
                                           'CreateTime',
                                           'MaxDiskUsage',
                                           'Roles',
@@ -612,6 +648,31 @@ def test_operations_list_page_bad():
     })
 
 
+def test_scheme_directory():
+    result = {}
+    result["1-get"] = get_viewer_normalized("/scheme/directory", {
+        'database': dedicated_db,
+        'path': dedicated_db
+        })
+    result["2-post"] = post_viewer("/scheme/directory", {
+        'database': dedicated_db,
+        'path': dedicated_db + '/test_dir'
+        })
+    result["3-get"] = get_viewer_normalized("/scheme/directory", {
+        'database': dedicated_db,
+        'path': dedicated_db
+        })
+    result["4-delete"] = delete_viewer("/scheme/directory", {
+        'database': dedicated_db,
+        'path': dedicated_db + '/test_dir'
+        })
+    result["5-get"] = get_viewer_normalized("/scheme/directory", {
+        'database': dedicated_db,
+        'path': dedicated_db
+        })
+    return result
+
+
 def test_topic_data():
     grpc_port = cluster.nodes[1].grpc_port
 
@@ -624,7 +685,6 @@ def test_topic_data():
     endpoint = "localhost:{}".format(grpc_port)
     driver = ydb.Driver(endpoint=endpoint, database=dedicated_db, oauth=None)
     driver.wait(10, fail_fast=True)
-    driver.topic_client.create_topic('topic2', min_active_partitions=1, max_active_partitions=1)
 
     def write(writer, message_pattern, close=True):
         writer.write(["{}-{}".format(message_pattern, i) for i in range(10)])
@@ -632,7 +692,7 @@ def test_topic_data():
         if close:
             writer.close()
 
-    writer = driver.topic_client.writer('topic2', producer_id="12345")
+    writer = driver.topic_client.writer('topic1', producer_id="12345")
     write(writer, "message", False)
 
     # Also write one messagewith metadata
@@ -640,27 +700,36 @@ def test_topic_data():
     writer.write(message_w_meta)
     writer.close()
 
-    writer_compressed = driver.topic_client.writer('topic2', producer_id="12345", codec=2)
+    writer_compressed = driver.topic_client.writer('topic1', producer_id="12345", codec=2)
     write(writer_compressed, "compressed-message")
 
     response = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
-        'path': '{}/topic2'.format(dedicated_db),
+        'path': '{}/topic1'.format(dedicated_db),
         'partition': '0',
         'offset': '0',
         'limit': '5'
     })
 
+    response_cut_by_last_offset = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': '{}/topic1'.format(dedicated_db),
+        'partition': '0',
+        'offset': '0',
+        'last_offset': '3',
+        'limit': '5'
+    })
+
     response_w_meta = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
-        'path': '{}/topic2'.format(dedicated_db),
+        'path': '{}/topic1'.format(dedicated_db),
         'partition': '0',
         'offset': '10',
         'limit': '1'
     })
     response_compressed = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
-        'path': '{}/topic2'.format(dedicated_db),
+        'path': '{}/topic1'.format(dedicated_db),
         'partition': '0',
         'offset': '11',
         'limit': '5'
@@ -668,29 +737,53 @@ def test_topic_data():
 
     response_last = call_viewer("/viewer/topic_data", {
         'database': dedicated_db,
-        'path': '{}/topic2'.format(dedicated_db),
+        'path': '{}/topic1'.format(dedicated_db),
         'partition': '0',
         'offset': '20',
         'limit': '5'
     })
 
-    def strip_non_canonized(resp):
-        for message in resp["Messages"]:
-            assert int(message.get("CreateTimestamp", "0")) != 0
-            assert int(message.get("WriteTimestamp", "0")) != 0
-            assert int(message.get("TimestampDiff", None)) >= 0
-            assert message.get("ProducerId", None) is not None
-            del message["CreateTimestamp"]
-            del message["WriteTimestamp"]
-            del message["TimestampDiff"]
-            del message["ProducerId"]
-        return resp
+    response_short_msg = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': '{}/topic1'.format(dedicated_db),
+        'partition': '0',
+        'offset': '20',
+        'limit': '1',
+        'message_size_limit': '5'
+    })
+
+    response_no_part = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': '{}/topic1'.format(dedicated_db),
+        'offset': '20'
+    })
+
+    response_both_offset_and_ts = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': '{}/topic1'.format(dedicated_db),
+        'partition': '0',
+        'offset': '20',
+        'read_timestamp': '20'
+    })
+
+    def replace_values(resp):
+        res = replace_values_by_key(resp, ['CreateTimestamp',
+                                           'WriteTimestamp',
+                                           'TimestampDiff',
+                                           'ProducerId',
+                                           ])
+        logging.info(res)
+        return res
 
     result = {
-        'response_read': strip_non_canonized(response),
-        'response_metadata': strip_non_canonized(response_w_meta),
-        'response_compressed': strip_non_canonized(response_compressed),
-        'response_not_truncated': strip_non_canonized(response_last)
+        'response_read': replace_values(response),
+        'response_metadata': replace_values(response_w_meta),
+        'response_compressed': replace_values(response_compressed),
+        'response_not_truncated': replace_values(response_last),
+        'no_partition': response_no_part,
+        'both_offset_and_ts': response_both_offset_and_ts,
+        'response_truncated': replace_values(response_short_msg),
+        'response_last_offset': replace_values(response_cut_by_last_offset),
     }
     return result
 
@@ -698,23 +791,16 @@ def test_topic_data():
 def test_transfer_describe():
     grpc_port = cluster.nodes[1].grpc_port
     endpoint = "grpc://localhost:{}/?database={}".format(grpc_port, dedicated_db)
-    lambd = "($x) -> { RETURN <|Id:$x._offset|>; }"
 
     call_viewer("/viewer/query", {
         'database': dedicated_db,
-        'query': 'CREATE TABLE `TransferTargetTable` ( `Id` Uint64 NOT NULL PRIMARY KEY (Id)) WITH (STORE = COLUMN)',
-        'schema': 'multi'
-    })
-
-    call_viewer("/viewer/query", {
-        'database': dedicated_db,
-        'query': 'CREATE TRANSFER `TestTransfer` FROM `TopicNotExists` TO `Table` USING {} WITH (CONNECTION_STRING = "{}")'.format(lambd, endpoint),
+        'query': 'CREATE ASYNC REPLICATION `TestAsyncReplication` FOR `TableNotExists` AS `TargetAsyncReplicationTable` WITH (CONNECTION_STRING = "{}")'.format(endpoint),
         'schema': 'multi'
     })
 
     result = get_viewer_normalized("/viewer/describe_replication", {
         'database': dedicated_db,
-        'path': '{}/TestTransfer'.format(dedicated_db),
+        'path': '{}/TestAsyncReplication'.format(dedicated_db),
         'include_stats': 'true',
         'enums': 'true'
     })

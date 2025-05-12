@@ -16,7 +16,7 @@ public:
         return Rows->size();
     }
 
-    auto GetRowsData() const {
+    std::shared_ptr<NTxProxy::TUploadRows> GetRowsData() const {
         return Rows;
     }
 
@@ -52,9 +52,8 @@ public:
         return Rows->size();
     }
 
-    bool IsReachLimits(const TUploadLimits& Limits) {
-        // TODO(mbkkt) why [0..BatchRowsLimit) but [0..BatchBytesLimit]
-        return Rows->size() >= Limits.BatchRowsLimit || ByteSize > Limits.BatchBytesLimit;
+    bool HasReachedLimits(size_t rowsLimit, ui64 bytesLimit) const {
+        return Rows->size() > rowsLimit || ByteSize > bytesLimit;
     }
 
     auto&& ExtractLastKey() {

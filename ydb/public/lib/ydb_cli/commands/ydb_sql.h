@@ -19,9 +19,9 @@ public:
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
     virtual int Run(TConfig& config) override;
-    void SetSyntax(TString&& syntax);
     void SetCollectStatsMode(TString&& collectStatsMode);
     void SetScript(TString&& script);
+    void SetSyntax(const TString& syntax);
 
 private:
     int RunCommand(TConfig& config);
@@ -31,10 +31,10 @@ private:
     TString DiagnosticsFile;
     TString Query;
     TString QueryFile;
-    TString Syntax;
     bool ExplainMode = false;
     bool ExplainAnalyzeMode = false;
     bool ExplainAst = false;
+    TString Progress;
 };
 
 }

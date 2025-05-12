@@ -10,8 +10,8 @@
 #define BOOST_GRAPH_DOMINATOR_HPP
 
 #include <boost/config.hpp>
-#include <deque>
 #include <set>
+#include <vector>
 #include <boost/graph/depth_first_search.hpp>
 #include <boost/concept/assert.hpp>
 
@@ -155,7 +155,7 @@ namespace detail
             //
             //  idom(n) = semi(n) if semi(y)=semi(n) or
             //            idom(y) if semi(y) != semi(n)
-            typename std::deque< Vertex >::iterator buckItr;
+            typename std::vector< Vertex >::iterator buckItr;
             for (buckItr = get(bucketMap_, p).begin();
                  buckItr != get(bucketMap_, p).end(); ++buckItr)
             {
@@ -195,10 +195,10 @@ namespace detail
 
         std::vector< Vertex > semi_, ancestor_, samedom_, best_;
         PredMap semiMap_, ancestorMap_, bestMap_;
-        std::vector< std::deque< Vertex > > buckets_;
+        std::vector< std::vector< Vertex > > buckets_;
 
         iterator_property_map<
-            typename std::vector< std::deque< Vertex > >::iterator, IndexMap >
+            typename std::vector< std::vector< Vertex > >::iterator, IndexMap >
             bucketMap_;
 
         const Vertex& entry_;

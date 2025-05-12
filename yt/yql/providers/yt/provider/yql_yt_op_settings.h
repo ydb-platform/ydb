@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yql/essentials/ast/yql_expr.h>
+#include <library/cpp/json/writer/json.h>
 
 #include <util/generic/flags.h>
 #include <util/generic/strbuf.h>
@@ -64,12 +65,12 @@ enum class EYtSettingType: ui64 {
     WarnNonExisting          /* "warn_non_existing" "warnnonexisting" */,
     XLock                    /* "xlock" */,
     Unordered                /* "unordered" */,
-    NonUnique                /* "nonUnique" */,
+    NonUnique                /* "non_unique" "nonUnique" */,
     UserSchema               /* "userschema" */,
     UserColumns              /* "usercolumns" */,
     StatColumns              /* "statcolumns" */,
     SysColumns               /* "syscolumns" */,
-    IgnoreTypeV3             /* "ignoretypev3" "ignore_type_v3" */,
+    IgnoreTypeV3             /* "ignore_type_v3" "ignoretypev3" */,
     // Table content
     MemUsage                 /* "memUsage" */,
     ItemsCount               /* "itemsCount" */,
@@ -228,6 +229,7 @@ TMaybe<ui64> GetMaxJobSizeForFirstAsPrimary(const TExprNode& settings);
 bool UseJoinReduceForSecondAsPrimary(const TExprNode& settings);
 
 ui32 GetMinChildrenForIndexedKeyFilter(EYtSettingType type);
+void YtWriteStmtContext(std::string_view ctxName, NJsonWriter::TBuf& json);
 
 } // NYql
 

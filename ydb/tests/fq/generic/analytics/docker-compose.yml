@@ -33,6 +33,22 @@ services:
       - /var
     volumes:
       - ./greenplum/init_db.sh:/init_db.sh
+  mysql:
+    container_name: tests-fq-generic-analytics-mysql
+    environment:
+      MYSQL_DATABASE: db
+      MYSQL_ROOT_PASSWORD: password
+    image: mirror.gcr.io/library/mysql@sha256:1579fe3a97a436cc10824fc771a07fcedc92213e7ab7604eb5d2976ca419abc8
+    ports:
+      - 3306
+    tmpfs:
+      - /run
+      - /tmp
+      - /var
+    volumes:
+      - ./mysql/init:/docker-entrypoint-initdb.d
+      - ./mysql/custom.cnf:/etc/mysql/conf.d/custom.cnf
+
   postgresql:
     command: -p 6432
     container_name: tests-fq-generic-analytics-postgresql

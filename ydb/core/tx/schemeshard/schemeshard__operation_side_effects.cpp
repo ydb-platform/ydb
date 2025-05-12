@@ -555,7 +555,7 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
         }
 
         if (!hasChanges) {
-            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                        "DoUpdateTenant no hasChanges"
                            << ", pathId: " << pathId
                            << ", tenantLink: " << tenantLink

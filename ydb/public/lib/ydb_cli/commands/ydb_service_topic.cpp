@@ -881,8 +881,7 @@ namespace NYdb::NConsoleClient {
 
         settings.AppendTopics(std::move(readSettings));
 
-        // This check was added for the static analyzer.
-        Y_ABORT_UNLESS(!settings.EventHandlers_.DataReceivedHandler_);
+        // coverity[uninit_use]
 
         return settings;
     }
@@ -1028,8 +1027,7 @@ namespace NYdb::NConsoleClient {
         settings.MessageGroupId(*MessageGroupId_);
         settings.ProducerId(*MessageGroupId_);
 
-        // This check was added for the static analyzer.
-        Y_ABORT_UNLESS(!settings.EventHandlers_.AcksHandler_);
+        // coverity[uninit_use]
 
         return settings;
     }

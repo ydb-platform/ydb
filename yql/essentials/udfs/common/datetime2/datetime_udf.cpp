@@ -266,7 +266,7 @@ public:
 
         builder.Args()->Add(argsTuple.GetElementType(0));
         const TType* retType;
-        if (features & NUdf::BigDateType) {
+        if (features & NUdf::ExtDateType) {
             retType = builder.SimpleType<TWResult>();
         } else if (features & NUdf::TimeIntervalType) {
             retType = builder.SimpleType<TSignedResult>();
@@ -284,7 +284,7 @@ public:
         }
 
         builder.Returns(retType);
-        if (!(features & NUdf::BigDateType)) {
+        if (!(features & NUdf::ExtDateType)) {
             // FIXME: Only non-wide overloads support block rewrite now.
             builder.SupportsBlocks();
         }
@@ -447,7 +447,7 @@ struct TGetTimeComponent {
             }
 
             const auto features = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(data.GetTypeId())).Features;
-            if (features & NUdf::BigDateType) {
+            if (features & NUdf::ExtDateType) {
                 BuildSignature<TFieldStorage, TM64ResourceName, WAccessor>(builder, typesOnly);
                 return true;
             }
@@ -832,7 +832,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
                 }
             } else {
                 builder.Args()->Add<TUserDataType>().Flags(ICallablePayload::TArgumentFlags::AutoMap);
-                if constexpr (NUdf::TDataType<TUserDataType>::Features & NYql::NUdf::BigDateType) {
+                if constexpr (NUdf::TDataType<TUserDataType>::Features & NYql::NUdf::ExtDateType) {
                     builder.Returns(builder.Resource(TM64ResourceName));
                 } else {
                     builder.Returns(builder.Resource(TMResourceName));
@@ -1360,7 +1360,7 @@ public:
             }
 
             const auto features = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(data.GetTypeId())).Features;
-            if (features & NUdf::BigDateType) {
+            if (features & NUdf::ExtDateType) {
                 BuildSignature<TResultWType, TM64ResourceName, WAccessor>(builder, typesOnly);
                 return true;
             }
@@ -1469,7 +1469,7 @@ public:
             }
 
             const auto features = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(data.GetTypeId())).Features;
-            if (features & NUdf::BigDateType) {
+            if (features & NUdf::ExtDateType) {
                 BuildSignature<TM64ResourceName, WAccessor>(builder, typesOnly);
                 return true;
             }
@@ -1695,7 +1695,7 @@ TUnboxedValue GetTimezoneName(const IValueBuilder* valueBuilder, const TUnboxedV
                 }
 
                 const auto features = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(data.GetTypeId())).Features;
-                if (features & NUdf::BigDateType) {
+                if (features & NUdf::ExtDateType) {
                     BuildSignature<TM64ResourceName>(builder, typesOnly);
                     return true;
                 }
@@ -1932,7 +1932,7 @@ public:
 
         const auto features = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(data.GetTypeId())).Features;
         if (features & NUdf::TimeIntervalType) {
-            if (features & NUdf::BigDateType) {
+            if (features & NUdf::ExtDateType) {
                 BuildSignature<TInterval64, TWResult>(builder, typesOnly);
             } else {
                 BuildSignature<TInterval, TResult>(builder, typesOnly);
@@ -2057,7 +2057,7 @@ public:
             }
 
             const auto features = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(data.GetTypeId())).Features;
-            if (features & NUdf::BigDateType) {
+            if (features & NUdf::ExtDateType) {
                 BuildSignature<TM64ResourceName, WBoundary>(builder, typesOnly);
                 return true;
             }
@@ -2385,7 +2385,7 @@ public:
             }
 
             const auto features = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(data.GetTypeId())).Features;
-            if (features & NUdf::BigDateType) {
+            if (features & NUdf::ExtDateType) {
                 BuildSignature<TM64ResourceName, WBoundary>(builder, typesOnly);
                 return true;
             }
@@ -2507,7 +2507,7 @@ public:
             }
 
             const auto features = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(data.GetTypeId())).Features;
-            if (features & NUdf::BigDateType) {
+            if (features & NUdf::ExtDateType) {
                 BuildSignature<TM64ResourceName>(builder, typesOnly);
                 return true;
             }
@@ -2634,7 +2634,7 @@ public:
             }
 
             const auto features = NUdf::GetDataTypeInfo(NUdf::GetDataSlot(data.GetTypeId())).Features;
-            if (features & NUdf::BigDateType) {
+            if (features & NUdf::ExtDateType) {
                 BuildSignature<TM64ResourceName, WShifter>(builder, typesOnly);
                 return true;
             }
@@ -3183,14 +3183,37 @@ private:
                             }
                             SetYear<TMResourceName>(result, year);
                         } else {
-                            static constexpr size_t size = 6;
                             i64 year = 0LL;
                             i64 negative = 1LL;
+                            if (limit == 0) {
+                                // Year must take at least 1 byte.
+                                return false;
+                            }
                             if (*it == '-') {
                                 negative = -1LL;
                                 it++;
+                                limit--;
                             }
-                            if (!ParseNDigits<size, true>::Do(it, year) || !ValidateYear<TM64ResourceName>(negative * year)) {
+                            auto parseDigits = [&]() {
+                                switch (limit) {
+                                    case 0:
+                                        // Year number must take at least 1 byte.
+                                        return false;
+                                    case 1:
+                                        return ParseNDigits<1, true>::Do(it, year);
+                                    case 2:
+                                        return ParseNDigits<2, true>::Do(it, year);
+                                    case 3:
+                                        return ParseNDigits<3, true>::Do(it, year);
+                                    case 4:
+                                        return ParseNDigits<4, true>::Do(it, year);
+                                    case 5:
+                                        return ParseNDigits<5, true>::Do(it, year);
+                                    default:
+                                        return ParseNDigits<6, true>::Do(it, year);
+                                }
+                            };
+                            if (!parseDigits() || !ValidateYear<TM64ResourceName>(negative * year)) {
                                 return false;
                             }
                             SetYear<TM64ResourceName>(result, negative * year);

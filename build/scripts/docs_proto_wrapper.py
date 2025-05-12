@@ -7,6 +7,7 @@ import pathlib
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--docs-output', required=True)
+    parser.add_argument('--template', required=True)
     parser.add_argument('args', nargs='+')
 
     return parser.parse_args()
@@ -19,7 +20,8 @@ def main(args):
     # --doc_opt=markdon,TARGET_FILE_NAME
 
     target_file = pathlib.Path(args.docs_output)
-    cmd.append(f'--doc_opt=markdown,{target_file.name}')
+    target_template = pathlib.Path(args.template)
+    cmd.append(f'--doc_opt={target_template},{target_file.name}')
     cmd.append(f'--doc_out={target_file.parent}')
 
     try:

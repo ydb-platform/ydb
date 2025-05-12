@@ -368,6 +368,7 @@ bool TTable::TryToPreallocateMemoryForJoin(TTable & t1, TTable & t2, EJoinKind /
         }
 
         if (wasException || TlsAllocState->IsMemoryYellowZoneEnabled()) {
+            UDF_LOG(Logger_, LogComponent_, NUdf::ELogLevel::Debug, TStringBuilder() << "Preallocation failed. WasException: " << wasException);
             for (ui64 i = 0; i < bucket; ++i) {
                 auto& b1 = t1.TableBuckets[i];
                 b1.JoinSlots.resize(0);
@@ -673,7 +674,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
         BloomHits_ += bloomHits;
         BloomLookups_ += bloomLookups;
 
-        YQL_LOG(GRACEJOIN_TRACE)
+        UDF_LOG(Logger_, LogComponent_, GRACEJOIN_TRACE, TStringBuilder()
             << (const void *)this << '#'
             << bucket
             << " Table1 " << JoinTable1->TableBucketsStats[bucket].TuplesNum
@@ -685,7 +686,7 @@ void TTable::Join( TTable & t1, TTable & t2, EJoinKind joinKind, bool hasMoreLef
             << " joinKind " << (int)JoinKind
             << " swapTables " << swapTables
             << " initHashTable " << initHashTable
-            ;
+            );
     }
 
     HasMoreLeftTuples_ = hasMoreLeftTuples;
@@ -1062,10 +1063,12 @@ void TTable::PrepareBucket(ui64 bucket) {
 }
 
 // Creates new table with key columns and data columns
-TTable::TTable( ui64 numberOfKeyIntColumns, ui64 numberOfKeyStringColumns,
+TTable::TTable( NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent,
+                ui64 numberOfKeyIntColumns, ui64 numberOfKeyStringColumns,
                 ui64 numberOfDataIntColumns, ui64 numberOfDataStringColumns,
                 ui64 numberOfKeyIColumns, ui64 numberOfDataIColumns,
-                ui64 nullsBitmapSize,  TColTypeInterface * colInterfaces, bool isAny ) :
+                ui64 nullsBitmapSize,  TColTypeInterface * colInterfaces,
+                bool isAny) :
 
                 NumberOfKeyIntColumns(numberOfKeyIntColumns),
                 NumberOfKeyStringColumns(numberOfKeyStringColumns),
@@ -1075,7 +1078,9 @@ TTable::TTable( ui64 numberOfKeyIntColumns, ui64 numberOfKeyStringColumns,
                 NumberOfDataIColumns(numberOfDataIColumns),
                 ColInterfaces(colInterfaces),
                 NullsBitmapSize_(nullsBitmapSize),
-                IsAny_(isAny)  {
+                IsAny_(isAny),
+                Logger_(logger),
+                LogComponent_(logComponent) {
 
     NumberOfKeyColumns = NumberOfKeyIntColumns + NumberOfKeyStringColumns + NumberOfKeyIColumns;
     NumberOfDataColumns = NumberOfDataIntColumns + NumberOfDataStringColumns + NumberOfDataIColumns;
@@ -1114,16 +1119,21 @@ TTable::TTable( ui64 numberOfKeyIntColumns, ui64 numberOfKeyStringColumns,
 }
 
 TTable::~TTable() {
-    YQL_LOG_IF(GRACEJOIN_DEBUG, InitHashTableCount_)
+    UDF_LOG_IF(InitHashTableCount_, Logger_, LogComponent_, GRACEJOIN_DEBUG, TStringBuilder()
         << (const void *)this << '#' << "InitHashTableCount " << InitHashTableCount_
         << " BloomLookups " << BloomLookups_ << " BloomHits " << BloomHits_ << " BloomFalsePositives " << BloomFalsePositives_
         << " HashLookups " << HashLookups_ << " HashChainTraversal " << HashO1Iterations_/(double)HashLookups_ << " HashSlotOperations " << HashSlotIterations_/(double)HashLookups_
         << " Table1 " << JoinTable1Total_ << " Table2 " << JoinTable2Total_ << " TuplesFound " << TuplesFound_
-        ;
-    YQL_LOG_IF(GRACEJOIN_DEBUG, JoinTable1 && JoinTable1->AnyFiltered_) << (const void *)this << '#' << "L AnyFiltered " <<  JoinTable1->AnyFiltered_;
-    YQL_LOG_IF(GRACEJOIN_DEBUG, JoinTable1 && JoinTable1->BloomLookups_) << (const void *)this << '#' << "L BloomLookups " <<  JoinTable1->BloomLookups_ << " BloomHits " <<  JoinTable1->BloomHits_;
-    YQL_LOG_IF(GRACEJOIN_DEBUG, JoinTable2 && JoinTable2->AnyFiltered_) << (const void *)this << '#' << "R AnyFiltered " <<  JoinTable2->AnyFiltered_;
-    YQL_LOG_IF(GRACEJOIN_DEBUG, JoinTable2 && JoinTable2->BloomLookups_) << (const void *)this << '#' << "R BloomLookups " <<  JoinTable2->BloomLookups_ << " BloomHits " <<  JoinTable2->BloomHits_;
+        );
+
+    UDF_LOG_IF(JoinTable1 && JoinTable1->AnyFiltered_, Logger_, LogComponent_, GRACEJOIN_DEBUG, TStringBuilder()
+        << (const void *)this << '#' << "L AnyFiltered " <<  JoinTable1->AnyFiltered_);
+    UDF_LOG_IF(JoinTable1 && JoinTable1->BloomLookups_, Logger_, LogComponent_, GRACEJOIN_DEBUG, TStringBuilder()
+        << (const void *)this << '#' << "L BloomLookups " <<  JoinTable1->BloomLookups_ << " BloomHits " <<  JoinTable1->BloomHits_);
+    UDF_LOG_IF(JoinTable2 && JoinTable2->AnyFiltered_, Logger_, LogComponent_, GRACEJOIN_DEBUG, TStringBuilder()
+        << (const void *)this << '#' << "R AnyFiltered " <<  JoinTable2->AnyFiltered_);
+    UDF_LOG_IF(JoinTable2 && JoinTable2->BloomLookups_, Logger_, LogComponent_, GRACEJOIN_DEBUG, TStringBuilder()
+        << (const void *)this << '#' << "R BloomLookups " <<  JoinTable2->BloomLookups_ << " BloomHits " <<  JoinTable2->BloomHits_);
 };
 
 TTableBucketSpiller::TTableBucketSpiller(ISpiller::TPtr spiller, size_t sizeLimit)

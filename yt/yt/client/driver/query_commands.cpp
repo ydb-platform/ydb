@@ -76,6 +76,13 @@ void TStartQueryCommand::Register(TRegistrar registrar)
             return command->Options.AccessControlObjects;
         })
         .Optional(/*init*/ false);
+
+    registrar.ParameterWithUniversalAccessor<std::vector<TQuerySecretPtr>>(
+        "secrets",
+        [] (TThis* command) -> auto& {
+            return command->Options.Secrets;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TStartQueryCommand::DoExecute(ICommandContextPtr context)

@@ -452,28 +452,28 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             {Keyword, "CURRENT_DATE"},
             {Keyword, "CURRENT_TIME"},
             {Keyword, "CURRENT_TIMESTAMP"},
-            {Keyword, "DICT<"},
+            {Keyword, "Dict<"},
             {Keyword, "DISTINCT"},
             {FunctionName, "DateTime::Split("},
             {Keyword, "EMPTY_ACTION"},
             {Keyword, "ENUM"},
             {Keyword, "EXISTS("},
             {Keyword, "FALSE"},
-            {Keyword, "FLOW<"},
+            {Keyword, "Flow<"},
             {Keyword, "JSON_EXISTS("},
             {Keyword, "JSON_QUERY("},
             {Keyword, "JSON_VALUE("},
-            {Keyword, "LIST<"},
+            {Keyword, "List<"},
             {Keyword, "NOT"},
             {Keyword, "NULL"},
-            {Keyword, "OPTIONAL<"},
+            {Keyword, "Optional<"},
             {FunctionName, "Python::__private("},
-            {Keyword, "RESOURCE<"},
-            {Keyword, "SET<"},
+            {Keyword, "Resource<"},
+            {Keyword, "Set<"},
             {Keyword, "STREAM"},
             {Keyword, "STRUCT"},
             {FunctionName, "StartsWith("},
-            {Keyword, "TAGGED<"},
+            {Keyword, "Tagged<"},
             {Keyword, "TRUE"},
             {Keyword, "TUPLE"},
             {Keyword, "VARIANT"},
@@ -628,27 +628,27 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             {Keyword, "CURRENT_DATE"},
             {Keyword, "CURRENT_TIME"},
             {Keyword, "CURRENT_TIMESTAMP"},
-            {Keyword, "DICT<"},
+            {Keyword, "Dict<"},
             {FunctionName, "DateTime::Split("},
             {Keyword, "EMPTY_ACTION"},
             {Keyword, "ENUM"},
             {Keyword, "EXISTS("},
             {Keyword, "FALSE"},
-            {Keyword, "FLOW<"},
+            {Keyword, "Flow<"},
             {Keyword, "JSON_EXISTS("},
             {Keyword, "JSON_QUERY("},
             {Keyword, "JSON_VALUE("},
-            {Keyword, "LIST<"},
+            {Keyword, "List<"},
             {Keyword, "NOT"},
             {Keyword, "NULL"},
-            {Keyword, "OPTIONAL<"},
+            {Keyword, "Optional<"},
             {FunctionName, "Python::__private("},
-            {Keyword, "RESOURCE<"},
-            {Keyword, "SET<"},
-            {Keyword, "STREAM<"},
+            {Keyword, "Resource<"},
+            {Keyword, "Set<"},
+            {Keyword, "Stream<"},
             {Keyword, "STRUCT"},
             {FunctionName, "StartsWith("},
-            {Keyword, "TAGGED<"},
+            {Keyword, "Tagged<"},
             {Keyword, "TRUE"},
             {Keyword, "TUPLE"},
             {Keyword, "VARIANT"},
@@ -692,28 +692,28 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
 
     Y_UNIT_TEST(TypeName) {
         TVector<TCandidate> expected = {
-            {Keyword, "CALLABLE<("},
-            {Keyword, "DECIMAL("},
-            {Keyword, "DICT<"},
-            {Keyword, "ENUM<"},
-            {Keyword, "FLOW<"},
-            {Keyword, "LIST<"},
-            {Keyword, "OPTIONAL<"},
-            {Keyword, "RESOURCE<"},
-            {Keyword, "SET<"},
-            {Keyword, "STREAM<"},
+            {Keyword, "Callable<("},
+            {Keyword, "Decimal("},
+            {Keyword, "Dict<"},
+            {Keyword, "Enum<"},
+            {Keyword, "Flow<"},
+            {Keyword, "List<"},
+            {Keyword, "Optional<"},
+            {Keyword, "Resource<"},
+            {Keyword, "Set<"},
+            {Keyword, "Stream<"},
             {Keyword, "STRUCT"},
-            {Keyword, "TAGGED<"},
+            {Keyword, "Tagged<"},
             {Keyword, "TUPLE"},
             {TypeName, "Uint64"},
-            {Keyword, "VARIANT<"},
+            {Keyword, "Variant<"},
         };
 
         auto engine = MakeSqlCompletionEngineUT();
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "CREATE TABLE table (id "), expected);
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT CAST (1 AS "), expected);
-        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT OPTIONAL<"), expected);
-        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT OPTIONAL<#>"), expected);
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT Optional<"), expected);
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT Optional<#>"), expected);
     }
 
     Y_UNIT_TEST(TypeNameAsArgument) {
@@ -726,7 +726,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         }
         {
             TVector<TCandidate> expected = {
-                {Keyword, "OPTIONAL<"},
+                {Keyword, "Optional<"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT Nothing(Option"), expected);
         }
@@ -985,7 +985,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                 {TypeName, "Unit"},
                 {TypeName, "Uint16"},
             };
-            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT OPTIONAL<U"), expected);
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT Optional<U"), expected);
         }
         {
             TVector<TCandidate> expected = {
@@ -1009,7 +1009,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         auto service = MakeIntrusive<TFailingNameService>();
         auto engine = MakeSqlCompletionEngine(MakePureLexerSupplier(), std::move(service));
         UNIT_ASSERT_EXCEPTION(Complete(engine, ""), TDummyException);
-        UNIT_ASSERT_EXCEPTION(Complete(engine, "SELECT OPTIONAL<U"), TDummyException);
+        UNIT_ASSERT_EXCEPTION(Complete(engine, "SELECT Optional<U"), TDummyException);
         UNIT_ASSERT_EXCEPTION(Complete(engine, "SELECT CAST (1 AS ").size(), TDummyException);
     }
 
@@ -1077,7 +1077,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                 {TypeName, "Int16"},
                 {TypeName, "Int8"},
             };
-            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT OPTIONAL<I"), expected);
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT Optional<I"), expected);
         }
         {
             TVector<TCandidate> expected = {

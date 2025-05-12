@@ -1941,6 +1941,7 @@ private:
         TypesCtx->FilterPushdownOverJoinOptionalSide = SessionCtx->ConfigPtr()->FilterPushdownOverJoinOptionalSide;
         const auto &yqlCoreOptFlags = SessionCtx->ConfigPtr()->YqlCoreOptimizerFlags;
         TypesCtx->OptimizerFlags.insert(yqlCoreOptFlags.begin(), yqlCoreOptFlags.end());
+        TypesCtx->OptimizerFlags.insert("MemberNthOverFlatMap");
 
         TypesCtx->IgnoreExpandPg = SessionCtx->ConfigPtr()->EnableNewRBO;
 

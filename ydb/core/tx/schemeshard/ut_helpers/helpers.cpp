@@ -1847,7 +1847,7 @@ namespace NSchemeShardUT_Private {
         TEvIndexBuilder::TEvCreateResponse* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
         UNIT_ASSERT(event);
 
-        Cerr << "BUILDINDEX RESPONSE CREATE: " << event->ToString() << Endl;
+        Cerr << "BUILDCOLUMN RESPONSE CREATE: " << event->ToString() << Endl;
         UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), expectedStatus,
                             "status mismatch"
                                 << " got " << Ydb::StatusIds::StatusCode_Name(event->Record.GetStatus())

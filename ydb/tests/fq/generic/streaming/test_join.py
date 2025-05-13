@@ -530,8 +530,9 @@ TESTCASES = [
                             e.Data as data, u.id as lookup
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.{table_name} with Listify as u
+                left join {streamlookup} ydb_conn_{table_name}.{table_name} as u
                 on(AsList(e.Data) = u.data)
+                -- MultiGet true
             ;
 
             insert into myyds.`{output_topic}`
@@ -550,6 +551,8 @@ TESTCASES = [
             ('ydb50', '{"data":"ydb50","lookup":[null]}'),
         ]
         * 10,
+        'MultiGet',
+        'true',
     ),
     # 11
     (
@@ -570,8 +573,9 @@ TESTCASES = [
                             u.data as lookup
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.{table_name} with Listify as u
+                left join {streamlookup} ydb_conn_{table_name}.{table_name} as u
                 on(e.user = u.id)
+                -- MultiGet true
             ;
 
             insert into myyds.`{output_topic}`
@@ -602,6 +606,8 @@ TESTCASES = [
             ]
             * 20
         ),
+        "MultiGet",
+        "true",
         "TTL",
         "10",
         "MaxCachedRows",
@@ -626,8 +632,9 @@ TESTCASES = [
                             u.data as lookup
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.{table_name} with Listify as u
+                left join {streamlookup} ydb_conn_{table_name}.{table_name} as u
                 on(e.user = u.id)
+                -- MultiGet true
             ;
 
             insert into myyds.`{output_topic}`
@@ -654,6 +661,8 @@ TESTCASES = [
             ]
             * 20
         ),
+        "MultiGet",
+        "true",
         "TTL",
         "10",
         "MaxCachedRows",
@@ -675,10 +684,14 @@ TESTCASES = [
                         )
                     )            ;
 
+            $listified = SELECT * FROM ydb_conn_{table_name}.db;
+
             $enriched = select a, b, c, d, e, f, za, yb, yc, zd
                 from
                     $input as e
-                left join {streamlookup} ydb_conn_{table_name}.db with Listify as u
+                left join {streamlookup} $listified as u
+                on(e.za = u.a AND e.yb = u.b)
+                -- MultiGet true
                 on(e.za = u.a AND e.yb = u.b)
             ;
 
@@ -701,6 +714,8 @@ TESTCASES = [
                 ),
             ]
         ),
+        "MultiGet",
+        "true",
     ),
 ]
 
@@ -811,12 +826,12 @@ class TestJoinStreaming(TestYdsBase):
             f"streamlookup_{partitions_count}{streamlookup}{testcase}", sql, type=fq.QueryContent.QueryType.STREAMING
         ).result.query_id
 
-        if not streamlookup and " with Listify " in sql:
+        if not streamlookup and "MultiGet true" in sql:
             fq_client.wait_query_status(query_id, fq.QueryMeta.FAILED)
             describe_result = fq_client.describe_query(query_id).result
-            # logging.debug("Describe result: {}".format(describe_result))
             describe_string = "{}".format(describe_result)
-            assert "WITH Listify is only supported with streamlookup JOIN" in describe_string
+            print("Describe result: {}".format(describe_string), file=sys.stderr)
+            assert "Cannot compare key columns" in describe_string
             return
 
         fq_client.wait_query_status(query_id, fq.QueryMeta.RUNNING)

@@ -998,6 +998,52 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
         lookupPayloadColumns,
         inputColumns
     );
+    if (settings.GetIsMultiget()) {
+        auto actor = isWide ?
+            (TInputTransformStreamLookupBase*)new TInputTransformStreamMultiLookupWide(
+                args.Alloc,
+                args.HolderFactory,
+                args.TypeEnv,
+                args.InputIndex,
+                args.TransformInput,
+                args.ComputeActorId,
+                args.TaskCounters,
+                factory,
+                std::move(settings),
+                std::move(lookupKeyInputIndexes),
+                std::move(otherInputIndexes),
+                inputRowType,
+                lookupKeyType,
+                lookupPayloadType,
+                outputRowType,
+                std::move(outputColumnsOrder),
+                settings.GetMaxDelayedRows(),
+                settings.GetCacheLimit(),
+                std::chrono::seconds(settings.GetCacheTtlSeconds())
+            ) :
+            (TInputTransformStreamLookupBase*)new TInputTransformStreamMultiLookupNarrow(
+                args.Alloc,
+                args.HolderFactory,
+                args.TypeEnv,
+                args.InputIndex,
+                args.TransformInput,
+                args.ComputeActorId,
+                args.TaskCounters,
+                factory,
+                std::move(settings),
+                std::move(lookupKeyInputIndexes),
+                std::move(otherInputIndexes),
+                inputRowType,
+                lookupKeyType,
+                lookupPayloadType,
+                outputRowType,
+                std::move(outputColumnsOrder),
+                settings.GetMaxDelayedRows(),
+                settings.GetCacheLimit(),
+                std::chrono::seconds(settings.GetCacheTtlSeconds())
+            );
+        return {actor, actor};
+    }
     if (settings.GetRightSource().GetListified()) {
         auto actor = isWide ?
             (TInputTransformStreamLookupBase*)new TInputTransformStreamMultiLookupWide(

@@ -182,8 +182,8 @@ struct TFsBackupEntry {
     TString DbPath;
     NScheme::ESchemeEntryType Type;
 
-    TFsBackupEntry(const TFsPath& path, TString&& dbPath, NScheme::ESchemeEntryType type)
-        : FsPath(path)
+    TFsBackupEntry(const TFsPath& fsPath, TString&& dbPath, NScheme::ESchemeEntryType type)
+        : FsPath(fsPath)
         , DbPath(std::move(dbPath))
         , Type(type)
     {

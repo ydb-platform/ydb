@@ -1,8 +1,9 @@
 #pragma once
 
+#include "events.h"
+
 #include <ydb/core/formats/arrow/reader/merger.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
-#include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/subscriber.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
@@ -60,17 +61,25 @@ class TBuildDuplicateFilters: public NConveyor::ITask {
         }
     };
 
+public:
+    class ISubscriber {
+    public:
+        virtual void OnResult(THashMap<ui64, NArrow::TColumnFilter>&& result) = 0;
+        virtual void OnFailure(const TString& error) = 0;
+        virtual ~ISubscriber() = default;
+    };
+
 private:
     THashMap<ui64, TSourceMergingInfo> SourcesById;
     std::shared_ptr<arrow::Schema> PKSchema;
     std::vector<std::string> VersionColumnNames;
-    ui32 IntervalIdx;
     TActorId Owner;
     NColumnShard::TScanCounters Counters;
     std::optional<NArrow::NMerger::TCursor> MaxVersion;
+    std::unique_ptr<ISubscriber> Callback;
 
 private:
-    virtual TConclusionStatus DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override;
+    virtual void DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override;
     virtual void DoOnCannotExecute(const TString& reason) override;
 
     virtual TString GetTaskClassIdentifier() const override {
@@ -79,14 +88,14 @@ private:
 
 public:
     TBuildDuplicateFilters(const std::shared_ptr<arrow::Schema>& pkSchema, const std::vector<std::string>& versionColumnNames,
-        const ui32 intervalIdx, const TActorId& owner, const NColumnShard::TScanCounters& counters,
-        const std::optional<NArrow::NMerger::TCursor>& maxVersion)
+        const NColumnShard::TScanCounters& counters, const std::optional<NArrow::NMerger::TCursor>& maxVersion,
+        std::unique_ptr<ISubscriber>&& callback)
         : PKSchema(pkSchema)
         , VersionColumnNames(versionColumnNames)
-        , IntervalIdx(intervalIdx)
-        , Owner(owner)
         , Counters(counters)
-        , MaxVersion(maxVersion) {
+        , MaxVersion(maxVersion)
+        , Callback(std::move(callback)) {
+        AFL_VERIFY(Callback);
     }
 
     void AddSource(

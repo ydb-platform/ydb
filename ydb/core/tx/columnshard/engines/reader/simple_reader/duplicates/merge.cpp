@@ -3,7 +3,7 @@
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-TConclusionStatus TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
+void TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
     NArrow::NMerger::TMergePartialStream merger(PKSchema, nullptr, false, VersionColumnNames, MaxVersion);
     TFiltersBuilder filtersBuilder;
     for (const auto& [id, source] : SourcesById) {
@@ -18,13 +18,16 @@ TConclusionStatus TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>
                                                               "data", source.GetData()->GetRecordsCount())(
                                                               "filter", filters.FindPtr(id)->GetRecordsCount().value_or(0));
     }
-    TActorContext::AsActorContext().Send(Owner, new TEvDuplicateFilterIntervalResult(std::move(filters), IntervalIdx));
+    AFL_VERIFY(Callback);
+    Callback->OnResult(std::move(filters));
+    Callback.reset();
     Counters.OnRowsMerged(filtersBuilder.GetRowsAdded(), filtersBuilder.GetRowsSkipped(), 0);
-    return TConclusionStatus::Success();
 }
 
 void TBuildDuplicateFilters::DoOnCannotExecute(const TString& reason) {
-    TActorContext::AsActorContext().Send(Owner, new TEvDuplicateFilterIntervalResult(TConclusionStatus::Fail(reason), IntervalIdx));
+    AFL_VERIFY(Callback);
+    Callback->OnFailure(reason);
+    Callback.reset();
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

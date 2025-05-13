@@ -1,4 +1,4 @@
-#include "interval_index.h"
+#include "interval_tree.h"
 
 namespace NKikimr::NOlap::NReader::NSimple {
 }

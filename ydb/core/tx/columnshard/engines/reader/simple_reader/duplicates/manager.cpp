@@ -2,370 +2,95 @@
 #include "manager.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/merge.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/source_cache.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/context.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/scanner.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/source.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
-
-#include <bit>
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
 #define LOCAL_LOG_TRACE \
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)
 
-TDuplicateFilterConstructor::TSourceFilterConstructor::TSourceFilterConstructor(
-    const std::shared_ptr<TPortionDataSource>& source, const std::shared_ptr<TSourceIntervals>& intervals)
-    : Source(source)
-    , Intervals(intervals)
-    , Range(Intervals->GetRangeBySourceId(source->GetSourceId()))
-    , IntervalFilters(Range.NumIntervals()) {
-    AFL_VERIFY(Intervals);
-    AFL_VERIFY(Source);
-}
-
-void TDuplicateFilterConstructor::TSourceFilterConstructor::SetColumnData(std::shared_ptr<NArrow::TGeneralContainer>&& data) {
-    AFL_VERIFY(MemoryGuard);
-    AFL_VERIFY(!ColumnData);
-    ColumnData = std::move(data);
-
-    InitIntervalOffsets();
-}
-
-void TDuplicateFilterConstructor::TSourceFilterConstructor::InitIntervalOffsets() {
-    AFL_VERIFY(ColumnData);
-    IntervalOffsets.emplace_back(0);
-    for (ui32 intervalIdx = Range.GetFirstIdx(); intervalIdx < Range.GetLastIdx(); ++intervalIdx) {
-        const std::vector<std::string>& sortingFields = Source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPrimaryKey()->field_names();
-        std::shared_ptr<NArrow::TGeneralContainer> keysData = [this, &sortingFields]() {
-            std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> columns;
-            for (const auto& field : sortingFields) {
-                columns.emplace_back(ColumnData->GetAccessorByNameOptional(field));
-            }
-            return std::make_shared<NArrow::TGeneralContainer>(
-                Source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPrimaryKey(), std::move(columns));
-        }();
-        AFL_VERIFY(keysData->GetRecordsCount());
-        auto position = NArrow::NMerger::TRWSortableBatchPosition(keysData, 0, sortingFields, {}, false);
-        const auto border = NArrow::NMerger::TSortableBatchPosition(
-            Intervals->GetRightInclusiveBorder(intervalIdx).ToBatch(Source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPrimaryKey()), 0,
-            sortingFields, {}, false);
-        auto findBorder = position.FindBound(position, 0, keysData->GetRecordsCount() - 1, border, true);
-        IntervalOffsets.emplace_back(findBorder ? findBorder->GetPosition() : keysData->GetRecordsCount());
-    }
-    AFL_VERIFY(IntervalOffsets.size() == IntervalFilters.size());
-}
-
-bool TDuplicateFilterConstructor::TSourceFilterConstructor::IsReady() const {
-    LOCAL_LOG_TRACE("event", "check_source_ready")
-    ("source", Source->GetSourceId())("has_subscriber", !!Subscriber)("ready_filters", ReadyFilterCount)("intervals", IntervalFilters.size());
-    return !!Subscriber && ReadyFilterCount == IntervalFilters.size();
-}
-
-TDuplicateFilterConstructor::TRowRange TDuplicateFilterConstructor::TSourceFilterConstructor::GetIntervalRange(
-    const ui32 globalIntervalIdx) const {
-    AFL_VERIFY(!IntervalOffsets.empty());
-    AFL_VERIFY(globalIntervalIdx >= Range.GetFirstIdx())("global", globalIntervalIdx)("range", Range.DebugString());
-    const ui32 localIntervalIdx = globalIntervalIdx - Range.GetFirstIdx();
-    AFL_VERIFY(localIntervalIdx < IntervalOffsets.size())("local", localIntervalIdx)("global", globalIntervalIdx)(
-                                      "size", IntervalOffsets.size());
-    const TRowRange localRange = (localIntervalIdx == IntervalOffsets.size() - 1)
-                                     ? TRowRange(IntervalOffsets[localIntervalIdx], Source->GetRecordsCount())
-                                     : TRowRange(IntervalOffsets[localIntervalIdx], IntervalOffsets[localIntervalIdx + 1]);
-    return localRange;
-}
-
-void TDuplicateFilterConstructor::TSourceFilterConstructor::SetFilter(const ui32 intervalIdx, NArrow::TColumnFilter&& filter) {
-    AFL_VERIFY(filter.GetRecordsCount().value_or(0) == GetIntervalRange(intervalIdx).Size())("actual", filter.GetRecordsCount().value_or(0))(
-                                                           "expected", GetIntervalRange(intervalIdx).Size());
-    const ui32 localIdx = intervalIdx - Range.GetFirstIdx();
-    AFL_VERIFY(localIdx < IntervalFilters.size())("idx", localIdx)("size", IntervalFilters.size());
-    AFL_VERIFY(!IntervalFilters[localIdx])("interval", intervalIdx);
-    IntervalFilters[localIdx].emplace(std::move(filter));
-    ++ReadyFilterCount;
-}
-
-void TDuplicateFilterConstructor::TSourceFilterConstructor::Finish() {
-    LOCAL_LOG_TRACE("event", "finish_filter_construction")("source", Source->GetSourceId());
-    AFL_VERIFY(IsReady());
-    NArrow::TColumnFilter result = NArrow::TColumnFilter::BuildAllowFilter();
-    auto appendFilter = [&result, this](const ui64 i) {
-        result.Append(*TValidator::CheckNotNull(IntervalFilters[i]));
-    };
-
-    for (ui64 i = 0; i < IntervalFilters.size(); ++i) {
-        appendFilter(i);
-    }
-
-    AFL_VERIFY(result.GetRecordsCountVerified() == Source->GetRecordsCount())("filter", result.GetRecordsCountVerified())(
-                                                       "source", Source->GetRecordsCount());
-    Subscriber->OnFilterReady(result);
-}
-
-void TDuplicateFilterConstructor::TSourceFilterConstructor::AbortConstruction(const TString& reason) {
-    if (Subscriber) {
-        Subscriber->OnFailure(reason);
-    }
-}
-
-std::shared_ptr<TPortionDataSource> TDuplicateFilterConstructor::TWaitingSourceInfo::Construct(
-    const std::shared_ptr<TSpecialReadContext>& context) const {
-    const auto& portions = context->GetReadMetadata()->SelectInfo->Portions;
-    AFL_VERIFY(PortionIdx < portions.size());
-    return std::make_shared<TPortionDataSource>(PortionIdx, portions[PortionIdx], context);
-}
-
-TDuplicateFilterConstructor::TSourceIntervals::TSourceIntervals(const std::vector<std::shared_ptr<TPortionInfo>>& sources) {
-    class TBorderView {
-    private:
-        YDB_READONLY_DEF(bool, IsLast);
-        const NArrow::TReplaceKey* Start;
-        YDB_READONLY_DEF(ui64, SourceId);
-
-        TBorderView(const bool isLast, const NArrow::TReplaceKey* pk, const ui64 sourceId)
-            : IsLast(isLast)
-            , Start(pk)
-            , SourceId(sourceId) {
-        }
-
-    public:
-        static TBorderView First(const std::shared_ptr<TPortionInfo>& source) {
-            return TBorderView(false, &source->IndexKeyStart(), source->GetPortionId());
-        }
-        static TBorderView Last(const std::shared_ptr<TPortionInfo>& source) {
-            return TBorderView(true, &source->IndexKeyEnd(), source->GetPortionId());
-        }
-
-        bool operator<(const TBorderView& other) const {
-            return std::tie<const NArrow::TReplaceKey&, const bool&, const ui64&>(*Start, IsLast, SourceId) <
-                   std::tie<const NArrow::TReplaceKey&, const bool&, const ui64&>(*other.Start, other.IsLast, other.SourceId);
-        };
-        bool operator==(const TBorderView& other) const {
-            return SourceId == other.SourceId && IsLast == other.IsLast;
-        };
-
-        const NArrow::TReplaceKey& GetStart() const {
-            return *Start;
-        }
-    };
-
-    std::vector<TBorderView> borders;
-    for (const auto& source : sources) {
-        borders.emplace_back(TBorderView::First(source));
-        borders.emplace_back(TBorderView::Last(source));
-    }
-    std::sort(borders.begin(), borders.end());
-
-    THashMap<ui64, ui32> firstBySourceId;
-    for (const auto& border : borders) {
-        if (border.GetIsLast()) {
-            if (IntervalBorders.empty() || IntervalBorders.back() != border.GetStart()) {
-                IntervalBorders.emplace_back(border.GetStart());
-            }
-            const TIntervalsRange sourceRange(
-                *TValidator::CheckNotNull(firstBySourceId.FindPtr(border.GetSourceId())), IntervalBorders.size() - 1);
-            AFL_VERIFY(SourceRanges.emplace(border.GetSourceId(), sourceRange).second);
-        } else {
-            AFL_VERIFY(firstBySourceId.emplace(border.GetSourceId(), IntervalBorders.size()).second);
-        }
-    }
-    AFL_VERIFY(SourceRanges.size() == sources.size());
-}
-
-void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
-    const ui64 sourceId = ev->Get()->GetSource()->GetSourceId();
-    const auto range = Intervals->GetRangeBySourceId(sourceId);
-
-    StableBorderCursor->Move(ReverseFetchingOrder ? range.GetLastIdx() : range.GetFirstIdx());
-    const THashSet<ui64> notFetchedSources =
-        NotFetchedSourcesIndex.GetIntersections(range.GetFirstIdx(), range.GetLastIdx(), StableBorderCursor);
-    for (const auto& sourceId : notFetchedSources) {
-        StartAllocation(sourceId, ev->Get()->GetSource());
-    }
-
-    LOCAL_LOG_TRACE("event", "request_filter")
-    ("source", sourceId)("range", range.DebugString())("fetching", TStringBuilder() << '[' << JoinSeq(',', notFetchedSources) << ']');
-
-    auto* findConstructor = ActiveSources.FindPtr(sourceId);
-    AFL_VERIFY(findConstructor);
-    (*findConstructor)->SetSubscriber(ev->Get()->GetSubscriber());
-    if ((*findConstructor)->IsReady()) {
-        (*findConstructor)->Finish();
-        ActiveSources.erase(sourceId);
-    }
-}
-
-void TDuplicateFilterConstructor::Handle(const TEvDuplicateFilterIntervalResult::TPtr& ev) {
-    if (ev->Get()->GetResult().IsFail()) {
-        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_merging_error")("error", ev->Get()->GetResult().GetErrorMessage());
-        AbortAndPassAway(ev->Get()->GetResult().GetErrorMessage());
-        return;
-    }
-
-    for (auto&& [sourceId, filter] : ev->Get()->DetachResult()) {
-        auto* findConstructor = ActiveSources.FindPtr(sourceId);
-        AFL_VERIFY(findConstructor);
-        (*findConstructor)->SetFilter(ev->Get()->GetIntervalIdx(), std::move(filter));
-        if ((*findConstructor)->IsReady()) {
-            (*findConstructor)->Finish();
-            ActiveSources.erase(sourceId);
-        }
-    }
-}
-
-void TDuplicateFilterConstructor::Handle(const TEvDuplicateFilterStartFetching::TPtr& ev) {
-    const ui64 sourceId = ev->Get()->GetContext()->GetSource()->GetSourceId();
-
-    AFL_VERIFY(WaitingSources.erase(sourceId));
-    auto* findConstructor = ActiveSources.FindPtr(sourceId);
-    AFL_VERIFY(findConstructor);
-    ev->Get()->GetContext()->SetConstructor(*findConstructor);
-    ev->Get()->GetContext()->ContinueFetching(ev->Get()->GetNextAction());
-}
-
-void TDuplicateFilterConstructor::Handle(const TEvDuplicateFilterDataFetched::TPtr& ev) {
-    if (ev->Get()->GetStatus().IsFail()) {
-        AbortAndPassAway(ev->Get()->GetStatus().GetErrorMessage());
-        return;
-    }
-
-    const TIntervalsRange intervals = Intervals->GetRangeBySourceId(ev->Get()->GetSourceId());
-    for (ui32 i = intervals.GetFirstIdx(); i <= intervals.GetLastIdx(); ++i) {
-        FetchedSourcesByInterval[i].emplace_back(ev->Get()->GetSourceId());
-    }
-
-    auto readyIntervals = NotFetchedSourcesCount.DecAndGetZeros(intervals.GetFirstIdx(), intervals.GetLastIdx());
-    LOCAL_LOG_TRACE("event", "columns_fetched")
-    ("source", ev->Get()->GetSourceId())("new_ready_intervals", TStringBuilder() << '[' << JoinSeq(',', readyIntervals) << ']');
-    for (const ui32 interval : readyIntervals) {
-        StartMergingColumns(interval);
-    }
-}
-
-void TDuplicateFilterConstructor::Handle(const NActors::TEvents::TEvPoison::TPtr&) {
-    AbortAndPassAway("aborted by actor system");
-}
-
-void TDuplicateFilterConstructor::AbortAndPassAway(const TString& reason) {
-    for (const auto& [id, constructor] : ActiveSources) {
-        constructor->AbortConstruction(reason);
-    }
-    ActiveSources.clear();
-    PassAway();
-}
-
-TDuplicateFilterConstructor::TDuplicateFilterConstructor(const TSpecialReadContext& context, const bool reverseFetchingOrder)
+TDuplicateFilterConstructor::TDuplicateFilterConstructor(const TSpecialReadContext& context)
     : TActor(&TDuplicateFilterConstructor::StateMain)
-    , ReverseFetchingOrder(reverseFetchingOrder)
-    , Intervals(std::make_shared<TSourceIntervals>(context.GetReadMetadata()->SelectInfo->Portions))
-    , NotFetchedSourcesCount([this]() {
-        std::vector<std::pair<ui32, ui32>> intervals;
-        for (const auto& [_, interval] : Intervals->GetSourceRanges()) {
-            intervals.emplace_back(interval.GetFirstIdx(), interval.GetLastIdx());
+    , SourceCache([this]() {
+        TSourceCache* cache = new TSourceCache();
+        RegisterWithSameMailbox((IActor*)cache);
+        return cache;
+    }())
+    , Intervals([&context]() {
+        std::remove_const_t<decltype(TDuplicateFilterConstructor::Intervals)> intervals(
+            NArrow::TSimpleRow(arrow::RecordBatch::Make(context.GetReadMetadata()->GetIndexInfo().GetPrimaryKey(),
+                                   0,   // TODO: change tree implementation, don't require default value/constructor
+                                   std::vector<std::shared_ptr<arrow::Array>>()),
+                0));
+        const auto& portions = context.GetReadMetadata()->SelectInfo->Portions;
+        for (ui64 i = 0; i < portions.size(); ++i) {
+            const auto& portion = portions[i];
+            intervals.insert({ portion->IndexKeyStart(), portion->IndexKeyEnd() }, TSourceInfo(i, portion));
         }
         return intervals;
     }()) {
-    for (const auto& [id, range] : Intervals->GetSourceRanges()) {
-        NotFetchedSourcesIndex.Insert(range.GetFirstIdx(), range.GetLastIdx(), id);
-    }
-    StableBorderCursor = NotFetchedSourcesIndex.MakeCursor();
+}
 
+void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
+    auto source = std::dynamic_pointer_cast<TPortionDataSource>(ev->Get()->GetSource());
+    AFL_VERIFY(source);
+
+    std::vector<std::shared_ptr<IDataSource>> sourcesToFetch;
     {
-        const auto& portions = context.GetReadMetadata()->SelectInfo->Portions;
-        for (ui64 i = 0; i < portions.size(); ++i) {
-            WaitingSources.emplace(portions[i]->GetPortionId(), std::make_shared<TWaitingSourceInfo>(i));
-        }
+        const auto collector = [&sourcesToFetch, context = ev->Get()->GetSource()->GetContextAsVerified<TSpecialReadContext>()](
+                                   const TInterval<NArrow::TSimpleRow>& /*interval*/, const TSourceInfo& info) {
+            sourcesToFetch.emplace_back(info.Construct(context));
+            return true;
+        };
+        Intervals.find(
+            TInterval<NArrow::TSimpleRow>(source->GetPortionInfo().IndexKeyStart(), source->GetPortionInfo().IndexKeyEnd()), collector);
     }
-}
 
-void TDuplicateFilterConstructor::StartAllocation(const ui64 sourceId, const std::shared_ptr<IDataSource>& requester) {
-    const ui64 memoryGroupId = requester->GetMemoryGroupId();
-    LOCAL_LOG_TRACE("component", "duplicates_manager")("event", "start_fetching_columns")("source", sourceId)("memory_group", memoryGroupId);
-
-    auto findWaiting = WaitingSources.FindPtr(sourceId);
-    if (!findWaiting) {
-        LOCAL_LOG_TRACE("event", "skip_start_allocation")("reason", "already_allocated")("source", sourceId)("memory_group", memoryGroupId);
-        return;
-    }
-    if (!(*findWaiting)->SetStartAllocation(memoryGroupId)) {
-        LOCAL_LOG_TRACE("event", "skip_start_allocation")("reason", "allocation_started")("source", sourceId)("memory_group", memoryGroupId);
+    if (sourcesToFetch.size() == 1) {
+        AFL_VERIFY(sourcesToFetch.front()->GetSourceId() == source->GetSourceId());
+        ev->Get()->GetSubscriber()->OnFilterReady(NArrow::TColumnFilter::BuildAllowFilter());
         return;
     }
 
-    std::shared_ptr<TPortionDataSource> source =
-        (*findWaiting)->Construct(requester->GetContextAsVerified<TSpecialReadContext>());
-    Y_UNUSED(ActiveSources.emplace(sourceId, std::make_shared<TSourceFilterConstructor>(source, Intervals)).second);
-
-    std::shared_ptr<TColumnFetchingContext> fetchingContext = std::make_shared<TColumnFetchingContext>(
-        *findWaiting, SelfId(), source->GetContextAsVerified<TSpecialReadContext>(), requester->GetGroupGuard());
-    std::shared_ptr<TDataAccessorsRequest> request = std::make_shared<TDataAccessorsRequest>("DUPLICATES");
-    request->AddPortion(source->GetPortionInfoPtr());
-    request->SetColumnIds(
-        { fetchingContext->GetResultSchema()->GetColumnIds().begin(), fetchingContext->GetResultSchema()->GetColumnIds().end() });
-    request->RegisterSubscriber(std::make_shared<TPortionAccessorFetchingSubscriber>(fetchingContext));
-
-    source->GetContext()->GetCommonContext()->GetDataAccessorsManager()->AskData(request);
+    SourceCache->GetSourcesData(std::move(sourcesToFetch), ev->Get()->GetSource()->GetGroupGuard(),
+        std::make_unique<TSourceDataSubscriber>(SelfId(), source, ev->Get()->GetSubscriber()));
 }
 
-void TDuplicateFilterConstructor::StartMergingColumns(const ui32 intervalIdx) {
-    auto findSources = FetchedSourcesByInterval.find(intervalIdx);
-    AFL_VERIFY(findSources != FetchedSourcesByInterval.end());
-    std::vector<ui64> sources = std::move(findSources->second);
-    FetchedSourcesByInterval.erase(findSources);
+std::shared_ptr<TPortionDataSource> TDuplicateFilterConstructor::TSourceInfo::Construct(
+    const std::shared_ptr<TSpecialReadContext>& context) const {
+    const auto& portions = context->GetReadMetadata()->SelectInfo->Portions;
+    AFL_VERIFY(SourceIdx < portions.size());
+    return std::make_shared<TPortionDataSource>(SourceIdx, portions[SourceIdx], context);
+}
 
-    LOCAL_LOG_TRACE("event", "start_merging_columns")("columns", sources.size())("interval", intervalIdx);
-
-    AFL_VERIFY(!ActiveSources.empty());
-    const std::shared_ptr<NCommon::TSpecialReadContext> readContext = ActiveSources.begin()->second->GetSource()->GetContext();
-    NArrow::NMerger::TCursor maxVersion = [snapshot = readContext->GetReadMetadata()->GetRequestSnapshot()]() {
+void TDuplicateFilterConstructor::TSourceDataSubscriber::OnSourcesReady(TSourceCache::TSourcesData&& result) {
+    // FIXME: don't merge on exclusive intervals
+    // FIXME: strip sources
+    NArrow::NMerger::TCursor maxVersion = [snapshot = Source->GetContext()->GetReadMetadata()->GetRequestSnapshot()]() {
         NArrow::TGeneralContainer batch(1);
         IIndexInfo::AddSnapshotColumns(batch, snapshot, std::numeric_limits<ui64>::max());
         return NArrow::NMerger::TCursor(batch.BuildTableVerified(), 0, IIndexInfo::GetSnapshotColumnNames());
     }();
+
     const std::shared_ptr<TBuildDuplicateFilters> task =
-        std::make_shared<TBuildDuplicateFilters>(readContext->GetReadMetadata()->GetReplaceKey(), IIndexInfo::GetSnapshotColumnNames(),
-            intervalIdx, SelfId(), readContext->GetCommonContext()->GetCounters(), maxVersion);
-
-    std::vector<ui64> emptySources;
-    std::vector<ui64> nonEmptySources;
-
-    for (const auto& sourceId : sources) {
-        const auto* findSource = ActiveSources.FindPtr(sourceId);
-        AFL_VERIFY(findSource);
-        std::shared_ptr<TSourceFilterConstructor> constructionInfo = *findSource;
-        const TRowRange range = constructionInfo->GetIntervalRange(intervalIdx);
-        if (range.Empty()) {
-            emptySources.emplace_back(constructionInfo->GetSource()->GetSourceId());
-            continue;
-        }
-
-        nonEmptySources.emplace_back(constructionInfo->GetSource()->GetSourceId());
-        std::shared_ptr<NArrow::TGeneralContainer> slice =
-            range.Empty()
-                ? constructionInfo->GetColumnData()->BuildEmptySame()
-                : std::make_shared<NArrow::TGeneralContainer>(constructionInfo->GetColumnData()->Slice(range.GetBegin(), range.Size()));
-        task->AddSource(std::move(slice), std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter()),
-            constructionInfo->GetSource()->GetSourceId());
+        std::make_shared<TBuildDuplicateFilters>(Source->GetContext()->GetReadMetadata()->GetReplaceKey(), IIndexInfo::GetSnapshotColumnNames(),
+            Source->GetContext()->GetCommonContext()->GetCounters(), maxVersion,
+            std::make_unique<TFilterResultSubscriber>(Owner, Source, std::move(Callback)));
+    for (const auto& [sourceId, data] : result) {
+        task->AddSource(std::move(data), std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter()), sourceId);
     }
 
-    if (emptySources.size()) {
-        THashMap<ui64, NArrow::TColumnFilter> emptyFilters;
-        for (const auto& sourceId : emptySources) {
-            emptyFilters.emplace(sourceId, NArrow::TColumnFilter::BuildAllowFilter());
-        }
-        Send(SelfId(), new TEvDuplicateFilterIntervalResult(std::move(emptyFilters), intervalIdx));
-    }
+    NConveyor::TScanServiceOperator::SendTaskToExecute(task, Source->GetContext()->GetCommonContext()->GetConveyorProcessId());
+}
 
-    if (nonEmptySources.size() > 1) {
-        NConveyor::TScanServiceOperator::SendTaskToExecute(task, readContext->GetCommonContext()->GetConveyorProcessId());
-    } else if (nonEmptySources.size() == 1) {
-        auto filter = NArrow::TColumnFilter::BuildAllowFilter();
-        const ui64 numEntries =
-            (*TValidator::CheckNotNull(ActiveSources.FindPtr(nonEmptySources.front())))->GetIntervalRange(intervalIdx).Size();
-        filter.Add(true, numEntries);
-        readContext->GetCommonContext()->GetCounters().OnRowsMerged(0, 0, numEntries);
-        Send(SelfId(), new TEvDuplicateFilterIntervalResult(
-                           THashMap<ui64, NArrow::TColumnFilter>({ { nonEmptySources.front(), std::move(filter) } }), intervalIdx));
-    }
+void TDuplicateFilterConstructor::TFilterResultSubscriber::OnResult(THashMap<ui64, NArrow::TColumnFilter>&& result) {
+    auto findFilter = result.FindPtr(Source->GetSourceId());
+    AFL_VERIFY(findFilter);
+    Callback->OnFilterReady(*findFilter);
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

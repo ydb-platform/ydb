@@ -2,6 +2,7 @@
 #include "serializer/stream.h"
 
 #include <ydb/library/formats/arrow/validation/validation.h>
+#include <ydb/library/formats/arrow/arrow_helpers.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/dictionary.h>
@@ -96,44 +97,7 @@ arrow::Result<std::string> CombineSerializedBatches(const std::string& first, co
     std::shared_ptr<arrow::RecordBatch> firstBatch = *tryFirstBatch;
     std::shared_ptr<arrow::RecordBatch> secondBatch = *trySecondBatch;
 
-    if (firstBatch->num_rows() == 0) {
-        return second;
-    }
-
-    if (secondBatch->num_rows() == 0) {
-        return first;
-    }
-
-    std::vector<std::shared_ptr<arrow::Table>> tables;
-
-    auto tryFirstTable = arrow::Table::FromRecordBatches({firstBatch});
-    if (!tryFirstTable.ok()) {
-        return tryFirstTable.status();
-    } else {
-        tables.push_back(*tryFirstTable);
-    }
-
-    auto trySecondTable = arrow::Table::FromRecordBatches({secondBatch});
-    if (!trySecondTable.ok()) {
-        return trySecondTable.status();
-    } else {
-        tables.push_back(*trySecondTable);
-    }
-
-    auto tryCombined = arrow::ConcatenateTables(tables);
-    if (!tryCombined.ok()) {
-        return tryCombined.status();
-    }
-
-    std::shared_ptr<arrow::Table> combinedTable = *tryCombined;
-
-    std::vector<std::shared_ptr<arrow::Array>> columns;
-    columns.reserve(combinedTable->num_columns());
-    for (const auto& col : combinedTable->columns()) {
-        columns.push_back(col->chunk(0));
-    }
-
-    auto result = arrow::RecordBatch::Make(combinedTable->schema(), combinedTable->num_rows(), std::move(columns));
+    std::shared_ptr<arrow::RecordBatch> result = NKikimr::NArrow::CombineBatches({firstBatch, secondBatch});
     auto serializedResult = SerializeBatch(result, arrow::ipc::IpcWriteOptions::Defaults());
     return serializedResult;
 }

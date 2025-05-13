@@ -335,19 +335,21 @@ namespace {
         }
 
         for (auto i = 0U; i < leftKeyTypes.size(); ++i) {
-            if (strictKeys && leftKeyTypes[i] != rightKeyTypes[i]) {
+            auto leftKeyType = leftKeyTypes[i];
+            auto rightKeyType = rightKeyTypes[i];
+            if (strictKeys && leftKeyType != rightKeyType) {
                 ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
                     TStringBuilder() << "Strict key type match requested, but keys have different types: ("
                     << leftKeys[i].first << "." << leftKeys[i].second
-                    << " has type: " << *leftKeyTypes[i] << ", " << rightKeys[i].first << "." << rightKeys[i].second
-                    << " has type: " << *rightKeyTypes[i] << ")"));
+                    << " has type: " << *leftKeyType << ", " << rightKeys[i].first << "." << rightKeys[i].second
+                    << " has type: " << *rightKeyType << ")"));
                 return IGraphTransformer::TStatus::Error;
             }
-            if (ECompareOptions::Uncomparable == CanCompare<true>(leftKeyTypes[i], rightKeyTypes[i])) {
+            if (ECompareOptions::Uncomparable == CanCompare<true>(leftKeyType, rightKeyType)) {
                 ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
                     TStringBuilder() << "Cannot compare key columns (" << leftKeys[i].first << "." << leftKeys[i].second
-                    << " has type: " << *leftKeyTypes[i] << ", " << rightKeys[i].first << "." << rightKeys[i].second
-                    << " has type: " << *rightKeyTypes[i] << ")"));
+                    << " has type: " << *leftKeyType << ", " << rightKeys[i].first << "." << rightKeys[i].second
+                    << " has type: " << *rightKeyType << ")"));
                 return IGraphTransformer::TStatus::Error;
             }
         }

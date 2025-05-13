@@ -161,6 +161,8 @@
 
 #include <ydb/core/tracing/tablet_info.h>
 
+#include <ydb/library/yql/dq/actors/spilling/channel_storage.h>
+
 namespace NKikimr {
 
 class TDomainsInitializer : public IAppDataInitializer {
@@ -1284,6 +1286,8 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     appDataInitializers.AddAppDataInitializer(new TYamlConfigInitializer(runConfig));
 
     appDataInitializers.Initialize(AppData.Get());
+
+    NYql::NDq::InitializeGlobalCounters(AppData->Counters);
 }
 
 void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)

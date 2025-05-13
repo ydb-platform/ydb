@@ -559,8 +559,6 @@ class StabilityCluster:
                 
                 # Пропускаем мертвые сессии и выводим предупреждение
                 if 'Dead' in screen:
-                    print(f"{bcolors.WARNING}Warning: Found dead screen session: {screen.strip()}{bcolors.ENDC}")
-                    print(f"{bcolors.WARNING}You might want to clean it up with 'stop_workload' or 'screen -wipe'{bcolors.ENDC}")
                     continue
                 
                 # Extract PID from screen listing (format: PID..hostname)
@@ -599,7 +597,7 @@ class StabilityCluster:
                         # Show only errors if requested
                         if mode in ['err', 'all']:
                             result = node.ssh_command(
-                                f'cat {log_file} 2>/dev/null | grep -E "ERROR|FATAL|WARN|WARNING|exit.*status" | tail -n {last_n_lines} || true',
+                                f'cat {log_file} 2>/dev/null | grep -E "Error:|ERROR|FATAL|WARN|WARNING|exit.*status" | tail -n {last_n_lines} || true',
                                 raise_on_error=False
                             )
                             print(f"\n{bcolors.BOLD}{bcolors.FAIL}ERROR MESSAGES (last {last_n_lines} error/warning lines):{bcolors.ENDC}")

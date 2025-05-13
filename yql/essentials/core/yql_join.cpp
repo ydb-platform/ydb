@@ -995,7 +995,6 @@ IGraphTransformer::TStatus EquiJoinAnnotation(
     if (!resultType->Validate(position, ctx)) {
         return IGraphTransformer::TStatus::Error;
     }
-    Cerr << "EquiJoin type =" << FormatType(resultType) << Endl;
 
     return IGraphTransformer::TStatus::Ok;
 }

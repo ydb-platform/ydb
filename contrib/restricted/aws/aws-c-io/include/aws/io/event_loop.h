@@ -12,6 +12,8 @@
 
 #include <aws/io/io.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 enum aws_io_event_type {
     AWS_IO_EVENT_TYPE_READABLE = 1,
     AWS_IO_EVENT_TYPE_WRITABLE = 2,
@@ -470,5 +472,6 @@ AWS_IO_API
 struct aws_event_loop *aws_event_loop_group_get_next_loop(struct aws_event_loop_group *el_group);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_IO_EVENT_LOOP_H */

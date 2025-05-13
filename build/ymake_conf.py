@@ -15,8 +15,6 @@ import subprocess
 import sys
 import tempfile
 
-import six
-
 from functools import total_ordering
 
 logger = logging.getLogger(__name__ if __name__ != '__main__' else 'ymake_conf.py')
@@ -255,7 +253,7 @@ class Platform(object):
     def find_in_dict(self, dict_, default=None):
         if dict_ is None:
             return default
-        for key in six.iterkeys(dict_):
+        for key in dict_.keys():
             if self._parse_os(key) == self.os:
                 return dict_[key]
         return default
@@ -342,9 +340,9 @@ def get_stdout(command):
 def get_stdout_and_code(command):
     # noinspection PyBroadException
     try:
-        process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         stdout, _ = process.communicate()
-        return six.ensure_str(stdout), process.returncode
+        return stdout, process.returncode
     except Exception as e:
         logger.info("While run: `%s`", e)
         return None, None
@@ -411,7 +409,7 @@ class Variables(dict):
                 emit(k, self[k])
 
     def update_from_presets(self):
-        for k in six.iterkeys(self):
+        for k in self.keys():
             v = preset(k)
             if v is not None:
                 self[k] = v
@@ -421,8 +419,8 @@ class Variables(dict):
             def value_check(v_):
                 return v_ is None
 
-        if any(map(value_check, six.itervalues(self))):
-            for k in six.iterkeys(self):
+        if any(map(value_check, self.values())):
+            for k in self.keys():
                 self[k] = reset_value
 
 
@@ -433,7 +431,7 @@ def format_env(env, list_separator=':'):
     def format(kv):
         return '${env:"%s=%s"}' % (kv[0], format_value(kv[1]))
 
-    return ' '.join(map(format, sorted(six.iteritems(env))))
+    return ' '.join(map(format, sorted(env.items())))
 
 
 # TODO(somov): Проверить, используется ли это. Может быть, выпилить.
@@ -465,7 +463,7 @@ def is_negative_str(s):
 
 
 def to_bool(s, default=None):
-    if isinstance(s, six.string_types):
+    if isinstance(s, str):
         if is_positive_str(s):
             return True
         if is_negative_str(s):
@@ -755,17 +753,7 @@ class Build(object):
         """
         :rtype: dict[str, Any]
         """
-
-        def un_unicode(o):
-            if isinstance(o, six.text_type):
-                return six.ensure_str(o)
-            if isinstance(o, list):
-                return [un_unicode(oo) for oo in o]
-            if isinstance(o, dict):
-                return {un_unicode(k): un_unicode(v) for k, v in six.iteritems(o)}
-            return o
-
-        return un_unicode(json.loads(base64.b64decode(base64str)))
+        return json.loads(base64.b64decode(base64str))
 
 
 class YMake(object):
@@ -900,7 +888,7 @@ class CompilerDetector(object):
             return None
 
         vars_ = {}
-        for line in six.ensure_str(stdout).split('\n'):
+        for line in stdout.split('\n'):
             parts = line.split('=', 1)
             if len(parts) == 2 and parts[0].startswith(prefix):
                 name, value = parts[0][len(prefix):], parts[1]
@@ -992,7 +980,7 @@ class ToolchainOptions(object):
             self.c_compiler = detector.c_compiler
             self.cxx_compiler = detector.cxx_compiler
             self.compiler_version_list = detector.version_list
-            self.compiler_version = '.'.join(map(lambda part: six.ensure_str(str(part)), self.compiler_version_list))
+            self.compiler_version = '.'.join(map(lambda part: str(part), self.compiler_version_list))
 
         else:
             self.type = self.params['type']
@@ -1058,7 +1046,7 @@ class ToolchainOptions(object):
     def get_env(self, convert_list=None):
         convert_list = convert_list or (lambda x: x)
         r = {}
-        for k, v in six.iteritems(self._env):
+        for k, v in self._env.items():
             if isinstance(v, str):
                 r[k] = v
             elif isinstance(v, list):
@@ -1351,7 +1339,7 @@ class GnuToolchain(Toolchain):
 
     def setup_apple_local_sdk(self, target):
         def get_output(*args):
-            return six.ensure_str(subprocess.check_output(tuple(args))).strip()
+            return subprocess.check_output(tuple(args), text=True).strip()
 
         def get_sdk_root(sdk):
             root = self.env.get('SDKROOT')

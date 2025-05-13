@@ -106,7 +106,7 @@ int aws_thread_join_all_managed(void) {
             aws_condition_variable_wait_for_pred(
                 &s_managed_thread_signal,
                 &s_managed_thread_lock,
-                wait_ns,
+                (int64_t)wait_ns,
                 s_one_or_fewer_managed_threads_unjoined,
                 NULL);
         } else {

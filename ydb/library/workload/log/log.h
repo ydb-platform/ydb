@@ -38,6 +38,7 @@ public:
     TWorkloadDataInitializer::TList CreateDataInitializers() const override;
 
 private:
+    void Validate() const;
     void ConfigureOptsFillData(NLastGetopt::TOpts& opts);
     void ConfigureOptsColumns(NLastGetopt::TOpts& opts);
 };

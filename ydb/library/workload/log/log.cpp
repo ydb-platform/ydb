@@ -302,7 +302,7 @@ public:
     {}
 
     TVector<TRow> GenerateRandomRows(ui64 count) const {
-        CheckParams();
+        // CheckParams();
         TVector<TRow> result;
         result.reserve(count);
 
@@ -421,6 +421,30 @@ void TLogWorkloadParams::ConfigureOptsFillData(NLastGetopt::TOpts& opts) {
         .DefaultValue(NullPercent).StoreResult(&NullPercent);
 }
 
+void TLogWorkloadParams::Validate() const {
+    const bool timestampDevPassed = TimestampStandardDeviationMinutes;
+    const bool dateFromPassed = !!TimestampDateFrom;
+    const bool dateToPassed = !!TimestampDateTo;
+
+    if (!timestampDevPassed && (!dateFromPassed || !dateToPassed)) {
+        throw yexception() << "One of parameter should be provided - timestamp_deviation or date-from and date-to";
+    }
+
+    if (timestampDevPassed && (dateFromPassed || dateToPassed)) {
+        throw yexception() << "The `timestamp_deviation` and `date-from`, `date-to` are mutually exclusive and shouldn't be provided at once";
+    }
+
+    if ((dateFromPassed && !dateToPassed) || (!dateFromPassed && dateToPassed)) {
+        throw yexception() << "The `date-from` and `date-to` parameters must be provided together to specify the interval for uniform PK generation";
+    }
+
+    if (dateFromPassed && dateToPassed && *TimestampDateFrom >= *TimestampDateTo) {
+        throw yexception() << "Invalid interval [`date-from`, `date-to`)";
+    }
+
+    return;
+}
+
 void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
     opts.AddLongOption('p', "path", "Path where benchmark tables are located")
         .Optional()
@@ -477,6 +501,8 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
 }
 
 THolder<IWorkloadQueryGenerator> TLogWorkloadParams::CreateGenerator() const {
+    Validate();
+
     return MakeHolder<TLogGenerator>(this);
 }
 

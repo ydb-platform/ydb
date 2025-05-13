@@ -216,7 +216,12 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
     };
 
     while (Now() < StopTime) {
-        auto queryInfoList = workloadGen.GetWorkload(type);
+        NYdbWorkload::TQueryInfoList queryInfoList;
+        try {
+            queryInfoList = workloadGen.GetWorkload(type);
+        } catch (yexception& exception) {
+            return;
+        }
         if (queryInfoList.empty()) {
             Cerr << "Task ID: " << taskId << ". No queries to run." << Endl;
             return;
@@ -279,6 +284,9 @@ int TWorkloadCommand::RunWorkload(NYdbWorkload::IWorkloadQueryGenerator& workloa
     StopTime = StartTime + TDuration::Seconds(TotalSec);
 
     NPar::LocalExecutor().RunAdditionalThreads(Threads);
+    // bool invalidParams = false;
+    // До разделения на потоки сделать валидацию.
+    
     auto futures = NPar::LocalExecutor().ExecRangeWithFutures([this, &workloadGen, type](int id) {
         try {
             WorkerFn(id, workloadGen, type);

@@ -1475,6 +1475,12 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
     }
     bsTo->MutableDefineHostConfig()->CopyFrom(bsFrom.GetDefineHostConfig());
 
+    if (bsFrom.HasBscSettings()) {
+        bsTo->MutableBscSettings()->CopyFrom(bsFrom.GetBscSettings());
+    } else {
+        bsTo->ClearBscSettings();
+    }
+
     // copy nameservice-related things
     if (!appConfig.HasNameserviceConfig()) {
         *errorReason = "origin config missing mandatory NameserviceConfig section";

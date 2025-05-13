@@ -158,24 +158,6 @@ message TEphemeralInputFields {
     optional FailDomainKind FailDomainType = 9 [default = Rack];
     optional TDomainsConfig.TSecurityConfig SecurityConfig = 10;
 
-    message TBscSettings {
-        optional uint32 DefaultMaxSlots = 1;
-        optional bool EnableSelfHeal = 2;
-        optional bool EnableDonorMode = 3;
-        optional uint64 ScrubPeriodicitySeconds = 4;
-        optional uint32 PDiskSpaceMarginPromille = 5;
-        optional uint32 GroupReserveMin = 6;
-        optional uint32 GroupReservePartPPM = 7;
-        optional uint32 MaxScrubbedDisksAtOnce = 8;
-        optional NKikimrBlobStorage.TPDiskSpaceColor.E PDiskSpaceColorBorder = 9;
-        optional bool EnableGroupLayoutSanitizer = 10;
-        optional bool AllowMultipleRealmsOccupation = 11;
-        optional bool UseSelfHealLocalPolicy = 12;
-        optional bool TryToRelocateBrokenDisksLocallyFirst = 13;
-    }
-
-    optional TBscSettings BscSettings = 11;
-
     enum FailDomainKind {
         Rack = 0;
         Body = 1;

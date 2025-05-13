@@ -1103,7 +1103,7 @@ def main():
             stability_cluster._clean_and_start_workload(
                 first_node,
                 'oltp_workload', 
-                '/Berkanavt/nemesis/bin/oltp_workload --database /Root/db1 --path oltp_workload --duration 3600'
+                '/Berkanavt/nemesis/bin/oltp_workload --database /Root/db1 --path oltp_workload --duration 120'
             )
             stability_cluster.get_state()
         if action == "stop_workloads":

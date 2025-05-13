@@ -16,7 +16,7 @@ namespace NKikimr::NKqp {
 
 namespace {
     // Avoid too many compute actors starting at the same time.
-    constexpr size_t kMaxDefferedEffects = 100;
+    constexpr size_t kMaxDeferredEffects = 100;
 }
 
 class TKqpTxLock {
@@ -323,7 +323,7 @@ public:
 
     void ApplyPhysicalQuery(const NKqpProto::TKqpPhyQuery& phyQuery, const bool commit) {
         NeedUncommittedChangesFlush = HasUncommittedChangesRead(ModifiedTablesSinceLastFlush, phyQuery, commit);
-        NeedUncommittedChangesFlush |= (DeferredEffects.Size() >= kMaxDefferedEffects);
+        NeedUncommittedChangesFlush |= (DeferredEffects.Size() >= kMaxDeferredEffects);
         if (NeedUncommittedChangesFlush) {
             ModifiedTablesSinceLastFlush.clear();   
         }

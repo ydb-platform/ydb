@@ -20,7 +20,7 @@ from ydb.tests.datashard.lib.types_of_variables import (
 
 
 class TestDML(TestBase):
-    """@pytest.mark.parametrize(
+    @pytest.mark.parametrize(
         "table_name, pk_types, all_types, index, ttl, unique, sync",
         [
             ("table_index_4_UNIQUE_SYNC", pk_types, {},
@@ -69,7 +69,6 @@ class TestDML(TestBase):
         self.without(table_name, all_types, pk_types, index, ttl)
         self.tablesample_sample(table_name, all_types,
                                 pk_types, index, ttl, dml)
-    """
 
     def limit(
         self,

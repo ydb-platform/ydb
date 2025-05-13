@@ -84,7 +84,7 @@ class TestCompatibility(RestartToAnotherVersionFixture):
 
         create_table(self, store_type)
         upsert_and_check_sum(self)
-        self.change_cluster_version(self.all_binary_paths[1])
+        self.change_cluster_version()
         assert self.execute_scan_query('select count(*) as row_count from `sample_table`')[0]['row_count'] == 200, 'Expected 200 rows after update version'
         upsert_and_check_sum(self, iteration_count=2, start_index=100)
         assert self.execute_scan_query('select count(*) as row_count from `sample_table`')[0]['row_count'] == 500, 'Expected 500 rows: update 100-200 rows and added 300 rows'
@@ -160,6 +160,6 @@ class TestCompatibility(RestartToAnotherVersionFixture):
         yatest.common.execute(init_command, wait=True, stdout=self.output_f)
         yatest.common.execute(import_command, wait=True, stdout=self.output_f)
         yatest.common.execute(run_command, wait=True, stdout=self.output_f)
-        self.change_cluster_version(self.all_binary_paths[1])
+        self.change_cluster_version()
         yatest.common.execute(run_command, wait=True, stdout=self.output_f)
         yatest.common.execute(clean_command, wait=True, stdout=self.output_f)

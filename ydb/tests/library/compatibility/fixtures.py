@@ -54,7 +54,7 @@ class RestartToAnotherVersionFixture:
         yield
         self.cluster.stop()
 
-    def change_cluster_version(self, new_binary_paths):
+    def change_cluster_version(self):
         self.current_binary_paths_index = (self.current_binary_paths_index + 1) % len(self.all_binary_paths)
         new_binary_paths = self.all_binary_paths[self.current_binary_paths_index]
         self.config.set_binary_paths(new_binary_paths)

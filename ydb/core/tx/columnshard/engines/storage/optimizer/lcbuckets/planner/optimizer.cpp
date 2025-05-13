@@ -10,9 +10,11 @@
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
 TOptimizerPlanner::TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
-    const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::vector<TLevelConstructorContainer>& levelConstructors)
+    const std::shared_ptr<arrow::Schema>& primaryKeysSchema, std::shared_ptr<TCounters> counters,
+    std::vector<std::shared_ptr<IPortionsLevel>> levels)
     : TBase(pathId)
-    , Counters(std::make_shared<TCounters>())
+    , Counters(counters)
+    , Levels(std::move(levels))
     , StoragesManager(storagesManager)
     , PrimaryKeysSchema(primaryKeysSchema) {
     std::shared_ptr<IPortionsLevel> nextLevel;

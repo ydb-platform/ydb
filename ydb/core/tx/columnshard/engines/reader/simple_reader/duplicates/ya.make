@@ -11,8 +11,8 @@ SRCS(
     common.cpp
     subscriber.cpp
     fetching.cpp
-    interval_index.cpp
-    interval_counter.cpp
+    interval_tree.cpp
+    source_cache.cpp
 )
 
 PEERDIR(

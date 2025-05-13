@@ -120,6 +120,9 @@ protected:
     virtual ui64 DoGetMetadataRequestSoftMemoryLimit(const ui64 defaultValue) const {
         return defaultValue;
     }
+    virtual ui64 DoGetDuplicateManagerCacheSize(const ui64 defaultValue) const {
+        return defaultValue;
+    }
     virtual ui64 DoGetReadSequentiallyBufferSize(const ui64 defaultValue) const {
         return defaultValue;
     }
@@ -236,6 +239,12 @@ public:
         const ui64 defaultValue = 100 * (1 << 20);
         return DoGetMetadataRequestSoftMemoryLimit(defaultValue);
     }
+
+    ui64 GetDuplicateManagerCacheSize() const {
+        const ui64 defaultValue = GetConfig().GetDuplicateManagerCacheSize();
+        return DoGetDuplicateManagerCacheSize(defaultValue);
+    }
+
     virtual bool NeedForceCompactionBacketsConstruction() const {
         return false;
     }

@@ -46,6 +46,7 @@ private:
     TSnapshot RequestSnapshot;
     std::optional<TGranuleShardingInfo> RequestShardingInfo;
     std::shared_ptr<IScanCursor> ScanCursor;
+    ui64 TabletId;
     virtual void DoOnReadFinished(NColumnShard::TColumnShard& /*owner*/) const {
     }
     virtual void DoOnBeforeStartReading(NColumnShard::TColumnShard& /*owner*/) const {

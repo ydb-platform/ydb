@@ -116,6 +116,12 @@ SELECT String::SplitToList("1,2,3,4,5,6,7", ",", 3 as Limit); -- ["1", "2", "3",
 
   Удаляют все/первое/последнее вхождения(е) символа в наборе `symbols` из `input`. Второй аргумент интерпретируется как неупорядоченный набор символов для удаления.
 
+* `String::ReverseBytes(input:String{Flags:AutoMap}) -> String` - добавлена в версии [2025.02](../../changelog/2025.02.md#string-module)
+  Разворачивает строку, рассматривая ее как байтовую последовательность.
+
+* `String::ReverseBits(input:String{Flags:AutoMap}) -> String` - добавлена в версии [2025.02](../../changelog/2025.02.md#string-module)
+  Разворачивает строку, рассматривая ее как битовую последовательность.
+
 * `String::IsAscii(string:String{Flags:AutoMap}) -> Bool`
 
   Проверяет, является ли строка валидной ascii последовательностью.

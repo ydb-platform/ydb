@@ -522,11 +522,11 @@ def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_s
             .add_column('value_string', ydb.OptionalType(ydb.PrimitiveType.Utf8))
         now = datetime.datetime.now()
         for i in range(0, 10000):
-            bulk_size = 1000; # rows
+            bulk_size = 1000  # rows
             rows = [BulkUpsertRow((now + datetime.timedelta(microseconds=dt)), str(dt)) for dt in range(i * bulk_size, (i + 1) * bulk_size)]
             try:
                 driver.table_client.bulk_upsert(path, rows, column_types)
-            except ydb.issues.Overloaded as e:
+            except ydb.issues.Overloaded:
                 described = ydb_cluster.client.describe(database, '')
                 logger.debug('database state when oveloaded: %s', described)
                 assert described.PathDescription.DomainDescription.DomainState.DiskQuotaExceeded, 'database did not move into DiskQuotaExceeded state'

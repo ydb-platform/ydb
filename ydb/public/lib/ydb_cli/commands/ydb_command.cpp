@@ -25,7 +25,8 @@ TDriverConfig TYdbCommand::CreateDriverConfig(TConfig& config) {
     auto driverConfig = TDriverConfig()
         .SetEndpoint(config.Address)
         .SetDatabase(config.Database)
-        .SetCredentialsProviderFactory(config.GetSingletonCredentialsProviderFactory());
+        .SetCredentialsProviderFactory(config.GetSingletonCredentialsProviderFactory())
+        .SetUsePerChannelTcpConnection(config.UsePerChannelTcpConnection);
 
     if (config.EnableSsl) {
         driverConfig.UseSecureConnection(config.CaCerts);
@@ -34,7 +35,6 @@ TDriverConfig TYdbCommand::CreateDriverConfig(TConfig& config) {
     if (config.IsNetworkIntensive) {
         size_t networkThreadNum = GetNetworkThreadNum(config);
         driverConfig.SetNetworkThreadsNum(networkThreadNum);
-        driverConfig.SetUsePerChannelTcpConnection(true);
     }
 
     if (config.SkipDiscovery) {

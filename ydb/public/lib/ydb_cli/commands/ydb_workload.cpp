@@ -217,11 +217,7 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
 
     while (Now() < StopTime) {
         NYdbWorkload::TQueryInfoList queryInfoList;
-        try {
-            queryInfoList = workloadGen.GetWorkload(type);
-        } catch (yexception& exception) {
-            return;
-        }
+        queryInfoList = workloadGen.GetWorkload(type);
         if (queryInfoList.empty()) {
             Cerr << "Task ID: " << taskId << ". No queries to run." << Endl;
             return;

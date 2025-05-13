@@ -234,7 +234,6 @@
   - sys/msg.h:              contrib/restricted/emscripten/system/lib/libc/musl/include/sys/msg.h
   - sys/mtio.h:             contrib/restricted/emscripten/system/lib/libc/musl/include/sys/mtio.h
   - sys/param.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/param.h
-  - sys/personality.h:      contrib/restricted/emscripten/system/lib/libc/musl/include/sys/personality.h
   - sys/poll.h:             contrib/restricted/emscripten/system/lib/libc/musl/include/sys/poll.h
   - sys/procfs.h:           contrib/restricted/emscripten/system/lib/libc/musl/include/sys/procfs.h
   - sys/ptrace.h:           contrib/restricted/emscripten/system/lib/libc/musl/include/sys/ptrace.h

@@ -58,7 +58,9 @@ enum aws_log_level {
 typedef uint32_t aws_log_subject_t;
 
 /* Each library gets space for 2^^10 log subject entries */
-#define AWS_LOG_SUBJECT_STRIDE_BITS 10
+enum {
+    AWS_LOG_SUBJECT_STRIDE_BITS = 10,
+};
 #define AWS_LOG_SUBJECT_STRIDE (1U << AWS_LOG_SUBJECT_STRIDE_BITS)
 #define AWS_LOG_SUBJECT_BEGIN_RANGE(x) ((x)*AWS_LOG_SUBJECT_STRIDE)
 #define AWS_LOG_SUBJECT_END_RANGE(x) (((x) + 1) * AWS_LOG_SUBJECT_STRIDE - 1)

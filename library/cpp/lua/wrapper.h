@@ -396,6 +396,10 @@ public:
     }
 
     inline void call(int args, int rets) {
+        Y_ASSUME(args >= 0);  // Allows to optimize out comparison with LUA_MULTRET if it's negative (-1 in Lua 5.2-5.4)
+        if (rets != LUA_MULTRET && rets > args) {
+            ensure_stack(rets - args);
+        }
         if (lua_pcall(State_, args, rets, 0)) {
             error();
         }

@@ -447,7 +447,7 @@ static int s_process_write_message(
     (void)slot;
     (void)message;
     AWS_FATAL_ASSERT(!"The event-stream-channel-handler is not designed to be a mid-channel handler.");
-    return AWS_OP_ERR;
+    return aws_raise_error(AWS_ERROR_UNIMPLEMENTED);
 }
 
 static int s_increment_read_window(struct aws_channel_handler *handler, struct aws_channel_slot *slot, size_t size) {

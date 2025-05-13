@@ -861,18 +861,15 @@ TCommandVersionDynamicConfig::TCommandVersionDynamicConfig(bool allowEmptyDataba
 
 void TCommandVersionDynamicConfig::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    config.Opts->AddLongOption("list-v1-nodes", "List nodes with V1 configuration")
-        .StoreTrue(&ListV1Nodes);
-    config.Opts->AddLongOption("list-v2-nodes", "List nodes with V2 configuration")
-        .StoreTrue(&ListV2Nodes);
-    config.Opts->AddLongOption("list-unknown-nodes", "List nodes with unknown configuration")
-        .StoreTrue(&ListUnknownNodes);
+    config.Opts->AddLongOption("list-nodes", "List nodes with different configuration versions")
+        .StoreTrue(&ListNodes);
     config.SetFreeArgsNum(0);
     config.AllowEmptyDatabase = AllowEmptyDatabase;
 
     AddOutputFormats(config, {
         EDataFormat::Pretty,
-        EDataFormat::JsonUnicode
+        EDataFormat::Json,
+        EDataFormat::Csv
     });
 }
 
@@ -882,26 +879,21 @@ void TCommandVersionDynamicConfig::Parse(TConfig& config) {
 }
 
 int TCommandVersionDynamicConfig::Run(TConfig& config) {
-    bool anyListFlagManuallySet = ListV1Nodes || ListV2Nodes || ListUnknownNodes;
-
-    if (!anyListFlagManuallySet) {
-        ListV1Nodes = true;
-        ListV2Nodes = true;
-        ListUnknownNodes = true;
-    }
 
     auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
     auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
 
-    auto result = client.GetConfigurationVersion(ListV1Nodes, ListV2Nodes, ListUnknownNodes).GetValueSync();
+    auto result = client.GetConfigurationVersion(ListNodes).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     auto sortNodes = [&](const auto& list) {
         std::vector<ui32> sortedNodes(list.begin(), list.end());
         std::sort(sortedNodes.begin(), sortedNodes.end());
         return sortedNodes;
     };
-
-    if (OutputFormat == EDataFormat::JsonUnicode) {
+    if (OutputFormat == EDataFormat::Json) {
+        if (ListNodes) {
+            Cerr << "Flag --list-nodes is redundant when using --format json, as node lists are included in output by default" << Endl;
+        }
         NJson::TJsonValue jsonOutput(NJson::JSON_MAP);
         auto serializeNodesInfo = [&](const TString& key, const auto& listGetter) {
             NJson::TJsonValue nodesArray(NJson::JSON_ARRAY);
@@ -912,10 +904,7 @@ int TCommandVersionDynamicConfig::Run(TConfig& config) {
         };
 
 #define SERIALIZE_NODES_INFO(type, key) \
-    if (List##type##Nodes) { \
-        jsonOutput.InsertValue(#key "_nodes_count", result.Get##type##Nodes()); \
         serializeNodesInfo(#key "_nodes_list", [&]() { return result.Get##type##NodesList(); }); \
-    }
 
         SERIALIZE_NODES_INFO(V1, v1)
         SERIALIZE_NODES_INFO(V2, v2)
@@ -923,13 +912,37 @@ int TCommandVersionDynamicConfig::Run(TConfig& config) {
 
         NJson::WriteJson(&Cout, &jsonOutput, true);
         Cout << Endl;
+    } else if (OutputFormat == EDataFormat::Csv) {
+        if (ListNodes) {
+            Cerr << "Flag --list-nodes is redundant when using --format csv, as node lists are included in output by default" << Endl;
+        }
+
+        Cout << "config_version,nodes_count,nodes_list" << Endl;
+        auto printNodesRow = [&](const TString& version, const auto& nodesCountGetter, const auto& listGetter) {
+            TStringBuilder row;
+            row << version << "," << nodesCountGetter();
+            row << ",\"";
+            bool first = true;
+            for (const auto& node : sortNodes(listGetter())) {
+                if (!first) {
+                    row << " ";
+                }
+                row << node;
+                first = false;
+            }
+            row << "\"";
+            Cout << row << Endl;
+        };
+        printNodesRow("v1", [&]() { return result.GetV1Nodes(); }, [&]() { return result.GetV1NodesList(); });
+        printNodesRow("v2", [&]() { return result.GetV2Nodes(); }, [&]() { return result.GetV2NodesList(); });
+        printNodesRow("unknown", [&]() { return result.GetUnknownNodes(); }, [&]() { return result.GetUnknownNodesList(); });
     } else {
-        auto printNodeList = [&](const TString& header, const auto& list_getter) {
-            const auto& nodes_vector = sortNodes(list_getter());
+        auto printNodeList = [&](const TString& header, const auto& listGetter) {
+            const auto& nodesVector = sortNodes(listGetter());
             Cout << header;
-            if (OutputFormat == EDataFormat::Pretty) {
+            if (OutputFormat == EDataFormat::Default) {
                 bool first = true;
-                for (const auto& node : nodes_vector) {
+                for (const auto& node : nodesVector) {
                     if (!first) {
                         Cout << ", ";
                     }
@@ -937,21 +950,14 @@ int TCommandVersionDynamicConfig::Run(TConfig& config) {
                     first = false;
                 }
                 Cout << Endl;
-            } else if (OutputFormat == EDataFormat::JsonUnicode) {
-                NJson::TJsonValue nodesArray(NJson::JSON_ARRAY);
-                for (const auto& node : nodes_vector) {
-                    nodesArray.AppendValue(node);
-                }
-                Cout << nodesArray.GetStringRobust();
             }
         };
 
 #define PRINT_NODE_VERSION_INFO(type) \
-    Cout << #type " node: " << result.Get##type##Nodes() << Endl; \
-    if (List##type##Nodes) { \
+    Cout << #type " nodes: " << result.Get##type##Nodes() << Endl; \
+    if (ListNodes) { \
         printNodeList(#type " node list: ", [&]() { return result.Get##type##NodesList(); }); \
-    } \
-    Cout << Endl;
+    }
 
         PRINT_NODE_VERSION_INFO(V1)
         PRINT_NODE_VERSION_INFO(V2)

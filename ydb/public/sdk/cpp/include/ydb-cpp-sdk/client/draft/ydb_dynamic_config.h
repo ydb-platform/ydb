@@ -308,9 +308,7 @@ public:
 
     // Get configuration version on nodes
     TAsyncGetConfigurationVersionResult GetConfigurationVersion(
-        bool listV1Nodes,
-        bool listV2Nodes,
-        bool listUnknownNodes,
+        bool listNodes,
         const TClusterConfigSettings& settings = {});
 
 private:

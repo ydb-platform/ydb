@@ -153,9 +153,7 @@ public:
     void Parse(TConfig&) override;
     int Run(TConfig&) override;
 private:
-    bool ListV1Nodes = false;
-    bool ListV2Nodes = false;
-    bool ListUnknownNodes = false;
+    bool ListNodes = false;
     bool AllowEmptyDatabase = false;
 };
 

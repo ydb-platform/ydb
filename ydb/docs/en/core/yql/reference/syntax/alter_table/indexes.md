@@ -66,7 +66,7 @@ These settings cannot be reset.
 
 ### Example
 
-The query in the following example enables automatic partitioning by load for the index named `title_index` of table `series`, sets its minimum partition count to 5 and enables one follower by AZ for every partition:
+The query in the following example enables automatic partitioning by load for the index named `title_index` of the table `series`, sets its minimum partition count to 5, and enables one follower per AZ for every partition:
 
 
 ```yql

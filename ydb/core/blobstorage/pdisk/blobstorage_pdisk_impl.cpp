@@ -2058,6 +2058,9 @@ void TPDisk::KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEven
         for (ui32 i = 0; i < ChunkState.size(); ++i) {
             TChunkState &state = ChunkState[i];
             if (state.OwnerId == owner) {
+                if (TPDisk::IS_SHRED_ENABLED) {
+                    state.IsDirty = true;
+                }
                 if (state.CommitState == TChunkState::DATA_RESERVED
                         || state.CommitState == TChunkState::DATA_DECOMMITTED
                         || state.CommitState == TChunkState::DATA_RESERVED_DECOMMIT_IN_PROGRESS

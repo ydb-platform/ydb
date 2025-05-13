@@ -600,11 +600,6 @@ namespace NYql::NDqs {
         YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceName << "\" did't fill dq source settings type for its dq source node");
 
         NDqProto::TDqStreamLookupSource streamLookupSource;
-        constexpr auto ListifiedPrefix = "Listified-"sv;
-        if (sourceType.StartsWith(ListifiedPrefix)) {
-            sourceType = sourceType.substr(ListifiedPrefix.size());
-            streamLookupSource.SetListified(true);
-        }
         streamLookupSource.SetProviderName(sourceType);
         *streamLookupSource.MutableLookupSource() = providerSpecificLookupSourceSettings;
         streamLookupSource.SetSerializedRowType(NYql::NCommon::GetSerializedTypeAnnotation(rightInput.RowType().Raw()->GetTypeAnn()));

@@ -188,7 +188,6 @@ message TDqStreamLookupSource {
     string ProviderName = 2;
     google.protobuf.Any LookupSource = 3; //Provider specific DataSource
     string Table = 4; //Table name to look up in
-    bool Listified = 5;
 }
 
 message TDqInputTransformLookupSettings {

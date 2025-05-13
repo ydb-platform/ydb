@@ -934,25 +934,6 @@ TVector<size_t> GetJoinColumnIndexes(const NMiniKQL::TStructType* type, const TH
     }, joinColumns);
 }
 
-NMiniKQL::TStructType* DeListifyType(const NMiniKQL::TStructType* type, const NMiniKQL::TTypeEnvironment& env, bool asOptional = false)
-{
-    std::vector<NMiniKQL::TStructMember> members;
-    const ui32 membersCount = type->GetMembersCount();
-    members.resize(membersCount);
-    for (ui32 i = 0; i != membersCount; ++i) {
-        members[i].Name = type->GetMemberName(i);
-        auto* memberType = type->GetMemberType(i);
-        Y_ENSURE(memberType->GetKind() == NMiniKQL::TType::EKind::List);
-        memberType = static_cast<NMiniKQL::TListType *>(memberType)->GetItemType();
-        Y_ENSURE(memberType->GetKind() == NMiniKQL::TType::EKind::Optional);
-        if (!asOptional) {
-            memberType = static_cast<NMiniKQL::TOptionalType *>(memberType)->GetItemType();
-        }
-        members[i].Type = memberType;
-    }
-    return NMiniKQL::TStructType::Create(membersCount, std::as_const(members).data(), env);
-}
-
 } // namespace
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStreamLookup(
@@ -1036,52 +1017,6 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
                 inputRowType,
                 lookupKeyType,
                 lookupPayloadType,
-                outputRowType,
-                std::move(outputColumnsOrder),
-                settings.GetMaxDelayedRows(),
-                settings.GetCacheLimit(),
-                std::chrono::seconds(settings.GetCacheTtlSeconds())
-            );
-        return {actor, actor};
-    }
-    if (settings.GetRightSource().GetListified()) {
-        auto actor = isWide ?
-            (TInputTransformStreamLookupBase*)new TInputTransformStreamMultiLookupWide(
-                args.Alloc,
-                args.HolderFactory,
-                args.TypeEnv,
-                args.InputIndex,
-                args.TransformInput,
-                args.ComputeActorId,
-                args.TaskCounters,
-                factory,
-                std::move(settings),
-                std::move(lookupKeyInputIndexes),
-                std::move(otherInputIndexes),
-                inputRowType,
-                DeListifyType(lookupKeyType, args.TypeEnv),
-                DeListifyType(lookupPayloadType, args.TypeEnv, true),
-                outputRowType,
-                std::move(outputColumnsOrder),
-                settings.GetMaxDelayedRows(),
-                settings.GetCacheLimit(),
-                std::chrono::seconds(settings.GetCacheTtlSeconds())
-            ) :
-            (TInputTransformStreamLookupBase*)new TInputTransformStreamMultiLookupNarrow(
-                args.Alloc,
-                args.HolderFactory,
-                args.TypeEnv,
-                args.InputIndex,
-                args.TransformInput,
-                args.ComputeActorId,
-                args.TaskCounters,
-                factory,
-                std::move(settings),
-                std::move(lookupKeyInputIndexes),
-                std::move(otherInputIndexes),
-                inputRowType,
-                DeListifyType(lookupKeyType, args.TypeEnv),
-                DeListifyType(lookupPayloadType, args.TypeEnv, true),
                 outputRowType,
                 std::move(outputColumnsOrder),
                 settings.GetMaxDelayedRows(),

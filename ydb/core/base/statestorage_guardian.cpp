@@ -399,8 +399,8 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         for (ui32 idx : xrange(replicasList.size())) {
             const TActorId replica = replicasList[idx];
             bool found = false;
-            for(auto& p : ReplicaGuardians)
-                if(p.first == replica && p.second) {
+            for (auto& p : ReplicaGuardians)
+                if (p.first == replica && p.second) {
                     updatedReplicaGuardians.emplace_back(p);
                     p.second = TActorId();
                     found = true;

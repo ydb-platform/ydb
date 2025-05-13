@@ -13,13 +13,13 @@ namespace NKikimr::NStorage {
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
 
-        if(cmd.HasGetStateStorageConfig() && cmd.GetGetStateStorageConfig()) {
+        if (cmd.HasGetStateStorageConfig() && cmd.GetGetStateStorageConfig()) {
             auto ev = PrepareResult(TResult::OK, std::nullopt);
             ev->Record.MutableStateStorageConfig()->CopyFrom(config.GetStateStorageConfig());
             Finish(Sender, SelfId(), ev.release(), 0, Cookie);
             return;
         }
-        if(!cmd.HasNewStateStorageConfig()) {
+        if (!cmd.HasNewStateStorageConfig()) {
             FinishWithError(TResult::ERROR, TStringBuilder() << "New configuration is not defined");
             return;   
         }
@@ -83,7 +83,7 @@ namespace NKikimr::NStorage {
             return;
         }
         auto* ssConfig = config.MutableStateStorageConfig();
-        if(newSSConfig.RingGroupsSize() == 1) {
+        if (newSSConfig.RingGroupsSize() == 1) {
             ssConfig->MutableRing()->CopyFrom(newSSConfig.GetRingGroups(0));
             ssConfig->ClearRingGroups();
         } else {

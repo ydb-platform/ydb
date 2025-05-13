@@ -651,7 +651,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         T *msg = ev->Get();
         Source = ev->Sender;
         WaitAllReplies = true;
-        if(SignatureSz != msg->SignatureSz) {
+        if (SignatureSz != msg->SignatureSz) {
             TabletID = msg->TabletID;
             Cookie = msg->Cookie;
             Reply(NKikimrProto::EReplyStatus::ERROR);

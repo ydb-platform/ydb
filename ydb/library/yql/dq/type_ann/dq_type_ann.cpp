@@ -426,7 +426,6 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
     }
 
     auto rowType = ctx.MakeType<TStructExprType>(resultStructItems);
-    Cerr << "DqJoin type " << isMultiget << " =" << FormatType(rowType) << Endl;
     return rowType;
 }
 

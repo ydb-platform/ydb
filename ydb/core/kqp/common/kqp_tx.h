@@ -322,8 +322,8 @@ public:
     }
 
     void ApplyPhysicalQuery(const NKqpProto::TKqpPhyQuery& phyQuery, const bool commit) {
-        NeedUncommittedChangesFlush = HasUncommittedChangesRead(ModifiedTablesSinceLastFlush, phyQuery, commit);
-        NeedUncommittedChangesFlush |= (DeferredEffects.Size() >= kMaxDeferredEffects);
+        NeedUncommittedChangesFlush = (DeferredEffects.Size() > kMaxDeferredEffects)
+            || HasUncommittedChangesRead(ModifiedTablesSinceLastFlush, phyQuery, commit);
         if (NeedUncommittedChangesFlush) {
             ModifiedTablesSinceLastFlush.clear();   
         }

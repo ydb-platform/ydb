@@ -728,7 +728,7 @@ public:
             );
         };
 
-        if (Action == GET_KEY) {
+        if (Action == CONFIGURE) {
             audit(AuditLogEndConfigureDatabase);
         } else if (Action == REMOVE) {
             audit(AuditLogEndRemoveDatabase);

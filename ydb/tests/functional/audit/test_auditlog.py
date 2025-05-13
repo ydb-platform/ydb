@@ -474,3 +474,7 @@ def test_create_and_remove_tenant(ydb_cluster):
         ydb_cluster.unregister_and_stop_slots(database_nodes)
 
     print(capture_audit.captured, file=sys.stderr)
+    assert "BEGIN INIT DATABASE CONFIG" in capture_audit.captured
+    assert "END INIT DATABASE CONFIG" in capture_audit.captured
+    assert "BEGIN REMOVE DATABASE" in capture_audit.captured
+    assert "END REMOVE DATABASE" in capture_audit.captured

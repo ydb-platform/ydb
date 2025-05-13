@@ -22,7 +22,7 @@ TCompactionTaskData TZeroLevelPortions::DoGetOptimizationTask() const {
 }
 
 ui64 TZeroLevelPortions::DoGetWeight() const {
-    if (!NextLevel || Portions.size() < PortionsCountAvailable) {
+    if (!NextLevel || Portions.size() < PortionsCountAvailable || Portions.empty()) {
         return 0;
     }
     if (PredOptimization && TInstant::Now() - *PredOptimization < DurationToDrop) {

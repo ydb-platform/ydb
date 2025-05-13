@@ -2883,6 +2883,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TString DstPathName;
         TPathId DstPathId;
         TString SrcPrefix;
+        TString SrcPath; // Src path from schema mapping
         Ydb::Table::CreateTableRequest Scheme;
         TString CreationQuery;
         TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
@@ -3040,6 +3041,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         Filling = 40,
         DropBuild = 45,
         CreateBuild = 46,
+        LockBuild = 47,
         Applying = 50,
         Unlocking = 60,
         Done = 200,
@@ -3383,7 +3385,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             return result;
         }
     };
-    
+
     TMap<TShardIdx, TShardStatus> Shards;
     TDeque<TShardIdx> ToUploadShards;
     THashSet<TShardIdx> InProgressShards;
@@ -3821,6 +3823,7 @@ struct TExternalDataSourceInfo: TSimpleRefCount<TExternalDataSourceInfo> {
         proto.SetInstallation(Installation);
         proto.MutableAuth()->CopyFrom(Auth);
         proto.MutableProperties()->CopyFrom(Properties);
+        proto.MutableReferences()->CopyFrom(ExternalTableReferences);
     }
 };
 

@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/changes/compaction/common/context.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction/common/result.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 
 namespace NKikimr::NOlap::NCompaction {
 
@@ -103,8 +104,7 @@ public:
 
     TMergingContext(const std::vector<std::shared_ptr<arrow::RecordBatch>>& pkAndAddresses,
         const std::vector<std::shared_ptr<NArrow::TGeneralContainer>>& inputContainers)
-        : InputContainers(inputContainers)
-    {
+        : InputContainers(inputContainers) {
         for (auto&& i : pkAndAddresses) {
             Chunks.emplace_back(i);
         }
@@ -125,6 +125,108 @@ protected:
     const TColumnMergeContext& Context;
 
 public:
+    template <class TArrayImpl>
+    class TBaseIterator {
+    private:
+        std::shared_ptr<NArrow::NAccessor::IChunkedArray> Input;
+        std::shared_ptr<TArrayImpl> CurrentArray;
+        std::optional<NArrow::NAccessor::IChunkedArray::TFullChunkedArrayAddress> CurrentChunk;
+        std::shared_ptr<TColumnLoader> Loader;
+        ui32 ChunkPosition = 0;
+        ui32 GlobalPosition = 0;
+
+        void InitArray(const ui32 globalPosition) {
+            if (Input) {
+                if (globalPosition == Input->GetRecordsCount()) {
+                    GlobalPosition = globalPosition;
+                    return;
+                }
+                AFL_VERIFY(globalPosition < Input->GetRecordsCount())("pos", globalPosition)("size", Input->GetRecordsCount());
+                CurrentChunk = Input->GetArray(CurrentChunk, globalPosition, Input);
+                if (CurrentChunk->GetArray()->GetType() == TArrayImpl::GetTypeStatic()) {
+                    CurrentArray = std::static_pointer_cast<TArrayImpl>(CurrentChunk->GetArray());
+                } else {
+                    CurrentArray = std::static_pointer_cast<TArrayImpl>(Loader->GetAccessorConstructor()
+                            ->Construct(CurrentChunk->GetArray(), Loader->BuildAccessorContext(CurrentChunk->GetArray()->GetRecordsCount()))
+                            .DetachResult());
+                }
+                ChunkPosition = CurrentChunk->GetAddress().GetLocalIndex(globalPosition);
+                GlobalPosition = globalPosition;
+            } else {
+                AFL_VERIFY(globalPosition == 0);
+                GlobalPosition = globalPosition;
+            }
+        }
+
+    public:
+        bool IsEmpty() const {
+            return !Input;
+        }
+
+        void MoveFurther(const ui32 delta) {
+            MoveToPosition(GlobalPosition + delta);
+        }
+
+        bool IsValid() const {
+            return Input && GlobalPosition < Input->GetRecordsCount();
+        }
+
+        void Reset() {
+            InitArray(0);
+        }
+
+        TBaseIterator(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& input)
+            : Input(input) {
+            InitArray(0);
+        }
+
+        ui32 GetChunkPosition() const {
+            return ChunkPosition;
+        }
+
+        const TArrayImpl& GetCurrentDataChunk() const {
+            AFL_VERIFY(CurrentArray);
+            return *CurrentArray;
+        }
+
+        void MoveToPosition(const ui32 globalPosition) {
+            if (GlobalPosition == globalPosition) {
+                AFL_VERIFY(GlobalPosition == 0)("old", GlobalPosition);
+                return;
+            }
+            AFL_VERIFY(Input);
+            AFL_VERIFY(GlobalPosition < globalPosition)("old", GlobalPosition)("new", globalPosition)("count", Input->GetRecordsCount());
+            if (CurrentChunk->GetAddress().Contains(globalPosition)) {
+                ChunkPosition = CurrentChunk->GetAddress().GetLocalIndex(globalPosition);
+                GlobalPosition = globalPosition;
+            } else {
+                InitArray(globalPosition);
+            }
+        }
+    };
+
+    template <class TArrayImpl, class TConstructorImpl>
+    class TPortionColumnChunkWriter: public TColumnPortionResult {
+    private:
+        using TBase = TColumnPortionResult;
+        const TConstructorImpl Constructor;
+
+    public:
+        TPortionColumnChunkWriter(const TConstructorImpl& constructor, const ui32 columnId)
+            : TBase(columnId)
+            , Constructor(constructor) {
+        }
+
+        void AddChunk(const std::shared_ptr<TArrayImpl>& cArray, const TColumnMergeContext& cmContext) {
+            AFL_VERIFY(cArray);
+            AFL_VERIFY(cArray->GetRecordsCount());
+            auto accContext = cmContext.GetLoader()->BuildAccessorContext(cArray->GetRecordsCount());
+            Chunks.emplace_back(std::make_shared<NChunks::TChunkPreparation>(Constructor.SerializeToString(cArray, accContext), cArray,
+                TChunkAddress(cmContext.GetColumnId(), Chunks.size()),
+                cmContext.GetIndexInfo().GetColumnFeaturesVerified(cmContext.GetColumnId())));
+        }
+    };
+
     static inline const TString PortionIdFieldName = "$$__portion_id";
     static inline const TString PortionRecordIndexFieldName = "$$__portion_record_idx";
     static inline const std::shared_ptr<arrow::Field> PortionIdField =

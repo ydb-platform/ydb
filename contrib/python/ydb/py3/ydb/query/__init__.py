@@ -7,6 +7,7 @@ __all__ = [
     "QuerySessionPool",
     "QueryClientSettings",
     "QuerySession",
+    "QueryStatsMode",
     "QueryTxContext",
 ]
 
@@ -14,6 +15,7 @@ import logging
 
 from .base import (
     QueryClientSettings,
+    QueryStatsMode,
 )
 
 from .session import QuerySession

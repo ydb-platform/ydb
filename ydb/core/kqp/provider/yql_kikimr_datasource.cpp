@@ -383,6 +383,7 @@ public:
                     do {
                         auto nextImplTable = implTable->Next;
                         auto& desc = SessionCtx->Tables().GetOrAddTable(implTable->Cluster, SessionCtx->GetDatabase(), implTable->Name);
+                        SessionCtx->Tables().AddIndexImplTableToMainTableMapping(tablePath, implTable->Name);
                         desc.Metadata = std::move(implTable);
                         desc.Load(ctx, sysColumnsEnabled);
                         implTable = std::move(nextImplTable);

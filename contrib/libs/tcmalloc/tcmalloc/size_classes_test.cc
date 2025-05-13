@@ -13,13 +13,19 @@
 // limitations under the License.
 
 #include <stddef.h>
-#include <stdlib.h>
+#include <stdint.h>
 
 #include "gtest/gtest.h"
+#include "absl/base/attributes.h"
 #include "absl/random/random.h"
+#include "absl/types/span.h"
+#include "tcmalloc/central_freelist.h"
 #include "tcmalloc/common.h"
+#include "tcmalloc/internal/config.h"
 #include "tcmalloc/size_class_info.h"
+#include "tcmalloc/sizemap.h"
 #include "tcmalloc/span.h"
+#include "tcmalloc/static_vars.h"
 #include "tcmalloc/tcmalloc_policy.h"
 
 namespace tcmalloc {
@@ -31,26 +37,33 @@ namespace tcmalloc_internal {
 // an offset within a span.
 class SpanTestPeer {
  public:
-  static uint16_t CalcReciprocal(size_t size) {
+  static bool UseBitmapForSize(size_t size) {
+    return Span::UseBitmapForSize(size);
+  }
+  static uint32_t CalcReciprocal(size_t size) {
     return Span::CalcReciprocal(size);
   }
-  static Span::ObjIdx TestOffsetToIdx(uintptr_t offset, size_t size,
-                                      uint16_t reciprocal) {
-    return Span::TestOffsetToIdx(offset, size, reciprocal);
+  static Span::ObjIdx TestOffsetToIdx(uintptr_t offset, uint32_t reciprocal) {
+    return Span::OffsetToIdx(offset, reciprocal);
   }
 };
 
 namespace {
 
 size_t Alignment(size_t size) {
-  size_t ret = kAlignment;
+  size_t ret = static_cast<size_t>(kAlignment);
   if (size >= 1024) {
     // SizeMap::ClassIndexMaybe requires 128-byte alignment for sizes >=1024.
     ret = 128;
   } else if (size >= 512) {
-    // Per //tcmalloc/span.h, we have 64 byte alignment for sizes
-    // >=512.
+    // This alignment is not required for tcmalloc operation anymore,
+    // but we keep it for classes were created when this requirement was active
+    // to prevent unintentional performance regressions.
     ret = 64;
+#if defined(__cpp_aligned_new) && __STDCPP_DEFAULT_NEW_ALIGNMENT__ > 8
+  } else if (size >= __STDCPP_DEFAULT_NEW_ALIGNMENT__) {
+    ret = __STDCPP_DEFAULT_NEW_ALIGNMENT__;
+#endif
   } else if (size >= 8) {
     ret = 8;
   }
@@ -58,30 +71,16 @@ size_t Alignment(size_t size) {
   return ret;
 }
 
-class SizeClassesTest : public ::testing::Test {
+class RunTimeSizeClassesTest : public ::testing::Test {
  protected:
-  SizeClassesTest() { m_.Init(); }
-
-  SizeMap m_;
+  struct TestingSizeMap : SizeMap {
+    // Re-export as public.
+    using SizeMap::ValidSizeClasses;
+  };
+  SizeMap& m_ = tc_globals.sizemap();
 };
 
-TEST_F(SizeClassesTest, SmallClassesSinglePage) {
-  // Per //tcmalloc/span.h, the compressed index implementation
-  // added by cl/126729493 requires small size classes to be placed on a single
-  // page span so they can be addressed.
-  for (int c = 1; c < kNumClasses; c++) {
-    const size_t max_size_in_class = m_.class_to_size(c);
-    if (max_size_in_class >= SizeMap::kMultiPageSize) {
-      continue;
-    }
-    if (max_size_in_class == 0) {
-      continue;
-    }
-    EXPECT_EQ(m_.class_to_pages(c), 1) << max_size_in_class;
-  }
-}
-
-TEST_F(SizeClassesTest, SpanPages) {
+TEST_F(RunTimeSizeClassesTest, SpanPages) {
   for (int c = 1; c < kNumClasses; c++) {
     const size_t max_size_in_class = m_.class_to_size(c);
     if (max_size_in_class == 0) {
@@ -92,23 +91,18 @@ TEST_F(SizeClassesTest, SpanPages) {
   }
 }
 
-TEST_F(SizeClassesTest, ValidateSufficientBitmapCapacity) {
-  // Validate that all the objects in a span can fit into a bitmap.
-  // The cut-off for using a bitmap is kBitmapMinObjectSize, so it is
-  // theoretically possible that a span could exceed this threshold
-  // for object size and contain more than 64 objects.
+TEST_F(RunTimeSizeClassesTest, ValidatePagesAndBitmapCapacity) {
   for (int c = 1; c < kNumClasses; ++c) {
     const size_t max_size_in_class = m_.class_to_size(c);
-    if (max_size_in_class >= kBitmapMinObjectSize) {
-      const size_t objects_per_span =
-          Length(m_.class_to_pages(c)).in_bytes() / m_.class_to_size(c);
-      // Span can hold at most 64 objects of this size.
-      EXPECT_LE(objects_per_span, 64);
+    if (max_size_in_class == 0) {
+      continue;
     }
+    EXPECT_TRUE(
+        Span::IsValidSizeClass(max_size_in_class, m_.class_to_pages(c)));
   }
 }
 
-TEST_F(SizeClassesTest, ValidateCorrectScalingByReciprocal) {
+TEST_F(RunTimeSizeClassesTest, ValidateCorrectScalingByReciprocal) {
   // Validate that multiplying by the reciprocal works for all size classes.
   // When converting an offset within a span into an index we avoid a
   // division operation by scaling by the reciprocal. The test ensures
@@ -117,7 +111,7 @@ TEST_F(SizeClassesTest, ValidateCorrectScalingByReciprocal) {
   for (int c = 1; c < kNumClasses; ++c) {
     const size_t max_size_in_class = m_.class_to_size(c);
     // Only test for sizes where object availability is recorded in a bitmap.
-    if (max_size_in_class < kBitmapMinObjectSize) {
+    if (!SpanTestPeer::UseBitmapForSize(max_size_in_class)) {
       continue;
     }
     size_t reciprocal = SpanTestPeer::CalcReciprocal(max_size_in_class);
@@ -127,15 +121,14 @@ TEST_F(SizeClassesTest, ValidateCorrectScalingByReciprocal) {
       // Calculate the address of the object.
       uintptr_t address = index * max_size_in_class;
       // Calculate the index into the page using the reciprocal method.
-      int idx =
-          SpanTestPeer::TestOffsetToIdx(address, max_size_in_class, reciprocal);
+      int idx = SpanTestPeer::TestOffsetToIdx(address, reciprocal);
       // Check that the starting address back is correct.
       ASSERT_EQ(address, idx * max_size_in_class);
     }
   }
 }
 
-TEST_F(SizeClassesTest, Aligned) {
+TEST_F(RunTimeSizeClassesTest, Aligned) {
   // Validate that each size class is properly aligned.
   for (int c = 1; c < kNumClasses; c++) {
     const size_t max_size_in_class = m_.class_to_size(c);
@@ -145,7 +138,7 @@ TEST_F(SizeClassesTest, Aligned) {
   }
 }
 
-TEST_F(SizeClassesTest, Distinguishable) {
+TEST_F(RunTimeSizeClassesTest, Distinguishable) {
   // Validate that the size to class lookup table is able to distinguish each
   // size class from one another.
   //
@@ -169,14 +162,26 @@ TEST_F(SizeClassesTest, Distinguishable) {
   }
 }
 
-// This test is disabled until we use a different span size allocation
-// algorithm (such as the one in effect from cl/130150125 until cl/139955211).
-TEST_F(SizeClassesTest, DISABLED_WastedSpan) {
+TEST_F(RunTimeSizeClassesTest, WastedSpan) {
   // Validate that each size class does not waste (number of objects) *
   // (alignment) at the end of the span.
+  switch (tc_globals.size_class_configuration()) {
+    case SizeClassConfiguration::kLegacy:
+    case SizeClassConfiguration::kPow2Below64:
+    case SizeClassConfiguration::kReuse:
+      // This test fails for other classes (was passing with a different span
+      // size allocation algorithm used between cl/130150125 and cl/139955211).
+      GTEST_SKIP();
+      break;
+    default:
+      break;
+  }
   for (int c = 1; c < kNumClasses; c++) {
-    const size_t span_size = kPageSize * m_.class_to_pages(c);
     const size_t max_size_in_class = m_.class_to_size(c);
+    if (max_size_in_class == 0) {
+      continue;
+    }
+    const size_t span_size = kPageSize * m_.class_to_pages(c);
     const size_t alignment = Alignment(max_size_in_class);
     const size_t n_objects = span_size / max_size_in_class;
     const size_t waste = span_size - n_objects * max_size_in_class;
@@ -185,7 +190,7 @@ TEST_F(SizeClassesTest, DISABLED_WastedSpan) {
   }
 }
 
-TEST_F(SizeClassesTest, DoubleCheckedConsistency) {
+TEST_F(RunTimeSizeClassesTest, DoubleCheckedConsistency) {
   // Validate that every size on [0, kMaxSize] maps to a size class that is
   // neither too big nor too small.
   for (size_t size = 0; size <= kMaxSize; size++) {
@@ -204,7 +209,7 @@ TEST_F(SizeClassesTest, DoubleCheckedConsistency) {
   }
 }
 
-TEST_F(SizeClassesTest, NumToMove) {
+TEST_F(RunTimeSizeClassesTest, NumToMove) {
   for (int c = 1; c < kNumClasses; c++) {
     // For non-empty size classes, we should move at least 1 object to/from each
     // layer of the caches.
@@ -216,31 +221,51 @@ TEST_F(SizeClassesTest, NumToMove) {
   }
 }
 
-class TestingSizeMap : public SizeMap {
- public:
-  TestingSizeMap() {}
+TEST_F(RunTimeSizeClassesTest, DenseSpansAreOnePage) {
+  // TODO(b/348043731):  We do not currently rely on this invariant, but we may
+  // be able to simplify the HugePageFiller's logic for many-object spans if it
+  // is true.
+  for (int c = 1; c < kNumClasses; c++) {
+    const Length in_pages = Length(m_.class_to_pages(c));
+    const size_t span_size = in_pages.in_bytes();
+    const size_t max_size_in_class = m_.class_to_size(c);
+    if (max_size_in_class == 0) {
+      continue;
+    }
 
-  bool ValidSizeClasses(int num_classes, const SizeClassInfo* parsed) {
-    return SizeMap::ValidSizeClasses(num_classes, parsed);
+    const size_t n_objects = span_size / max_size_in_class;
+    if (n_objects <= central_freelist_internal::kFewObjectsAllocMaxLimit) {
+      continue;
+    }
+
+    EXPECT_EQ(in_pages, Length(1)) << max_size_in_class;
+  }
+}
+
+TEST_F(RunTimeSizeClassesTest, MaxSize) {
+  // kMaxSize should appear as one of the size classes.  As of 10/2021, we crash
+  // during SizeClass::Init anyways, but this test exists to further document
+  // that requirement.
+  bool found = false;
+
+  for (int c = 1; c < kNumClasses; c++) {
+    // For non-empty size classes, we should move at least 1 object to/from each
+    // layer of the caches.
+    const size_t max_size_in_class = m_.class_to_size(c);
+    if (max_size_in_class == kMaxSize) {
+      found = true;
+      break;
+    }
   }
 
-  const SizeClassInfo* DefaultSizeClasses() const { return kSizeClasses; }
-  const int DefaultSizeClassesCount() const { return kSizeClassesCount; }
-};
-
-class RunTimeSizeClassesTest : public ::testing::Test {
- protected:
-  RunTimeSizeClassesTest() {}
-
-  TestingSizeMap m_;
-};
+  EXPECT_TRUE(found) << "Could not find " << kMaxSize;
+}
 
 TEST_F(RunTimeSizeClassesTest, ExpandedSizeClasses) {
   // Verify that none of the default size classes are considered expanded size
   // classes.
   for (int i = 0; i < kNumClasses; i++) {
-    EXPECT_EQ(i < (m_.DefaultSizeClassesCount() * kNumaPartitions),
-              !IsExpandedSizeClass(i))
+    EXPECT_EQ(i < (kNumBaseClasses * kNumaPartitions), !IsExpandedSizeClass(i))
         << i;
   }
 }
@@ -250,95 +275,72 @@ TEST_F(RunTimeSizeClassesTest, ValidateClassSizeIncreases) {
       {0, 0, 0},
       {16, 1, 14},
       {32, 1, 15},
-      {kMaxSize, 1, 15},
+      {kMaxSize, kMaxSize / kPageSize, 15},
   };
-  EXPECT_TRUE(m_.ValidSizeClasses(4, parsed));
+  EXPECT_TRUE(TestingSizeMap::ValidSizeClasses(parsed));
 
   parsed[2].size = 8;  // Change 32 to 8
-  EXPECT_FALSE(m_.ValidSizeClasses(4, parsed));
+  EXPECT_FALSE(TestingSizeMap::ValidSizeClasses(parsed));
 }
 
 TEST_F(RunTimeSizeClassesTest, ValidateClassSizeMax) {
   SizeClassInfo parsed[] = {
       {0, 0, 0},
-      {kMaxSize - 128, 1, 15},
+      {kMaxSize - 128, kMaxSize / kPageSize, 15},
   };
   // Last class must cover kMaxSize
-  EXPECT_FALSE(m_.ValidSizeClasses(2, parsed));
+  EXPECT_FALSE(TestingSizeMap::ValidSizeClasses(parsed));
 
   // Check Max Size is allowed 256 KiB = 262144
   parsed[1].size = kMaxSize;
-  EXPECT_TRUE(m_.ValidSizeClasses(2, parsed));
+  EXPECT_TRUE(TestingSizeMap::ValidSizeClasses(parsed));
   // But kMaxSize + 128 is not allowed
   parsed[1].size = kMaxSize + 128;
-  EXPECT_FALSE(m_.ValidSizeClasses(2, parsed));
+  EXPECT_FALSE(TestingSizeMap::ValidSizeClasses(parsed));
 }
 
 TEST_F(RunTimeSizeClassesTest, ValidateClassSizesAlignment) {
   SizeClassInfo parsed[] = {
       {0, 0, 0},
       {8, 1, 14},
-      {kMaxSize, 1, 15},
+      {kMaxSize, kMaxSize / kPageSize, 15},
   };
-  EXPECT_TRUE(m_.ValidSizeClasses(3, parsed));
+  EXPECT_TRUE(TestingSizeMap::ValidSizeClasses(parsed));
   // Doesn't meet alignment requirements
   parsed[1].size = 7;
-  EXPECT_FALSE(m_.ValidSizeClasses(3, parsed));
-
-  // Over 512, expect alignment of 64 bytes.
-  // 512 + 64 = 576
-  parsed[1].size = 576;
-  EXPECT_TRUE(m_.ValidSizeClasses(3, parsed));
-  // 512 + 8
-  parsed[1].size = 520;
-  EXPECT_FALSE(m_.ValidSizeClasses(3, parsed));
+  EXPECT_FALSE(TestingSizeMap::ValidSizeClasses(parsed));
 
   // Over 1024, expect alignment of 128 bytes.
   // 1024 + 128 = 1152
   parsed[1].size = 1024 + 128;
-  EXPECT_TRUE(m_.ValidSizeClasses(3, parsed));
+  EXPECT_TRUE(TestingSizeMap::ValidSizeClasses(parsed));
   // 1024 + 64 = 1088
   parsed[1].size = 1024 + 64;
-  EXPECT_FALSE(m_.ValidSizeClasses(3, parsed));
+  EXPECT_FALSE(TestingSizeMap::ValidSizeClasses(parsed));
 }
 
 TEST_F(RunTimeSizeClassesTest, ValidateBatchSize) {
   SizeClassInfo parsed[] = {
       {0, 0, 0},
       {8, 1, kMaxObjectsToMove},
-      {kMaxSize, 1, 15},
+      {kMaxSize, kMaxSize / kPageSize, 15},
   };
-  EXPECT_TRUE(m_.ValidSizeClasses(3, parsed));
+  EXPECT_TRUE(TestingSizeMap::ValidSizeClasses(parsed));
 
   ++parsed[1].num_to_move;
-  EXPECT_FALSE(m_.ValidSizeClasses(3, parsed));
+  EXPECT_FALSE(TestingSizeMap::ValidSizeClasses(parsed));
 }
 
 TEST_F(RunTimeSizeClassesTest, ValidatePageSize) {
   SizeClassInfo parsed[] = {
       {0, 0, 0},
-      {1024, 255, kMaxObjectsToMove},
-      {kMaxSize, 1, 15},
+      {1024, 1, kMaxObjectsToMove},
+      {kMaxSize, kMaxSize / kPageSize, 15},
   };
-  EXPECT_TRUE(m_.ValidSizeClasses(3, parsed));
+  EXPECT_TRUE(TestingSizeMap::ValidSizeClasses(parsed));
 
-  parsed[1].pages = 256;
-  EXPECT_FALSE(m_.ValidSizeClasses(3, parsed));
-}
-
-TEST_F(RunTimeSizeClassesTest, ValidateDefaultSizeClasses) {
-  // The default size classes also need to be valid.
-  EXPECT_TRUE(m_.ValidSizeClasses(m_.DefaultSizeClassesCount(),
-                                  m_.DefaultSizeClasses()));
-}
-
-TEST_F(RunTimeSizeClassesTest, EnvVariableNotExamined) {
-  // Set a valid runtime size class environment variable
-  setenv("TCMALLOC_SIZE_CLASSES", "256,1,1", 1);
-  m_.Init();
-  // Without runtime_size_classes library linked, the environment variable
-  // should have no affect.
-  EXPECT_NE(m_.class_to_size(1), 256);
+  parsed[1].pages = 255;
+  EXPECT_FALSE(TestingSizeMap::ValidSizeClasses(parsed));
 }
 
 TEST(SizeMapTest, GetSizeClass) {
@@ -350,10 +352,10 @@ TEST(SizeMapTest, GetSizeClass) {
   // non-zero NUMA partition.
   for (int i = 0; i < kTrials; ++i) {
     const size_t size = absl::LogUniform(rng, 0, 4 << 20);
-    uint32_t cl;
-    if (m.GetSizeClass(CppPolicy(), size, &cl)) {
-      EXPECT_EQ(cl % kNumBaseClasses, 0) << size;
-      EXPECT_LT(cl, kExpandedClassesStart) << size;
+    size_t size_class;
+    if (m.GetSizeClass(CppPolicy(), size, &size_class)) {
+      EXPECT_EQ(size_class % kNumBaseClasses, 0) << size;
+      EXPECT_LT(size_class, kExpandedClassesStart) << size;
     } else {
       // We should only fail to lookup the size class when size is outside of
       // the size classes.
@@ -362,13 +364,13 @@ TEST(SizeMapTest, GetSizeClass) {
   }
 
   // After m.Init(), GetSizeClass should return a size class.
-  m.Init();
+  m.Init(kSizeClasses.classes);
 
   for (int i = 0; i < kTrials; ++i) {
     const size_t size = absl::LogUniform(rng, 0, 4 << 20);
-    uint32_t cl;
-    if (m.GetSizeClass(CppPolicy(), size, &cl)) {
-      const size_t mapped_size = m.class_to_size(cl);
+    size_t size_class;
+    if (m.GetSizeClass(CppPolicy(), size, &size_class)) {
+      const size_t mapped_size = m.class_to_size(size_class);
       // The size class needs to hold size.
       ASSERT_GE(mapped_size, size);
     } else {
@@ -389,14 +391,12 @@ TEST(SizeMapTest, GetSizeClassWithAlignment) {
   for (int i = 0; i < kTrials; ++i) {
     const size_t size = absl::LogUniform(rng, 0, 4 << 20);
     const size_t alignment = 1 << absl::Uniform(rng, 0u, kHugePageShift);
-    uint32_t cl;
-    if (m.GetSizeClass(CppPolicy().AlignAs(alignment), size, &cl)) {
-      EXPECT_EQ(cl % kNumBaseClasses, 0) << size << " " << alignment;
-      EXPECT_LT(cl, kExpandedClassesStart) << size << " " << alignment;
-    } else if (alignment < kPageSize) {
+    size_t size_class;
+    if (m.GetSizeClass(CppPolicy().AlignAs(alignment), size, &size_class)) {
+      EXPECT_EQ(size_class % kNumBaseClasses, 0) << size << " " << alignment;
+      EXPECT_LT(size_class, kExpandedClassesStart) << size << " " << alignment;
+    } else if (alignment <= kPageSize) {
       // When alignment > kPageSize, we do not produce a size class.
-      // TODO(b/172060547): alignment == kPageSize could fit into the size
-      // classes too.
       //
       // We should only fail to lookup the size class when size is large.
       ASSERT_GT(size, kMaxSize) << alignment;
@@ -404,22 +404,20 @@ TEST(SizeMapTest, GetSizeClassWithAlignment) {
   }
 
   // After m.Init(), GetSizeClass should return a size class.
-  m.Init();
+  m.Init(kSizeClasses.classes);
 
   for (int i = 0; i < kTrials; ++i) {
     const size_t size = absl::LogUniform(rng, 0, 4 << 20);
     const size_t alignment = 1 << absl::Uniform(rng, 0u, kHugePageShift);
-    uint32_t cl;
-    if (m.GetSizeClass(CppPolicy().AlignAs(alignment), size, &cl)) {
-      const size_t mapped_size = m.class_to_size(cl);
+    size_t size_class;
+    if (m.GetSizeClass(CppPolicy().AlignAs(alignment), size, &size_class)) {
+      const size_t mapped_size = m.class_to_size(size_class);
       // The size class needs to hold size.
       ASSERT_GE(mapped_size, size);
       // The size needs to be a multiple of alignment.
       ASSERT_EQ(mapped_size % alignment, 0);
-    } else if (alignment < kPageSize) {
+    } else if (alignment <= kPageSize) {
       // When alignment > kPageSize, we do not produce a size class.
-      // TODO(b/172060547): alignment == kPageSize could fit into the size
-      // classes too.
       //
       // We should only fail to lookup the size class when size is large.
       ASSERT_GT(size, kMaxSize) << alignment;
@@ -436,33 +434,51 @@ TEST(SizeMapTest, SizeClass) {
   // non-zero NUMA partition.
   for (int i = 0; i < kTrials; ++i) {
     const size_t size = absl::LogUniform<size_t>(rng, 0u, kMaxSize);
-    const uint32_t cl = m.SizeClass(CppPolicy(), size);
-    EXPECT_EQ(cl % kNumBaseClasses, 0) << size;
-    EXPECT_LT(cl, kExpandedClassesStart) << size;
+    const uint32_t size_class = m.SizeClass(CppPolicy(), size);
+    EXPECT_EQ(size_class % kNumBaseClasses, 0) << size;
+    EXPECT_LT(size_class, kExpandedClassesStart) << size;
   }
 
   // After m.Init(), SizeClass should return a size class.
-  m.Init();
+  m.Init(kSizeClasses.classes);
 
   for (int i = 0; i < kTrials; ++i) {
     const size_t size = absl::LogUniform<size_t>(rng, 0u, kMaxSize);
-    uint32_t cl = m.SizeClass(CppPolicy(), size);
+    uint32_t size_class = m.SizeClass(CppPolicy(), size);
 
-    const size_t mapped_size = m.class_to_size(cl);
+    const size_t mapped_size = m.class_to_size(size_class);
     // The size class needs to hold size.
     ASSERT_GE(mapped_size, size);
+  }
+}
+
+TEST(SizeMapTest, ValidateConditionsForSeparateAllocsInHugePageFiller) {
+  SizeMap m;
+  // After m.Init(), SizeClass should return a size class.
+  m.Init(kSizeClasses.classes);
+
+  for (int size_class = 0; size_class < kNumClasses; ++size_class) {
+    size_t object_size = m.class_to_size(size_class);
+    Length pages_per_span = Length(m.class_to_pages(size_class));
+    size_t objects_per_span =
+        pages_per_span.in_bytes() / (object_size > 0 ? object_size : 1);
+    EXPECT_TRUE(pages_per_span.in_bytes() <= kHugePageSize / 2 ||
+                objects_per_span <=
+                    central_freelist_internal::kFewObjectsAllocMaxLimit);
   }
 }
 
 TEST(SizeMapTest, Preinit) {
   ABSL_CONST_INIT static SizeMap m;
 
-  for (int cl = 0; cl < kNumClasses; ++cl) {
-    EXPECT_EQ(m.class_to_size(cl), 0) << cl;
-    EXPECT_EQ(m.class_to_pages(cl), 0) << cl;
-    EXPECT_EQ(m.num_objects_to_move(cl), 0) << cl;
+  for (int size_class = 0; size_class < kNumClasses; ++size_class) {
+    EXPECT_EQ(m.class_to_size(size_class), 0) << size_class;
+    EXPECT_EQ(m.class_to_pages(size_class), 0) << size_class;
+    EXPECT_EQ(m.num_objects_to_move(size_class), 0) << size_class;
   }
 }
+
+TEST(SizeMapTest, CheckAssumptions) { SizeMap::CheckAssumptions(); }
 
 }  // namespace
 }  // namespace tcmalloc_internal

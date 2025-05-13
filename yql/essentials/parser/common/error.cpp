@@ -6,6 +6,7 @@ namespace NAST {
         : MaxErrors(maxErrors)
         , NumErrors(0)
     {
+        Y_ENSURE(0 < MaxErrors);
     }
 
     IErrorCollector::~IErrorCollector()

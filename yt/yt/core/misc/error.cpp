@@ -699,9 +699,9 @@ void TErrorCodicils::Initialize()
     Initialized_ = true;
 
     ErrorCodicilsSlot(); // Warm up the slot.
-    TError::RegisterEnricher([] (TError& error) {
+    TError::RegisterEnricher([] (TError* error) {
         if (auto* codicils = TErrorCodicils::MaybeGet()) {
-            codicils->Apply(error);
+            codicils->Apply(*error);
         }
     });
 }

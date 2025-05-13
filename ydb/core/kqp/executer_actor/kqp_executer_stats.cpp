@@ -148,7 +148,7 @@ void TPartitionedStats::ResizeByParts(ui32 partCount, ui32 taskCount) {
     Resize(partCount);
 }
 
-void TPartitionedStats::SetNonZero(ui32 taskIndex, ui32 partIndex, ui64 value, bool recordTimeSeries) {
+void TPartitionedStats::SetNonZeroAggSum(ui32 taskIndex, ui32 partIndex, ui64 value, bool recordTimeSeries) {
     if (value) {
         AFL_ENSURE(partIndex < Parts.size());
         auto& part = Parts[partIndex];
@@ -164,7 +164,43 @@ void TPartitionedStats::SetNonZero(ui32 taskIndex, ui32 partIndex, ui64 value, b
     }
 }
 
-void TTimeMultiSeriesStats::SetNonZero(TPartitionedStats& stats, ui32 taskIndex, const TString& key, ui64 value, bool recordTimeSeries) {
+void TPartitionedStats::SetNonZeroAggMin(ui32 taskIndex, ui32 partIndex, ui64 value, bool recordTimeSeries) {
+    if (value) {
+        AFL_ENSURE(partIndex < Parts.size());
+        auto& part = Parts[partIndex];
+        AFL_ENSURE(taskIndex < part.size());
+        part[taskIndex] = value;
+        AFL_ENSURE(partIndex < Values.size());
+        if (Values[partIndex] == 0 || value < Values[partIndex]) {
+            // Min/Max is related to Parts[] only, Values[] should kepp count Sum as well
+            Sum = Sum + value - Values[partIndex];
+            Values[partIndex] = value;
+            if (recordTimeSeries) {
+                AppendHistory();
+            }
+        }
+    }
+}
+
+void TPartitionedStats::SetNonZeroAggMax(ui32 taskIndex, ui32 partIndex, ui64 value, bool recordTimeSeries) {
+    if (value) {
+        AFL_ENSURE(partIndex < Parts.size());
+        auto& part = Parts[partIndex];
+        AFL_ENSURE(taskIndex < part.size());
+        part[taskIndex] = value;
+        AFL_ENSURE(partIndex < Values.size());
+        if (value > Values[partIndex]) {
+            // Min/Max is related to Parts[] only, Values[] should kepp count Sum as well
+            Sum = Sum + value - Values[partIndex];
+            Values[partIndex] = value;
+            if (recordTimeSeries) {
+                AppendHistory();
+            }
+        }
+    }
+}
+
+void TTimeMultiSeriesStats::SetNonZero(TPartitionedStats& stats, ui32 taskIndex, const TString& key, ui64 value, bool recordTimeSeries, EPartitionedAggKind aggKind) {
     auto [it, inserted] = Indices.try_emplace(key);
     if (inserted) {
         it->second = Indices.size() - 1;
@@ -175,7 +211,18 @@ void TTimeMultiSeriesStats::SetNonZero(TPartitionedStats& stats, ui32 taskIndex,
     if (stats.Parts.size() < PartCount) {
         stats.ResizeByParts(PartCount, TaskCount);
     }
-    stats.SetNonZero(taskIndex, it->second, value, recordTimeSeries);
+
+    switch (aggKind) {
+        case EPartitionedAggKind::PartitionedAggSum:
+            stats.SetNonZeroAggSum(taskIndex, it->second, value, recordTimeSeries);
+            break;
+        case EPartitionedAggKind::PartitionedAggMin:
+            stats.SetNonZeroAggMin(taskIndex, it->second, value, recordTimeSeries);
+            break;
+        case EPartitionedAggKind::PartitionedAggMax:
+            stats.SetNonZeroAggMax(taskIndex, it->second, value, recordTimeSeries);
+            break;
+    }
 }
 
 void TExternalStats::Resize(ui32 taskCount) {
@@ -524,13 +571,13 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
             for (auto& partitionStat : sourceStat.GetExternalPartitions()) {
                 auto key = partitionStat.GetPartitionId();
                 asyncBufferStats.External.SetNonZero(asyncBufferStats.External.ExternalRows,
-                    index, key, partitionStat.GetExternalRows(), false);
+                    index, key, partitionStat.GetExternalRows(), false, EPartitionedAggKind::PartitionedAggSum);
                 asyncBufferStats.External.SetNonZero(asyncBufferStats.External.ExternalBytes,
-                    index, key, partitionStat.GetExternalBytes(), true);
+                    index, key, partitionStat.GetExternalBytes(), true, EPartitionedAggKind::PartitionedAggSum);
                 asyncBufferStats.External.SetNonZero(asyncBufferStats.External.FirstMessageMs,
-                    index, key, partitionStat.GetFirstMessageMs(), false);
+                    index, key, partitionStat.GetFirstMessageMs(), false, EPartitionedAggKind::PartitionedAggMin);
                 asyncBufferStats.External.SetNonZero(asyncBufferStats.External.LastMessageMs,
-                    index, key, partitionStat.GetLastMessageMs(), false);
+                    index, key, partitionStat.GetLastMessageMs(), false, EPartitionedAggKind::PartitionedAggMax);
             }
         }
     }
@@ -798,6 +845,7 @@ void TQueryExecutionStats::Prepare() {
             auto [it, inserted] = StageStats.try_emplace(stageId);
             Y_ENSURE(inserted);
             it->second.StageId = stageId;
+            it->second.SetHistorySampleCount(HistorySampleCount);
         }
         // connections
         for (auto& [_, stageStats] : StageStats) {

@@ -169,5 +169,15 @@ ui64 GetSizeOfArrowExecBatchInBytes(const arrow::compute::ExecBatch& batch) {
 
     return size;
 }
+
+const TType* SkipTaggedType(const ITypeInfoHelper& typeInfoHelper, const TType* type) {
+    TTaggedTypeInspector typeTagged(typeInfoHelper, type);
+    while (typeTagged) {
+        type = typeTagged.GetBaseType();
+        typeTagged = TTaggedTypeInspector(typeInfoHelper, type);
+    }
+
+    return type;
+}
 }
 }

@@ -3323,7 +3323,9 @@ namespace NTypeAnnImpl {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (IsNull(input->Head()) || IsNull(input->Tail())) {
+        const auto ignoreNulls = input->Content().ends_with("IgnoreCase");
+
+        if ((IsNull(input->Head()) || IsNull(input->Tail())) && !ignoreNulls) {
             output = MakeBoolNothing(input->Pos(), ctx.Expr);
             return IGraphTransformer::TStatus::Repeat;
         }
@@ -3343,8 +3345,11 @@ namespace NTypeAnnImpl {
             }
             bool isOptional = false;
             const TDataExprType* dataType = nullptr;
-            if (!IsDataOrOptionalOfData(type, isOptional, dataType) ||
-                !(dataType->GetSlot() == EDataSlot::String || dataType->GetSlot() == EDataSlot::Utf8))
+            if ((!IsDataOrOptionalOfData(type, isOptional, dataType) ||
+                !(dataType->GetSlot() == EDataSlot::String || dataType->GetSlot() == EDataSlot::Utf8) ||
+                dataType->IsOptionalOrNull()) &&
+                (!IsNull(*type) && ignoreNulls)
+            )
             {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), TStringBuilder()
                     << "Expected (optional) string/utf8 or corresponding Pg type, but got: " << *child->GetTypeAnn()));
@@ -3352,8 +3357,7 @@ namespace NTypeAnnImpl {
             }
             hasOptionals = hasOptionals || isOptional;
         }
-
-        if (hasOptionals)
+        if (hasOptionals && !ignoreNulls)
             input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool)));
         else
             input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool));
@@ -7837,7 +7841,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         if (!EnsureMinArgsCount(*input, 4, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
-        if (!EnsureMaxArgsCount(*input, 5, ctx.Expr)) {
+        if (!EnsureMaxArgsCount(*input, 6, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -7896,6 +7900,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         bool isCustomPython = NKikimr::NMiniKQL::IsCustomPython(scriptType);
         auto canonizedModuleName = isCustomPython ? moduleName : NKikimr::NMiniKQL::ScriptTypeAsStr(scriptType);
         bool foundModule = false;
+        TStringBuf fileAlias = ""_sb;
 
         // resolve script udf from external resources (files / urls)
         // (main usage of CustomPython)
@@ -7906,7 +7911,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 return IGraphTransformer::TStatus::Error;
             }
 
-            foundModule = ctx.Types.UdfModules.find(canonizedModuleName) != ctx.Types.UdfModules.end();
+            if (auto udfInfo = ctx.Types.UdfModules.FindPtr(canonizedModuleName)) {
+                foundModule = true;
+                fileAlias = udfInfo->FileAlias;
+            }
         }
 
         // fallback for preinstalled CustomPython case
@@ -7926,7 +7934,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (input->ChildrenSize() == 5) {
+        if (input->ChildrenSize() > 4) {
             if (!EnsureTuple(*input->Child(4), ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -7964,6 +7972,21 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     return IGraphTransformer::TStatus::Error;
                 }
             }
+        }
+
+        if (input->ChildrenSize() > 5) {
+            if (!EnsureAtom(*input->Child(5), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else if (fileAlias) {
+            auto children = input->ChildrenList();
+            if (children.size() < 5) {
+                children.push_back(ctx.Expr.NewList(input->Pos(), {}));
+            }
+            children.push_back(ctx.Expr.NewAtom(input->Pos(), fileAlias));
+            YQL_ENSURE(children.size() == 6);
+            output = ctx.Expr.ChangeChildren(*input, std::move(children));
+            return IGraphTransformer::TStatus::Repeat;
         }
 
         input->SetTypeAnn(callableType);
@@ -11088,6 +11111,26 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Repeat;
     }
 
+    IGraphTransformer::TStatus CurrentLanguageVersionWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        TLangVersionBuffer buffer;
+        TStringBuf str;
+        if (!FormatLangVersion(ctx.Types.LangVer, buffer, str)) {
+            str = "";
+        }
+
+        output = ctx.Expr.Builder(input->Pos())
+            .Callable("String")
+                .Atom(0, str)
+            .Seal()
+            .Build();
+
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
     IGraphTransformer::TStatus SecureParamWrapper(const TExprNode::TPtr& input, TExprNode::TPtr&, TExtContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -12470,6 +12513,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["GreaterOrEqual"] = &CompareWrapper<false>;
         Functions["=="] = &CompareWrapper<true>;
         Functions["Equal"] = &CompareWrapper<true>;
+        Functions["EqualsIgnoreCase"] = &WithWrapper;
         Functions["!="] = &CompareWrapper<true>;
         Functions["NotEqual"] = &CompareWrapper<true>;
         Functions["Inc"] = &IncDecWrapper<true>;
@@ -12533,8 +12577,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Find"] = &FindWrapper;
         Functions["RFind"] = &FindWrapper;
         Functions["StartsWith"] = &WithWrapper;
+        Functions["StartsWithIgnoreCase"] = &WithWrapper;
         Functions["EndsWith"] = &WithWrapper;
+        Functions["EndsWithIgnoreCase"] = &WithWrapper;
         Functions["StringContains"] = &WithWrapper;
+        Functions["StringContainsIgnoreCase"] = &WithWrapper;
         Functions["ByteAt"] = &ByteAtWrapper;
         Functions["ListIf"] = &ListIfWrapper;
         Functions["AsList"] = &AsListWrapper<false>;
@@ -13145,6 +13192,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["CurrentOperationId"] = &CurrentOperationIdWrapper;
         ExtFunctions["CurrentOperationSharedId"] = &CurrentOperationSharedIdWrapper;
         ExtFunctions["CurrentAuthenticatedUser"] = &CurrentAuthenticatedUserWrapper;
+        ExtFunctions["CurrentLanguageVersion"] = &CurrentLanguageVersionWrapper;
         ExtFunctions["SecureParam"] = &SecureParamWrapper;
         ExtFunctions["UnsafeTimestampCast"] = &UnsafeTimestampCastWrapper;
         ExtFunctions["JsonValue"] = &JsonValueWrapper;

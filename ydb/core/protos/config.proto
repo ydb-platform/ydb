@@ -430,6 +430,11 @@ message TInterconnectConfig {
         REQUIRED = 2;
     };
 
+    enum ESocketSendOptimization {
+        IC_SO_DISABLED = 0;
+        IC_SO_MSG_ZEROCOPY = 1;
+    };
+
     repeated TChannel Channel = 1;
     optional bool FirstTryBeforePoll = 2; // DEPRECATED
     optional bool StartTcp = 3 [default = false];
@@ -463,6 +468,7 @@ message TInterconnectConfig {
     optional bool EnableExternalDataChannel = 42 [default = true];
     optional bool ValidateIncomingPeerViaDirectLookup = 44;
     optional uint32 SocketBacklogSize = 45; // SOMAXCONN if not set or zero
+    optional ESocketSendOptimization SocketSendOptimization = 51 [default = IC_SO_DISABLED];
 
     // ballast is added to IC handshake frames to ensure correctness of jumbo frames transmission over network
     optional uint32 HandshakeBallastSize = 14;
@@ -1553,7 +1559,7 @@ message TImmediateControlsConfig {
             Description: "Maximum number of slow disks, which DSProxy can skip with Accelerations, option for HDD",
             MinValue: 1,
             MaxValue: 2,
-            DefaultValue: 2 }];
+            DefaultValue: 1 }];
 
         optional uint64 SlowDiskThresholdSSD = 9 [(ControlOptions) = {
             Description: "The minimum ratio of slowest and second slowest disks, required to accelerate, promille, option for SSD",
@@ -1917,6 +1923,8 @@ message TColumnShardConfig {
     optional uint64 MemoryLimitMergeOnCompactionRawData = 38 [default = 512000000];
     optional bool AlterObjectEnabled = 39 [default = false];
     optional EJsonDoubleOutOfRangeHandlingPolicy DoubleOutOfRangeHandling = 40 [default = REJECT];
+    optional bool PortionMetaV0Usage = 41 [default = true];
+    optional uint32 PeriodicWakeupActivationPeriodMs = 42 [default = 60000];
 }
 
 message TSchemeShardConfig {
@@ -2359,6 +2367,7 @@ message TYdbVersion {
     optional uint32 Year = 1;
     optional uint32 Major = 2;
     optional uint32 Minor = 3;
+    optional uint32 Patch = 5;
     optional uint32 Hotfix = 4;
 }
 

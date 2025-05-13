@@ -194,6 +194,7 @@ TS_TEST_SPECIFIC_FIELDS = {
         df.TsTestDataDirsRename.value,
         df.TsResources.value,
         df.TsTestForPath.value,
+        df.DockerImage.value,
     ),
     TsTestType.PLAYWRIGHT: (
         df.Size.from_unit,
@@ -409,16 +410,16 @@ def on_set_append_with_directive(unit: NotsUnitType, var_name: str, directive: s
 
 
 def _check_nodejs_version(unit: NotsUnitType, major: int) -> None:
-    if major < 14:
+    if major < 16:
         raise Exception(
             "Node.js {} is unsupported. Update Node.js please. See https://nda.ya.ru/t/joB9Mivm6h4znu".format(major)
         )
 
-    if major < 18:
+    if major < 20:
         unit.message(
             [
                 "WARN",
-                "Node.js {} is deprecated. Update Node.js please. See https://nda.ya.ru/t/joB9Mivm6h4znu".format(major),
+                "Node.js {} is deprecated. Update Node.js please. See https://nda.ya.ru/t/Yk0qYZe17DeVKP".format(major),
             ]
         )
 
@@ -892,8 +893,13 @@ def on_ts_test_for_configure(
 
     for_mod_path = df.TsTestForPath.value(unit, (), {})[df.TsTestForPath.KEY]
     unit.onpeerdir([for_mod_path])
+
+    # user-defined recipes should be in the end
+    user_recipes = unit.get("TEST_RECIPES_VALUE").replace("$TEST_RECIPES_VALUE", "").strip()
+    unit.set(["TEST_RECIPES_VALUE", ""])
     unit.on_setup_extract_node_modules_recipe([for_mod_path])
     unit.on_setup_extract_output_tars_recipe([for_mod_path])
+    __set_append(unit, "TEST_RECIPES_VALUE", user_recipes)
 
     build_root = "$B" if test_runner in [TsTestType.HERMIONE, TsTestType.PLAYWRIGHT_LARGE] else "$(BUILD_ROOT)"
     unit.set(["TS_TEST_NM", os.path.join(build_root, for_mod_path, node_modules_filename)])

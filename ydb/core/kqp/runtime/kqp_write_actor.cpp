@@ -240,9 +240,6 @@ public:
         ShardedWriteController = CreateShardedWriteController(
             TShardedWriteControllerSettings {
                 .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
-                .MemoryLimitPerMessage = std::min(
-                    MessageSettings.InFlightMemoryLimitPerActorBytes,
-                    MessageSettings.MemoryLimitPerMessageBytes),
                 .Inconsistent = InconsistentTx,
             },
             Alloc);
@@ -778,6 +775,8 @@ public:
     void ProcessWritePreparedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
         YQL_ENSURE(Mode == EMode::PREPARE);
         const auto& record = ev->Get()->Record;
+        AFL_ENSURE(record.GetTxLocks().empty());
+
         IKqpTransactionManager::TPrepareResult preparedInfo;
         preparedInfo.ShardId = record.GetOrigin();
         preparedInfo.MinStep = record.GetMinStep();
@@ -820,10 +819,7 @@ public:
                     issues.AddIssue(*TxManager->GetLockIssue());
                     RuntimeError(
                         NYql::NDqProto::StatusIds::ABORTED,
-                        NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
-                        TStringBuilder() << "Transaction locks invalidated. Table `"
-                            << TablePath << "`.",
-                        issues);
+                        std::move(issues));
                     return;
                 }
             }
@@ -840,6 +836,7 @@ public:
         if (result && result->IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
             Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize);
         } else if (result) {
+            AFL_ENSURE(Mode == EMode::WRITE);
             Callbacks->OnMessageAcknowledged(result->DataSize);
         }
     }
@@ -958,6 +955,15 @@ public:
             Counters->WriteActorWritesSizeHistogram->Collect(serializationResult.TotalDataSize);
             Counters->WriteActorWritesOperationsHistogram->Collect(metadata->OperationsCount);
 
+            for (const auto& operation : evWrite->Record.GetOperations()) {
+                if (operation.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
+                       || operation.GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE) {
+                    Counters->WriteActorReadWriteOperations->Inc();
+                } else {
+                    Counters->WriteActorWriteOnlyOperations->Inc();
+                }
+            }
+
             SendTime[shardId] = TInstant::Now();
         } else {
             YQL_ENSURE(!isPrepare);
@@ -977,7 +983,11 @@ public:
             }()
             << ", Size=" << serializationResult.TotalDataSize << ", Cookie=" << metadata->Cookie
             << ", OperationsCount=" << evWrite->Record.OperationsSize() << ", IsFinal=" << metadata->IsFinal
-            << ", Attempts=" << metadata->SendAttempts << ", Mode=" << static_cast<int>(Mode));
+            << ", Attempts=" << metadata->SendAttempts << ", Mode=" << static_cast<int>(Mode)
+            << ", BufferMemory=" << GetMemory());
+
+        AFL_ENSURE(Mode == EMode::WRITE || metadata->IsFinal);
+
         Send(
             PipeCacheId,
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, /* subscribe */ true),
@@ -1024,10 +1034,11 @@ public:
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         CA_LOG_W("TEvDeliveryProblem was received from tablet: " << ev->Get()->TabletId);
+        const auto state = TxManager->GetState(ev->Get()->TabletId);
         if (InconsistentTx) {
             RetryShard(ev->Get()->TabletId, std::nullopt);
-        } else if ((TxManager->GetState(ev->Get()->TabletId) == IKqpTransactionManager::PREPARED
-                    || TxManager->GetState(ev->Get()->TabletId) == IKqpTransactionManager::EXECUTING)
+        } else if ((state == IKqpTransactionManager::PREPARED
+                    || state == IKqpTransactionManager::EXECUTING)
                 && TxManager->ShouldReattach(ev->Get()->TabletId, TlsActivationContext->Now())) {
             // Disconnected while waiting for other shards to prepare
             auto& reattachState = TxManager->GetReattachState(ev->Get()->TabletId);
@@ -1035,28 +1046,30 @@ public:
                         << reattachState.ReattachInfo.Delay << ")");
 
             Schedule(reattachState.ReattachInfo.Delay, new TEvPrivate::TEvReattachToShard(ev->Get()->TabletId));
+        } else if (state == IKqpTransactionManager::EXECUTING) {
+            TxManager->SetError(ev->Get()->TabletId);
+            RuntimeError(
+                NYql::NDqProto::StatusIds::UNDETERMINED,
+                NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
+                TStringBuilder()
+                    << "State of operation is unknown. "
+                    << "Error writing to table `" << TablePath << "`"
+                    << ". Transaction state unknown for tablet " << ev->Get()->TabletId << ".");
+            return;
+        } else if (state == IKqpTransactionManager::PROCESSING
+                || state == IKqpTransactionManager::PREPARING
+                || state == IKqpTransactionManager::PREPARED) {
+            TxManager->SetError(ev->Get()->TabletId);
+            RuntimeError(
+                NYql::NDqProto::StatusIds::UNAVAILABLE,
+                NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                TStringBuilder()
+                    << "Kikimr cluster or one of its subsystems was unavailable. "
+                    << "Error writing to table `" << TablePath << "`"
+                    << ": can't deliver message to tablet " << ev->Get()->TabletId << ".");
+            return;
         } else {
-            if (TxManager->GetState(ev->Get()->TabletId) == IKqpTransactionManager::EXECUTING) {
-                TxManager->SetError(ev->Get()->TabletId);
-                RuntimeError(
-                    NYql::NDqProto::StatusIds::UNDETERMINED,
-                    NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
-                    TStringBuilder()
-                        << "State of operation is unknown. "
-                        << "Error writing to table `" << TablePath << "`"
-                        << ". Transaction state unknown for tablet " << ev->Get()->TabletId << ".");
-                return;
-            } else {
-                TxManager->SetError(ev->Get()->TabletId);
-                RuntimeError(
-                    NYql::NDqProto::StatusIds::UNAVAILABLE,
-                    NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-                    TStringBuilder()
-                        << "Kikimr cluster or one of its subsystems was unavailable. "
-                        << "Error writing to table `" << TablePath << "`"
-                        << ": can't deliver message to tablet " << ev->Get()->TabletId << ".");
-                return;
-            }
+            AFL_ENSURE(state == IKqpTransactionManager::FINISHED || state == IKqpTransactionManager::ERROR);
         }
     }
 
@@ -1791,6 +1804,7 @@ public:
             }
 
             EnableStreamWrite &= settings.EnableStreamWrite;
+
             auto cookie = writeInfo.WriteTableActor->Open(
                 settings.OperationType,
                 std::move(settings.KeyColumns),
@@ -2374,6 +2388,13 @@ public:
 
         if (!TxManager->NeedCommit()) {
             RollbackAndDie(std::move(ev->TraceId));
+        } else if (TxManager->BrokenLocks()) {
+            NYql::TIssues issues;
+            issues.AddIssue(*TxManager->GetLockIssue());
+            ReplyErrorAndDie(
+                NYql::NDqProto::StatusIds::ABORTED,
+                std::move(issues));
+            return;
         } else if (TxManager->IsSingleShard() && !TxManager->HasOlapTable() && (!WriteInfos.empty() || TxManager->HasTopics())) {
             TxManager->StartExecute();
             ImmediateCommit(std::move(ev->TraceId));

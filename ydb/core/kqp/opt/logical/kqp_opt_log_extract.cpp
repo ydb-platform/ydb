@@ -220,6 +220,18 @@ TExprBase KqpApplyExtractMembersToLookupTable(TExprBase node, TExprContext& ctx,
         return node;
     }
 
+    if (auto maybeStreamLookup = lookup.Maybe<TKqlStreamLookupIndex>()) {
+        auto streamLookup = maybeStreamLookup.Cast();
+
+        return Build<TKqlStreamLookupIndex>(ctx, lookup.Pos())
+            .Table(streamLookup.Table())
+            .LookupKeys(streamLookup.LookupKeys())
+            .Columns(usedColumns.Cast())
+            .Index(streamLookup.Index())
+            .Settings(streamLookup.Settings())
+            .Done();
+    }
+
     if (auto maybeIndexLookup = lookup.Maybe<TKqlLookupIndexBase>()) {
         auto indexLookup = maybeIndexLookup.Cast();
 

@@ -457,6 +457,11 @@ void TNodeBroker::ScheduleEpochUpdate(const TActorContext &ctx)
     }
 }
 
+void TNodeBroker::ScheduleProcessSubscribersQueue(const TActorContext &ctx)
+{
+    ctx.Schedule(TDuration::Seconds(1), new TEvPrivate::TEvProcessSubscribersQueue);
+}
+
 void TNodeBroker::FillNodeInfo(const TNodeInfo &node,
                                NKikimrNodeBroker::TNodeInfo &info) const
 {
@@ -586,6 +591,36 @@ void TNodeBroker::PrepareEpochCache()
     TabletCounters->Simple()[COUNTER_EPOCH_DELTAS_SIZE_BYTES].Set(EpochDeltasCache.size());
 }
 
+void TNodeBroker::PrepareUpdateNodesLog()
+{
+    LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
+                "Preparing update nodes log for epoch #" << Committed.Epoch.ToString()
+                << " nodes=" << Committed.Nodes.size()
+                << " expired=" << Committed.ExpiredNodes.size()
+                << " removed=" << Committed.RemovedNodes.size());
+
+    UpdateNodesLog.clear();
+    UpdateNodesLogVersions.clear();
+
+    TVector<TVersionedNodeID> nodeIdsSortedByVersion;
+    for (auto &entry : Committed.Nodes) {
+        nodeIdsSortedByVersion.emplace_back(entry.second.NodeId, entry.second.Version);
+    }
+    for (auto &entry : Committed.ExpiredNodes) {
+        nodeIdsSortedByVersion.emplace_back(entry.second.NodeId, entry.second.Version);
+    }
+    for (auto &entry : Committed.RemovedNodes) {
+        nodeIdsSortedByVersion.emplace_back(entry.second.NodeId, entry.second.Version);
+    }
+    std::sort(nodeIdsSortedByVersion.begin(), nodeIdsSortedByVersion.end(), TVersionedNodeID::TCmpByVersion());
+
+    for (const auto &id : nodeIdsSortedByVersion) {
+        const auto& node = *Committed.FindNode(id.NodeId);
+        AddNodeToUpdateNodesLog(node);
+    }
+    TabletCounters->Simple()[COUNTER_UPDATE_NODES_LOG_SIZE_BYTES].Set(UpdateNodesLog.size());
+}
+
 void TNodeBroker::AddNodeToEpochCache(const TNodeInfo &node)
 {
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
@@ -615,11 +650,131 @@ void TNodeBroker::AddDeltaToEpochDeltasCache(const TString &delta, ui64 version)
     TabletCounters->Simple()[COUNTER_EPOCH_DELTAS_SIZE_BYTES].Set(EpochDeltasCache.size());
 }
 
+void TNodeBroker::AddNodeToUpdateNodesLog(const TNodeInfo &node)
+{
+    LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
+                "Add node " << node.IdShortString() << " to update nodes log");
+
+    NKikimrNodeBroker::TUpdateNodes updateNodes;
+
+    switch (node.State) {
+        case ENodeState::Active:
+            FillNodeInfo(node, *updateNodes.AddUpdates()->MutableNode());
+            break;
+        case ENodeState::Expired:
+            updateNodes.AddUpdates()->SetExpiredNode(node.NodeId);
+            break;
+        case ENodeState::Removed:
+            updateNodes.AddUpdates()->SetRemovedNode(node.NodeId);
+            break;
+    }
+
+    TString delta;
+    Y_PROTOBUF_SUPPRESS_NODISCARD updateNodes.SerializeToString(&delta);
+
+    Y_ENSURE(UpdateNodesLogVersions.empty() || UpdateNodesLogVersions.back().Version <= node.Version);
+    if (!UpdateNodesLogVersions.empty() && UpdateNodesLogVersions.back().Version == node.Version) {
+        UpdateNodesLog += delta;
+        UpdateNodesLogVersions.back().CacheEndOffset = UpdateNodesLog.size();
+    } else {
+        UpdateNodesLog += delta;
+        UpdateNodesLogVersions.emplace_back(node.Version, UpdateNodesLog.size());
+    }
+    TabletCounters->Simple()[COUNTER_UPDATE_NODES_LOG_SIZE_BYTES].Set(UpdateNodesLog.size());
+}
+
 void TNodeBroker::SubscribeForConfigUpdates(const TActorContext &ctx)
 {
     ui32 nodeBrokerItem = (ui32)NKikimrConsole::TConfigItem::NodeBrokerConfigItem;
     ui32 featureFlagsItem = (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem;
     NConsole::SubscribeViaConfigDispatcher(ctx, {nodeBrokerItem, featureFlagsItem}, ctx.SelfID);
+}
+
+void TNodeBroker::SendToSubscriber(const TSubscriberInfo &subscriber, IEventBase* event, const TActorContext &ctx) const
+{
+    SendToSubscriber(subscriber, event, 0, ctx);
+}
+
+void TNodeBroker::SendToSubscriber(const TSubscriberInfo &subscriber, IEventBase* event, ui64 cookie, const TActorContext &ctx) const
+{
+    THolder<IEventHandle> ev = MakeHolder<IEventHandle>(subscriber.Id, ctx.SelfID, event, 0, cookie);
+    if (subscriber.PipeServerInfo->IcSession) {
+        ev->Rewrite(TEvInterconnect::EvForward, subscriber.PipeServerInfo->IcSession);
+    }
+    ctx.Send(ev.Release());
+}
+
+
+void TNodeBroker::SendUpdateNodes(TSubscriberInfo &subscriber, const TActorContext &ctx)
+{
+    SubscribersQueue.Remove(&subscriber);
+
+    NKikimrNodeBroker::TUpdateNodes record;
+    record.SetSeqNo(subscriber.SeqNo);
+    Committed.Epoch.Serialize(*record.MutableEpoch());
+    auto response = MakeHolder<TEvNodeBroker::TEvUpdateNodes>(record);
+
+    auto it = std::lower_bound(UpdateNodesLogVersions.begin(), UpdateNodesLogVersions.end(), subscriber.SentVersion + 1);
+    if (it != UpdateNodesLogVersions.begin()) {
+        response->PreSerializedData = UpdateNodesLog.substr(std::prev(it)->CacheEndOffset);
+    } else {
+        response->PreSerializedData = UpdateNodesLog;
+    }
+
+    TabletCounters->Percentile()[COUNTER_UPDATE_NODES_BYTES].IncrementFor(response->GetCachedByteSize());
+    LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER,
+                "Send TEvUpdateNodes v" << subscriber.SentVersion << " -> v" << Committed.Epoch.Version
+                << " to " << subscriber.Id);
+    SendToSubscriber(subscriber, response.Release(), ctx);
+
+    subscriber.SentVersion = Committed.Epoch.Version;
+    SubscribersQueue.PushBack(&subscriber);
+}
+
+TNodeBroker::TSubscriberInfo& TNodeBroker::AddSubscriber(TActorId subscriberId,
+                                                         TActorId pipeServerId,
+                                                         ui64 seqNo,
+                                                         ui64 version,
+                                                         const TActorContext &ctx)
+{
+    LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
+                "New subscriber " << subscriberId
+                << ", seqNo: " << seqNo
+                << ", version: " << version
+                << ", server pipe id: " << pipeServerId);
+
+    auto& pipeServer = PipeServers.at(pipeServerId);
+    auto res = Subscribers.emplace(
+        std::piecewise_construct,
+        std::forward_as_tuple(subscriberId),
+        std::forward_as_tuple(subscriberId, seqNo, version, &pipeServer)
+    );
+    Y_ENSURE(res.second, "Subscription already exists for " << subscriberId);
+    pipeServer.Subscribers.insert(subscriberId);
+    return res.first->second;
+}
+
+void TNodeBroker::RemoveSubscriber(TActorId subscriber, const TActorContext &ctx)
+{
+    auto it = Subscribers.find(subscriber);
+    Y_ENSURE(it != Subscribers.end(), "No subscription for " << subscriber);
+
+    LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
+                "Unsubscribed " << subscriber
+                << ", seqNo: " << it->second.SeqNo
+                << ", server pipe id: " << it->second.PipeServerInfo->Id);
+
+    it->second.PipeServerInfo->Subscribers.erase(subscriber);
+    SubscribersQueue.Remove(&it->second);
+    Subscribers.erase(it);
+}
+
+bool TNodeBroker::HasOutdatedSubscription(TActorId subscriber, ui64 newSeqNo) const
+{
+    if (auto it = Subscribers.find(subscriber); it != Subscribers.end()) {
+        return it->second.SeqNo < newSeqNo;
+    }
+    return false;
 }
 
 void TNodeBroker::TState::LoadConfigFromProto(const NKikimrNodeBroker::TConfig &config)
@@ -1452,6 +1607,64 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvSetConfigRequest::TPtr &ev,
     Execute(CreateTxUpdateConfig(ev), ctx);
 }
 
+void TNodeBroker::Handle(TEvNodeBroker::TEvSubscribeNodesRequest::TPtr &ev,
+                         const TActorContext &ctx)
+{
+    TabletCounters->Cumulative()[COUNTER_SUBSCRIBE_NODES_REQUESTS].Increment(1);
+
+    auto seqNo = ev->Get()->Record.GetSeqNo();
+    auto version = ev->Get()->Record.GetCachedVersion();
+
+    if (HasOutdatedSubscription(ev->Sender, seqNo)) {
+        RemoveSubscriber(ev->Sender, ctx);
+    }
+
+    if (!Subscribers.contains(ev->Sender)) {
+        auto& subscriber = AddSubscriber(ev->Sender, ev->Recipient, seqNo, version, ctx);
+        SendUpdateNodes(subscriber, ctx);
+    }
+}
+
+void TNodeBroker::Handle(TEvNodeBroker::TEvSyncNodesRequest::TPtr &ev,
+                         const TActorContext &ctx)
+{
+    TabletCounters->Cumulative()[COUNTER_SYNC_NODES_REQUESTS].Increment(1);
+
+    auto it = Subscribers.find(ev->Sender);
+    if (it == Subscribers.end()) {
+        return;
+    }
+
+    if (it->second.SeqNo != ev->Get()->Record.GetSeqNo()) {
+        return;
+    }
+
+    if (it->second.SentVersion < Committed.Epoch.Version) {
+        SendUpdateNodes(it->second, ctx);
+    }
+
+    auto response = MakeHolder<TEvNodeBroker::TEvSyncNodesResponse>();
+    response->Record.SetSeqNo(it->second.SeqNo);
+    SendToSubscriber(it->second, response.Release(), ev->Cookie, ctx);
+}
+
+void TNodeBroker::Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev)
+{
+    auto res = PipeServers.emplace(ev->Get()->ServerId, TPipeServerInfo(ev->Get()->ServerId, ev->Get()->InterconnectSession));
+    Y_ENSURE(res.second, "Unexpected TEvServerConnected for " << ev->Get()->ServerId);
+}
+
+void TNodeBroker::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev,
+                         const TActorContext &ctx)
+{
+    auto it = PipeServers.find(ev->Get()->ServerId);
+    Y_ENSURE(it != PipeServers.end(), "Unexpected TEvServerDisconnected for " << ev->Get()->ServerId);
+    while (!it->second.Subscribers.empty()) {
+        RemoveSubscriber(*it->second.Subscribers.begin(), ctx);
+    }
+    PipeServers.erase(it);
+}
+
 void TNodeBroker::Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev,
                          const TActorContext &ctx)
 {
@@ -1470,6 +1683,23 @@ void TNodeBroker::Handle(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev,
                          const TActorContext &ctx)
 {
     Execute(CreateTxRegisterNode(ev), ctx);
+}
+
+void TNodeBroker::Handle(TEvPrivate::TEvProcessSubscribersQueue::TPtr &, const TActorContext &ctx)
+{
+    constexpr size_t MAX_BATCH_SIZE = 1000;
+
+    size_t batchSize = 0;
+    while (batchSize < SubscribersQueue.Size() && batchSize < MAX_BATCH_SIZE) {
+        auto& subscriber = *SubscribersQueue.Front();
+        if (subscriber.SentVersion >= Committed.Epoch.Version) {
+            break;
+        }
+        SendUpdateNodes(subscriber, ctx);
+        ++batchSize;
+    }
+
+    ScheduleProcessSubscribersQueue(ctx);
 }
 
 TNodeBroker::TState::TState(TNodeBroker* self)

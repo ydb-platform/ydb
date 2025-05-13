@@ -1,6 +1,6 @@
 # Grafana дашборды для {{ ydb-short-name }}
 
-На этой странице представлено описание дашбордов Grafana для {{ ydb-short-name }}. Как установить дашборды читайте в разделе [{#T}](../../../devops/manual/monitoring.md#prometheus-grafana).
+На этой странице представлено описание дашбордов Grafana для {{ ydb-short-name }}. Как установить дашборды читайте в разделе [{#T}](../../../devops/observability/monitoring.md#prometheus-grafana).
 
 ## DB status {#dbstatus}
 

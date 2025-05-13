@@ -342,7 +342,7 @@ protected:
   // The manager that keeps track of outstanding operations.
   winrt_async_manager& async_manager_;
 
-  // Mutex to protect access to the linked list of implementations. 
+  // Mutex to protect access to the linked list of implementations.
   boost::asio::detail::mutex mutex_;
 
   // The head of a linked list of all implementations.

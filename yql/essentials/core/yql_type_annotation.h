@@ -27,9 +27,12 @@
 #include <util/generic/vector.h>
 #include <util/digest/city.h>
 
+#include <functional>
 #include <vector>
 
 namespace NYql {
+
+using TTypeAnnCallableFactory = std::function<TAutoPtr<IGraphTransformer>()>;
 
 class IUrlLoader : public TThrRefBase {
 public:

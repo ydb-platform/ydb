@@ -2638,10 +2638,17 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }
     }
 
-    Y_UNIT_TEST(ExecuteWriteQuery) {
+    Y_UNIT_TEST_TWIN(ExecuteWriteQuery, UseSink) {
         using namespace fmt::literals;
 
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(true);
+
+        TKikimrRunner kikimr(settings);
         auto client = kikimr.GetQueryClient();
 
         {   // Just generate table

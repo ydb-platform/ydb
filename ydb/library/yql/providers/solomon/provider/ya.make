@@ -11,6 +11,7 @@ SRCS(
     yql_solomon_dq_integration.cpp
     yql_solomon_io_discovery.cpp
     yql_solomon_load_meta.cpp
+    yql_solomon_logical_optimize.cpp
     yql_solomon_mkql_compiler.cpp
     yql_solomon_physical_optimize.cpp
     yql_solomon_provider.cpp

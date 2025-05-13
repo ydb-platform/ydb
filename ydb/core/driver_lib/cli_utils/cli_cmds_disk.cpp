@@ -207,7 +207,7 @@ public:
     virtual int Run(TConfig&) override {
         try {
             ObliterateDisk(Path);
-        } catch (TFileError& e) {
+        } catch (const yexception& e) {
             Cerr << "Error, what# " << e.what() << Endl;
             return 1;
         }

@@ -51,7 +51,7 @@ ui32 TWorkloadGeneratorBase::GetDefaultPartitionsCount(const TString& /*tableNam
     return 64;
 }
 
-void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJson::TJsonValue& table, bool single) const {
+void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJson::TJsonValue& table, const NJson::TJsonValue& common, bool single) const {
     auto specialTypes = GetSpecialDataTypes();
     specialTypes["string_type"] = Params.GetStringType();
     specialTypes["date_type"] = Params.GetDateType();
@@ -94,6 +94,9 @@ void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJ
         result << "PARTITION BY HASH (" <<  (table.Has("partition_by") ? KeysList(table, "partition_by") : keys) << ")" << Endl;
     }
 
+    const ui64 partitioning = table["partitioning"].GetUIntegerSafe(
+        common["partitioning"].GetUIntegerSafe(GetDefaultPartitionsCount(tableName)));
+
     result << "WITH (" << Endl;
     switch (Params.GetStoreType()) {
     case TWorkloadBaseParams::EStoreType::ExternalS3:
@@ -102,14 +105,18 @@ void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJ
         break;
     case TWorkloadBaseParams::EStoreType::Column:
         result << "    STORE = COLUMN," << Endl;
-        result << "    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << table["partitioning"].GetUIntegerSafe(GetDefaultPartitionsCount(tableName)) << Endl;
+        result << "    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << partitioning << Endl;
         break;
     case TWorkloadBaseParams::EStoreType::Row:
         result << "    STORE = ROW," << Endl;
         result << "    AUTO_PARTITIONING_PARTITION_SIZE_MB = " << Params.GetPartitionSizeMb() << ", " << Endl;
-        result << "    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << table["partitioning"].GetUIntegerSafe(GetDefaultPartitionsCount(tableName)) << Endl;
+        result << "    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << partitioning << Endl;
     }
     result << ");" << Endl;
+    if (TString actions = table["actions"].GetStringSafe(common["actions"].GetStringSafe(""))) {
+        SubstGlobal(actions, "{table}", path);
+        result << actions << Endl;
+    }
 }
 
 std::string TWorkloadGeneratorBase::GetDDLQueries() const {
@@ -125,10 +132,10 @@ std::string TWorkloadGeneratorBase::GetDDLQueries() const {
     }
 
     for (const auto& table: json["tables"].GetArray()) {
-        GenerateDDLForTable(result.Out, table, false);
+        GenerateDDLForTable(result.Out, table, json["every_table"], false);
     }
     if (json.Has("table")) {
-        GenerateDDLForTable(result.Out, json["table"], true);
+        GenerateDDLForTable(result.Out, json["table"], json["every_table"], true);
     }
     if (result) {
         return "--!syntax_v1\n" + result;

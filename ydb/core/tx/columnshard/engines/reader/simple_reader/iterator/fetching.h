@@ -4,7 +4,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/common/conveyor_task.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetching.h>
-#include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/subscriber.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/events.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>

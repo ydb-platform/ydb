@@ -376,7 +376,8 @@ TExprNode::TPtr QuoteCode(const TExprNode::TPtr& node, TExprContext& ctx, TNodeO
 }
 
 IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExprNode::TPtr& output,
-    TTypeAnnotationContext& types, TExprContext& ctx, const IFunctionRegistry& functionRegistry, IGraphTransformer* calcTransfomer) {
+    TTypeAnnotationContext& types, TExprContext& ctx, const IFunctionRegistry& functionRegistry,
+    IGraphTransformer* calcTransfomer, TTypeAnnCallableFactory typeAnnCallableFactory) {
     output = input;
     if (ctx.Step.IsDone(TExprStep::ExprEval))
         return IGraphTransformer::TStatus::Ok;
@@ -391,7 +392,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
     bool isOptionalAtom = false;
     bool isTypePipeline = false;
     bool isCodePipeline = false;
-    TTransformationPipeline pipeline(&types);
+    TTransformationPipeline pipeline(&types, typeAnnCallableFactory);
     pipeline.AddServiceTransformers();
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(functionRegistry);

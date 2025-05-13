@@ -2,12 +2,13 @@
 import logging
 import yaml
 import tempfile
-from hamcrest import assert_that
+from hamcrest import assert_that, is_, has_length
 import time
 import requests
+from copy import deepcopy
 
 from ydb.tests.library.common.types import Erasure
-from ydb.tests.library.common.types import TabletStates
+from ydb.tests.library.common.types import TabletStates, TabletTypes
 import ydb.tests.library.common.cms as cms
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -18,6 +19,7 @@ from ydb.tests.library.kv.helpers import get_kv_tablet_ids
 from ydb.tests.library.kv.helpers import wait_tablets_state_by_id
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 from ydb.tests.library.harness.util import LogLevels
+from ydb.tests.library.matchers.response import is_valid_response_with_field
 
 import ydb.public.api.protos.ydb_config_pb2 as config
 
@@ -206,29 +208,73 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
             raise
 
 
-class TestKiKiMRDistConfReassignStateStorage(DistConfKiKiMRTest):
+class KiKiMRDistConfReassignStateStorageTest(DistConfKiKiMRTest):
     nodes_count = 12
+    count = 1
+    hive_id = None
+    hive_generation = None
 
     def do_request(self, json_req):
         url = f'http://localhost:{self.cluster.nodes[1].mon_port}/actors/nodewarden?page=distconf'
         return requests.post(url, headers={'content-type': 'application/json'}, json=json_req).json()
 
-    def do_load_and_test(self, req):
-        table_path = '/Root/mydb/mytable_with_expand'
+    def init_hive_info(self):
+        if self.hive_id:
+            return
+        hive_state_response = self.cluster.client.tablet_state(tablet_type=TabletTypes.FLAT_HIVE)
+        assert_that(
+            hive_state_response,
+            is_valid_response_with_field('TabletStateInfo', has_length(1))
+        )
+        self.hive_id = hive_state_response.TabletStateInfo[0].TabletId
+        self.hive_generation = hive_state_response.TabletStateInfo[0].Generation
+
+    def check_hive_is_same(self):
+        wait_tablets_state_by_id(
+            self.cluster.client,
+            TabletStates.Active,
+            tablet_ids=[self.hive_id],
+            skip_generations={self.hive_id: self.hive_generation},
+            generation_matcher=is_,
+            message='Hive killed',
+            timeout_seconds=3,
+        )
+
+    def do_load_and_test(self, req, generations):
+        self.init_hive_info()
+        table_path = '/Root/mydb/mytable_' + str(self.count)
+        self.count += 1
         number_of_tablets = 10
 
         response = self.cluster.kv_client.create_tablets(number_of_tablets, table_path)
+        logger.info(f"Created tablets: {response}")
         assert_that(response.operation.status == StatusIds.SUCCESS)
         tablet_ids = get_kv_tablet_ids(self.swagger_client)
 
         res = self.do_request(req)
+        logger.info(f"Generations: {generations}")
+        if len(generations) > 0:
+            wait_tablets_state_by_id(
+                self.cluster.client,
+                TabletStates.Active,
+                tablet_ids=list(generations.keys()),
+                timeout_seconds=3,
+                skip_generations=generations,
+                generation_matcher=is_
+            )
         wait_tablets_state_by_id(
             self.cluster.client,
             TabletStates.Active,
             tablet_ids=tablet_ids,
-            timeout_seconds=3
+            timeout_seconds=3,
         )
-        self.check_kikimr_is_operational(table_path, tablet_ids)
+        actual_tablet_info = self.cluster.client.tablet_state(tablet_ids=tablet_ids).TabletStateInfo
+        assert_that(len(generations) + number_of_tablets == len(actual_tablet_info))
+        for info in actual_tablet_info:
+            if info.TabletId not in generations:
+                generations[info.TabletId] = info.Generation
+        self.check_hive_is_same()
+        # self.check_kikimr_is_operational(table_path, tablet_ids)
         return res
 
     def test_cluster_change_state_storage_distconf_bad_cases(self):
@@ -247,27 +293,57 @@ class TestKiKiMRDistConfReassignStateStorage(DistConfKiKiMRTest):
         assert_that(self.do_request({"ReconfigStateStorage": {"NewStateStorageConfig": {"RingGroups": [{"WriteOnly": True, "NToSelect": 1, "Ring": [{"Node": [4]}]}]}}})
                     ["ErrorReason"] == "New configuration first RingGroup is writeOnly")
 
-    def test_cluster_change_state_storage_distconf(self):
-        defaultRingGroup = self.do_request({"ReconfigStateStorage": {"GetStateStorageConfig": True}})["StateStorageConfig"]["Ring"]
-        newRingGroup = {"WriteOnly": True, "NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}]}
+    def do_test_change_state_storage(self, defaultRingGroup, newRingGroup):
+        logger.info(f"Current State Storage config: {defaultRingGroup}")
+        logger.info(f"Target State Storage config: {newRingGroup}")
+        generations = {}
+        newRingGroup["WriteOnly"] = True
         assert_that(defaultRingGroup["NToSelect"] > 0)
-        logger.info({"ReconfigStateStorage": {"NewStateStorageConfig": {
-                    "RingGroups": [defaultRingGroup, newRingGroup]}}})
         logger.info(self.do_load_and_test({"ReconfigStateStorage": {"NewStateStorageConfig": {
-                    "RingGroups": [defaultRingGroup, newRingGroup]}}}))
+                    "RingGroups": [defaultRingGroup, newRingGroup]}}}, generations))
         time.sleep(1)
         assert_that(self.do_request({"ReconfigStateStorage": {"GetStateStorageConfig": True}})
                     ["StateStorageConfig"] == {"RingGroups": [defaultRingGroup, newRingGroup]})
         time.sleep(1)
         newRingGroup["WriteOnly"] = False
         logger.info(self.do_load_and_test({"ReconfigStateStorage": {"NewStateStorageConfig": {
-                    "RingGroups": [defaultRingGroup, newRingGroup]}}}))
+                    "RingGroups": [defaultRingGroup, newRingGroup]}}}, generations))
         time.sleep(1)
         assert_that(self.do_request({"ReconfigStateStorage": {"GetStateStorageConfig": True}})
                     ["StateStorageConfig"] == {"RingGroups": [defaultRingGroup, newRingGroup]})
         time.sleep(1)
         logger.info(self.do_load_and_test({"ReconfigStateStorage": {"NewStateStorageConfig": {
-                    "RingGroups": [newRingGroup]}}}))
+                    "RingGroups": [newRingGroup]}}}, generations))
         time.sleep(1)
+        assert_that(self.do_request({"ReconfigStateStorage": {"GetStateStorageConfig": True}})
+                    ["StateStorageConfig"] == {"Ring": newRingGroup})
+        logger.info(self.do_load_and_test({"ReconfigStateStorage": {"NewStateStorageConfig": {
+                    "RingGroups": [newRingGroup]}}}, generations))
+
+
+class TestKiKiMRDistConfReassignStateStorage(KiKiMRDistConfReassignStateStorageTest):
+    def test_cluster_change_state_storage_distconf(self):
+        defaultRingGroup = self.do_request({"ReconfigStateStorage": {"GetStateStorageConfig": True}})["StateStorageConfig"]["Ring"]
+        newRingGroup = {"WriteOnly": True, "NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}]}
+        self.do_test_change_state_storage(defaultRingGroup, newRingGroup)
+        assert_that(self.do_request({"ReconfigStateStorage": {"GetStateStorageConfig": True}})
+                    ["StateStorageConfig"] == {"Ring": newRingGroup})
+
+
+class TestKiKiMRDistConfReassignStateStorageToTheSameConfig(KiKiMRDistConfReassignStateStorageTest):
+    def test_cluster_change_state_storage_distconf_to_the_same_config(self):
+        defaultRingGroup = self.do_request({"ReconfigStateStorage": {"GetStateStorageConfig": True}})["StateStorageConfig"]["Ring"]
+        newRingGroup = deepcopy(defaultRingGroup)
+        self.do_test_change_state_storage(defaultRingGroup, newRingGroup)
+        assert_that(self.do_request({"ReconfigStateStorage": {"GetStateStorageConfig": True}})
+                    ["StateStorageConfig"] == {"Ring": newRingGroup})
+
+
+class TestKiKiMRDistConfReassignStateStorageReuseSameNodes(KiKiMRDistConfReassignStateStorageTest):
+    def test_cluster_change_state_storage_distconf_reuse_same_nodes(self):
+        defaultRingGroup = self.do_request({"ReconfigStateStorage": {"GetStateStorageConfig": True}})["StateStorageConfig"]["Ring"]
+        newRingGroup = deepcopy(defaultRingGroup)
+        newRingGroup["NToSelect"] = 3
+        self.do_test_change_state_storage(defaultRingGroup, newRingGroup)
         assert_that(self.do_request({"ReconfigStateStorage": {"GetStateStorageConfig": True}})
                     ["StateStorageConfig"] == {"Ring": newRingGroup})

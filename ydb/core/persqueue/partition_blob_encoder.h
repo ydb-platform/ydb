@@ -9,7 +9,7 @@ namespace NKikimr::NPQ {
 class TKeyLevel;
 
 struct TPartitionBlobEncoder {
-    explicit TPartitionBlobEncoder(const TPartitionId& partition);
+    explicit TPartitionBlobEncoder(const TPartitionId& partition, bool fastWrite);
 
     void CheckHeadConsistency(const TVector<ui32>& compactLevelBorder,
                               const ui32 totalLevels,
@@ -101,7 +101,12 @@ struct TPartitionBlobEncoder {
     std::deque<TDataKey> HeadKeys;
     ui64 FirstUncompactedOffset = 0;
 
+    bool HaveData = false;
     bool HeadCleared = false;
+
+    void Dump() const;
+
+    bool ForFastWrite = true;
 };
 
 }

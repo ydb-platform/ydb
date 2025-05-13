@@ -22,6 +22,7 @@
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
+//#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace {
 
@@ -201,8 +202,8 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , WriteInflightSize(0)
     , Tablet(tablet)
     , BlobCache(blobCache)
-    , CompactionBlobEncoder(partition)
-    , BlobEncoder(partition)
+    , CompactionBlobEncoder(partition, false)
+    , BlobEncoder(partition, true)
     , GapSize(0)
     , IsServerless(isServerless)
     , ReadingTimestamp(false)
@@ -2230,71 +2231,49 @@ bool TPartition::TryAddDeleteHeadKeysToPersistRequest()
     return haveChanges;
 }
 
-void TPartition::DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request)
-{
-    PQ_LOG_D("=== DumpKeyValueRequest ===");
-    PQ_LOG_D("--- delete ----------------");
-    for (size_t i = 0; i < request.CmdDeleteRangeSize(); ++i) {
-        const auto& cmd = request.GetCmdDeleteRange(i);
-        const auto& range = cmd.GetRange();
-        PQ_LOG_D((range.GetIncludeFrom() ? '[' : '(') << range.GetFrom() <<
-                 ", " <<
-                 range.GetTo() << (range.GetIncludeTo() ? ']' : ')'));
-    }
-    PQ_LOG_D("--- write -----------------");
-    for (size_t i = 0; i < request.CmdWriteSize(); ++i) {
-        const auto& cmd = request.GetCmdWrite(i);
-        PQ_LOG_D(cmd.GetKey());
-    }
-    PQ_LOG_D("--- rename ----------------");
-    for (size_t i = 0; i < request.CmdRenameSize(); ++i) {
-        const auto& cmd = request.GetCmdRename(i);
-        PQ_LOG_D(cmd.GetOldKey() << ", " << cmd.GetNewKey());
-    }
-    PQ_LOG_D("===========================");
-}
+//void TPartition::DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request)
+//{
+//    DBGTRACE_LOG("=== DumpKeyValueRequest ===");
+//    DBGTRACE_LOG("--- delete ----------------");
+//    for (size_t i = 0; i < request.CmdDeleteRangeSize(); ++i) {
+//        const auto& cmd = request.GetCmdDeleteRange(i);
+//        const auto& range = cmd.GetRange();
+//        Y_UNUSED(range);
+//        DBGTRACE_LOG((range.GetIncludeFrom() ? '[' : '(') << range.GetFrom() <<
+//                     ", " <<
+//                     range.GetTo() << (range.GetIncludeTo() ? ']' : ')'));
+//    }
+//    DBGTRACE_LOG("--- write -----------------");
+//    for (size_t i = 0; i < request.CmdWriteSize(); ++i) {
+//        const auto& cmd = request.GetCmdWrite(i);
+//        Y_UNUSED(cmd);
+//        DBGTRACE_LOG(cmd.GetKey());
+//    }
+//    DBGTRACE_LOG("--- rename ----------------");
+//    for (size_t i = 0; i < request.CmdRenameSize(); ++i) {
+//        const auto& cmd = request.GetCmdRename(i);
+//        Y_UNUSED(cmd);
+//        DBGTRACE_LOG(cmd.GetOldKey() << ", " << cmd.GetNewKey());
+//    }
+//    DBGTRACE_LOG("===========================");
+//}
 
-void TPartition::DumpZones(const char* file, unsigned line) const
-{
-    PQ_LOG_D("TPartition::DumpZones");
-
-    if (file) {
-        PQ_LOG_D(file << "(" << line << ")");
-    }
-
-    auto dumpZone = [this](const TPartitionBlobEncoder& zone) {
-        auto dumpKeys = [this](const std::deque<TDataKey>& keys, const char* prefix) {
-            Y_UNUSED(prefix);
-            for (size_t i = 0; i < keys.size(); ++i) {
-                PQ_LOG_D(prefix << "[" << i << "]=" << keys[i].Key.ToString() <<
-                         ", Size=" << keys[i].Size << ", CumulativeSize=" << keys[i].CumulativeSize);
-            }
-        };
-        auto dumpHead = [this](const THead& head, const char* prefix) {
-            Y_UNUSED(head);
-            Y_UNUSED(prefix);
-            PQ_LOG_D(prefix <<
-                     ": Offset=" << head.Offset << ", PartNo=" << head.PartNo <<
-                     ", PackedSize=" << head.PackedSize <<
-                     ", Batches.size=" << head.GetBatches().size());
-        };
-
-        PQ_LOG_D("StartOffset=" << zone.StartOffset << ", EndOffset=" << zone.EndOffset);
-        PQ_LOG_D("CompactedKeys.size=" << zone.CompactedKeys.size());
-        PQ_LOG_D("BodySize=" << zone.BodySize);
-        dumpKeys(zone.DataKeysBody, "Body");
-        dumpKeys(zone.HeadKeys, "Head");
-        dumpHead(zone.Head, "Head");
-        dumpHead(zone.NewHead, "NewHead");
-    };
-
-    PQ_LOG_D("=== DumpPartitionZones ===");
-    PQ_LOG_D("--- Compaction -----------");
-    dumpZone(CompactionBlobEncoder);
-    PQ_LOG_D("--- FastWrite ------------");
-    dumpZone(BlobEncoder);
-    PQ_LOG_D("==========================");
-}
+//void TPartition::DumpZones(const char* file, unsigned line) const
+//{
+//    DBGTRACE("TPartition::DumpZones");
+//
+//    if (file) {
+//        Y_UNUSED(line);
+//        DBGTRACE_LOG(file << "(" << line << ")");
+//    }
+//
+//    DBGTRACE_LOG("=== DumpPartitionZones ===");
+//    DBGTRACE_LOG("--- Compaction -----------");
+//    CompactionBlobEncoder.Dump();
+//    DBGTRACE_LOG("--- FastWrite ------------");
+//    BlobEncoder.Dump();
+//    DBGTRACE_LOG("==========================");
+//}
 
 TBlobKeyTokenPtr TPartition::MakeBlobKeyToken(const TString& key)
 {
@@ -2550,14 +2529,14 @@ void TPartition::CommitWriteOperations(TTransaction& t)
             (Parameters->FirstCommitWriteOperations ? BlobEncoder.Head : BlobEncoder.NewHead).PackedSize != 0;
 
         BlobEncoder.NewPartitionedBlob(Partition,
-                                    BlobEncoder.NewHead.Offset,
-                                    "", // SourceId
-                                    0,  // SeqNo
-                                    0,  // TotalParts
-                                    0,  // TotalSize
-                                    Parameters->HeadCleared,  // headCleared
-                                    needCompactHead,          // needCompactHead
-                                    MaxBlobSize);
+                                       BlobEncoder.NewHead.Offset,
+                                       "", // SourceId
+                                       0,  // SeqNo
+                                       0,  // TotalParts
+                                       0,  // TotalSize
+                                       Parameters->HeadCleared,  // headCleared
+                                       needCompactHead,          // needCompactHead
+                                       MaxBlobSize);
 
         for (auto& k : t.WriteInfo->BodyKeys) {
             PQ_LOG_D("add key " << k.Key.ToString());

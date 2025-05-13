@@ -1,28 +1,53 @@
 #include "partition_blob_encoder.h"
 #include "partition_util.h"
+//#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
-TPartitionBlobEncoder::TPartitionBlobEncoder(const TPartitionId& partition)
+TPartitionBlobEncoder::TPartitionBlobEncoder(const TPartitionId& partition, bool fastWrite)
     : StartOffset(0)
     , EndOffset(0)
     , PartitionedBlob(partition, 0, "", 0, 0, 0, Head, NewHead, true, false, 8_MB)
     , NewHeadKey{TKey{}, 0, TInstant::Zero(), 0}
     , BodySize(0)
     , MaxWriteResponsesSize(0)
+    , ForFastWrite(fastWrite)
 {
 }
+
+//void DumpKeys(const auto& DataKeysHead, const auto& HeadKeys)
+//{
+//    DBGTRACE_LOG("==== DataKeysHead ====");
+//    for (ui32 j = 0; j < DataKeysHead.size(); ++j) {
+//        for (ui32 k = 0; k < DataKeysHead[j].KeysCount(); ++k) {
+//            DBGTRACE_LOG("[" << j << "][" << k << "]: " << DataKeysHead[j].GetKey(k).ToString());
+//        }
+//    }
+//    DBGTRACE_LOG("==== HeadKeys ========");
+//    for (size_t j = 0; j < HeadKeys.size(); ++j) {
+//        DBGTRACE_LOG("[" << j << "]: " << HeadKeys[j].Key.ToString());
+//    }
+//    DBGTRACE_LOG("======================");
+//}
 
 void TPartitionBlobEncoder::CheckHeadConsistency(const TVector<ui32>& compactLevelBorder,
                                                  const ui32 totalLevels,
                                                  const ui32 totalMaxCount) const
 {
+    //DumpKeys(DataKeysHead, HeadKeys);
     ui32 p = 0;
     for (ui32 j = 0; j < DataKeysHead.size(); ++j) {
         ui32 s = 0;
         for (ui32 k = 0; k < DataKeysHead[j].KeysCount(); ++k) {
             Y_ABORT_UNLESS(p < HeadKeys.size());
-            Y_ABORT_UNLESS(DataKeysHead[j].GetKey(k) == HeadKeys[p].Key);
+            //if (DataKeysHead[j].GetKey(k) != HeadKeys[p].Key) {
+            //    DBGTRACE_LOG("j=" << j << ", k=" << k << ", p=" << p);
+            //    Dump();
+            //    //DumpKeys(DataKeysHead, HeadKeys);
+            //}
+            Y_ABORT_UNLESS(DataKeysHead[j].GetKey(k) == HeadKeys[p].Key,
+                           "DataKeysHead[%" PRIu32 "].Key[%" PRIu32 "]=%s, HeadKeys[%" PRIu32 "]=%s",
+                           j, k, DataKeysHead[j].GetKey(k).ToString().data(), p, HeadKeys[p].Key.ToString().data());
             Y_ABORT_UNLESS(DataKeysHead[j].GetSize(k) == HeadKeys[p].Size);
             s += DataKeysHead[j].GetSize(k);
             Y_ABORT_UNLESS(j + 1 == totalLevels || DataKeysHead[j].GetSize(k) >= compactLevelBorder[j + 1]);
@@ -311,6 +336,7 @@ TKey TPartitionBlobEncoder::KeyForWrite(TKeyPrefix::EType type,
                                         const TPartitionId& partitionId,
                                         bool needCompaction) const
 {
+    Y_ABORT_UNLESS(!ForFastWrite);
     if (needCompaction) {
         return TKey::ForBody(type, partitionId, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount());
     }
@@ -319,6 +345,7 @@ TKey TPartitionBlobEncoder::KeyForWrite(TKeyPrefix::EType type,
 
 TKey TPartitionBlobEncoder::KeyForFastWrite(TKeyPrefix::EType type, const TPartitionId& partitionId) const
 {
+    Y_ABORT_UNLESS(ForFastWrite);
     return TKey::ForFastWrite(type, partitionId, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount());
 }
 
@@ -417,7 +444,12 @@ void TPartitionBlobEncoder::SyncDataKeysBody(TInstant now,
         BodySize += blobSize;
 
         ui64 lastOffset = DataKeysBody.empty() ? 0 : getNextOffset(DataKeysBody.back().Key);
-        Y_ABORT_UNLESS(lastOffset <= key.GetOffset());
+        //if (!(lastOffset <= key.GetOffset())) {
+        //    Dump();
+        //}
+        Y_ABORT_UNLESS(lastOffset <= key.GetOffset(),
+                       "lastOffset=%" PRIu64 ", key=%s",
+                       lastOffset, key.ToString().data());
 
         if (DataKeysBody.empty()) {
             startOffset = key.GetOffset() + (key.GetPartNo() > 0 ? 1 : 0);
@@ -446,6 +478,7 @@ void TPartitionBlobEncoder::SyncHeadFromNewHead()
 
 void TPartitionBlobEncoder::SyncHead(ui64& startOffset, ui64& endOffset)
 {
+    Y_ABORT_UNLESS(!ForFastWrite);
     //append Head with newHead
     while (!NewHead.GetBatches().empty()) {
         Head.AddBatch(NewHead.ExtractFirstBatch());
@@ -461,6 +494,7 @@ void TPartitionBlobEncoder::SyncHead(ui64& startOffset, ui64& endOffset)
 
 void TPartitionBlobEncoder::SyncHeadFastWrite(ui64& startOffset, ui64& endOffset)
 {
+    Y_ABORT_UNLESS(ForFastWrite);
     Y_ABORT_UNLESS(Head.PackedSize == 0,
                    "Head.PackedSize=%" PRIu32, Head.PackedSize);
 
@@ -542,5 +576,69 @@ std::pair<TKey, ui32> TPartitionBlobEncoder::Compact(const TKey& key, bool headC
     Y_ABORT_UNLESS(res.first.GetOffset() < key.GetOffset() || res.first.GetOffset() == key.GetOffset() && res.first.GetPartNo() <= key.GetPartNo());
     return res;
 }
+
+//void TPartitionBlobEncoder::Dump() const
+//{
+//    auto dumpCompactedKeys = [this](const std::deque<std::pair<TKey, ui32>>& keys, const char* prefix) {
+//        Y_UNUSED(this);
+//        Y_UNUSED(prefix);
+//        for (size_t i = 0; i < keys.size(); ++i) {
+//            DBGTRACE_LOG(prefix << "[" << i << "]=" << keys[i].first.ToString() << " (" << keys[i].second << ")");
+//        }
+//    };
+//    auto dumpKeys = [this](const std::deque<TDataKey>& keys, const char* prefix) {
+//        Y_UNUSED(this);
+//        Y_UNUSED(prefix);
+//        if (keys.size() > 10) {
+//            auto dumpSubkeys = [this](const std::deque<TDataKey>& keys, size_t begin, size_t end, const char* prefix) {
+//                Y_UNUSED(this);
+//                Y_UNUSED(keys);
+//                Y_UNUSED(prefix);
+//                for (size_t i = begin; i < end; ++i) {
+//                    DBGTRACE_LOG(prefix << "[" << i << "]=" << keys[i].Key.ToString() <<
+//                                 ", Size=" << keys[i].Size << ", CumulativeSize=" << keys[i].CumulativeSize);
+//                }
+//            };
+//            dumpSubkeys(keys, 0, 3, prefix);
+//            DBGTRACE_LOG("...");
+//            dumpSubkeys(keys, keys.size() - 3, keys.size(), prefix);
+//            return;
+//        }
+//        for (size_t i = 0; i < keys.size(); ++i) {
+//            DBGTRACE_LOG(prefix << "[" << i << "]=" << keys[i].Key.ToString() <<
+//                         ", Size=" << keys[i].Size << ", CumulativeSize=" << keys[i].CumulativeSize);
+//        }
+//    };
+//    auto dumpHead = [this](const THead& head, const char* prefix) {
+//        Y_UNUSED(this);
+//        Y_UNUSED(head);
+//        Y_UNUSED(prefix);
+//        DBGTRACE_LOG(prefix <<
+//                     ": Offset=" << head.Offset << ", PartNo=" << head.PartNo <<
+//                     ", PackedSize=" << head.PackedSize <<
+//                     ", Batches.size=" << head.GetBatches().size());
+//    };
+//    auto dumpDataKeysHead = [this](const TVector<TKeyLevel>& levels, const char* prefix) {
+//        Y_UNUSED(this);
+//        Y_UNUSED(prefix);
+//        for (size_t i = 0; i < levels.size(); ++i) {
+//            const auto& level = levels[i];
+//            DBGTRACE_LOG(prefix << "[" << i << "] " << level.Sum() << " / " << level.Border());
+//            for (ui32 j = 0; j < level.KeysCount(); ++j) {
+//                DBGTRACE_LOG("    [" << j << "] " << level.GetKey(j).ToString() << " (" << level.GetSize(j) << ")");
+//            }
+//        }
+//    };
+//
+//    DBGTRACE_LOG("StartOffset=" << StartOffset << ", EndOffset=" << EndOffset);
+//    dumpCompactedKeys(CompactedKeys, "CompactedKeys");
+//    DBGTRACE_LOG("BodySize=" << BodySize);
+//    dumpKeys(DataKeysBody, "Body");
+//    dumpKeys(HeadKeys, "Head");
+//    dumpHead(Head, "Head");
+//    dumpDataKeysHead(DataKeysHead, "Levels");
+//    dumpHead(NewHead, "NewHead");
+//    DBGTRACE_LOG("NewHeadKey=" << NewHeadKey.Key.ToString() << " (" << NewHeadKey.Size << ")");
+//}
 
 }

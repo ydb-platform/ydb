@@ -22,6 +22,7 @@
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
+//#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -404,10 +405,10 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     }
 
     BlobEncoder.SyncDataKeysBody(ctx.Now(),
-                              [this](const TString& key){ return MakeBlobKeyToken(key); },
-                              BlobEncoder.StartOffset,
-                              GapOffsets,
-                              GapSize);
+                                 [this](const TString& key){ return MakeBlobKeyToken(key); },
+                                 BlobEncoder.StartOffset,
+                                 GapOffsets,
+                                 GapSize);
 
     BlobEncoder.SyncHeadFastWrite(BlobEncoder.StartOffset, BlobEncoder.EndOffset);
 
@@ -1048,10 +1049,13 @@ void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFor
                  " old key " << x.OldKey.ToString() << " new key " << x.NewKey.ToString() <<
                  " size " << x.Size << " WTime " << ctx.Now().MilliSeconds());
 
+        //DBGTRACE_LOG("rename key " << x.OldKey.ToString() << " to " << x.NewKey.ToString() << " (" << x.Size << ")");
         zone.CompactedKeys.emplace_back(x.NewKey, x.Size);
     }
 
     if (!formedBlobs.empty()) {
+        //DBGTRACE_LOG("offset=" << zone.PartitionedBlob.GetOffset() << ", partno=" << zone.PartitionedBlob.GetHeadPartNo());
+
         parameters.HeadCleared = true;
 
         // zone.ResetNewHead ???
@@ -1565,7 +1569,7 @@ void TPartition::BeginHandleRequests(TEvKeyValue::TEvRequest* request, const TAc
     TInstant now = ctx.Now();
     WriteCycleStartTime = now;
 
-    HaveData = false;
+    BlobEncoder.HaveData = false;
     HaveCheckDisk = false;
 
     if (!DiskIsFull) {
@@ -1579,7 +1583,7 @@ void TPartition::BeginHandleRequests(TEvKeyValue::TEvRequest* request, const TAc
 void TPartition::EndHandleRequests(TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
 {
     ProcessReserveRequests(ctx);
-    if (!HaveData && !HaveDrop && !HaveCheckDisk) { //no data writed/deleted
+    if (!BlobEncoder.HaveData && !HaveDrop && !HaveCheckDisk) { //no data writed/deleted
         return;
     }
 
@@ -1609,13 +1613,13 @@ void TPartition::EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActor
 
     if (BlobEncoder.NewHead.PackedSize == 0) { //nothing added to head - just compaction or tmp part blobs writed
         if (!SourceIdBatch->HasModifications()) {
-            HaveData = request->Record.CmdWriteSize() > 0
+            BlobEncoder.HaveData = request->Record.CmdWriteSize() > 0
                 || request->Record.CmdRenameSize() > 0
                 || request->Record.CmdDeleteRangeSize() > 0;
             return;
         } else {
             SourceIdBatch->FillRequest(request);
-            HaveData = true;
+            BlobEncoder.HaveData = true;
             return;
         }
     }
@@ -1633,7 +1637,7 @@ void TPartition::EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActor
     );
     AddNewFastWriteBlob(res, request, ctx);
 
-    HaveData = true;
+    BlobEncoder.HaveData = true;
 }
 
 void TPartition::BeginAppendHeadWithNewWrites(const TActorContext& ctx)

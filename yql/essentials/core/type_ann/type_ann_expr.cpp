@@ -206,39 +206,21 @@ private:
         auto input = start;
         for (size_t transformCount = 0; true; ++transformCount) {
             TIssueScopeGuard issueScope(ctx.IssueManager, [this, input, &ctx]() -> TIssuePtr {
+                if (!CurrentFunctions.empty() && CurrentFunctions.top().second) {
+                    return nullptr;
+                }
+
                 TStringBuilder str;
                 str << "At ";
                 switch (input->Type()) {
                 case TExprNode::Callable:
-                    if (!CurrentFunctions.empty() && CurrentFunctions.top().second) {
-                        return nullptr;
-                    }
-
-                    if (!CurrentFunctions.empty()) {
-                        CurrentFunctions.top().second = true;
-                    }
-
                     str << "function: " << NormalizeCallableName(input->Content());
                     break;
                 case TExprNode::List:
-                    if (CurrentFunctions.empty()) {
-                        str << "tuple";
-                    } else if (!CurrentFunctions.top().second) {
-                        CurrentFunctions.top().second = true;
-                        str << "function: " << CurrentFunctions.top().first;
-                    } else {
-                        return nullptr;
-                    }
+                    str << "tuple";
                     break;
                 case TExprNode::Lambda:
-                    if (CurrentFunctions.empty()) {
-                        str << "lambda";
-                    } else if (!CurrentFunctions.top().second) {
-                        CurrentFunctions.top().second = true;
-                        str << "function: " << CurrentFunctions.top().first;
-                    } else {
-                        return nullptr;
-                    }
+                    str << "lambda";
                     break;
                 default:
                     str << "unknown";

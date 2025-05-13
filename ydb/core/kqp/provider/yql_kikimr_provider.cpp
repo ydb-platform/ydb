@@ -430,7 +430,7 @@ void TKikimrTableDescription::ToYson(NYson::TYsonWriter& writer) const {
 
 bool TKikimrKey::Extract(const TExprNode& key) {
     if (key.IsCallable("MrTableConcat")) {
-        Ctx.AddError(TIssue(Ctx.GetPosition(key.Pos()), "CONCAT is not supported on Kikimr clusters."));
+        Ctx.AddError(TIssue(Ctx.GetPosition(key.Pos()), "CONCAT is not supported on YDB clusters."));
         return false;
     }
 
@@ -445,7 +445,7 @@ bool TKikimrKey::Extract(const TExprNode& key) {
         const TExprNode* nameNode = key.Child(0)->Child(1);
 
         if (nameNode->IsCallable("MrTableRange") || nameNode->IsCallable("MrTableRangeStrict")) {
-            Ctx.AddError(TIssue(Ctx.GetPosition(key.Pos()), "RANGE is not supported on Kikimr clusters."));
+            Ctx.AddError(TIssue(Ctx.GetPosition(key.Pos()), "RANGE is not supported on YDB clusters."));
             return false;
         }
 

@@ -681,7 +681,7 @@ public:
                 RuntimeError(
                     NYql::NDqProto::StatusIds::OVERLOADED,
                     NYql::TIssuesIds::KIKIMR_OVERLOADED,
-                    TStringBuilder() << "Kikimr cluster or one of its subsystems is overloaded."
+                    TStringBuilder() << "YDB cluster or one of its subsystems is overloaded."
                         << " Tablet " << ev->Get()->Record.GetOrigin() << " is overloaded. Table `"
                         << TablePath << "`.",
                     getIssues());
@@ -1064,7 +1064,7 @@ public:
                 NYql::NDqProto::StatusIds::UNAVAILABLE,
                 NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
                 TStringBuilder()
-                    << "Kikimr cluster or one of its subsystems was unavailable. "
+                    << "YDB cluster or one of its subsystems was unavailable. "
                     << "Error writing to table `" << TablePath << "`"
                     << ": can't deliver message to tablet " << ev->Get()->TabletId << ".");
             return;
@@ -2329,7 +2329,7 @@ public:
                 ReplyErrorAndDie(
                     NYql::NDqProto::StatusIds::UNAVAILABLE,
                     NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-                    TStringBuilder() << "Kikimr cluster or one of its subsystems was unavailable. Failed to deviler message to coordinator.",
+                    TStringBuilder() << "YDB cluster or one of its subsystems was unavailable. Failed to deviler message to coordinator.",
                     {});
                 return;
             }
@@ -2358,7 +2358,7 @@ public:
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::UNAVAILABLE,
                 NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
-                TStringBuilder() << "Kikimr cluster or one of its subsystems was unavailable. Failed to deviler message.",
+                TStringBuilder() << "YDB cluster or one of its subsystems was unavailable. Failed to deviler message.",
                 {});
             return;
         }
@@ -2548,7 +2548,7 @@ public:
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::OVERLOADED,
                 NYql::TIssuesIds::KIKIMR_OVERLOADED,
-                TStringBuilder() << "Kikimr cluster or one of its subsystems is overloaded."
+                TStringBuilder() << "YDB cluster or one of its subsystems is overloaded."
                     << " Tablet " << ev->Get()->Record.GetOrigin() << " is overloaded."
                     << " " << getPathes() << ".",
                 getIssues());

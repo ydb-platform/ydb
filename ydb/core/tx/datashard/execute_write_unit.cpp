@@ -175,15 +175,8 @@ public:
         const TSerializedCellMatrix& matrix = validatedOperation.GetMatrix();
         const auto operationType = validatedOperation.GetOperationType();
 
-<<<<<<< HEAD
-        auto fillOps = [&](ui32 rowIdx) {
-            ops.clear();
-            Y_ABORT_UNLESS(matrix.GetColCount() >= userTable.KeyColumnIds.size());
-            ops.reserve(matrix.GetColCount() - userTable.KeyColumnIds.size());
-=======
         TSmallVec<TRawTypeValue> key;
         TSmallVec<NTable::TUpdateOp> ops;
->>>>>>> 27683edc32f (Precharge in EvWrite (#17721))
 
         // Main update cycle
 

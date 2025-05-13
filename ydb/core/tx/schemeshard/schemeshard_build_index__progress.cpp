@@ -1624,7 +1624,7 @@ public:
                 }
                 for (; from < sample.size(); ++from) {
                     db.Table<Schema::KMeansTreeSample>().Key(buildInfo.Id, from).Update(
-                        NIceDb::TUpdate<Schema::KMeansTreeSample::Row>(sample[from].P),
+                        NIceDb::TUpdate<Schema::KMeansTreeSample::Probability>(sample[from].P),
                         NIceDb::TUpdate<Schema::KMeansTreeSample::Data>(sample[from].Row)
                     );
                 }

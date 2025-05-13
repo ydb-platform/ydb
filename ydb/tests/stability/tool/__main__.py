@@ -445,6 +445,65 @@ class StabilityCluster:
                 else:
                     print(f"{bcolors.OKGREEN}All screen sessions cleaned up successfully.{bcolors.ENDC}")
 
+    def stop_workload(self, workload_name):
+        """Остановка конкретной рабочей нагрузки на всех узлах"""
+        if workload_name not in DICT_OF_PROCESSES:
+            print(f"{bcolors.FAIL}Ошибка: Неизвестный workload '{workload_name}'{bcolors.ENDC}")
+            return
+        
+        print(f"{bcolors.BOLD}{bcolors.HEADER}=== Остановка {workload_name} на всех nodes ==={bcolors.ENDC}")
+        
+        for node in self.kikimr_cluster.nodes.values():
+            node_host = node.host.split(':')[0]
+            print(f"{bcolors.BOLD}Останавливаем {workload_name} на {node_host}:{bcolors.ENDC}")
+            
+            # Находим все связанные процессы с этой рабочей нагрузкой
+            node.ssh_command(
+                f"pkill -9 -f '/tmp/{workload_name}_wrapper.sh'",
+                raise_on_error=False
+            )
+            
+            # Остановка всех screen-сессий с указанным именем, включая мертвые (Dead)
+            node.ssh_command(
+                f"screen -ls | grep -E '(Detached|Dead).*{workload_name}' | cut -f1 -d'.' | xargs -r kill -9",
+                raise_on_error=False
+            )
+            
+            # Пытаемся удалить мертвые сессии напрямую
+            node.ssh_command(
+                "screen -wipe",
+                raise_on_error=False
+            )
+            
+            # Убиваем процессы фактической рабочей нагрузки, нужный шаблон берем из конфигурации
+            status_cmd = DICT_OF_PROCESSES[workload_name]['status']
+            grep_pattern = next((line for line in status_cmd.split('\n') if 'grep' in line and '-v grep' not in line), '')
+            if grep_pattern:
+                # Извлекаем шаблон grep из команды проверки статуса
+                grep_parts = grep_pattern.split('grep')
+                if len(grep_parts) > 1:
+                    pattern = grep_parts[1].strip().replace('"', '').replace("'", "").split('|')[0]
+                    node.ssh_command(
+                        f"pkill -9 -f '{pattern}'",
+                        raise_on_error=False
+                    )
+            
+            # Дополнительная проверка по имени нагрузки
+            node.ssh_command(
+                f"ps aux | grep -E '{workload_name}|{workload_name.replace('_', '.*')}' | grep -v grep | awk '{{print $2}}' | xargs -r kill -9",
+                raise_on_error=False
+            )
+            
+            # Проверка результата
+            result = node.ssh_command(DICT_OF_PROCESSES[workload_name]['status'], raise_on_error=False)
+            status = result.decode('utf-8').replace('\n', '')
+            if status == 'Stopped':
+                print(f"{bcolors.OKGREEN}Workload {workload_name} успешно остановлена на {node_host}{bcolors.ENDC}")
+            else:
+                print(f"{bcolors.FAIL}Не удалось остановить {workload_name} на {node_host}, статус: {status}{bcolors.ENDC}")
+                
+        print(f"{bcolors.OKGREEN}Завершено выполнение остановки {workload_name} на всех узлах{bcolors.ENDC}")
+
     def stop_nemesis(self):
         for node in self.kikimr_cluster.nodes.values():
             node.ssh_command(DICT_OF_SERVICES['nemesis']['stop_command'], raise_on_error=False)
@@ -946,68 +1005,9 @@ def main():
             stability_cluster.get_state()
         if action == "stop_workload":
             workload_name = args.name
-            if DICT_OF_PROCESSES.get(workload_name):
-                for node_id, node in enumerate(stability_cluster.kikimr_cluster.nodes.values()):
-                    # Находим все связанные процессы с этой рабочей нагрузкой
-                    node.ssh_command(
-                        f"pkill -9 -f '/tmp/{workload_name}_wrapper.sh'",
-                        raise_on_error=False
-                    )
-                    
-                    # Остановка всех screen-сессий с указанным именем, включая мертвые (Dead)
-                    print(f"{bcolors.OKCYAN}Stopping screen sessions for {workload_name}...{bcolors.ENDC}")
-                    
-                    # Сначала получаем список всех screen-сессий
-                    screen_result = node.ssh_command('screen -ls || true', raise_on_error=False)
-                    if screen_result:
-                        screen_output = screen_result.decode('utf-8')
-                        print(f"{bcolors.OKCYAN}Debug: Screen sessions before cleanup:{bcolors.ENDC}")
-                        for line in screen_output.splitlines():
-                            print(f"{bcolors.OKCYAN}  {line}{bcolors.ENDC}")
-                        
-                        # Находим все живые и мертвые сессии
-                        # Используем более надежный поиск по имени
-                        node.ssh_command(
-                            f"screen -ls | grep -E '(Detached|Dead).*{workload_name}' | cut -f1 -d'.' | xargs -r kill -9",
-                            raise_on_error=False
-                        )
-                        
-                        # Пытаемся удалить мертвые сессии напрямую
-                        node.ssh_command(
-                            f"screen -wipe",
-                            raise_on_error=False
-                        )
-                    
-                    # Убиваем процессы фактической рабочей нагрузки, нужный шаблон берем из конфигурации
-                    status_cmd = DICT_OF_PROCESSES[workload_name]['status']
-                    grep_pattern = next((line for line in status_cmd.split('\n') if 'grep' in line and '-v grep' not in line), '')
-                    if grep_pattern:
-                        # Извлекаем шаблон grep из команды проверки статуса
-                        grep_parts = grep_pattern.split('grep')
-                        if len(grep_parts) > 1:
-                            pattern = grep_parts[1].strip().replace('"', '').replace("'", "").split('|')[0]
-                            node.ssh_command(
-                                f"pkill -9 -f '{pattern}'",
-                                raise_on_error=False
-                            )
-                    
-                    # Дополнительная проверка по имени нагрузки
-                    node.ssh_command(
-                        f"ps aux | grep -E '{workload_name}|{workload_name.replace('_', '.*')}' | grep -v grep | awk '{{print $2}}' | xargs -r kill -9",
-                        raise_on_error=False
-                    )
-                    
-                    # Проверим, что все screen-сессии удалены
-                    screen_after = node.ssh_command('screen -ls || true', raise_on_error=False)
-                    if screen_after:
-                        screen_after_output = screen_after.decode('utf-8')
-                        print(f"{bcolors.OKCYAN}Debug: Screen sessions after cleanup:{bcolors.ENDC}")
-                        for line in screen_after_output.splitlines():
-                            print(f"{bcolors.OKCYAN}  {line}{bcolors.ENDC}")
-            else:
-                print(f"Unknown workload {workload_name}")
+            stability_cluster.stop_workload(workload_name)
             stability_cluster.get_state()
-        if "clean_workload" in action:
+        if action == "clean_workload":
             workload_name = args.name
             if DICT_OF_PROCESSES.get(workload_name):
                 store_type_list = []
@@ -1100,6 +1100,9 @@ def main():
             stability_cluster.get_state()
         if action == "start_workload_oltp_workload":
             first_node = stability_cluster.kikimr_cluster.nodes[1]
+            stability_cluster.stop_workload('oltp_workload')
+            
+            print(f"{bcolors.BOLD}{bcolors.HEADER}=== Запуск OLTP workload ==={bcolors.ENDC}")
             stability_cluster._clean_and_start_workload(
                 first_node,
                 'oltp_workload', 

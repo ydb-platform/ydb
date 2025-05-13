@@ -505,10 +505,12 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
     YQL_ENSURE(lookupType);
 
     const TStructExprType* structType = nullptr;
+    TMaybe<TString> streamLookupIndexName;
     if (isStreamLookup) {
         TCoNameValueTupleList settingsNode{node->ChildPtr(TKqlStreamLookupTable::Match(node.Get()) ?
             TKqlStreamLookupTable::idx_Settings : TKqlStreamLookupIndex::idx_Settings)};
         auto settings = TKqpStreamLookupSettings::Parse(settingsNode);
+        streamLookupIndexName = settings.IndexName;
         if (settings.Strategy == EStreamLookupStrategyType::LookupJoinRows
             || settings.Strategy == EStreamLookupStrategyType::LookupSemiJoinRows) {
 
@@ -571,6 +573,12 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
             return TStatus::Error;
         }
 
+    } else if (streamLookupIndexName) {
+        auto indexMeta = table.second->Metadata->GetIndexMetadata(*streamLookupIndexName).first;
+
+        if (!CalcKeyColumnsCount(ctx, node->Pos(), *structType, *table.second, *indexMeta, keyColumnsCount)) {
+            return TStatus::Error;
+        }
     } else {
         if (!CalcKeyColumnsCount(ctx, node->Pos(), *structType, *table.second, *table.second->Metadata, keyColumnsCount)) {
             return TStatus::Error;
@@ -1771,9 +1779,22 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
         const TStructExprType* joinKeys = joinKeyType->Cast<TStructExprType>();
         const TStructExprType* leftRowType = inputTupleType->GetItems()[1]->Cast<TStructExprType>();
 
-        for (const auto& inputKey : joinKeys->GetItems()) {
-            if (!table.second->GetKeyColumnIndex(TString(inputKey->GetName()))) {
+        if (settings.IndexName) {
+            auto meta = table.second->Metadata->GetIndexMetadata(*settings.IndexName).first;
+            if (!meta) {
                 return TStatus::Error;
+            }
+
+            for (size_t keyColumnIndex = 0; keyColumnIndex < joinKeys->GetItems().size(); ++keyColumnIndex) {
+                if (meta->KeyColumnNames[keyColumnIndex] != joinKeys->GetItems()[keyColumnIndex]->GetName()) {
+                    return TStatus::Error;
+                }
+            }
+        } else {
+            for (const auto& inputKey : joinKeys->GetItems()) {
+                if (!table.second->GetKeyColumnIndex(TString(inputKey->GetName()))) {
+                    return TStatus::Error;
+                }
             }
         }
 

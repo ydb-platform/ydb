@@ -305,6 +305,9 @@ message TKqpPhyCnStreamLookup {
     bool AllowNullKeys = 8;
     uint32 AllowNullKeysPrefixSize = 9;
     bool IsTableImmutable = 10;
+    TKqpPhyTableId Index = 11;
+    repeated string IndexKeyColumns = 12;
+    repeated string IndexColumns = 13;
 }
 
 message TKqpPhyCnSequencer {

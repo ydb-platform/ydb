@@ -28,18 +28,7 @@ target_compile_options(restricted-aws-aws-c-s3 PRIVATE
   -DAWS_USE_EPOLL
   -DCJSON_HIDE_SYMBOLS
   -DHAVE_SYSCONF
-  -DS2N_CLONE_SUPPORTED
-  -DS2N_CPUID_AVAILABLE
-  -DS2N_FALL_THROUGH_SUPPORTED
-  -DS2N_FEATURES_AVAILABLE
-  -DS2N_KYBER512R3_AVX2_BMI2
-  -DS2N_LIBCRYPTO_SUPPORTS_EVP_MD5_SHA1_HASH
-  -DS2N_LIBCRYPTO_SUPPORTS_EVP_MD_CTX_SET_PKEY_CTX
-  -DS2N_LIBCRYPTO_SUPPORTS_EVP_RC4
-  -DS2N_MADVISE_SUPPORTED
-  -DS2N_PLATFORM_SUPPORTS_KTLS
-  -DS2N_STACKTRACE
-  -DS2N___RESTRICT__SUPPORTED
+  -DINTEL_NO_ITTNOTIFY_API
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 
@@ -61,6 +50,7 @@ target_sources(restricted-aws-aws-c-s3 PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_auto_ranged_get.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_auto_ranged_put.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_buffer_pool.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_checksum_stream.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_checksums.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_chunk_stream.c
@@ -72,8 +62,11 @@ target_sources(restricted-aws-aws-c-s3 PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_list_parts.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_meta_request.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_paginator.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_parallel_input_stream.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_platform_info.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_request.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_request_messages.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3_util.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-s3/source/s3express_credentials_provider.c
 )
 

@@ -19,6 +19,7 @@ target_compile_options(restricted-aws-aws-c-cal PRIVATE
   -DAWS_CAL_USE_IMPORT_EXPORT
   -DAWS_COMMON_USE_IMPORT_EXPORT
   -DHAVE_SYSCONF
+  -DINTEL_NO_ITTNOTIFY_API
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 
@@ -42,6 +43,7 @@ target_sources(restricted-aws-aws-c-cal PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/ecc.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/hash.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/hmac.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/rsa.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/symmetric_cipher.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/darwin/commoncrypto_aes.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/darwin/commoncrypto_hmac.c
@@ -50,6 +52,7 @@ target_sources(restricted-aws-aws-c-cal PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/darwin/commoncrypto_sha1.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/darwin/commoncrypto_sha256.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/darwin/securityframework_ecc.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/darwin/securityframework_rsa.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/darwin/common_cryptor_spi.h
 )
 

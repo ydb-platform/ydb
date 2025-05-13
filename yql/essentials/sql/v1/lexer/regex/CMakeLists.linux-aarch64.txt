@@ -36,6 +36,7 @@ target_link_libraries(v1-lexer-regex PUBLIC
 )
 
 target_sources(v1-lexer-regex PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/lexer/regex/generic.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/lexer/regex/lexer.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/lexer/regex/regex.cpp
 )

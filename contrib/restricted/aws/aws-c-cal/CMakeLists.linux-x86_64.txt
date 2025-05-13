@@ -19,6 +19,7 @@ target_compile_options(restricted-aws-aws-c-cal PRIVATE
   -DAWS_CAL_USE_IMPORT_EXPORT
   -DAWS_COMMON_USE_IMPORT_EXPORT
   -DHAVE_SYSCONF
+  -DINTEL_NO_ITTNOTIFY_API
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 
@@ -38,9 +39,11 @@ target_sources(restricted-aws-aws-c-cal PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/ecc.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/hash.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/hmac.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/rsa.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/symmetric_cipher.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/openssl_aes.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/openssl_platform_init.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/openssl_rsa.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/opensslcrypto_ecc.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/opensslcrypto_hash.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-cal/source/unix/opensslcrypto_hmac.c

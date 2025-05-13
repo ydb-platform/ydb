@@ -21,9 +21,8 @@ target_compile_options(restricted-aws-aws-c-common PRIVATE
   -DAWS_PTHREAD_SETNAME_TAKES_2ARGS
   -DCJSON_HIDE_SYMBOLS
   -DHAVE_SYSCONF
+  -DINTEL_NO_ITTNOTIFY_API
   -DAWS_AFFINITY_METHOD=AWS_AFFINITY_METHOD_NONE
-  -DHAVE_MM256_EXTRACT_EPI64
-  -DHAVE_AVX2_INTRINSICS
   -DUSE_SIMD_ENCODING
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
@@ -57,9 +56,11 @@ target_sources(restricted-aws-aws-c-common PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/fifo_cache.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/file.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/hash_table.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/host_utils.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/json.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/lifo_cache.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/linked_hash_table.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/linux/system_info.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/log_channel.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/log_formatter.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/log_writer.c
@@ -74,6 +75,7 @@ target_sources(restricted-aws-aws-c-common PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/ring_buffer.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/statistics.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/string.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/system_info.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/task_scheduler.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/thread_scheduler.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/thread_shared.c
@@ -84,6 +86,7 @@ target_sources(restricted-aws-aws-c-common PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/arch/intel/cpuid.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/clock.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/condition_variable.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/cross_process_lock.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/device_random.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/environment.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/file.c
@@ -91,6 +94,7 @@ target_sources(restricted-aws-aws-c-common PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/process.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/rw_lock.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/system_info.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/system_resource_utils.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/thread.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/posix/time.c
 )

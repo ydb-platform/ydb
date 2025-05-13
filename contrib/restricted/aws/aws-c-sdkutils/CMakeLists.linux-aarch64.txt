@@ -34,6 +34,7 @@ target_link_libraries(restricted-aws-aws-c-sdkutils PUBLIC
 
 target_sources(restricted-aws-aws-c-sdkutils PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/aws_profile.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/endpoints_regex.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/endpoints_rule_engine.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/endpoints_ruleset.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-sdkutils/source/endpoints_standard_lib.c

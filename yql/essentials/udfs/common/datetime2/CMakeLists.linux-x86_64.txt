@@ -31,7 +31,6 @@ target_link_libraries(datetime2_udf INTERFACE
   public-udf-arrow
   yql-essentials-minikql
   essentials-minikql-datetime
-  public-udf-tz
 )
 
 
@@ -55,7 +54,6 @@ target_link_libraries(datetime2_udf.global PUBLIC
   public-udf-arrow
   yql-essentials-minikql
   essentials-minikql-datetime
-  public-udf-tz
 )
 
 target_sources(datetime2_udf.global PRIVATE

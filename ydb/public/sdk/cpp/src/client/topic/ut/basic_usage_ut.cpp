@@ -175,7 +175,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto readSettings = TReadSessionSettings()
                 .ConsumerName(TEST_CONSUMER)
                 .AppendTopics(TEST_TOPIC)
-                .DirectRead(EnableDirectRead);
+                // .DirectRead(EnableDirectRead)
+                ;
             auto readSession = client.CreateReadSession(readSettings);
 
             auto event = readSession->GetEvent(true);
@@ -214,7 +215,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .MaxMemoryUsageBytes(1_MB)
             .DecompressionExecutor(decompressor)
             .AppendTopics(topic)
-            .DirectRead(EnableDirectRead);
+            // .DirectRead(EnableDirectRead)
+            ;
 
         TWriteSessionSettings writeSettings;
         writeSettings
@@ -244,7 +246,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto readSettings = TReadSessionSettings()
             .ConsumerName(TEST_CONSUMER)
             .AppendTopics(TEST_TOPIC)
-            .DirectRead(EnableDirectRead);
+            // .DirectRead(EnableDirectRead)
+            ;
         auto readSession = client.CreateReadSession(readSettings);
 
         auto event = readSession->GetEvent(true);
@@ -313,7 +316,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .ConsumerName(setup->GetTestConsumer())
             .MaxMemoryUsageBytes(1_MB)
             .AppendTopics(setup->GetTestTopic())
-            .DirectRead(EnableDirectRead);
+            // .DirectRead(EnableDirectRead)
+            ;
 
         Cerr << "Session was created" << Endl;
 
@@ -369,7 +373,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .MaxMemoryUsageBytes(1_MB)
             .DecompressionExecutor(decompressor)
             .AppendTopics(TEST_TOPIC)
-            .DirectRead(EnableDirectRead);
+            // .DirectRead(EnableDirectRead)
+            ;
 
         TWriteSessionSettings writeSettings;
         writeSettings
@@ -412,7 +417,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .MaxMemoryUsageBytes(1_MB)
             .AppendTopics(TEST_TOPIC)
             .DecompressionExecutor(stepByStepExecutor)
-            .DirectRead(EnableDirectRead);
+            // .DirectRead(EnableDirectRead)
+            ;
 
         auto f = std::async(std::launch::async,
                             [readSettings, writeSettings, &topicClient,
@@ -527,7 +533,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .ConsumerName(TEST_CONSUMER)
             .MaxMemoryUsageBytes(1_MB)
             .AppendTopics(TEST_TOPIC)
-            .DirectRead(EnableDirectRead);
+            // .DirectRead(EnableDirectRead)
+            ;
 
         readSettings.EventHandlers_
             .HandlersExecutor(stepByStepExecutor);
@@ -659,7 +666,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             .Decompress(false)
             .RetryPolicy(NYdb::NTopic::IRetryPolicy::GetNoRetryPolicy())
             .AppendTopics(setup->GetTestTopic())
-            .DirectRead(EnableDirectRead);
+            // .DirectRead(EnableDirectRead)
+            ;
 
         readSettings.EventHandlers_.SimpleDataHandlers(
             []
@@ -706,7 +714,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto settings = NTopic::TReadSessionSettings()
                 .ConsumerName(TEST_CONSUMER)
                 .AppendTopics(std::string(setup.GetTopicPath()))
-                .DirectRead(EnableDirectRead);
+                // .DirectRead(EnableDirectRead)
+                ;
 
             auto client = setup.MakeClient();
             auto reader = client.CreateReadSession(settings);
@@ -850,7 +859,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto readSettings = TReadSessionSettings()
             .ConsumerName(TEST_CONSUMER)
             .AppendTopics(TEST_TOPIC)
-            .DirectRead(EnableDirectRead);
+            // .DirectRead(EnableDirectRead)
+            ;
         std::shared_ptr<IReadSession> readSession = client.CreateReadSession(readSettings);
         ui32 readMessageCount = 0;
         while (readMessageCount < 4) {

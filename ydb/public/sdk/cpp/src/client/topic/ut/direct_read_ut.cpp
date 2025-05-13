@@ -712,7 +712,7 @@ public:
 
 TDirectReadSessionImplTestSetup::TDirectReadSessionImplTestSetup() {
     ReadSessionSettings
-        .DirectRead(true)
+        // .DirectRead(true)
         .AppendTopics({"TestTopic"})
         .ConsumerName("TestConsumer")
         .RetryPolicy(NYdb::NTopic::IRetryPolicy::GetFixedIntervalPolicy(TDuration::MilliSeconds(10)))
@@ -722,7 +722,7 @@ TDirectReadSessionImplTestSetup::TDirectReadSessionImplTestSetup() {
 }
 
 TDirectReadSessionImplTestSetup::~TDirectReadSessionImplTestSetup() noexcept(false) {
-    if (!std::uncaught_exception()) { // Exiting from test successfully. Check additional expectations.
+    if (!std::uncaught_exceptions()) { // Exiting from test successfully. Check additional expectations.
         MockReadProcessorFactory->Wait();
         MockReadProcessor->Wait();
 
@@ -812,12 +812,12 @@ TSingleClusterReadSessionImpl<false>* TDirectReadSessionImplTestSetup::GetContro
             "client-session-id-1",
             "",
             Log,
-            TSingleClusterReadSessionImpl<false>::TScheduleCallbackFunc {},
             MockReadProcessorFactory,
             GetEventsQueue(),
             FakeContext,
             1,
             1,
+            TSingleClusterReadSessionImpl<false>::TScheduleCallbackFunc {},
             MockDirectReadProcessorFactory);
         SingleClusterReadSession = SingleClusterReadSessionContextPtr->TryGet();
     }
@@ -882,7 +882,8 @@ Y_UNIT_TEST_SUITE_F(DirectReadWithClient, TDirectReadTestsFixture) {
             auto settings = TReadSessionSettings()
                 .ConsumerName(TEST_CONSUMER)
                 .AppendTopics(TEST_TOPIC)
-                .DirectRead(true);
+                // .DirectRead(true)
+                ;
             auto reader = client.CreateReadSession(settings);
 
             {
@@ -964,7 +965,8 @@ Y_UNIT_TEST_SUITE_F(DirectReadWithClient, TDirectReadTestsFixture) {
                 .ConsumerName(TEST_CONSUMER)
                 .AppendTopics(TEST_TOPIC)
                 .MaxMemoryUsageBytes(1_MB)
-                .DirectRead(GetEnv("DIRECT", "0") == "1");
+                // .DirectRead(GetEnv("DIRECT", "0") == "1")
+                ;
 
             std::shared_ptr<IReadSession> reader;
 
@@ -2047,7 +2049,8 @@ Y_UNIT_TEST_SUITE(DirectReadWithServer) {
         auto readerSettings = TReadSessionSettings()
             .ConsumerName(TEST_CONSUMER)
             .AppendTopics(TEST_TOPIC)
-            .DirectRead(true);
+            // .DirectRead(true)
+            ;
 
         TIntrusivePtr<TPartitionSession> partitionSession;
 
@@ -2123,7 +2126,8 @@ Y_UNIT_TEST_SUITE(DirectReadWithServer) {
         auto readerSettings = TReadSessionSettings()
             .ConsumerName(TEST_CONSUMER)
             .AppendTopics(TEST_TOPIC)
-            .DirectRead(true);
+            // .DirectRead(true)
+            ;
 
         TIntrusivePtr<TPartitionSession> partitionSession;
 
@@ -2180,7 +2184,8 @@ Y_UNIT_TEST_SUITE(DirectReadWithServer) {
         auto settings = TReadSessionSettings()
             .AppendTopics(TTopicReadSettings("t1").AppendPartitionIds({0}))
             .ConsumerName("c1")
-            .DirectRead(true);
+            // .DirectRead(true)
+            ;
 
         settings.EventHandlers_
             .StartPartitionSessionHandler([](TReadSessionEvent::TStartPartitionSessionEvent& e) {

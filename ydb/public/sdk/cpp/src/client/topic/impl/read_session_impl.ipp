@@ -713,6 +713,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
     >;
 
     CookieMapping.RemoveMapping(GetPartitionStreamId(partitionStream));
+    PartitionStreams.erase(partitionStream->GetAssignId());
 
     bool pushRes = true;
     if constexpr (UseMigrationProtocol) {
@@ -720,7 +721,6 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
                                 TClosedEvent(partitionStream, TClosedEvent::EReason::DestroyConfirmedByUser),
                                 deferred);
     } else {
-        PartitionStreams.erase(partitionStream->GetAssignId());
         pushRes = EventsQueue->PushEvent(partitionStream,
                                 TClosedEvent(partitionStream, TClosedEvent::EReason::StopConfirmedByUser),
                                 deferred);
@@ -1002,6 +1002,23 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnReadDone(NYdbGrpc::T
 template <>
 template <>
 inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
+    Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::InitResponse&& msg,
+    TDeferredActions<true>& deferred) {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+    Y_UNUSED(deferred);
+
+    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Server session id: " << msg.session_id());
+
+    RetryState = nullptr;
+    ReadSessionId = msg.session_id();
+
+    // Successful init. Do nothing.
+    ContinueReadingDataImpl();
+}
+
+template <>
+template <>
+inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
     Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch&& msg,
     TDeferredActions<true>& deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
@@ -1238,24 +1255,6 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
 template <>
 template <>
 inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
-    Ydb::Topic::StreamReadMessage::InitResponse&& msg,
-    TDeferredActions<false>& deferred) {
-
-    Y_ABORT_UNLESS(Lock.IsLocked());
-    Y_UNUSED(deferred);
-
-    RetryState = nullptr;
-    ReadSessionId = msg.session_id();
-
-    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Server session id: " << msg.session_id());
-
-    // Successful init. Do nothing.
-    ContinueReadingDataImpl();
-}
-
-template <>
-template <>
-inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     Ydb::Topic::StreamReadMessage::ReadResponse&& msg,
     TDeferredActions<false>& deferred
 ) {
@@ -1471,15 +1470,14 @@ template <>
 template <>
 inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     Ydb::Topic::StreamReadMessage::InitResponse&& msg,
-    TDeferredActions<false>& deferred
+    TDeferredActions<false>&
 ) {
     Y_ABORT_UNLESS(Lock.IsLocked());
-    Y_UNUSED(deferred);
 
     RetryState = nullptr;
 
     ServerSessionId = msg.session_id();
-    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Server session id: " << ServerSessionId);
+    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Got InitResponse. ServerSessionId: " << ServerSessionId);
 
     if (IsDirectRead()) {
         Y_ABORT_UNLESS(!DirectReadSessionManager.Defined());
@@ -1553,15 +1551,31 @@ template <>
 template <>
 inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     Ydb::Topic::StreamReadMessage::UpdatePartitionSession&& msg,
-    TDeferredActions<false>& deferred) {
+    TDeferredActions<false>&
+) {
     Y_ABORT_UNLESS(Lock.IsLocked());
-    Y_UNUSED(deferred);
+    LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "UpdatePartitionSession " << msg.DebugString());
 
-    auto partitionStreamIt = PartitionStreams.find(msg.partition_session_id());
-    if (partitionStreamIt == PartitionStreams.end()) {
+    auto partitionSessionId = msg.partition_session_id();
+    auto it = PartitionStreams.find(partitionSessionId);
+    if (it == PartitionStreams.end()) {
+        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Wanted to update partition_session_id: " << partitionSessionId
+                                                 << ", but no such id was found");
         return;
     }
-    //TODO: update generation/nodeid info
+
+    Y_ABORT_UNLESS(it->second->GetAssignId() == static_cast<unsigned long>(partitionSessionId));
+
+    // TODO(qyryq) Do we need to store generation/nodeid info in TSingleClusterReadSessionImpl?
+    if (IsDirectRead()) {
+        Y_ABORT_UNLESS(DirectReadSessionManager.Defined());
+        it->second->SetLocation(msg.partition_location());
+        DirectReadSessionManager->UpdatePartitionSession(
+            partitionSessionId,
+            static_cast<TPartitionId>(it->second->GetPartitionId()),
+            msg.partition_location()
+        );
+    }
 }
 
 template <>
@@ -1598,8 +1612,6 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
             // This is the second case.
             StopPartitionSessionImpl(partitionStreamIt->second, true, deferred);
         }
-
-        AbortImpl();
 
         return;
     }

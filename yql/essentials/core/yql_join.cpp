@@ -21,6 +21,7 @@ namespace {
 
     struct TJoinState {
         bool Used = false;
+        bool IsMultiget = false;
     };
 
     IGraphTransformer::TStatus ParseJoinKeys(TExprNode& side, TVector<std::pair<TStringBuf, TStringBuf>>& keys,
@@ -197,6 +198,7 @@ namespace {
 
         std::optional<std::unordered_set<std::string_view>> leftHints, rightHints;
         bool hasJoinStrategyHint = false;
+        bool isMultiget = false;
         for (auto child : linkOptions->Children()) {
             if (!EnsureTupleMinSize(*child, 1, ctx)) {
                 return IGraphTransformer::TStatus::Error;
@@ -245,17 +247,25 @@ namespace {
                     for (ui32 i = 1; i + 1 < child->ChildrenSize(); i += 2) {
                         auto& name = *child->Child(i);
                         auto& value = *child->Child(i + 1);
+                        if (!EnsureAtom(value, ctx)) {
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                        if (name.IsAtom("MultiGet")) {
+                            if (!TryFromString(value.Content(), isMultiget)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(name.Pos()), TStringBuilder() <<
+                                            "streamlookup(" << name.Content() << "...): Expected bool, but got: " << value.Content()));
+                                return IGraphTransformer::TStatus::Error;
+                            }
+                            continue;
+                        }
                         if (!name.IsAtom({"TTL", "MaxCachedRows", "MaxDelayedRows"})) {
                             ctx.AddError(TIssue(ctx.GetPosition(name.Pos()), TStringBuilder() <<
                                         "streamlookup(): Unsupported option: " << name.Content()));
                             return IGraphTransformer::TStatus::Error;
                         }
-                        if (!EnsureAtom(value, ctx)) {
-                            return IGraphTransformer::TStatus::Error;
-                        }
                         if (!TryFromString<ui64>(value.Content())) {
                             ctx.AddError(TIssue(ctx.GetPosition(name.Pos()), TStringBuilder() <<
-                                        "streamlookup(): Expected integer, but got: " << value.Content()));
+                                        "streamlookup(" << name.Content() << "...): Expected integer, but got: " << value.Content()));
                             return IGraphTransformer::TStatus::Error;
                         }
                     }
@@ -325,6 +335,7 @@ namespace {
             }
 
             joinsStates[*labels.FindInputIndex(x.first)].Used = true;
+            joinsStates[*labels.FindInputIndex(x.first)].IsMultiget = isMultiget;
         }
 
         if (leftKeys.size() != rightKeys.size()) {
@@ -337,6 +348,19 @@ namespace {
         for (auto i = 0U; i < leftKeyTypes.size(); ++i) {
             auto leftKeyType = leftKeyTypes[i];
             auto rightKeyType = rightKeyTypes[i];
+            if (isMultiget) {
+                if (ETypeAnnotationKind::Optional == leftKeyType->GetKind()) {
+                    leftKeyType = leftKeyType->Cast<TOptionalExprType>()->GetItemType();
+                }
+                if (ETypeAnnotationKind::List != leftKeyType->GetKind()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
+                                TStringBuilder() << "MultiGet option requested, left side key is expected to be List[], but "
+                                << leftKeys[i].first << "." << leftKeys[i].second
+                                << " has type: " << *leftKeyType));
+                    return IGraphTransformer::TStatus::Error;
+                }
+                leftKeyType = leftKeyType->Cast<TListExprType>()->GetItemType();
+            }
             if (strictKeys && leftKeyType != rightKeyType) {
                 ctx.AddError(TIssue(ctx.GetPosition(joins.Pos()),
                     TStringBuilder() << "Strict key type match requested, but keys have different types: ("
@@ -899,11 +923,20 @@ IGraphTransformer::TStatus EquiJoinAnnotation(
     TVector<const TItemExprType*> resultFields;
     TMap<TString, TFlattenState> flattenFields; // column -> table
     THashSet<TString> processedRenames;
-    for (auto it: labels.Inputs) {
+    for (ui32 i = 0; i != labels.Inputs.size(); ++i) {
+        const auto& it = labels.Inputs[i];
         for (auto item: it.InputType->GetItems()) {
             TString fullName = it.FullName(item->GetName());
-            auto type = columnTypes.FindPtr(fullName);
-            if (type) {
+            auto type_it = columnTypes.find(fullName);
+            if (type_it != columnTypes.end()) {
+                auto type = type_it->second;
+                if (joinsStates[i].IsMultiget) {
+                    auto wasOptional = type->IsOptionalOrNull();
+                    type = ctx.MakeType<TListExprType>(type);
+                    if (wasOptional) {
+                        type = AddOptionalType(type, ctx);
+                    }
+                }
                 TVector<TStringBuf> fullNames;
                 fullNames.push_back(fullName);
                 if (!processedRenames.contains(fullName)) {
@@ -921,7 +954,7 @@ IGraphTransformer::TStatus EquiJoinAnnotation(
                         auto iter = flattenFields.find(columnName);
                         if (iter != flattenFields.end()) {
                             if (AreSameJoinKeys(joins, tableName, columnName, iter->second.Table, columnName)) {
-                                iter->second.AllTypes.push_back(*type);
+                                iter->second.AllTypes.push_back(type);
                                 continue;
                             }
 
@@ -932,11 +965,11 @@ IGraphTransformer::TStatus EquiJoinAnnotation(
                         }
 
                         TFlattenState state;
-                        state.AllTypes.push_back(*type);
+                        state.AllTypes.push_back(type);
                         state.Table = TString(tableName);
                         flattenFields.emplace(TString(columnName), state);
                     } else {
-                        resultFields.push_back(ctx.MakeType<TItemExprType>(fullName, *type));
+                        resultFields.push_back(ctx.MakeType<TItemExprType>(fullName, type));
                     }
                 }
             }
@@ -958,6 +991,7 @@ IGraphTransformer::TStatus EquiJoinAnnotation(
     if (!resultType->Validate(position, ctx)) {
         return IGraphTransformer::TStatus::Error;
     }
+    Cerr << "EquiJoin type =" << FormatType(resultType) << Endl;
 
     return IGraphTransformer::TStatus::Ok;
 }

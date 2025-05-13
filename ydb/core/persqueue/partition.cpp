@@ -770,6 +770,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
                 clientInfo->SetConsumer(userInfo.User);
                 clientInfo->set_errorcode(NPersQueue::NErrorCode::EErrorCode::OK);
                 clientInfo->SetCommitedOffset(userInfo.Offset);
+                clientInfo->SetCommittedMetadata(userInfo.CommittedMetadata);
                 requiredConsumers.extract(userInfo.User);
             }
             continue;
@@ -791,6 +792,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
 
             auto read = clientInfo->MutableReadPosition();
             read->SetOffset(readOffset);
+            // метадата?
             read->SetWriteTimestamp(snapshot.LastReadMessage.WriteTimestamp.MilliSeconds());
             read->SetCreateTimestamp(snapshot.LastReadMessage.CreateTimestamp.MilliSeconds());
             read->SetSize(GetSizeLag(readOffset));

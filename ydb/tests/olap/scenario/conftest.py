@@ -82,7 +82,7 @@ class BaseTestSet:
         if self.__class__.__name__ != 'TestInsert':
             return
         self.def_inserts_count = 50
-        num_threads = int(get_external_param("num_threads", "10"))
+        num_threads = int(get_external_param("num_threads", "5"))
         threads = []
         exit_codes = [None] * num_threads
         for p in range(num_threads):

@@ -1394,6 +1394,10 @@ private:
                 shuffleProto.MutableHashV1();
             }
 
+            if (Config->EnableSpillingInHashJoinShuffleConnections && shuffle.UseSpilling()) {
+                shuffleProto.SetUseSpilling(FromStringWithDefault<bool>(shuffle.UseSpilling().Cast().StringValue(), false));
+            }
+
             return;
         }
 

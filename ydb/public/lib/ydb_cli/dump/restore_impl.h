@@ -182,7 +182,12 @@ struct TFsBackupEntry {
     TString DbPath;
     NScheme::ESchemeEntryType Type;
 
-    TFsBackupEntry(const TFsPath& path, TString&& dbPath, NScheme::ESchemeEntryType type) : FsPath(path), DbPath(std::move(dbPath)), Type(type) {}
+    TFsBackupEntry(const TFsPath& path, TString&& dbPath, NScheme::ESchemeEntryType type)
+        : FsPath(path)
+        , DbPath(std::move(dbPath))
+        , Type(type)
+    {
+    }
 };
 
 } // NPrivate

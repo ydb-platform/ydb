@@ -43,7 +43,8 @@ namespace NKikimr::NStorage {
         }
         for (ui32 rgIndex : xrange(newSSConfig.RingGroupsSize())) {
             auto &rg = newSSConfig.GetRingGroups(rgIndex);
-            if (rg.RingSize() < 1 || rg.GetNToSelect() < 1 || rg.GetNToSelect() > rg.RingSize()) {
+            const size_t numItems = Max(rg.RingSize(), rg.NodeSize());
+            if (numItems < 1 || rg.GetNToSelect() < 1 || rg.GetNToSelect() > numItems) {
                 FinishWithError(TResult::ERROR, TStringBuilder() << "StateStorage invalid ring group selection");
                 return;
             }
@@ -81,8 +82,13 @@ namespace NKikimr::NStorage {
             FinishWithError(TResult::ERROR, TStringBuilder() << "Can not build StateStorage info from config");
             return;
         }
-
-        config.MutableStateStorageConfig()->CopyFrom(newSSConfig);
+        auto* ssConfig = config.MutableStateStorageConfig();
+        if(newSSConfig.RingGroupsSize() == 1) {
+            ssConfig->MutableRing()->CopyFrom(newSSConfig.GetRingGroups(0));
+            ssConfig->ClearRingGroups();
+        } else {
+            ssConfig->CopyFrom(newSSConfig);
+        }
         config.SetGeneration(config.GetGeneration() + 1);
         StartProposition(&config);
     }

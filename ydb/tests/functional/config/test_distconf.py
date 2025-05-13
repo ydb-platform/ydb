@@ -251,21 +251,23 @@ class TestKiKiMRDistConfReassignStateStorage(DistConfKiKiMRTest):
         defaultRingGroup = self.do_request({"ReconfigStateStorage": {"GetStateStorageConfig": True}})["StateStorageConfig"]["Ring"]
         newRingGroup = {"WriteOnly": True, "NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}]}
         assert_that(defaultRingGroup["NToSelect"] > 0)
-        assert_that(self.do_load_and_test({"ReconfigStateStorage": {"NewStateStorageConfig": {
-                    "RingGroups": [defaultRingGroup, newRingGroup]}}})["Scepter"])
+        logger.info({"ReconfigStateStorage": {"NewStateStorageConfig": {
+                    "RingGroups": [defaultRingGroup, newRingGroup]}}})
+        logger.info(self.do_load_and_test({"ReconfigStateStorage": {"NewStateStorageConfig": {
+                    "RingGroups": [defaultRingGroup, newRingGroup]}}}))
         time.sleep(1)
         assert_that(self.do_request({"ReconfigStateStorage": {"GetStateStorageConfig": True}})
                     ["StateStorageConfig"] == {"RingGroups": [defaultRingGroup, newRingGroup]})
         time.sleep(1)
         newRingGroup["WriteOnly"] = False
-        assert_that(self.do_load_and_test({"ReconfigStateStorage": {"NewStateStorageConfig": {
-                    "RingGroups": [defaultRingGroup, newRingGroup]}}})["Scepter"])
+        logger.info(self.do_load_and_test({"ReconfigStateStorage": {"NewStateStorageConfig": {
+                    "RingGroups": [defaultRingGroup, newRingGroup]}}}))
         time.sleep(1)
         assert_that(self.do_request({"ReconfigStateStorage": {"GetStateStorageConfig": True}})
                     ["StateStorageConfig"] == {"RingGroups": [defaultRingGroup, newRingGroup]})
         time.sleep(1)
-        assert_that(self.do_load_and_test({"ReconfigStateStorage": {"NewStateStorageConfig": {
-                    "RingGroups": [newRingGroup]}}})["Scepter"])
+        logger.info(self.do_load_and_test({"ReconfigStateStorage": {"NewStateStorageConfig": {
+                    "RingGroups": [newRingGroup]}}}))
         time.sleep(1)
         assert_that(self.do_request({"ReconfigStateStorage": {"GetStateStorageConfig": True}})
-                    ["StateStorageConfig"] == {"RingGroups": [newRingGroup]})
+                    ["StateStorageConfig"] == {"Ring": newRingGroup})

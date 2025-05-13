@@ -226,9 +226,17 @@ private:
             buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryIndex;
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync;
             break;
-        case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
-            explain = "unsupported index type to build";
-            return false;
+        case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex: {
+            const auto& request = Request->Get()->Record;
+            if (request.GetInternal()) {
+                buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryIndex;
+                buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
+            } else {
+                explain = "unsupported index type to build";
+                return false;
+            } 
+            break;
+        }
         case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex: {
             buildInfo.BuildKind = index.index_columns().size() == 1
                 ? TIndexBuildInfo::EBuildKind::BuildVectorIndex

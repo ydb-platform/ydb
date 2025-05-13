@@ -622,7 +622,7 @@ const char* ConvertIndexTypeToSQL(NKikimrSchemeOp::EIndexType indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
             return "GLOBAL ASYNC";
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-            return "GLOBAL UNIQUE";
+            return "GLOBAL UNIQUE SYNC";
         default:
             UNIT_FAIL("No conversion to SQL for this index type");
             return nullptr;
@@ -2192,10 +2192,9 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         switch (Value) {
             case EIndexTypeGlobal:
             case EIndexTypeGlobalAsync:
+            case EIndexTypeGlobalUnique:
             case EIndexTypeGlobalVectorKmeansTree:
                 return TestTableWithIndexBackupRestore(Value);
-            case EIndexTypeGlobalUnique:
-                break; // https://github.com/ydb-platform/ydb/issues/10468
             case EIndexTypeInvalid:
                 break; // not applicable
             default:
@@ -2749,11 +2748,10 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         switch (Value) {
             case EIndexTypeGlobal:
             case EIndexTypeGlobalAsync:
+            case EIndexTypeGlobalUnique:
             case EIndexTypeGlobalVectorKmeansTree:
                 TestTableWithIndexBackupRestore(Value);
                 break;
-            case EIndexTypeGlobalUnique:
-                break; // https://github.com/ydb-platform/ydb/issues/10468
             case EIndexTypeInvalid:
                 break; // not applicable
             default:

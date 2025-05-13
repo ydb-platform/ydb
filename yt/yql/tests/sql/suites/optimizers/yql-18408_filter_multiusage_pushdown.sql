@@ -1,7 +1,6 @@
 use plato;
 pragma AnsiOptionalAs;
 pragma config.flags("OptimizerFlags",
-                    "FieldSubsetEnableMultiusage",
                     "FilterPushdownEnableMultiusage",
                     "EarlyExpandSkipNull");
 

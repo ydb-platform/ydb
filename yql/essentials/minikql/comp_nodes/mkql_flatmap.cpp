@@ -219,7 +219,7 @@ public:
         }
 
         if (state.IsFinish()) {
-            return NUdf::TUnboxedValuePod::MakeFinish();
+            return state;
         }
 
         while (true) {

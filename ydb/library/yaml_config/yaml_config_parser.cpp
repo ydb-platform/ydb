@@ -1285,7 +1285,20 @@ namespace NKikimr::NYaml {
             }
 
             if (!domain.HasSchemeRoot()) {
-                domain.SetSchemeRoot(72057594046678944);
+                std::optional<ui64> schemeRoot;
+                if (config.HasBootstrapConfig()) {
+                    for (const auto& tablet : config.GetBootstrapConfig().GetTablet()) {
+                        if (tablet.GetType() != NKikimrConfig::TBootstrap::FLAT_SCHEMESHARD) {
+                            continue;
+                        }
+                        Y_ABORT_UNLESS(tablet.HasInfo());
+                        Y_ABORT_UNLESS(tablet.GetInfo().HasTabletID());
+                        const ui64 id = tablet.GetInfo().GetTabletID();
+                        Y_ABORT_UNLESS(!schemeRoot || *schemeRoot == id);
+                        schemeRoot.emplace(id);
+                    }
+                }
+                domain.SetSchemeRoot(schemeRoot.value_or(72057594046678944));
             }
 
             if (!domain.HasPlanResolution()) {
@@ -1426,8 +1439,8 @@ namespace NKikimr::NYaml {
         PrepareStaticGroup(ctx, config, ephemeralConfig);
         PrepareBlobStorageConfig(config, ephemeralConfig);
         PrepareSystemTabletsInfo(config, ephemeralConfig, relaxed);
-        PrepareDomainsConfig(config, ephemeralConfig, relaxed);
         PrepareBootstrapConfig(config, ephemeralConfig, relaxed);
+        PrepareDomainsConfig(config, ephemeralConfig, relaxed);
         PrepareIcConfig(config, ephemeralConfig);
         PrepareGrpcConfig(config, ephemeralConfig);
         PrepareSecurityConfig(ctx, config, relaxed);

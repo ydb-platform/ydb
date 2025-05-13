@@ -11,6 +11,7 @@ struct TYtReaderSettings {
 };
 
 struct TYtWriterSettings {
+    TMaybe<ui64> MaxRowWeight = Nothing();
 };
 
 class IYtService: public TThrRefBase {

@@ -20,6 +20,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
     struct TKikimrRunnerOptions {
         TString DomainRoot = "Root";
         ui32 NodeCount = 1;
+        NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
     };
 
     std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
@@ -28,6 +29,6 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         NYql::IDatabaseAsyncResolver::TPtr databaseAsyncResolver = nullptr,
         std::optional<NKikimrConfig::TAppConfig> appConfig = std::nullopt,
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory = nullptr,
-        const TKikimrRunnerOptions& options = {},
-        NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr);
+        const TKikimrRunnerOptions& options = {});
+
 } // namespace NKikimr::NKqp::NFederatedQueryTest

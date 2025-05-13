@@ -50,7 +50,7 @@ public:
         ui32 flags = 0;
         TFunctionTypeInfo funcInfo;
         const auto status = ctx.HolderFactory.GetFunctionRegistry()->FindFunctionTypeInfo(
-            ctx.TypeEnv, ctx.TypeInfoHelper, ctx.CountersProvider, FunctionName, UserType->IsVoid() ? nullptr : UserType,
+            ctx.LangVer, ctx.TypeEnv, ctx.TypeInfoHelper, ctx.CountersProvider, FunctionName, UserType->IsVoid() ? nullptr : UserType,
             TypeConfig, flags, Pos, ctx.SecureParamsProvider, ctx.LogProvider, &funcInfo);
 
         if (!status.IsOk()) {
@@ -204,7 +204,7 @@ private:
         ui32 flags = 0;
         TFunctionTypeInfo funcInfo;
         const auto status = ctx.HolderFactory.GetFunctionRegistry()->FindFunctionTypeInfo(
-            ctx.TypeEnv, ctx.TypeInfoHelper, ctx.CountersProvider, FunctionName, UserType->IsVoid() ? nullptr : UserType,
+            ctx.LangVer, ctx.TypeEnv, ctx.TypeInfoHelper, ctx.CountersProvider, FunctionName, UserType->IsVoid() ? nullptr : UserType,
             TypeConfig, flags, Pos, ctx.SecureParamsProvider, ctx.LogProvider, &funcInfo);
 
         if (!status.IsOk()) {
@@ -290,7 +290,7 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
     const auto userType = static_cast<TType*>(userTypeNode.GetNode());
 
     const auto status = ctx.FunctionRegistry.FindFunctionTypeInfo(
-        ctx.Env, ctx.TypeInfoHelper, ctx.CountersProvider, funcName, userType->IsVoid() ? nullptr : userType,
+        ctx.LangVer, ctx.Env, ctx.TypeInfoHelper, ctx.CountersProvider, funcName, userType->IsVoid() ? nullptr : userType,
         typeConfig, flags, pos, ctx.SecureParamsProvider, ctx.LogProvider, &funcInfo);
 
     if (!status.IsOk()) {
@@ -352,7 +352,7 @@ IComputationNode* WrapScriptUdf(TCallable& callable, const TComputationNodeFacto
     ui32 flags = 0;
     TFunctionTypeInfo funcInfo;
     const auto status = ctx.FunctionRegistry.FindFunctionTypeInfo(
-        ctx.Env, ctx.TypeInfoHelper, ctx.CountersProvider, funcName, userType,
+        ctx.LangVer, ctx.Env, ctx.TypeInfoHelper, ctx.CountersProvider, funcName, userType,
         typeConfig, flags, pos, ctx.SecureParamsProvider, ctx.LogProvider, &funcInfo);
 
     if (!status.IsOk()) {

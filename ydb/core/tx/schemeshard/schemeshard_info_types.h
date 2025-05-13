@@ -2688,6 +2688,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         Done = 240,
         Dropping = 241,
         Dropped = 242,
+        AutoDropping = 243,
         Cancellation = 250,
         Cancelled = 251,
     };
@@ -2805,12 +2806,16 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         return State == EState::Dropping;
     }
 
+    bool IsAutoDropping() const {
+        return State == EState::AutoDropping;
+    }
+
     bool IsCancelling() const {
         return State == EState::Cancellation;
     }
 
     bool IsInProgress() const {
-        return IsPreparing() || IsWorking() || IsDropping() || IsCancelling();
+        return IsPreparing() || IsWorking() || IsDropping() || IsAutoDropping() || IsCancelling();
     }
 
     bool IsDone() const {
@@ -2878,6 +2883,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TString DstPathName;
         TPathId DstPathId;
         TString SrcPrefix;
+        TString SrcPath; // Src path from schema mapping
         Ydb::Table::CreateTableRequest Scheme;
         TString CreationQuery;
         TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
@@ -3035,6 +3041,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         Filling = 40,
         DropBuild = 45,
         CreateBuild = 46,
+        LockBuild = 47,
         Applying = 50,
         Unlocking = 60,
         Done = 200,
@@ -3091,6 +3098,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     TIndexBuildId Id;
     TString Uid;
+    TMaybe<TString> UserSID;
 
     TPathId DomainPathId;
     TPathId TablePathId;
@@ -3153,7 +3161,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             return ParentCount() * K;
         }
 
-        TString ToStr() const {
+        TString DebugString() const {
             return TStringBuilder()
                 << "{ K = " << K
                 << ", Level = " << Level << " / " << Levels
@@ -3274,13 +3282,13 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
                 }
                 return maxParent;
             }();
-            Y_VERIFY_DEBUG_S(minParent <= parentFrom, "minParent(" << minParent << ") > parentFrom(" << parentFrom << ") " << ToStr());
-            Y_VERIFY_DEBUG_S(parentFrom <= parentTo, "parentFrom(" << parentFrom << ") > parentTo(" << parentTo << ") " << ToStr());
-            Y_VERIFY_DEBUG_S(parentTo <= maxParent, "parentTo(" << parentTo << ") > maxParent(" << maxParent << ") " << ToStr());
+            Y_VERIFY_DEBUG_S(minParent <= parentFrom, "minParent(" << minParent << ") > parentFrom(" << parentFrom << ") " << DebugString());
+            Y_VERIFY_DEBUG_S(parentFrom <= parentTo, "parentFrom(" << parentFrom << ") > parentTo(" << parentTo << ") " << DebugString());
+            Y_VERIFY_DEBUG_S(parentTo <= maxParent, "parentTo(" << parentTo << ") > maxParent(" << maxParent << ") " << DebugString());
             return {parentFrom, parentTo};
         }
 
-        TString RangeToDebugStr(const TSerializedTableRange& range, ui32 rootLevel) const {
+        TString RangeToDebugStr(const TSerializedTableRange& range) const {
             auto toStr = [&](const TSerializedCellVec& v) -> TString {
                 const auto cells = v.GetCells();
                 if (cells.empty()) {
@@ -3290,7 +3298,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
                     return "-inf";
                 }
                 auto str = TStringBuilder{} << "{ count: " << cells.size();
-                if (Level > rootLevel) {
+                if (Level > 1) {
                     str << ", parent: " << cells[0].AsValue<NTableIndex::TClusterId>();
                     if (cells.size() != 1 && cells[1].IsNull()) {
                         str << ", pk: null";
@@ -3314,6 +3322,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     EState State = EState::Invalid;
     TString Issue;
+    TInstant StartTime = TInstant::Zero();
+    TInstant EndTime = TInstant::Zero();
 
     TSet<TActorId> Subscribers;
 
@@ -3378,7 +3388,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             return result;
         }
     };
-    
+
     TMap<TShardIdx, TShardStatus> Shards;
     TDeque<TShardIdx> ToUploadShards;
     THashSet<TShardIdx> InProgressShards;
@@ -3465,14 +3475,20 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     };
     TSample Sample;
 
-    TString KMeansTreeToDebugStr() const {
-        return TStringBuilder()
-            << KMeans.ToStr() << ", "
-            << "{ Rows = " << Sample.Rows.size()
-            << ", Sample = " << Sample.State << " }, "
-            << "{ Done = " << DoneShards.size()
-            << ", ToUpload = " << ToUploadShards.size()
-            << ", InProgress = " << InProgressShards.size() << " }";
+    TString DebugString() const {
+        auto result = TStringBuilder() << BuildKind;
+
+        if (IsBuildVectorIndex()) {
+            result << " "
+                << KMeans.DebugString() << ", "
+                << "{ Rows = " << Sample.Rows.size()
+                << ", Sample = " << Sample.State << " }, "
+                << "{ Done = " << DoneShards.size()
+                << ", ToUpload = " << ToUploadShards.size()
+                << ", InProgress = " << InProgressShards.size() << " }";
+        }
+
+        return result;
     }
 
     struct TClusterShards {
@@ -3581,6 +3597,11 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             row.template GetValueOrDefault<Schema::IndexBuild::Issue>();
         indexInfo->CancelRequested =
             row.template GetValueOrDefault<Schema::IndexBuild::CancelRequest>(false);
+        if (row.template HaveValue<Schema::IndexBuild::UserSID>()) {
+            indexInfo->UserSID = row.template GetValue<Schema::IndexBuild::UserSID>();
+        }
+        indexInfo->StartTime = TInstant::Seconds(row.template GetValueOrDefault<Schema::IndexBuild::StartTime>());
+        indexInfo->EndTime = TInstant::Seconds(row.template GetValueOrDefault<Schema::IndexBuild::EndTime>());
 
         indexInfo->LockTxId =
             row.template GetValueOrDefault<Schema::IndexBuild::LockTxId>(
@@ -3679,9 +3700,10 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         TSerializedTableRange bound{range};
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
-            "AddShardStatus id# " << Id << " shard " << shardIdx <<
-            " range " << KMeans.RangeToDebugStr(bound, IsBuildPrefixedVectorIndex() ? 2 : 1));
-        AddParent(bound, shardIdx);
+            "AddShardStatus id# " << Id << " shard " << shardIdx);
+        if (BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex) {
+            AddParent(bound, shardIdx);
+        }
         Shards.emplace(
             shardIdx, TIndexBuildInfo::TShardStatus(std::move(bound), std::move(lastKeyAck), Shards.size()));
         TIndexBuildInfo::TShardStatus &shardStatus = Shards.at(shardIdx);
@@ -3809,6 +3831,7 @@ struct TExternalDataSourceInfo: TSimpleRefCount<TExternalDataSourceInfo> {
         proto.SetInstallation(Installation);
         proto.MutableAuth()->CopyFrom(Auth);
         proto.MutableProperties()->CopyFrom(Properties);
+        proto.MutableReferences()->CopyFrom(ExternalTableReferences);
     }
 };
 
@@ -3856,6 +3879,8 @@ TConclusion<TDuration> GetExpireAfter(const NKikimrSchemeOp::TTTLSettings::TEnab
 
 std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceName, const TString& dataType,
     const NKikimr::NScheme::TTypeRegistry& typeRegistry, bool pgTypesEnabled, TString& errStr);
+
+NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec);
 
 }
 

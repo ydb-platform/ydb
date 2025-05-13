@@ -15,6 +15,7 @@ namespace {
         public:
             TMaybe<NKikimr::NPQ::TTestContext> Ctx;
             TActorId ActorId;
+            const TString Database = "/Root/PQ";
             
             void SetUp(NUnitTest::TTestContext&) override {
                 Ctx.ConstructInPlace();
@@ -22,7 +23,7 @@ namespace {
                 Ctx->Prepare();
                 Ctx->Runtime->SetScheduledLimit(5'000);
                 Ctx->Runtime->SetLogPriority(NKikimrServices::KAFKA_PROXY, NLog::PRI_DEBUG);
-                ActorId = Ctx->Runtime->Register(new NKafka::TKafkaTransactionsCoordinator());
+                ActorId = Ctx->Runtime->Register(new NKafka::TTransactionsCoordinator());
             }
 
             void TearDown(NUnitTest::TTestContext&) override  {
@@ -30,7 +31,7 @@ namespace {
             }
 
             THolder<NKafka::TEvKafka::TEvSaveTxnProducerResponse> SaveTxnProducer(const TString& txnId, i64 producerId, i16 producerEpoch) {
-                auto request = MakeHolder<NKafka::TEvKafka::TEvSaveTxnProducerRequest>(txnId, producerId, producerEpoch);
+                auto request = MakeHolder<NKafka::TEvKafka::TEvSaveTxnProducerRequest>(txnId, NKafka::TEvKafka::TProducerInstanceId{producerId, producerEpoch});
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, request.Release()));
                 auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvSaveTxnProducerResponse>();
                 UNIT_ASSERT(response != nullptr);
@@ -50,7 +51,7 @@ namespace {
                     }
                     message->Topics.push_back(topic);
                 }
-                auto event = MakeHolder<NKafka::TEvKafka::TEvAddPartitionsToTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TAddPartitionsToTxnRequestData>({}, message), Ctx->Edge);
+                auto event = MakeHolder<NKafka::TEvKafka::TEvAddPartitionsToTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TAddPartitionsToTxnRequestData>({}, message), Ctx->Edge, Database);
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
             }
 
@@ -69,7 +70,7 @@ namespace {
                     }
                     message->Topics.push_back(topic);
                 }
-                auto event = MakeHolder<NKafka::TEvKafka::TEvTxnOffsetCommitRequest>(correlationId, NKafka::TMessagePtr<NKafka::TTxnOffsetCommitRequestData>({}, message), Ctx->Edge);
+                auto event = MakeHolder<NKafka::TEvKafka::TEvTxnOffsetCommitRequest>(correlationId, NKafka::TMessagePtr<NKafka::TTxnOffsetCommitRequestData>({}, message), Ctx->Edge, Database);
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
             }
 
@@ -78,12 +79,12 @@ namespace {
                 message->TransactionalId = txnId;
                 message->ProducerId = producerId;
                 message->ProducerEpoch = producerEpoch;
-                auto event = MakeHolder<NKafka::TEvKafka::TEvEndTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TEndTxnRequestData>({}, message), Ctx->Edge);
+                auto event = MakeHolder<NKafka::TEvKafka::TEvEndTxnRequest>(correlationId, NKafka::TMessagePtr<NKafka::TEndTxnRequestData>({}, message), Ctx->Edge, Database);
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
             }
     };
 
-    Y_UNIT_TEST_SUITE_F(KafkaTransactionCoordinatorActor, TFixture) {
+    Y_UNIT_TEST_SUITE_F(TransactionCoordinatorActor, TFixture) {
         Y_UNIT_TEST(OnProducerInitializedEvent_ShouldRespondOkIfTxnProducerWasNotFound) {
             auto response = SaveTxnProducer("my-tn-producer-1", 123, 0);
 
@@ -170,7 +171,7 @@ namespace {
                 if (auto* event = input->CastAsLocal<NKafka::TEvKafka::TEvEndTxnRequest>()) {
                     // there will be two events TEvEndTxnRequest:
                     // first: the one we dispatch in this test
-                    // second: event forwarded by TKafkaTransactionCoordinatorActor
+                    // second: event forwarded by TTransactionCoordinatorActor
                     if (eventCounter == 1) {
                         UNIT_ASSERT_VALUES_EQUAL(event->Request->TransactionalId, txnId);
                         UNIT_ASSERT_VALUES_EQUAL(event->Request->ProducerId, producerId);
@@ -209,8 +210,8 @@ namespace {
             auto observer = [&](TAutoPtr<IEventHandle>& input) {
                 if (auto* event = input->CastAsLocal<NKafka::TEvKafka::TEvEndTxnRequest>()) {
                     // There will be four events TEvEndTxnRequest. We need only two of them 
-                    // with recipient not equal to our TKafkaTransactionCoordinatorActor id. 
-                    // Those are event sent from TKafkaTransactionCoordinatorActor to TKafkaTransactionActor
+                    // with recipient not equal to our TTransactionCoordinatorActor id. 
+                    // Those are event sent from TTransactionCoordinatorActor to TTransactionActor
                     if (input->Recipient != ActorId) {
                         if (eventCounter == 0) {
                             txnActorId = input->Recipient;
@@ -306,5 +307,4 @@ namespace {
             UNIT_ASSERT_EQUAL(firstResponse->ErrorCode, NKafka::EKafkaErrors::PRODUCER_FENCED);
         }
     }
-
 } // namespace

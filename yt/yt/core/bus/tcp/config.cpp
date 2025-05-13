@@ -175,7 +175,7 @@ void TBusConfig::Register(TRegistrar registrar)
 
 void TBusDynamicConfig::Register(TRegistrar registrar)
 {
-    registrar.Parameter("need_reject_connection_due_memory_overcommit", &TThis::NeedRejectConnectionDueMemoryOvercommit)
+    registrar.Parameter("need_reject_connection_on_memory_overcommit", &TThis::NeedRejectConnectionOnMemoryOvercommit)
         .Default(false);
 }
 

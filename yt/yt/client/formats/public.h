@@ -64,11 +64,11 @@ DEFINE_ENUM(EFormatType,
 ////////////////////////////////////////////////////////////////////////////////
 
 DECLARE_REFCOUNTED_STRUCT(TYsonFormatConfig)
-DECLARE_REFCOUNTED_CLASS(TTableFormatConfigBase)
+DECLARE_REFCOUNTED_STRUCT(TTableFormatConfigBase)
 DECLARE_REFCOUNTED_STRUCT(TYamrFormatConfig)
-DECLARE_REFCOUNTED_CLASS(TYamrFormatConfigBase)
+DECLARE_REFCOUNTED_STRUCT(TYamrFormatConfigBase)
 DECLARE_REFCOUNTED_STRUCT(TDsvFormatConfig)
-DECLARE_REFCOUNTED_CLASS(TDsvFormatConfigBase)
+DECLARE_REFCOUNTED_STRUCT(TDsvFormatConfigBase)
 DECLARE_REFCOUNTED_STRUCT(TYamredDsvFormatConfig)
 DECLARE_REFCOUNTED_STRUCT(TSchemafulDsvFormatConfig)
 DECLARE_REFCOUNTED_STRUCT(TProtobufTypeConfig)

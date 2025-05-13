@@ -268,12 +268,12 @@ public:
         }
         return CreateServiceTicketInjectingChannel(
             std::move(channel),
-            TAuthenticationOptions::FromServiceTicketAuth(ServiceTicketAuth_));
+            {.ServiceTicketAuth = ServiceTicketAuth_});
     }
 
 private:
-    IChannelFactoryPtr UnderlyingFactory_;
-    IServiceTicketAuthPtr ServiceTicketAuth_;
+    const IChannelFactoryPtr UnderlyingFactory_;
+    const IServiceTicketAuthPtr ServiceTicketAuth_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

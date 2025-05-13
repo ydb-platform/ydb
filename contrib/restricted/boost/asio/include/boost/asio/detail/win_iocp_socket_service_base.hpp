@@ -809,7 +809,7 @@ protected:
   // Pointer to NtSetInformationFile implementation.
   void* nt_set_info_;
 
-  // Mutex to protect access to the linked list of implementations. 
+  // Mutex to protect access to the linked list of implementations.
   boost::asio::detail::mutex mutex_;
 
   // The head of a linked list of all implementations.

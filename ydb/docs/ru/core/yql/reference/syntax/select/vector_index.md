@@ -6,6 +6,8 @@
 
 {% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
 
+{% include [limitations](../../../../_includes/vector_index_limitations.md) %}
+
 {% endnote %}
 
 {% endif %}

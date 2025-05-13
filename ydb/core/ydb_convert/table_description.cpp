@@ -1015,6 +1015,7 @@ void FillGlobalIndexSettings(Ydb::Table::GlobalIndexSettings& settings,
     }
 
     FillPartitioningSettingsImpl(settings, indexImplTableDescription);
+    FillReadReplicasSettings(settings, indexImplTableDescription);
 }
 
 template <typename TYdbProto>
@@ -1054,7 +1055,7 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
                 tableIndex.GetIndexImplTableDescriptions(0)
             );
             break;
-        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree: {
             FillGlobalIndexSettings(
                 *index->mutable_global_vector_kmeans_tree_index()->mutable_level_table_settings(),
                 tableIndex.GetIndexImplTableDescriptions(0)
@@ -1063,10 +1064,18 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
                 *index->mutable_global_vector_kmeans_tree_index()->mutable_posting_table_settings(),
                 tableIndex.GetIndexImplTableDescriptions(1)
             );
+            const bool prefixVectorIndex = tableIndex.GetKeyColumnNames().size() > 1;
+            if (prefixVectorIndex) {
+                FillGlobalIndexSettings(
+                    *index->mutable_global_vector_kmeans_tree_index()->mutable_prefix_table_settings(),
+                    tableIndex.GetIndexImplTableDescriptions(2)
+                );                    
+            }
 
             *index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings() = tableIndex.GetVectorIndexKmeansTreeDescription().GetSettings();
 
             break;
+        }
         default:
             break;
         };
@@ -1503,7 +1512,8 @@ void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
     FillColumnFamiliesImpl(out, in);
 }
 
-void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
+template <typename TYdbProto>
+void FillColumnFamiliesImpl(TYdbProto& out,
         const NKikimrSchemeOp::TColumnTableDescription& in) {
     const auto& schema = in.GetSchema();
     for (size_t i = 0; i < schema.ColumnFamiliesSize(); ++i) {
@@ -1512,6 +1522,16 @@ void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
 
         FillColumnFamily(*r, family, true);
     }
+}
+
+void FillColumnFamilies(Ydb::Table::DescribeTableResult& out,
+        const NKikimrSchemeOp::TColumnTableDescription& in) {
+    FillColumnFamiliesImpl(out, in);
+}
+
+void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
+        const NKikimrSchemeOp::TColumnTableDescription& in) {
+    FillColumnFamiliesImpl(out, in);
 }
 
 void FillAttributes(Ydb::Table::DescribeTableResult& out,
@@ -1619,6 +1639,11 @@ void FillReadReplicasSettings(Ydb::Table::DescribeTableResult& out,
 
 void FillReadReplicasSettings(Ydb::Table::CreateTableRequest& out,
         const NKikimrSchemeOp::TTableDescription& in) {
+    FillReadReplicasSettingsImpl(out, in);
+}
+
+void FillReadReplicasSettings(Ydb::Table::GlobalIndexSettings& out,
+    const NKikimrSchemeOp::TTableDescription& in) {
     FillReadReplicasSettingsImpl(out, in);
 }
 

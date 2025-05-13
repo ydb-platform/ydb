@@ -29,13 +29,6 @@ namespace {
         }
     }
 
-    NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec) {
-        NProtoBuf::Timestamp timestamp;
-        timestamp.set_seconds((i64)(sec));
-        timestamp.set_nanos(0);
-        return timestamp;
-    }
-
     void FillItemProgress(TSchemeShard* ss, const TExportInfo::TPtr exportInfo, ui32 itemIdx,
             Ydb::Export::ExportItemProgress& itemProgress) {
 
@@ -98,9 +91,11 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
     switch (exportInfo->State) {
     case TExportInfo::EState::CreateExportDir:
     case TExportInfo::EState::CopyTables:
+    case TExportInfo::EState::UploadExportMetadata:
         exprt.SetProgress(Ydb::Export::ExportProgress::PROGRESS_PREPARING);
         break;
 
+    case TExportInfo::EState::AutoDropping:
     case TExportInfo::EState::Transferring:
     case TExportInfo::EState::Done:
         for (ui32 itemIdx : xrange(exportInfo->Items.size())) {

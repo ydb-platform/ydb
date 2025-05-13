@@ -73,13 +73,13 @@ private:
         TQueryClient::TQueryResultFunc callback = [query = sql.str(), args = params.Build()](TQueryClient::TSession session) -> TAsyncExecuteQueryResult {
             return session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), args);
         };
-        const auto my = this->SelfId();
-        const auto ass = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
-        Stuff->Client->RetryQuery(std::move(callback)).Subscribe([my, ass](const auto& future) {
-            if (const auto res = future.GetValueSync(); res.IsSuccess())
-                ass->Send(my, new TEvQueryResult(res.GetResultSets()));
-            else
-                ass->Send(my, new TEvQueryError(res.GetIssues()));
+        Stuff->Client->RetryQuery(std::move(callback)).Subscribe([my = this->SelfId(), stuff = TSharedStuff::TWeakPtr(Stuff)](const auto& future) {
+            if (const auto lock = stuff.lock()) {
+                if (const auto res = future.GetValue(); res.IsSuccess())
+                    lock->ActorSystem->Send(my, new TEvQueryResult(res.GetResultSets()));
+                else
+                    lock->ActorSystem->Send(my, new TEvQueryError(res.GetIssues()));
+            }
         });
 
         if (!Ctx->Read())
@@ -172,21 +172,21 @@ private:
         std::ostringstream sql;
         sql << Stuff->TablePrefix;
         if (WithPrevious) {
-            sql << "select * from (select max_by(TableRow(), `modified`) from `content` where " << revName << " > `modified` and " << where.view() << " group by `key`) flatten columns union all" << std::endl;
+            sql << "select * from (select max_by(TableRow(), `modified`) from `history` where " << revName << " > `modified` and " << where.view() << " group by `key`) flatten columns union all" << std::endl;
         }
-        sql << "select * from `content` where " << revName << " <= `modified` and " << where.view() << " order by `modified` asc;" << std::endl;
+        sql << "select * from `history` where " << revName << " <= `modified` and " << where.view() << " order by `modified` asc;" << std::endl;
 //      std::cout << std::endl << sql.view() << std::endl;
 
         TQueryClient::TQueryResultFunc callback = [query = sql.str(), args = params.Build()](TQueryClient::TSession session) -> TAsyncExecuteQueryResult {
             return session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(), args);
         };
-        const auto my = this->SelfId();
-        const auto ass = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
-        Stuff->Client->RetryQuery(std::move(callback)).Subscribe([my, ass](const auto& future) {
-            if (const auto res = future.GetValueSync(); res.IsSuccess())
-                ass->Send(my, new TEvQueryResult(res.GetResultSets()));
-            else
-                ass->Send(my, new TEvQueryError(res.GetIssues()));
+        Stuff->Client->RetryQuery(std::move(callback)).Subscribe([my = this->SelfId(), stuff = TSharedStuff::TWeakPtr(Stuff)](const auto& future) {
+            if (const auto lock = stuff.lock()) {
+                if (const auto res = future.GetValue(); res.IsSuccess())
+                    lock->ActorSystem->Send(my, new TEvQueryResult(res.GetResultSets()));
+                else
+                    lock->ActorSystem->Send(my, new TEvQueryError(res.GetIssues()));
+            }
         });
     }
 
@@ -599,13 +599,12 @@ private:
         NYdb::TParamsBuilder params;
         const auto& revName = AddParam("Revision", params, Revision);
 
-        sql << "$Leases = select 0L as `lease` union all select `id` as `lease` from `leases` where unwrap(interval('PT1S') * `ttl` + `updated`) > CurrentUtcDatetime(`id`);" << std::endl;
-        sql << "$Victims = select `key`, `value`, `created`, `modified`, `version`, `lease` from (";
-        MakeSimpleSlice(sql, params);
-        sql << ") as h left only join $Leases as l using(`lease`);" << std::endl;
+        sql << "$Leases = select `id` as `lease` from `leases` where unwrap(interval('PT1S') * `ttl` + `updated`) <= CurrentUtcDatetime(`id`);" << std::endl;
+        sql << "$Victims = select `key`, `value`, `created`, `modified`, `version`, `lease` from `current` view `lease` as h left semi join $Leases as l using(`lease`);" << std::endl;
 
-        sql << "insert into `content`" << std::endl;
+        sql << "insert into `history`" << std::endl;
         sql << "select `key`, `created`, " << revName << " as `modified`, 0L as `version`, `value`, `lease` from $Victims;" << std::endl;
+        sql << "delete from `current` on select `key` from $Victims;" << std::endl;
 
         if constexpr (NotifyWatchtower) {
             sql << "select `key`, `value`, `created`, `modified`, `version`, `lease` from $Victims;" << std::endl;
@@ -613,15 +612,15 @@ private:
             sql << "select count(*) from $Victims;" << std::endl;
         }
 
-        sql << "delete from `leases` where `id` not in $Leases;" << std::endl;
+        sql << "delete from `leases` where `id` in $Leases;" << std::endl;
 
-        const auto my = this->SelfId();
-        const auto ass = NActors::TlsActivationContext->ExecutorThread.ActorSystem;
-        Stuff->Client->ExecuteQuery(sql.str(), TTxControl::BeginTx().CommitTx(), params.Build()).Subscribe([my, ass](const auto& future) {
-            if (const auto res = future.GetValueSync(); res.IsSuccess())
-                ass->Send(my, new TEvQueryResult(res.GetResultSets()));
-            else
-                ass->Send(my, new TEvQueryError(res.GetIssues()));
+        Stuff->Client->ExecuteQuery(sql.str(), TTxControl::BeginTx().CommitTx(), params.Build()).Subscribe([my = this->SelfId(), stuff = TSharedStuff::TWeakPtr(Stuff)](const auto& future) {
+            if (const auto lock = stuff.lock()) {
+                if (const auto res = future.GetValue(); res.IsSuccess())
+                    lock->ActorSystem->Send(my, new TEvQueryResult(res.GetResultSets()));
+                else
+                    lock->ActorSystem->Send(my, new TEvQueryError(res.GetIssues()));
+            }
         });
     }
 

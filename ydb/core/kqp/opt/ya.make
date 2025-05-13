@@ -14,6 +14,11 @@ SRCS(
     kqp_statistics_transformer.cpp
     kqp_column_statistics_requester.cpp
     kqp_constant_folding_transformer.cpp
+    kqp_new_rbo_transformer.cpp
+    kqp_operator.cpp
+    kqp_new_rbo.cpp
+    kqp_new_rbo_rules.cpp
+    kqp_convert_to_physical.cpp
 )
 
 PEERDIR(

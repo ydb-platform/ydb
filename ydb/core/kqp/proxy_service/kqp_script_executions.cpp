@@ -340,8 +340,19 @@ struct TCreateScriptExecutionActor : public TActorBootstrapped<TCreateScriptExec
             resultsTtl = Min(operationTtl, resultsTtl);
         }
 
+        const auto& eventProto = Event->Get()->Record;
+        const TKqpRunScriptActorSettings settings = {
+            .Database = eventProto.GetRequest().GetDatabase(),
+            .ExecutionId = ExecutionId,
+            .LeaseGeneration = 1,
+            .LeaseDuration = LeaseDuration,
+            .ResultsTtl = resultsTtl,
+            .ProgressStatsPeriod = Event->Get()->ProgressStatsPeriod,
+            .Counters = Counters,
+        };
+
         // Start request
-        RunScriptActorId = Register(CreateRunScriptActor(ExecutionId, Event->Get()->Record, Event->Get()->Record.GetRequest().GetDatabase(), 1, LeaseDuration, resultsTtl, QueryServiceConfig, Counters));
+        RunScriptActorId = Register(CreateRunScriptActor(eventProto, settings, QueryServiceConfig));
         Register(new TCreateScriptOperationQuery(ExecutionId, RunScriptActorId, Event->Get()->Record, operationTtl, resultsTtl, LeaseDuration, MaxRunTime));
     }
 
@@ -2300,7 +2311,7 @@ private:
         }
 
         NJsonWriter::TBuf serializedSinks;
-        serializedSinks.WriteJsonValue(&value);
+        serializedSinks.WriteJsonValue(&value, false, PREC_NDIGITS, 17);
 
         return serializedSinks.Str();
     }
@@ -2316,7 +2327,7 @@ private:
         }
 
         NJsonWriter::TBuf serializedSecretNames;
-        serializedSecretNames.WriteJsonValue(&value);
+        serializedSecretNames.WriteJsonValue(&value, false, PREC_NDIGITS, 17);
 
         return serializedSecretNames.Str();
     }
@@ -2535,7 +2546,14 @@ public:
             Ydb::TableStats::QueryStats queryStats;
             NGRpcService::FillQueryStats(queryStats, *Request.QueryStats);
             NProtobufJson::Proto2Json(queryStats, statsJson, NProtobufJson::TProto2JsonConfig());
-            serializedStats = NJson::WriteJson(statsJson);
+            TStringStream statsStream;
+            NJson::WriteJson(&statsStream, &statsJson, {
+                .DoubleNDigits = 17,
+                .FloatToStringMode = PREC_NDIGITS,
+                .ValidateUtf8 = false,
+                .WriteNanAsString = true,
+            });
+            serializedStats = statsStream.Str();
         }
 
         std::optional<TString> ast;

@@ -25,11 +25,14 @@ TInt Midpoint(TInt a, TInt b) noexcept;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Y_FORCE_INLINE i64 SignedSaturationArithmeticMultiply(i64 lhs, i64 rhs);
-Y_FORCE_INLINE i64 UnsignedSaturationArithmeticMultiply(i64 lhs, i64 rhs, i64 max = std::numeric_limits<i64>::max());
+Y_FORCE_INLINE i64 SignedSaturationArithmeticMultiply(i64 lhs, i64 rhs) noexcept;
+Y_FORCE_INLINE i64 UnsignedSaturationArithmeticMultiply(i64 lhs, i64 rhs, i64 max = std::numeric_limits<i64>::max()) noexcept;
 
-Y_FORCE_INLINE i64 SignedSaturationArithmeticAdd(i64 lhs, i64 rhs);
-Y_FORCE_INLINE i64 UnsignedSaturationArithmeticAdd(i64 lhs, i64 rhs, i64 max = std::numeric_limits<i64>::max());
+Y_FORCE_INLINE i64 SignedSaturationArithmeticAdd(i64 lhs, i64 rhs) noexcept;
+Y_FORCE_INLINE i64 UnsignedSaturationArithmeticAdd(i64 lhs, i64 rhs, i64 max = std::numeric_limits<i64>::max()) noexcept;
+
+// Rounds to lower for positive numbers and to upper for negative numbers.
+Y_FORCE_INLINE i64 SignedSaturationConversion(double value) noexcept;
 
 ////////////////////////////////////////////////////////////////////////////////
 

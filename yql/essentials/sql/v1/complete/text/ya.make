@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    case.cpp
     word.cpp
 )
 

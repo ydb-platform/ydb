@@ -14,10 +14,12 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
 
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 
+    // lru cache counters:
     const TCounterPtr FreshBytes;
     const TCounterPtr StagingBytes;
     const TCounterPtr WarmBytes;
 
+    // page counters:
     const TCounterPtr MemLimitBytes;
     const TCounterPtr ConfigLimitBytes;
     const TCounterPtr ActivePages;
@@ -33,6 +35,16 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
     const TCounterPtr CacheMissBytes;
     const TCounterPtr LoadInFlyPages;
     const TCounterPtr LoadInFlyBytes;
+
+    // page collection counters:
+    const TCounterPtr PageCollections;
+    const TCounterPtr Owners;
+    const TCounterPtr PageCollectionOwners;
+
+    // request counters:
+    const TCounterPtr PendingRequests;
+    const TCounterPtr SucceedRequests;
+    const TCounterPtr FailedRequests;
 
     explicit TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
 

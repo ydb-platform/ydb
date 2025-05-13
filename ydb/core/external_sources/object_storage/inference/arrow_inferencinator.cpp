@@ -169,8 +169,12 @@ using ArrowFields = std::vector<ArrowField>;
 
 std::variant<ArrowFields, TString> InferCsvTypes(std::shared_ptr<arrow::io::RandomAccessFile> file, std::shared_ptr<CsvConfig> config) {
     int64_t fileSize;
+    constexpr auto errorHeader = "couldn't open csv/tsv file, check format and compression parameters: "sv;
     if (auto sizeStatus = file->GetSize().Value(&fileSize); !sizeStatus.ok()) {
-        return TStringBuilder{} << "coudn't get file size: " << sizeStatus.ToString();
+        return TStringBuilder{} << errorHeader << "coudn't get file size: " << sizeStatus.ToString();
+    }
+    if (fileSize <= 0 || fileSize > INT32_MAX) {
+        return TStringBuilder{} << errorHeader << "empty file";
     }
 
     std::shared_ptr<arrow::csv::TableReader> reader;
@@ -184,48 +188,52 @@ std::variant<ArrowFields, TString> InferCsvTypes(std::shared_ptr<arrow::io::Rand
     .Value(&reader);
 
     if (!readerStatus.ok()) {
-        return TString{TStringBuilder{} << "couldn't open csv/tsv file, check format and compression parameters: " << readerStatus.ToString()};
+        return TString{TStringBuilder{} << errorHeader << readerStatus.ToString()};
     }
 
     std::shared_ptr<arrow::Table> table;
     auto tableRes = reader->Read().Value(&table);
 
     if (!tableRes.ok()) {
-        return TStringBuilder{} << "couldn't parse csv/tsv file, check format and compression parameters: " << tableRes.ToString();
+        return TStringBuilder{} << errorHeader << tableRes.ToString();
     }
 
     return table->fields();
 }
 
 std::variant<ArrowFields, TString> InferParquetTypes(std::shared_ptr<arrow::io::RandomAccessFile> file) {
+    constexpr auto errorHeader = "couldn't open parquet file, check format parameters: "sv;
     parquet::arrow::FileReaderBuilder builder;
     builder.properties(parquet::ArrowReaderProperties(false));
     auto openStatus = builder.Open(std::move(file));
     if (!openStatus.ok()) {
-        return TStringBuilder{} << "couldn't open parquet file, check format parameters: " << openStatus.ToString();
+        return TStringBuilder{} << errorHeader << openStatus.ToString();
     }
 
     std::unique_ptr<parquet::arrow::FileReader> reader;
     auto readerStatus = builder.Build(&reader);
     if (!readerStatus.ok()) {
-        return TStringBuilder{} << "couldn't read parquet file, check format parameters: " << readerStatus.ToString();
+        return TStringBuilder{} << errorHeader << readerStatus.ToString();
     }
 
     std::shared_ptr<arrow::Schema> schema;
     auto schemaRes = reader->GetSchema(&schema);
     if (!schemaRes.ok()) {
-        return TStringBuilder{} << "couldn't parse parquet file, check format parameters: " << schemaRes.ToString();
+        return TStringBuilder{} << errorHeader << schemaRes.ToString();
     }
 
     return schema->fields();
 }
 
 std::variant<ArrowFields, TString> InferJsonTypes(std::shared_ptr<arrow::io::RandomAccessFile> file, std::shared_ptr<JsonConfig> config) {
+    constexpr auto errorHeader = "couldn't open json file, check format and compression parameters: "sv;
     int64_t fileSize;
     if (auto sizeStatus = file->GetSize().Value(&fileSize); !sizeStatus.ok()) {
-        return TStringBuilder{} << "coudn't get file size: " << sizeStatus.ToString();
+        return TStringBuilder{} << errorHeader << "coudn't get file size: " << sizeStatus.ToString();
     }
-
+    if (fileSize <= 0 || fileSize > INT32_MAX) {
+        return TStringBuilder{} << errorHeader << "empty file";
+    }
     std::shared_ptr<arrow::json::TableReader> reader;
     auto readerStatus = arrow::json::TableReader::Make(
         arrow::default_memory_pool(),
@@ -235,14 +243,14 @@ std::variant<ArrowFields, TString> InferJsonTypes(std::shared_ptr<arrow::io::Ran
     ).Value(&reader);
 
     if (!readerStatus.ok()) {
-        return TString{TStringBuilder{} << "couldn't open json file, check format and compression parameters: " << readerStatus.ToString()};
+        return TString{TStringBuilder{} << errorHeader << readerStatus.ToString()};
     }
 
     std::shared_ptr<arrow::Table> table;
     auto tableRes = reader->Read().Value(&table);
 
     if (!tableRes.ok()) {
-        return TString{TStringBuilder{} << "couldn't parse json file, check format and compression parameters: " << tableRes.ToString()};
+        return TString{TStringBuilder{} << errorHeader << tableRes.ToString()};
     }
 
     return table->fields();

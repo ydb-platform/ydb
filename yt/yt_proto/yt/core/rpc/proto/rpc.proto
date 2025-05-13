@@ -86,6 +86,7 @@ message TRequestHeader
      * allow_resolve_from_sequoia_object    118
      * resolve_depth                        119
      * ssl_credentials_ext                  120
+     * caused_by_node_expiration            124
      * req_execute_ext                      200
      * req_multiread_ext                    201
      */
@@ -142,7 +143,7 @@ message TResponseHeader
 {
     optional NYT.NProto.TGuid request_id = 1;
 
-    // May be blank.
+    // NB: In some cases we deliberately omit setting these fields.
     optional string service = 7;
     optional string method = 8;
 

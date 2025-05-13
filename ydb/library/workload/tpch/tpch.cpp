@@ -29,6 +29,10 @@ TWorkloadGeneratorBase::TSpecialDataTypes TTpchWorkloadGenerator::GetSpecialData
     }
 }
 
+ui32 TTpchWorkloadGenerator::GetDefaultPartitionsCount(const TString& /*tableName*/) const {
+    return Params.GetScale() <= 10 ? 64 : 256;
+}
+
 
 THolder<IWorkloadQueryGenerator> TTpchWorkloadParams::CreateGenerator() const {
     return MakeHolder<TTpchWorkloadGenerator>(*this);

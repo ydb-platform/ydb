@@ -43,9 +43,11 @@ ENDIF()
 SRCS(
     converters.cpp
     factories.cpp
+    printout.cpp
     simple.cpp
     simple_block.cpp
     simple_last.cpp
+    subprocess.cpp
     streams.cpp
     tpch_last.cpp
 )

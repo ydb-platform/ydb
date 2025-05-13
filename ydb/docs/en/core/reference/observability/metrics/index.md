@@ -5,7 +5,7 @@
 | Metric name<br/>Type, units of measurement | Description<br/>Labels |
 | ----- | ----- |
 | `resources.storage.used_bytes`<br/>`IGAUGE`, bytes | The size of user and service data stored in distributed network storage. `resources.storage.used_bytes` = `resources.storage.table.used_bytes` + `resources.storage.topic.used_bytes`. |
-| `resources.storage.table.used_bytes`<br/>`IGAUGE`, bytes | The size of user and service data stored by tables in distributed network storage. Service data includes the data of the primary, [secondary indexes](../../../concepts/secondary_indexes.md) and [vector indexes](../../../concepts/vector_indexes.md). |
+| `resources.storage.table.used_bytes`<br/>`IGAUGE`, bytes | The size of user and service data stored by tables in distributed network storage. Service data includes the data of the primary, [secondary indexes](../../../concepts/glossary.md#secondary-index) and [vector indexes](../../../concepts/glossary.md#vector-index). |
 | `resources.storage.topic.used_bytes`<br/>`IGAUGE`, bytes | The size of storage used by topics. This metric sums the `topic.storage_bytes` values of all topics. |
 | `resources.storage.limit_bytes`<br/>`IGAUGE`, bytes | A limit on the size of user and service data that a database can store in distributed network storage. |
 
@@ -71,6 +71,8 @@ You can analyze a transaction's execution time using a histogram counter. The in
 | `table.datashard.bulk_upsert.bytes`<br/>`RATE`, bytes | The size of data that is added through a `BulkUpsert` gRPC API call to all partitions of all DB tables in a certain period of time. |
 | `table.datashard.erase.rows`<br/>`RATE`, pieces | The number of rows deleted from the database in a certain period of time. |
 | `table.datashard.erase.bytes`<br/>`RATE`, bytes | The size of data deleted from the database in a certain period of time. |
+| `table.datashard.cache_hit.bytes`<br/>`RATE`, bytes | The total amount of data successfully retrieved from memory (cache), indicating efficient cache utilization in serving frequently accessed data without accessing distributed storage. |
+| `table.datashard.cache_miss.bytes`<br/>`RATE`, bytes | The total amount of data that was requested but not found in memory (cache) and was read from distributed storage, highlighting potential areas for cache optimization. |
 
 ## Resource usage metrics (for Dedicated mode only) {#ydb_dedicated_resources}
 

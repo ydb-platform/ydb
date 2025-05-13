@@ -3,7 +3,7 @@ ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 ENV(MOTO_SERVER_PATH="contrib/python/moto/bin/moto_server")
 ENV(YDB_ADDITIONAL_LOG_CONFIGS="TX_TIERING:DEBUG")
 
-FORK_TEST_FILES()
+FORK_TESTS()
 
 TEST_SRCS(
     base.py
@@ -12,6 +12,7 @@ TEST_SRCS(
     ttl_unavailable_s3.py
     data_migration_when_alter_ttl.py
     unstable_connection.py
+    tier_delete.py
 )
 
 SIZE(MEDIUM)
@@ -19,6 +20,7 @@ SIZE(MEDIUM)
 PEERDIR(
     ydb/tests/library
     ydb/tests/library/test_meta
+    ydb/tests/olap/lib
     ydb/public/sdk/python
     ydb/public/sdk/python/enable_v3_new_behavior
     contrib/python/boto3

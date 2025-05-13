@@ -278,6 +278,7 @@ NKikimrSchemeOp::TPathDescription DescribePath(TTestActorRuntime& runtime, TStri
     request->Record.MutableDescribePath()->SetPath(path);
     request->Record.MutableDescribePath()->MutableOptions()->SetShowPrivateTable(true);
     request->Record.MutableDescribePath()->MutableOptions()->SetReturnBoundaries(true);
+    request->Record.MutableDescribePath()->MutableOptions()->SetReturnSetVal(true);
     runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
     return runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle)->GetRecord().GetPathDescription();
 }
@@ -295,7 +296,7 @@ public:
         CreateTier("tier2");
     }
 
-    void CheckShowCreateTable(const std::string& query, const std::string& tableName, TString formatQuery = "", bool temporary = false) {
+    void CheckShowCreateTable(const std::string& query, const std::string& tableName, TString formatQuery = "", bool temporary = false, bool initialScan = false) {
         auto session = QueryClient.GetSession().GetValueSync().GetSession();
 
         std::optional<TString> sessionId = std::nullopt;
@@ -308,6 +309,10 @@ public:
 
         if (formatQuery) {
             UNIT_ASSERT_VALUES_EQUAL_C(UnescapeC(formatQuery), UnescapeC(showCreateTableQuery), UnescapeC(showCreateTableQuery));
+        }
+
+        if (initialScan) {
+            return;
         }
 
         auto describeResultOrig = DescribeTable(tableName, sessionId);
@@ -360,14 +365,14 @@ private:
         )", tierName, tierName));
     }
 
-    Ydb::Table::CreateTableRequest DescribeTable(const std::string& tableName, std::optional<TString> sessionId = std::nullopt) {
+    Ydb::Table::DescribeTableResult DescribeTable(const std::string& tableName, std::optional<TString> sessionId = std::nullopt) {
 
         auto describeTable = [this](TString&& path) {
             auto pathDescription = DescribePath(Runtime, std::move(path));
 
             if (pathDescription.HasColumnTableDescription()) {
                 const auto& tableDescription = pathDescription.GetColumnTableDescription();
-                return *GetCreateTableRequest(tableDescription);
+                return *GetScheme(tableDescription);
             }
 
             if (!pathDescription.HasTable()) {
@@ -375,7 +380,7 @@ private:
             }
 
             const auto& tableDescription = pathDescription.GetTable();
-            return *GetCreateTableRequest(tableDescription);
+            return *GetScheme(tableDescription);
         };
 
         auto tablePath = TString(tableName);
@@ -469,8 +474,8 @@ private:
         UNIT_ASSERT_VALUES_EQUAL_C(first, second, showCreateTableQuery);
     }
 
-    TMaybe<Ydb::Table::CreateTableRequest> GetCreateTableRequest(const NKikimrSchemeOp::TTableDescription& tableDesc) {
-        Ydb::Table::CreateTableRequest scheme;
+    TMaybe<Ydb::Table::DescribeTableResult> GetScheme(const NKikimrSchemeOp::TTableDescription& tableDesc) {
+        Ydb::Table::DescribeTableResult scheme;
 
         NKikimrMiniKQL::TType mkqlKeyType;
 
@@ -489,6 +494,8 @@ private:
             return Nothing();
         }
 
+        FillChangefeedDescription(scheme, tableDesc);
+
         FillStorageSettings(scheme, tableDesc);
         FillColumnFamilies(scheme, tableDesc);
         FillPartitioningSettings(scheme, tableDesc);
@@ -504,8 +511,8 @@ private:
         return scheme;
     }
 
-    TMaybe<Ydb::Table::CreateTableRequest> GetCreateTableRequest(const NKikimrSchemeOp::TColumnTableDescription& tableDesc) {
-        Ydb::Table::CreateTableRequest scheme;
+    TMaybe<Ydb::Table::DescribeTableResult> GetScheme(const NKikimrSchemeOp::TColumnTableDescription& tableDesc) {
+        Ydb::Table::DescribeTableResult scheme;
 
         FillColumnDescription(scheme, tableDesc);
         FillColumnFamilies(scheme, tableDesc);
@@ -1531,6 +1538,490 @@ WITH (
     KEY_BLOOM_FILTER = ENABLED,
     TTL = INTERVAL('PT1H') DELETE ON Value4
 );
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint32,
+                Key2 BigSerial,
+                Key3 SmallSerial,
+                Value1 Serial,
+                Value2 String,
+                PRIMARY KEY (Key1, Key2, Key3)
+            );
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed_1` WITH (MODE = 'OLD_IMAGE', FORMAT = 'DEBEZIUM_JSON', RETENTION_PERIOD = Interval("PT1H"));
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed_2` WITH (MODE = 'NEW_IMAGE', FORMAT = 'JSON', TOPIC_MIN_ACTIVE_PARTITIONS = 10, RETENTION_PERIOD = Interval("PT3H"), VIRTUAL_TIMESTAMPS = TRUE);
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed_3` WITH (MODE = 'KEYS_ONLY', TOPIC_MIN_ACTIVE_PARTITIONS = 3, FORMAT = 'JSON', RETENTION_PERIOD = Interval("PT30M"));
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key2`
+                START WITH 150
+                INCREMENT BY 300;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key2`
+                INCREMENT 1;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key3`
+                RESTART WITH 5;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Value1`
+                START WITH 101;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Value1`
+                INCREMENT 404
+                RESTART;
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key1` Uint32,
+    `Key2` Serial8 NOT NULL,
+    `Key3` Serial2 NOT NULL,
+    `Value1` Serial4 NOT NULL,
+    `Value2` String,
+    PRIMARY KEY (`Key1`, `Key2`, `Key3`)
+);
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed_1` WITH (MODE = 'OLD_IMAGE', FORMAT = 'DEBEZIUM_JSON', RETENTION_PERIOD = INTERVAL('PT1H'), TOPIC_MIN_ACTIVE_PARTITIONS = 1)
+;
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed_2` WITH (MODE = 'NEW_IMAGE', FORMAT = 'JSON', VIRTUAL_TIMESTAMPS = TRUE, RETENTION_PERIOD = INTERVAL('PT3H'), TOPIC_MIN_ACTIVE_PARTITIONS = 10)
+;
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed_3` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = INTERVAL('PT30M'), TOPIC_MIN_ACTIVE_PARTITIONS = 3)
+;
+
+ALTER SEQUENCE `/Root/test_show_create/_serial_column_Key2` START WITH 150;
+
+ALTER SEQUENCE `/Root/test_show_create/_serial_column_Key3` RESTART WITH 5;
+
+ALTER SEQUENCE `/Root/test_show_create/_serial_column_Value1` START WITH 101 INCREMENT BY 404 RESTART;
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 BigSerial,
+                Key2 SmallSerial,
+                Value1 Serial,
+                Value2 String,
+                PRIMARY KEY (Key1, Key2)
+            ) WITH (
+                AUTO_PARTITIONING_BY_LOAD = ENABLED,
+                PARTITION_AT_KEYS = ((10), (100, 1000), (1000, 20))
+            );
+            ALTER TABLE test_show_create ADD CHANGEFEED `feed1` WITH (
+                MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = Interval("PT1H")
+            );
+            ALTER TABLE test_show_create ADD CHANGEFEED `feed2` WITH (
+                MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = Interval("PT2H")
+            );
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key1`
+                START WITH 150
+                INCREMENT BY 300;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key1`
+                INCREMENT 1;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key2`
+                RESTART WITH 5;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Value1`
+                START WITH 101;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Value1`
+                INCREMENT 404
+                RESTART;
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key1` Serial8 NOT NULL,
+    `Key2` Serial2 NOT NULL,
+    `Value1` Serial4 NOT NULL,
+    `Value2` String,
+    PRIMARY KEY (`Key1`, `Key2`)
+)
+WITH (
+    AUTO_PARTITIONING_BY_LOAD = ENABLED,
+    PARTITION_AT_KEYS = ((10), (100, 1000), (1000, 20))
+);
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed1` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = INTERVAL('PT1H'))
+;
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed2` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = INTERVAL('PT2H'))
+;
+
+ALTER SEQUENCE `/Root/test_show_create/_serial_column_Key1` START WITH 150;
+
+ALTER SEQUENCE `/Root/test_show_create/_serial_column_Key2` RESTART WITH 5;
+
+ALTER SEQUENCE `/Root/test_show_create/_serial_column_Value1` START WITH 101 INCREMENT BY 404 RESTART;
+)"
+        );
+    }
+
+    Y_UNIT_TEST(ShowCreateTableChangefeeds) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            ALTER TABLE test_show_create ADD CHANGEFEED `feed` WITH (
+                MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = Interval("PT1H")
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Uint64,
+    `Value` String,
+    PRIMARY KEY (`Key`)
+);
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = INTERVAL('PT1H'), TOPIC_MIN_ACTIVE_PARTITIONS = 1)
+;
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed_1` WITH (MODE = 'OLD_IMAGE', FORMAT = 'DEBEZIUM_JSON', RETENTION_PERIOD = Interval("PT1H"));
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed_2` WITH (MODE = 'NEW_IMAGE', FORMAT = 'JSON', TOPIC_MIN_ACTIVE_PARTITIONS = 10, RETENTION_PERIOD = Interval("PT3H"), VIRTUAL_TIMESTAMPS = TRUE);
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Uint64,
+    `Value` String,
+    PRIMARY KEY (`Key`)
+);
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed_1` WITH (MODE = 'OLD_IMAGE', FORMAT = 'DEBEZIUM_JSON', RETENTION_PERIOD = INTERVAL('PT1H'), TOPIC_MIN_ACTIVE_PARTITIONS = 1)
+;
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed_2` WITH (MODE = 'NEW_IMAGE', FORMAT = 'JSON', VIRTUAL_TIMESTAMPS = TRUE, RETENTION_PERIOD = INTERVAL('PT3H'), TOPIC_MIN_ACTIVE_PARTITIONS = 10)
+;
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key String,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON');
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` String,
+    `Value` String,
+    PRIMARY KEY (`Key`)
+);
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = INTERVAL('P1D'))
+;
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed_1` WITH (MODE = 'OLD_IMAGE', FORMAT = 'DEBEZIUM_JSON', RETENTION_PERIOD = Interval("PT1H"));
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed_2` WITH (MODE = 'NEW_IMAGE', FORMAT = 'JSON', TOPIC_MIN_ACTIVE_PARTITIONS = 10, RETENTION_PERIOD = Interval("PT3H"), VIRTUAL_TIMESTAMPS = TRUE);
+            ALTER TABLE test_show_create
+                ADD CHANGEFEED `feed_3` WITH (MODE = 'KEYS_ONLY', TOPIC_MIN_ACTIVE_PARTITIONS = 3, FORMAT = 'JSON', RETENTION_PERIOD = Interval("PT30M"), INITIAL_SCAN = TRUE);
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Uint64,
+    `Value` String,
+    PRIMARY KEY (`Key`)
+);
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed_1` WITH (MODE = 'OLD_IMAGE', FORMAT = 'DEBEZIUM_JSON', RETENTION_PERIOD = INTERVAL('PT1H'), TOPIC_MIN_ACTIVE_PARTITIONS = 1)
+;
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed_2` WITH (MODE = 'NEW_IMAGE', FORMAT = 'JSON', VIRTUAL_TIMESTAMPS = TRUE, RETENTION_PERIOD = INTERVAL('PT3H'), TOPIC_MIN_ACTIVE_PARTITIONS = 10)
+;
+
+ALTER TABLE `test_show_create`
+    ADD CHANGEFEED `feed_3` WITH (MODE = 'KEYS_ONLY', FORMAT = 'JSON', RETENTION_PERIOD = INTERVAL('PT30M'), TOPIC_MIN_ACTIVE_PARTITIONS = 3, INITIAL_SCAN = TRUE)
+;
+)"
+        , false, true
+        );
+    }
+
+    Y_UNIT_TEST(ShowCreateTableSequences) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Serial,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key`
+                START 50
+                INCREMENT BY 11;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key`
+                RESTART;
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Serial4 NOT NULL,
+    `Value` String,
+    PRIMARY KEY (`Key`)
+);
+
+ALTER SEQUENCE `/Root/test_show_create/_serial_column_Key` START WITH 50 INCREMENT BY 11 RESTART;
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 BigSerial,
+                Key2 SmallSerial,
+                Value String,
+                PRIMARY KEY (Key1, Key2)
+            );
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key1`
+                START WITH 50
+                INCREMENT BY 11;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key2`
+                RESTART WITH 5;
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key1` Serial8 NOT NULL,
+    `Key2` Serial2 NOT NULL,
+    `Value` String,
+    PRIMARY KEY (`Key1`, `Key2`)
+);
+
+ALTER SEQUENCE `/Root/test_show_create/_serial_column_Key1` START WITH 50 INCREMENT BY 11;
+
+ALTER SEQUENCE `/Root/test_show_create/_serial_column_Key2` RESTART WITH 5;
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 BigSerial,
+                Key2 SmallSerial,
+                Value1 Serial,
+                Value2 String,
+                PRIMARY KEY (Key1, Key2)
+            );
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key1`
+                START WITH 150
+                INCREMENT BY 300;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key1`
+                INCREMENT 1;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Key2`
+                RESTART WITH 5;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Value1`
+                START WITH 101;
+            ALTER SEQUENCE IF EXISTS `/Root/test_show_create/_serial_column_Value1`
+                INCREMENT 404
+                RESTART;
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key1` Serial8 NOT NULL,
+    `Key2` Serial2 NOT NULL,
+    `Value1` Serial4 NOT NULL,
+    `Value2` String,
+    PRIMARY KEY (`Key1`, `Key2`)
+);
+
+ALTER SEQUENCE `/Root/test_show_create/_serial_column_Key1` START WITH 150;
+
+ALTER SEQUENCE `/Root/test_show_create/_serial_column_Key2` RESTART WITH 5;
+
+ALTER SEQUENCE `/Root/test_show_create/_serial_column_Value1` START WITH 101 INCREMENT BY 404 RESTART;
+)"
+        );
+    }
+
+    Y_UNIT_TEST(ShowCreateTablePartitionPolicyIndexTable) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 Int64 NOT NULL,
+                Key2 Utf8 NOT NULL,
+                Key3 PgInt2 NOT NULL,
+                Value1 Utf8,
+                Value2 Bool,
+                Value3 String,
+                INDEX Index1 GLOBAL SYNC ON (Key2, Value1, Value2),
+                PRIMARY KEY (Key1, Key2, Key3)
+            );
+            ALTER TABLE test_show_create ALTER INDEX Index1 SET (
+                AUTO_PARTITIONING_BY_LOAD = ENABLED,
+                AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 5000
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key1` Int64 NOT NULL,
+    `Key2` Utf8 NOT NULL,
+    `Key3` pgint2 NOT NULL,
+    `Value1` Utf8,
+    `Value2` Bool,
+    `Value3` String,
+    INDEX `Index1` GLOBAL SYNC ON (`Key2`, `Value1`, `Value2`),
+    PRIMARY KEY (`Key1`, `Key2`, `Key3`)
+);
+
+ALTER TABLE `test_show_create`
+    ALTER INDEX `Index1` SET (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 5000)
+;
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 Int64 NOT NULL DEFAULT -100,
+                Key2 Utf8 NOT NULL,
+                Key3 BigSerial NOT NULL,
+                Value1 Utf8 FAMILY Family1,
+                Value2 Bool FAMILY Family2,
+                Value3 String FAMILY Family2,
+                INDEX Index1 GLOBAL ASYNC ON (Key2, Value1, Value2),
+                INDEX Index2 GLOBAL ASYNC ON (Key3, Value2) COVER (Value1, Value3),
+                PRIMARY KEY (Key1, Key2, Key3),
+                FAMILY Family1 (
+                    DATA = "test0",
+                    COMPRESSION = "off"
+                ),
+                FAMILY Family2 (
+                    DATA = "test1",
+                    COMPRESSION = "lz4"
+                )
+            ) WITH (
+                AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000
+            );
+            ALTER TABLE test_show_create ALTER INDEX Index1 SET (
+                AUTO_PARTITIONING_BY_LOAD = ENABLED,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2000
+            );
+            ALTER TABLE test_show_create ALTER INDEX Index2 SET (
+                AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 100
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key1` Int64 NOT NULL DEFAULT -100,
+    `Key2` Utf8 NOT NULL,
+    `Key3` Serial8 NOT NULL,
+    `Value1` Utf8 FAMILY `Family1`,
+    `Value2` Bool FAMILY `Family2`,
+    `Value3` String FAMILY `Family2`,
+    INDEX `Index1` GLOBAL ASYNC ON (`Key2`, `Value1`, `Value2`),
+    INDEX `Index2` GLOBAL ASYNC ON (`Key3`, `Value2`) COVER (`Value1`, `Value3`),
+    FAMILY `Family1` (DATA = 'test0', COMPRESSION = 'off'),
+    FAMILY `Family2` (DATA = 'test1', COMPRESSION = 'lz4'),
+    PRIMARY KEY (`Key1`, `Key2`, `Key3`)
+)
+WITH (
+    AUTO_PARTITIONING_BY_SIZE = ENABLED,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000
+);
+
+ALTER TABLE `test_show_create`
+    ALTER INDEX `Index1` SET (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2000)
+;
+
+ALTER TABLE `test_show_create`
+    ALTER INDEX `Index2` SET (AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 100)
+;
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 Int64 NOT NULL,
+                Key2 Utf8 NOT NULL,
+                Key3 PgInt2 NOT NULL,
+                Value1 Utf8,
+                Value2 Bool,
+                Value3 String,
+                INDEX Index1 GLOBAL SYNC ON (Key2, Value1, Value2),
+                INDEX Index2 GLOBAL ASYNC ON (Key3, Value1) COVER (Value2, Value3),
+                INDEX Index3 GLOBAL SYNC ON (Key1, Key2, Value1),
+                PRIMARY KEY (Key1, Key2, Key3)
+            );
+            ALTER TABLE test_show_create ALTER INDEX Index1 SET (
+                AUTO_PARTITIONING_BY_LOAD = ENABLED,
+                AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 5000,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1000
+            );
+            ALTER TABLE test_show_create ALTER INDEX Index2 SET (
+                AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                AUTO_PARTITIONING_PARTITION_SIZE_MB = 10000,
+                AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 2700
+            );
+            ALTER TABLE test_show_create ALTER INDEX Index3 SET (
+                AUTO_PARTITIONING_BY_SIZE = DISABLED,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3500
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key1` Int64 NOT NULL,
+    `Key2` Utf8 NOT NULL,
+    `Key3` pgint2 NOT NULL,
+    `Value1` Utf8,
+    `Value2` Bool,
+    `Value3` String,
+    INDEX `Index1` GLOBAL SYNC ON (`Key2`, `Value1`, `Value2`),
+    INDEX `Index2` GLOBAL ASYNC ON (`Key3`, `Value1`) COVER (`Value2`, `Value3`),
+    INDEX `Index3` GLOBAL SYNC ON (`Key1`, `Key2`, `Value1`),
+    PRIMARY KEY (`Key1`, `Key2`, `Key3`)
+);
+
+ALTER TABLE `test_show_create`
+    ALTER INDEX `Index1` SET (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1000, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 5000)
+;
+
+ALTER TABLE `test_show_create`
+    ALTER INDEX `Index2` SET (AUTO_PARTITIONING_BY_SIZE = ENABLED, AUTO_PARTITIONING_PARTITION_SIZE_MB = 10000, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 2700)
+;
+
+ALTER TABLE `test_show_create`
+    ALTER INDEX `Index3` SET (AUTO_PARTITIONING_BY_SIZE = DISABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3500)
+;
 )"
         );
     }

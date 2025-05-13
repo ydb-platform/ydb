@@ -222,4 +222,5 @@ message CleanUpDataResponse {
     uint64 actual_generation = 2;
     Status status = 3;
     string error_reason = 4;
+    uint64 tablet_id = 5; // key value tablet id
 }

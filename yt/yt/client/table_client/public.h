@@ -160,7 +160,7 @@ DEFINE_ENUM(ECompatOptimizeFor,
     ((Scan)    (1))
 );
 
-DEFINE_ENUM_WITH_UNDERLYING_TYPE(EOptimizeFor, int,
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(EOptimizeFor, i32,
     ((Lookup)  (0))
     ((Scan)    (1))
 );
@@ -370,7 +370,7 @@ DECLARE_REFCOUNTED_STRUCT(THashTableChunkIndexWriterConfig)
 DECLARE_REFCOUNTED_STRUCT(TChunkIndexesWriterConfig)
 DECLARE_REFCOUNTED_STRUCT(TSlimVersionedWriterConfig)
 
-DECLARE_REFCOUNTED_CLASS(TChunkWriterTestingOptions)
+DECLARE_REFCOUNTED_STRUCT(TChunkWriterTestingOptions)
 
 DECLARE_REFCOUNTED_STRUCT(TChunkReaderConfig)
 DECLARE_REFCOUNTED_STRUCT(TChunkWriterConfig)
@@ -392,8 +392,8 @@ DECLARE_REFCOUNTED_STRUCT(TRetentionConfig)
 DECLARE_REFCOUNTED_STRUCT(TTypeConversionConfig)
 DECLARE_REFCOUNTED_STRUCT(TInsertRowsFormatConfig)
 
-DECLARE_REFCOUNTED_CLASS(TChunkReaderOptions)
-DECLARE_REFCOUNTED_CLASS(TChunkWriterOptions)
+DECLARE_REFCOUNTED_STRUCT(TChunkReaderOptions)
+DECLARE_REFCOUNTED_STRUCT(TChunkWriterOptions)
 
 DECLARE_REFCOUNTED_STRUCT(TVersionedRowDigestConfig)
 

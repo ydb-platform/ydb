@@ -18,6 +18,7 @@ PEERDIR(
     yt/cpp/mapreduce/interface
     yt/cpp/mapreduce/library/user_job_statistics
     yql/essentials/minikql/comp_nodes
+    yql/essentials/public/langver
     yql/essentials/public/udf
     yql/essentials/utils
     yql/essentials/utils/backtrace

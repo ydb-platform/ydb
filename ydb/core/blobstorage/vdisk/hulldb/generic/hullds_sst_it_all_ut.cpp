@@ -202,6 +202,64 @@ namespace NKikimr {
                 == "[20:0:300:0:0:0:0][20:0:10:0:0:0:0][20:0:0:0:0:0:0][10:0:10:0:0:0:0][10:0:0:0:0:0:0]");
         }
 
+        Y_UNIT_TEST(TestSstIndexSaveLoad) {
+            TTestContexts ctxs;
+            TTrackableVector<TLogoBlobSst::TRec> index(TMemoryConsumer(ctxs.GetVCtx()->SstIndex));
+
+            auto addRecord = [&index](ui64 tabletId, ui32 step, ui32 blobSize) {
+                TLogoBlobID id(tabletId, 0, step, 0, blobSize, 0);
+                index.emplace_back(TKeyLogoBlob(id), TMemRecLogoBlob());
+            };
+
+            addRecord(10, 0, 1);
+            addRecord(10, 10, 2);
+            addRecord(20, 0, 3);
+            addRecord(20, 10, 4);
+            addRecord(20, 300, 5);
+
+            TLogoBlobSstPtr ptr(new TLogoBlobSst(ctxs.GetVCtx()));
+            ptr->LoadLinearIndex(index);
+
+            const auto& indexHigh = ptr->IndexHigh;
+            auto high = indexHigh.begin();
+
+            using TLogoBlobIdHigh = TRecIndex<TKeyLogoBlob, TMemRecLogoBlob>::TLogoBlobIdHigh;
+
+            UNIT_ASSERT(high->Key == TLogoBlobIdHigh(10, 0, 0, 0));
+            UNIT_ASSERT(high->LowRangeEndIndex == 2);
+            ++high;
+            UNIT_ASSERT(high->Key == TLogoBlobIdHigh(20, 0, 0, 0));
+            UNIT_ASSERT(high->LowRangeEndIndex == 4);
+            ++high;
+            UNIT_ASSERT(high->Key == TLogoBlobIdHigh(20, 0, 300, 0));
+            UNIT_ASSERT(high->LowRangeEndIndex == 5);
+            ++high;
+            UNIT_ASSERT(high == indexHigh.end());
+
+            const auto& indexLow = ptr->IndexLow;
+            auto low = indexLow.begin();
+
+            using TLogoBlobIdLow = TRecIndex<TKeyLogoBlob, TMemRecLogoBlob>::TLogoBlobIdLow;
+
+            UNIT_ASSERT(low->Key == TLogoBlobIdLow(0, 0, 0, 1, 0));
+            ++low;
+            UNIT_ASSERT(low->Key == TLogoBlobIdLow(10, 0, 0, 2, 0));
+            ++low;
+            UNIT_ASSERT(low->Key == TLogoBlobIdLow(0, 0, 0, 3, 0));
+            ++low;
+            UNIT_ASSERT(low->Key == TLogoBlobIdLow(10, 0, 0, 4, 0));
+            ++low;
+            UNIT_ASSERT(low->Key == TLogoBlobIdLow(300, 0, 0, 5, 0));
+            ++low;
+            UNIT_ASSERT(low == indexLow.end());
+
+            TTrackableVector<TLogoBlobSst::TRec> checkIndex(TMemoryConsumer(ctxs.GetVCtx()->SstIndex));
+            ptr->SaveLinearIndex(&checkIndex);
+
+            for (auto i = index.begin(), c = checkIndex.begin(); i != index.end(); ++i, ++c) {
+                UNIT_ASSERT(i->Key == c->Key);
+            }
+        }
     } // TBlobStorageHullSstIt
 
     Y_UNIT_TEST_SUITE(TBlobStorageHullOrderedSstsIt) {

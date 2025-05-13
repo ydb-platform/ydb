@@ -21,25 +21,10 @@ private:
     };
     std::vector<TColumnsPack> Packs;
     THashMap<ui32, THashSet<EMemType>> Control;
-    const EStageFeaturesIndexes StageIndex;
+    const NArrow::NSSA::IMemoryCalculationPolicy::EStage StageIndex;
     const std::optional<ui64> PredefinedSize;
 
 protected:
-    class TFetchingStepAllocation: public NGroupedMemoryManager::IAllocation {
-    private:
-        using TBase = NGroupedMemoryManager::IAllocation;
-        std::weak_ptr<IDataSource> Source;
-        TFetchingScriptCursor Step;
-        NColumnShard::TCounterGuard TasksGuard;
-        const EStageFeaturesIndexes StageIndex;
-        virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
-            const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation) override;
-        virtual void DoOnAllocationImpossible(const TString& errorMessage) override;
-
-    public:
-        TFetchingStepAllocation(const std::shared_ptr<IDataSource>& source, const ui64 mem, const TFetchingScriptCursor& step,
-            const EStageFeaturesIndexes stageIndex);
-    };
     virtual TConclusion<bool> DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const override;
     virtual ui64 GetProcessingDataSize(const std::shared_ptr<IDataSource>& source) const override;
     virtual TString DoDebugString() const override {
@@ -53,6 +38,22 @@ protected:
     }
 
 public:
+    class TFetchingStepAllocation: public NGroupedMemoryManager::IAllocation {
+    private:
+        using TBase = NGroupedMemoryManager::IAllocation;
+        std::weak_ptr<IDataSource> Source;
+        TFetchingScriptCursor Step;
+        NColumnShard::TCounterGuard TasksGuard;
+        const NArrow::NSSA::IMemoryCalculationPolicy::EStage StageIndex;
+        const bool NeedNextStep;
+        virtual bool DoOnAllocated(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard,
+            const std::shared_ptr<NGroupedMemoryManager::IAllocation>& allocation) override;
+        virtual void DoOnAllocationImpossible(const TString& errorMessage) override;
+
+    public:
+        TFetchingStepAllocation(const std::shared_ptr<IDataSource>& source, const ui64 mem, const TFetchingScriptCursor& step,
+            const NArrow::NSSA::IMemoryCalculationPolicy::EStage stageIndex, const bool needNextStep = true);
+    };
     void AddAllocation(const TColumnsSetIds& ids, const EMemType memType) {
         if (!ids.GetColumnsCount()) {
             return;
@@ -62,17 +63,17 @@ public:
         }
         Packs.emplace_back(ids, memType);
     }
-    EStageFeaturesIndexes GetStage() const {
+    NArrow::NSSA::IMemoryCalculationPolicy::EStage GetStage() const {
         return StageIndex;
     }
 
-    TAllocateMemoryStep(const TColumnsSetIds& columns, const EMemType memType, const EStageFeaturesIndexes stageIndex)
+    TAllocateMemoryStep(const TColumnsSetIds& columns, const EMemType memType, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stageIndex)
         : TBase("ALLOCATE_MEMORY::" + ::ToString(stageIndex))
         , StageIndex(stageIndex) {
         AddAllocation(columns, memType);
     }
 
-    TAllocateMemoryStep(const ui64 memSize, const EStageFeaturesIndexes stageIndex)
+    TAllocateMemoryStep(const ui64 memSize, const NArrow::NSSA::IMemoryCalculationPolicy::EStage stageIndex)
         : TBase("ALLOCATE_MEMORY::" + ::ToString(stageIndex))
         , StageIndex(stageIndex)
         , PredefinedSize(memSize) {

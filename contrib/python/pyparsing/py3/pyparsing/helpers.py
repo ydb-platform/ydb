@@ -418,6 +418,8 @@ def locatedExpr(expr: ParserElement) -> ParserElement:
     )
 
 
+# define special default value to permit None as a significant value for
+# ignore_expr
 _NO_IGNORE_EXPR_GIVEN = NoMatch()
 
 
@@ -498,11 +500,13 @@ def nested_expr(
     """
     if ignoreExpr != ignore_expr:
         ignoreExpr = ignore_expr if ignoreExpr is _NO_IGNORE_EXPR_GIVEN else ignoreExpr
+
     if ignoreExpr is _NO_IGNORE_EXPR_GIVEN:
         ignoreExpr = quoted_string()
 
     if opener == closer:
         raise ValueError("opening and closing strings cannot be the same")
+
     if content is None:
         if isinstance(opener, str_type) and isinstance(closer, str_type):
             opener = typing.cast(str, opener)
@@ -519,8 +523,11 @@ def nested_expr(
                         )
                     )
                 else:
-                    content = empty.copy() + CharsNotIn(
-                        opener + closer + ParserElement.DEFAULT_WHITE_CHARS
+                    content = Combine(
+                        Empty()
+                        + CharsNotIn(
+                            opener + closer + ParserElement.DEFAULT_WHITE_CHARS
+                        )
                     )
             else:
                 if ignoreExpr is not None:
@@ -544,10 +551,12 @@ def nested_expr(
             raise ValueError(
                 "opening and closing arguments must be strings if no content expression is given"
             )
-    if ParserElement.DEFAULT_WHITE_CHARS:
-        content.set_parse_action(
-            lambda t: t[0].strip(ParserElement.DEFAULT_WHITE_CHARS)
-        )
+
+        # for these internally-created context expressions, simulate whitespace-skipping
+        if ParserElement.DEFAULT_WHITE_CHARS:
+            content.set_parse_action(
+                lambda t: t[0].strip(ParserElement.DEFAULT_WHITE_CHARS)
+            )
 
     ret = Forward()
     if ignoreExpr is not None:
@@ -556,7 +565,9 @@ def nested_expr(
         )
     else:
         ret <<= Group(Suppress(opener) + ZeroOrMore(ret | content) + Suppress(closer))
+
     ret.set_name(f"nested {opener}{closer} expression")
+
     # don't override error message from content expressions
     ret.errmsg = None
     return ret
@@ -621,7 +632,7 @@ def _makeTags(tagStr, xml, suppress_LT=Suppress("<"), suppress_GT=Suppress(">"))
 
 
 def make_html_tags(
-    tag_str: Union[str, ParserElement]
+    tag_str: Union[str, ParserElement],
 ) -> tuple[ParserElement, ParserElement]:
     """Helper to construct opening and closing tag expressions for HTML,
     given a tag name. Matches tags in either upper or lower case,
@@ -648,7 +659,7 @@ def make_html_tags(
 
 
 def make_xml_tags(
-    tag_str: Union[str, ParserElement]
+    tag_str: Union[str, ParserElement],
 ) -> tuple[ParserElement, ParserElement]:
     """Helper to construct opening and closing tag expressions for XML,
     given a tag name. Matches tags only in the given upper/lower case.

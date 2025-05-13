@@ -158,8 +158,8 @@ class TestMutableMultiDict:
         d.add("key", "val1")
         d.add("key", "val2")
 
-        assert ("key", "val1") == d.popitem()
-        assert [("key", "val2")] == list(d.items())
+        assert ("key", "val2") == d.popitem()
+        assert [("key", "val1")] == list(d.items())
 
     def test_popitem_empty_multidict(
         self,
@@ -317,6 +317,38 @@ class TestMutableMultiDict:
             del d["key" + str(i)]
 
         assert {"key" + str(SIZE - 1): SIZE - 1} == d
+
+    def test_update(
+        self,
+        case_sensitive_multidict_class: type[CIMultiDict[Union[str, int]]],
+    ) -> None:
+        d = case_sensitive_multidict_class()
+        assert d == {}
+
+        d.update([("key", "one"), ("key", "two")], key=3, foo="bar")
+        assert d != {"key": "one", "foo": "bar"}
+        assert 4 == len(d)
+        itms = d.items()
+        # we can't guarantee order of kwargs
+        assert ("key", "one") in itms
+        assert ("key", "two") in itms
+        assert ("key", 3) in itms
+        assert ("foo", "bar") in itms
+
+        other = case_sensitive_multidict_class(bar="baz")
+        assert other == {"bar": "baz"}
+
+        d.update(other)
+        assert ("bar", "baz") in d.items()
+
+        d.update({"foo": "moo"})
+        assert ("foo", "moo") in d.items()
+
+        d.update()
+        assert 5 == len(d)
+
+        with pytest.raises(TypeError):
+            d.update("foo", "bar")  # type: ignore[arg-type, call-arg]
 
 
 class TestCIMutableMultiDict:
@@ -514,9 +546,9 @@ class TestCIMutableMultiDict:
         d.add("key", "val2")
 
         pair = d.popitem()
-        assert ("KEY", "val1") == pair
+        assert ("key", "val2") == pair
         assert isinstance(pair[0], str)
-        assert [("key", "val2")] == list(d.items())
+        assert [("KEY", "val1")] == list(d.items())
 
     def test_popitem_empty_multidict(
         self,
@@ -658,3 +690,28 @@ class TestCIMutableMultiDict:
         d["c"] = "000"
         # This causes an error on pypy.
         list(before_mutation_values)
+
+    def test_keys_type(
+        self,
+        case_insensitive_multidict_class: type[CIMultiDict[str]],
+        case_insensitive_str_class: type[istr],
+    ) -> None:
+        d = case_insensitive_multidict_class(
+            [
+                ("KEY", "one"),
+            ]
+        )
+        d["k2"] = "2"
+        d.extend(k3="3")
+
+        for k in d:
+            assert type(k) is case_insensitive_str_class
+
+        for k in d.keys():
+            assert type(k) is case_insensitive_str_class
+
+        for k, v in d.items():
+            assert type(k) is case_insensitive_str_class
+
+        k, v = d.popitem()
+        assert type(k) is case_insensitive_str_class

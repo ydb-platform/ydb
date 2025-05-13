@@ -18,7 +18,7 @@ class TestCompatibility(RestartToAnotherVersionFixture):
                 "suppress_compatibility_check": True,
                 # "enable_table_datetime64": True # uncomment for 64 datetime in tpc-h/tpc-ds
                 },
-            column_shard_config={   
+            column_shard_config={
                 'disabled_on_scheme_shard': False,
             }
         )

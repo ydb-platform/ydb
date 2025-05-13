@@ -32,7 +32,6 @@ class RestartToAnotherVersionFixture:
         self.current_binary_paths_index = 0
         self.all_binary_paths = request.param
 
-
     def setup_cluster(self, **kwargs):
         self.config = KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,

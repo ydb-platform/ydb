@@ -133,8 +133,13 @@ protected:
     }
 
     void Handle(TEvHttpProxy::TEvHttpOutgoingConnectionAvailable::TPtr& event) {
-        ALOG_DEBUG(HttpLog, "Connection " << event->Get()->ConnectionID << " available for destination " << event->Get()->Destination);
-        AvailableConnections.emplace(event->Get()->Destination, event->Get()->ConnectionID);
+        if (AvailableConnections.size() < MAX_REUSABLE_CONNECTIONS) {
+            ALOG_DEBUG(HttpLog, "Connection " << event->Get()->ConnectionID << " available for destination " << event->Get()->Destination);
+            AvailableConnections.emplace(event->Get()->Destination, event->Get()->ConnectionID);
+        } else {
+            ALOG_DEBUG(HttpLog, "Connection " << event->Get()->ConnectionID << " not added to available connections, limit reached");
+            Send(event->Get()->ConnectionID, new NActors::TEvents::TEvPoisonPill());
+        }
     }
 
     void Handle(TEvHttpProxy::TEvHttpOutgoingConnectionClosed::TPtr& event) {

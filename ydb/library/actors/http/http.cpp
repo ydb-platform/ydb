@@ -89,7 +89,7 @@ bool THttpParser<THttpRequest>::HasBody() const {
 }
 
 template <>
-void THttpParser<THttpRequest>::Advance(size_t len) {
+size_t THttpParser<THttpRequest>::AdvancePartial(size_t len) {
     TStringBuf data(Pos(), len);
     while (!data.empty()) {
         if (Stage != EParseStage::Error) {
@@ -140,7 +140,7 @@ void THttpParser<THttpRequest>::Advance(size_t len) {
                 if (Stage != EParseStage::Body) {
                     break;
                 }
-                [[fallthrough]];
+                return TSocketBuffer::Advance(len - data.size());
             }
             case EParseStage::Body: {
                 if (TEqNoCase()(TransferEncoding, "chunked")) {
@@ -204,6 +204,7 @@ void THttpParser<THttpRequest>::Advance(size_t len) {
                                 // Invalid body encoding
                                 Stage = EParseStage::Error;
                             }
+                            return TSocketBuffer::Advance(len - data.size());
                         }
                     }
                 }
@@ -220,7 +221,7 @@ void THttpParser<THttpRequest>::Advance(size_t len) {
                 break;
         }
     }
-    TSocketBuffer::Advance(len);
+    return TSocketBuffer::Advance(len - data.size());
 }
 
 template <>
@@ -253,7 +254,7 @@ void THttpResponse::Clear() {
 }
 
 template <>
-void THttpParser<THttpResponse>::Advance(size_t len) {
+size_t THttpParser<THttpResponse>::AdvancePartial(size_t len) {
     TStringBuf data(Pos(), len);
     while (!data.empty()) {
         if (Stage != EParseStage::Error) {
@@ -304,7 +305,7 @@ void THttpParser<THttpResponse>::Advance(size_t len) {
                 if (Stage != EParseStage::Body) {
                     break;
                 }
-                [[fallthrough]];
+                return TSocketBuffer::Advance(len - data.size());
             }
             case EParseStage::Body: {
                 if (TEqNoCase()(TransferEncoding, "chunked")) {
@@ -379,6 +380,7 @@ void THttpParser<THttpResponse>::Advance(size_t len) {
                                 // Invalid body encoding
                                 Stage = EParseStage::Error;
                             }
+                            return TSocketBuffer::Advance(len - data.size());
                         }
                     }
                 }
@@ -394,7 +396,7 @@ void THttpParser<THttpResponse>::Advance(size_t len) {
                 break;
         }
     }
-    TSocketBuffer::Advance(len);
+    return TSocketBuffer::Advance(len - data.size());
 }
 
 template <>
@@ -654,9 +656,14 @@ void THttpOutgoingResponse::AddDataChunk(THttpOutgoingDataChunkPtr dataChunk) {
 }
 
 THttpOutgoingDataChunk::THttpOutgoingDataChunk(THttpOutgoingResponsePtr response, TStringBuf data)
-    : THttpDataChunk(data)
-    , Response(std::move(response))
-{}
+    : Response(std::move(response))
+{
+    if (data) {
+        SetData(data);
+    } else {
+        SetEndOfData();
+    }
+}
 
 THttpOutgoingDataChunk::THttpOutgoingDataChunk(THttpOutgoingResponsePtr response)
     : Response(std::move(response))

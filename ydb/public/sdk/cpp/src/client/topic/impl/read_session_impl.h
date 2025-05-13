@@ -1404,12 +1404,7 @@ private:
     ui64 NextPartitionStreamId;
     ui64 PartitionStreamIdStep;
 
-    // Currently needed only for scheduling callbacks in direct read sessions
-    // to retry sending StartDirectReadPartitionSession requests after temporary errors.
-    TScheduleCallbackFunc ScheduleCallbackFunc;
-
     IProcessorFactoryPtr ConnectionFactory;
-    IDirectReadProcessorFactoryPtr DirectReadProcessorFactory;
 
     std::shared_ptr<TReadSessionEventsQueue<UseMigrationProtocol>> EventsQueue;
     NYdbGrpc::IQueueClientContextPtr ClientContext; // Common client context.
@@ -1452,6 +1447,11 @@ private:
 
     std::unordered_map<ui32, std::vector<TParentInfo>> HierarchyData;
     std::unordered_set<ui64> ReadingFinishedData;
+
+    // Currently needed only for scheduling callbacks in direct read sessions
+    // to retry sending StartDirectReadPartitionSession requests after temporary errors.
+    TScheduleCallbackFunc ScheduleCallbackFunc;
+    IDirectReadProcessorFactoryPtr DirectReadProcessorFactory;
 
     TTransactionMap Txs;
 };

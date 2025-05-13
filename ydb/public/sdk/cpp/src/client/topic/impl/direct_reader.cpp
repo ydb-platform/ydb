@@ -472,7 +472,7 @@ void TDirectReadSession::DeletePartitionSession(TPartitionSessionId partitionSes
     with_lock (Lock) {
         auto it = PartitionSessions.find(partitionSessionId);
         if (it == PartitionSessions.end()) {
-            // TODO(qyryq) Log it.
+            LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "DeletePartitionSession " << partitionSessionId << " not found");
             return;
         }
 
@@ -492,7 +492,7 @@ void TDirectReadSession::DeletePartitionSessionImpl(TPartitionSessionId partitio
 
     auto it = PartitionSessions.find(partitionSessionId);
     if (it == PartitionSessions.end()) {
-        // TODO(qyryq) Log it.
+        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "DeletePartitionSessionImpl " << partitionSessionId << " not found");
         return;
     }
 
@@ -729,8 +729,14 @@ void TDirectReadSession::OnReadDoneImpl(Ydb::Topic::StreamDirectReadMessage::Sta
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Got StartDirectReadPartitionSessionResponse " << response.ShortDebugString());
 
     auto partitionSessionId = response.partition_session_id();
-    // TODO(qyryq) Check response.generation().
+
     auto it = PartitionSessions.find(partitionSessionId);
+    if (it->second.Location.GetGeneration() != response.generation()) {
+        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Got StartDirectReadPartitionSessionResponse for wrong generation "
+            << "(expected " << it->second.Location.GetGeneration()
+            << ", got " << response.generation() << ") partition_session_id=" << partitionSessionId);
+        return;
+    }
 
     if (it == PartitionSessions.end()) {
         // We could get a StopPartitionSessionRequest from server before processing this response.

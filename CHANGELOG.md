@@ -10,24 +10,16 @@
 * 16194:Fixed a verification failure that occurred during VDisk compaction. [#16194](https://github.com/ydb-platform/ydb/pull/16194) ([Alexander Rutkovsky](https://github.com/alexvru))
 * 15570:Allow creation of views that use UDFs in their queries. [#15570](https://github.com/ydb-platform/ydb/pull/15570) ([Daniil Demin](https://github.com/jepett0))
 * 15515:Fixed a topic reading hang that occurred when at least one partition had no incoming data but was being read by multiple consumers. [#15515](https://github.com/ydb-platform/ydb/pull/15515) ([FloatingCrowbar](https://github.com/FloatingCrowbar))
-* 18117:Moved changes from: https://github.com/ydb-platform/ydb/pull/18079
-
-Issue: https://github.com/ydb-platform/ydb/issues/18116
-
-This PR fixes optimisation in `NKikimr::NRawSocket::TBufferedWriter`, that wrote the entire message directly to socket if message was larger than available space in buffer. When we wrote more than 6mb to socket with SSL enabled, it every time returned -11 (WAGAIN). 
+* 17629:Fix early object deletion in wide combiner. [#17629](https://github.com/ydb-platform/ydb/pull/17629) ([Filitov Mikhail](https://github.com/lll-phill-lll))
+* 17583:Copy table should not check feature flags for columns types. If the types in original table are created then they should be allowed in destination table. [#17583](https://github.com/ydb-platform/ydb/pull/17583) ([azevaykin](https://github.com/azevaykin))
+* 17521:The SDK user writes messages to the topic in a transaction. It does not wait for confirmation that the messages have been recorded and calls Commit. The processing of this and the following transactions in the PQ tablet stops. When processing the `UserActionAndTransactionEvents` queue, it was not taken into account that the `TEvGetWriteInfoError` message was received. As a result, the transaction remained at the head of the queue and blocked the processing of other operations. [#17521](https://github.com/ydb-platform/ydb/pull/17521) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
+* 17852:The transaction has entered the EXECUTED state, but has not yet saved it to disk. If the tablet receives a TEvReadSet, it will send a TEvReadSetAck in response. TEvReadSetAck and it will delete the transaction. If the tablet restarts at this point, the transaction will remain in the WAIT_RS state. The tablet should send TEvReadSetAck only after it saves the transaction status to disk. [#17852](https://github.com/ydb-platform/ydb/pull/17852) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
+* 18117:This PR fixes optimisation in `NKikimr::NRawSocket::TBufferedWriter`, that wrote the entire message directly to socket if message was larger than available space in buffer. When we wrote more than 6mb to socket with SSL enabled, it every time returned -11 (WAGAIN). 
 As a quick fix, we replace sending of an entire message to socket with cutting this message into 1mb chunks and sending them to socket one by one. [#18117](https://github.com/ydb-platform/ydb/pull/18117) ([Andrey Serebryanskiy](https://github.com/a-serebryanskiy))
-* 18077:Changes from #18072
+* 18077:The metric value is reset to zero when the `TEvPQ::TEvPartitionCounters` event arrives. Added a re-calculation of the values. [#18077](https://github.com/ydb-platform/ydb/pull/18077) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
+* 18007:The PQ tablet forgets about the transaction only after it receives a TEvReadSetAck from all participants. Another shard may be deleted before the PQ completes the transaction (for example, due to a split table). As a result, transactions are executed, but remain in the WAIT_RS_ACKS state. If the PQ tablet sends a TEvReadSet to a tablet that has already been deleted, it receives a TEvClientConnected with the `Dead` flag in response. In this case, we consider that we have received a TEvReadSetAck. [#18007](https://github.com/ydb-platform/ydb/pull/18007) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
 
-Issue #18071
+### Performance
 
-The metric value is reset to zero when the `TEvPQ::TEvPartitionCounters` event arrives.
-
-Added a re-calculation of the values. [#18077](https://github.com/ydb-platform/ydb/pull/18077) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
-* 18007:Moved changes from #17913 
-
-Issue #17915
-
-The PQ tablet forgets about the transaction only after it receives a TEvReadSetAck from all participants. Another shard may be deleted before the PQ completes the transaction (for example, due to a split table). As a result, transactions are executed, but remain in the WAIT_RS_ACKS state.
-
-If the PQ tablet sends a TEvReadSet to a tablet that has already been deleted, it receives a TEvClientConnected with the `Dead` flag in response. In this case, we consider that we have received a TEvReadSetAck. [#18007](https://github.com/ydb-platform/ydb/pull/18007) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
+* 17757:Limit internal inflight config updates. [#17757](https://github.com/ydb-platform/ydb/pull/17757) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
 

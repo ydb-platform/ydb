@@ -24,7 +24,7 @@ public:
         NKikimr::NMiniKQL::TType* srcRowType, Ydb::ResultSet::Type resultSetType, const TVector<ui32>* columnOrder = nullptr,
         const TVector<TString>* columnHints = nullptr);
 
-  private:
+private:
     NMiniKQL::TScopedAlloc* Alloc = nullptr;
     NMiniKQL::TTypeEnvironment* TypeEnv = nullptr;
     NMiniKQL::THolderFactory* HolderFactory = nullptr;

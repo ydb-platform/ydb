@@ -48,10 +48,12 @@ struct TTask {
             Value = std::forward<U>(v);
         }
 
-        // TODO
-        void unhandled_exception() { std::terminate(); }
+        void unhandled_exception() {
+            Exception = std::current_exception();
+        }
 
         T Value;
+        std::exception_ptr Exception;
         std::coroutine_handle<> Continuation;
     };
 
@@ -102,6 +104,9 @@ struct TTask {
     }
 
     T& await_resume() {
+        if (Handle.promise().Exception) {
+            std::rethrow_exception(Handle.promise().Exception);
+        }
         return Get();
     }
 
@@ -135,9 +140,11 @@ struct TTask<void> {
 
         void return_void() {}
 
-        // TODO
-        void unhandled_exception() { std::terminate(); }
+        void unhandled_exception() {
+            Exception = std::current_exception();
+        }
 
+        std::exception_ptr Exception;
         std::coroutine_handle<> Continuation;
     };
 
@@ -182,7 +189,11 @@ struct TTask<void> {
         Handle.resume();  // start inner task
     }
 
-    void await_resume() {}
+    void await_resume() {
+        if (Handle.promise().Exception) {
+            std::rethrow_exception(Handle.promise().Exception);
+        }
+    }
 
     TCoroHandle Handle;
 };

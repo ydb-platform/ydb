@@ -38,8 +38,12 @@ TTerminalTask TTerminal::Run() {
     Y_UNUSED(StopWarmup);
 
     while (!StopToken.stop_requested()) {
-        auto result = co_await GetNewOrderTask(Context);
-        (void) result;
+        try {
+            auto result = co_await GetNewOrderTask(Context);
+            (void) result;
+        } catch (std::exception ex) {
+            LOG_E("Terminal " << Context.TerminalID << " got exception while transaction execution: " << ex.what());
+        }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(200)); // XXX
     }

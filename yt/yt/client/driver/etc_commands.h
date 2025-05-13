@@ -249,7 +249,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    TString TabletCellBundle;
+    std::string TabletCellBundle;
     std::vector<NYPath::TYPath> MovableTables;
 
     void DoExecute(ICommandContextPtr context) override;

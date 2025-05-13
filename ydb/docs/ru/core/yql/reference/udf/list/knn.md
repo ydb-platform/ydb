@@ -8,11 +8,11 @@
 
 ### Точный метод {#exact-method}
 
-{% include [vector_search_exact.md](../../../../concepts/_includes/vector_search_exact.md) %}
+{% include [vector_search_exact.md](../../_includes/vector_search_exact.md) %}
 
 ### Приближенные методы  {#approximate-methods}
 
-{% include [vector_search_approximate.md](../../../../concepts/_includes/vector_search_approximate.md) %}
+{% include [vector_search_approximate.md](../../_includes/vector_search_approximate.md) %}
 
 {% note info %}
 

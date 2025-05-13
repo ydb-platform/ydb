@@ -63,89 +63,32 @@ public:
     }
 };
 
-std::vector<std::shared_ptr<IPortionDataChunk>> TGeneralSerializedSlice::SplitToSize(const std::shared_ptr<IPortionDataChunk>& bigChunk, const ui32 sizeLimit) const {
-    const ui32 entityId = bigChunk->GetEntityId();
-    NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("entity_id", entityId)(
-        "size", bigChunk->GetPackedSize())("limit", sizeLimit)("r_count", bigChunk->GetRecordsCountVerified());
-    const auto predSplit = [this, sizeLimit, entityId](const std::shared_ptr<IPortionDataChunk>& chunkToSplit) {
-        AFL_VERIFY(chunkToSplit->IsSplittable());
-        Counters->BySizeSplitter.OnTrashSerialized(chunkToSplit->GetPackedSize());
-        const ui32 countSplit = chunkToSplit->GetPackedSize() / sizeLimit + 1;
-        const ui32 sizeSplit = chunkToSplit->GetPackedSize() / countSplit;
-        const std::vector<i64> sizes = NArrow::NSplitter::TSimilarPacker::SplitWithExpected(chunkToSplit->GetPackedSize(), sizeSplit);
-        const std::vector<ui64> sizesUI64(sizes.begin(), sizes.end());
-        auto result = chunkToSplit->InternalSplit(Schema->GetColumnSaver(entityId), Counters, sizesUI64);
-        std::vector<ui32> splittedSizes;
-        std::vector<ui32> splittedRecords;
-        for (auto&& i : result) {
-            splittedSizes.emplace_back(i->GetPackedSize());
-            splittedRecords.emplace_back(i->GetRecordsCountVerified());
-        }
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("sizes", JoinSeq(",", sizes))("s_splitted", JoinSeq(",", splittedSizes))(
-            "r_splitted", JoinSeq(",", splittedRecords));
-        return result;
-    };
-    std::deque<std::shared_ptr<IPortionDataChunk>> dqParts;
-    {
-        auto parts = predSplit(bigChunk);
-        dqParts.insert(dqParts.end(), parts.begin(), parts.end());
-    }
-    std::vector<std::shared_ptr<IPortionDataChunk>> result;
-    while (dqParts.size()) {
-        auto checkImpl = dqParts.front();
-        dqParts.pop_front();
-        if (checkImpl->GetPackedSize() < sizeLimit) {
-            result.emplace_back(checkImpl);
-        } else {
-            AFL_VERIFY(checkImpl->IsSplittable())("p_size", checkImpl->GetPackedSize())("c_impl", checkImpl->GetRecordsCountVerified());
-            auto parts = predSplit(checkImpl);
-            dqParts.insert(dqParts.begin(), parts.begin(), parts.end());
-        }
-    }
-    return result;
-}
-
 bool TGeneralSerializedSlice::GroupBlobsImpl(const NSplitter::TGroupFeatures& features, std::vector<TSplittedBlob>& blobs) {
+    AFL_VERIFY(features.GetSplitSettings().GetMaxBlobSize() >= 2 * features.GetSplitSettings().GetMinBlobSize())(
+                                                                   "event", "we need be sure that 2 * small < big");
     TChunksToSplit chunksInProgress;
     std::sort(Data.begin(), Data.end());
-    const ui64 maxSizeLimitReal = features.GetSplitSettings().GetMaxBlobSize();
-
+    THashMap<ui32, TSplittedEntity::TNormalizedBlobChunks> chunksPreparation;
     for (auto&& i : Data) {
         if (!features.Contains(i.GetEntityId())) {
             continue;
         }
-        std::vector<std::shared_ptr<IPortionDataChunk>> chunks;
-        for (auto&& check : i.GetChunks()) {
-            if (check->GetPackedSize() < (ui64)features.GetSplitSettings().GetMaxBlobSize()) {
-                Counters->BySizeSplitter.OnCorrectSerialized(check->GetPackedSize());
-                chunks.emplace_back(check);
-                continue;
-            }
-            auto splitted = SplitToSize(check, maxSizeLimitReal);
-            chunks.insert(chunks.end(), splitted.begin(), splitted.end());
-            ++InternalSplitsCount;
+        TSplittedEntity::TNormalizedBlobChunks normalizedChunks(features.GetSplitSettings().GetMinBlobSize(),
+            features.GetSplitSettings().GetMaxBlobSize(), features.GetSplitSettings().GetBlobSizeTolerance(), Schema, Counters, InternalSplitsCount);
+        auto chunksInit = i.BuildBlobChunks(features.GetSplitSettings().GetMaxBlobSize(), Schema, Counters, InternalSplitsCount);
+        for (auto&& c : chunksInit) {
+            normalizedChunks.AddChunk(std::move(c));
         }
-        for (ui32 idx = 0; idx < chunks.size(); ++idx) {
-            chunks[idx]->SetChunkIdx(idx);
-        }
-        chunksInProgress.AddChunks(std::move(chunks));
+        chunksPreparation.emplace(i.GetEntityId(), normalizedChunks.Normalize());
     }
-    std::vector<TSplittedBlob> result;
-    result.emplace_back(TSplittedBlob(features.GetName()));
-    TSplittedBlob* currentBlob = &result.back();
-    for (ui32 i = 0; i < chunksInProgress.size(); ++i) {
-        if (currentBlob->GetSize() + chunksInProgress[i]->GetPackedSize() >= maxSizeLimitReal) {
-            AFL_VERIFY(currentBlob->GetSize());
-            result.emplace_back(TSplittedBlob(features.GetName()));
-            currentBlob = &result.back();
-        }
-        currentBlob->Take(chunksInProgress[i]);
+    TSplittedEntity::TNormalizedBlobChunks result(features.GetSplitSettings().GetMinBlobSize(), features.GetSplitSettings().GetMaxBlobSize(),
+        features.GetSplitSettings().GetBlobSizeTolerance(), Schema, Counters, InternalSplitsCount);
+    for (auto&& i : chunksPreparation) {
+        result.Merge(std::move(i.second));
     }
-    if (result.size() && result.back().GetSize() == 0) {
-        result.pop_back();
-    }
-    AFL_VERIFY(result.size() || chunksInProgress.IsEmpty());
-    std::swap(blobs, result);
+    result = result.Normalize();
+    result.ForceMergeSmall();
+    blobs = result.Finish(features.GetName());
     return true;
 }
 

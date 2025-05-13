@@ -142,7 +142,7 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TIndexMeta::DoBuildIndexImpl(TCh
         auto protoString = protoDescription.SerializeAsString();
         TString indexData;
         {
-            result.reserve(sizeof(ui32) + protoString.size() + filtersSumSize);
+            indexData.reserve(sizeof(ui32) + protoString.size() + filtersSumSize);
             TStringOutput so(indexData);
             const ui32 protoSize = protoString.size();
             so.Write(&protoSize, sizeof(ui32));

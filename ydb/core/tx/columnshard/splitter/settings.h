@@ -17,11 +17,13 @@ private:
 // DefaultMaxBlobSize - 2 * DefaultMinBlobSize have to been enought to "guarantee" records count > 1 through blobs splitting
     static const inline i64 DefaultMaxBlobSize = 8 * 1024 * 1024;
     static const inline i64 DefaultMinBlobSize = 3 * 1024 * 1024;
+    static const inline i64 DefaultBlobSizeTolerance = 0;
 
     static const inline i64 DefaultMinRecordsCount = 10000;
     static const inline i64 DefaultMaxPortionSize = 6 * DefaultMaxBlobSize;
     YDB_ACCESSOR(i64, MaxBlobSize, DefaultMaxBlobSize);
     YDB_ACCESSOR(i64, MinBlobSize, DefaultMinBlobSize);
+    YDB_ACCESSOR(i64, BlobSizeTolerance, DefaultBlobSizeTolerance);
     YDB_ACCESSOR(i64, MinRecordsCount, DefaultMinRecordsCount);
     YDB_ACCESSOR(i64, MaxPortionSize, DefaultMaxPortionSize);
 

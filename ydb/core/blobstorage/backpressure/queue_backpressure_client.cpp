@@ -557,6 +557,11 @@ private:
         // 3. TEvUndelivered when message couldn't be delivered
     }
 
+    void ConnectionResetReqeuested(const TActorContext& ctx) {
+        ResetConnection(ctx, NKikimrProto::ERROR, "connection reset requested",
+                ReconnectTimeoutManager.GetTimeoutForNewRequest());
+    }
+
     void HandleCheckReadiness(TEvBlobStorage::TEvVCheckReadinessResult::TPtr& ev, const TActorContext& ctx) {
         QLOG_INFO_S("BSQ17", "TEvVCheckReadinessResult"
             << " Cookie# " << ev->Cookie
@@ -951,6 +956,7 @@ private:
             HFunc(TEvBlobStorage::TEvVGetBarrierResult, HandleResponse)
 
             HFunc(TEvRequestReadiness, RequestReadiness)
+            CFunc(TEvBlobStorage::EvBSQueueResetConnection, ConnectionResetReqeuested)
             HFunc(TEvBlobStorage::TEvVCheckReadinessResult, HandleCheckReadiness)
             CFunc(TEvBlobStorage::EvVReadyNotify, HandleReadyNotify)
 

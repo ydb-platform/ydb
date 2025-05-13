@@ -260,7 +260,7 @@ TMaybe<TColumnOrder> TTypeAnnotationContext::LookupColumnOrder(const TExprNode& 
 IGraphTransformer::TStatus TTypeAnnotationContext::SetColumnOrder(const TExprNode& node,
     const TColumnOrder& columnOrder, TExprContext& ctx)
 {
-    if (!OrderedColumns) {
+    if (!DeriveColumnOrder) {
         return IGraphTransformer::TStatus::Ok;
     }
 

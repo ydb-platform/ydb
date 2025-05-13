@@ -1143,7 +1143,7 @@ namespace {
                             }
                         }
 
-                        if (res.Data().Ref().IsCallable("AssumeColumnOrder")) {
+                        if (Config->Types.OrderedColumns && res.Data().Ref().IsCallable("AssumeColumnOrder")) {
                             if (!HasSetting(res.Settings().Ref(), "freezeColumns")) {
                                 auto dataOrder = Config->Types.LookupColumnOrder(res.Data().Ref());
                                 YQL_ENSURE(dataOrder);

@@ -7,6 +7,8 @@ import copy
 import pytest
 import subprocess
 import datetime
+import random
+import string
 
 from ydb.retries import (
     RetrySettings,
@@ -506,9 +508,9 @@ def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_s
     class BulkUpsertRow(object):
         __slots__ = ('ts', 'value_string')
 
-        def __init__(self, ts, value_string):
+        def __init__(self, ts):
             self.ts = ts
-            self.value_string = value_string
+            self.value_string = ''.join(random.choices(string.ascii_lowercase, k=1024))
 
     driver.scheme_client.make_directory(os.path.join(database, "dirA0"))
     with ydb.QuerySessionPool(driver) as qpool:
@@ -521,9 +523,9 @@ def test_database_with_column_disk_quotas(ydb_hostel_db, ydb_disk_small_quoted_s
             .add_column('ts', ydb.OptionalType(ydb.PrimitiveType.Timestamp)) \
             .add_column('value_string', ydb.OptionalType(ydb.PrimitiveType.Utf8))
         now = datetime.datetime.now()
-        for i in range(0, 10000):
+        for i in range(1000):
             bulk_size = 1000  # rows
-            rows = [BulkUpsertRow((now + datetime.timedelta(microseconds=dt)), str(dt)) for dt in range(i * bulk_size, (i + 1) * bulk_size)]
+            rows = [BulkUpsertRow((now + datetime.timedelta(microseconds=dt))) for dt in range(i * bulk_size, (i + 1) * bulk_size)]
             try:
                 driver.table_client.bulk_upsert(path, rows, column_types)
             except ydb.issues.Overloaded:

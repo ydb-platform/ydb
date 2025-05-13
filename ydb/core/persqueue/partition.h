@@ -765,7 +765,6 @@ private:
 
     bool FirstEvent = true;
     bool HaveWriteMsg = false;
-    bool HaveData = false;
     bool HaveCheckDisk = false;
     bool HaveDrop = false;
     TMaybe<TPartitionSourceManager::TModificationBatch> SourceIdBatch;

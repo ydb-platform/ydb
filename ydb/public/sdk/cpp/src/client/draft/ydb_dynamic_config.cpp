@@ -366,11 +366,9 @@ public:
         return promise.GetFuture();
     }
 
-    TAsyncGetConfigurationVersionResult GetConfigurationVersion(bool listV1Nodes, bool listV2Nodes, bool listUnknownNodes, const TClusterConfigSettings& settings = {}) {
+    TAsyncGetConfigurationVersionResult GetConfigurationVersion(bool listNodes, const TClusterConfigSettings& settings = {}) {
         auto request = MakeOperationRequest<Ydb::DynamicConfig::GetConfigurationVersionRequest>(settings);
-        request.set_list_v1_nodes(listV1Nodes);
-        request.set_list_v2_nodes(listV2Nodes);
-        request.set_list_unknown_nodes(listUnknownNodes);
+        request.set_list_nodes(listNodes);
 
         auto promise = NThreading::NewPromise<TGetConfigurationVersionResult>();
 
@@ -511,11 +509,9 @@ TAsyncFetchStartupConfigResult TDynamicConfigClient::FetchStartupConfig(const TC
 }
 
 TAsyncGetConfigurationVersionResult TDynamicConfigClient::GetConfigurationVersion(
-    bool listV1Nodes,
-    bool listV2Nodes,
-    bool listUnknownNodes,
+    bool listNodes,
     const TClusterConfigSettings& settings) {
-    return Impl_->GetConfigurationVersion(listV1Nodes, listV2Nodes, listUnknownNodes, settings);
+    return Impl_->GetConfigurationVersion(listNodes, settings);
 }
 
 } // namespace NYdb::NDynamicConfig

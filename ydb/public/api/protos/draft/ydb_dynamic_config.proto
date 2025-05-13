@@ -245,12 +245,8 @@ message FetchStartupConfigResult {
 
 message GetConfigurationVersionRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    // List nodes with V1 configuration version
-    bool list_v1_nodes = 2;
-    // List nodes with V2 configuration version
-    bool list_v2_nodes = 3;
-    // List nodes with unknown configuration version
-    bool list_unknown_nodes = 4;
+    // List nodes with different configuration versions
+    bool list_nodes = 2;
 }
 
 message GetConfigurationVersionResponse {

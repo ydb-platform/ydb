@@ -117,8 +117,8 @@ public:
 
 public:
     // IReadyTaskQueue
-    void TerminalReady(TTerminalTask::TCoroHandle handle, size_t terminalId) override;
-    void TransactionReady(TTransactionTask::TCoroHandle handle, size_t terminalId) override;
+    void TaskReady(TTerminalTask::TCoroHandle handle, size_t terminalId) override;
+    void TaskReady(TTransactionTask::TCoroHandle handle, size_t terminalId) override;
 
 private:
     void Join();
@@ -268,7 +268,7 @@ void TPCCRunner::RunSync() {
     Join();
 }
 
-void TPCCRunner::TerminalReady(TTerminalTask::TCoroHandle handle, size_t terminalId) {
+void TPCCRunner::TaskReady(TTerminalTask::TCoroHandle handle, size_t terminalId) {
     auto index = terminalId % PerThreadContext.size();
     auto& context = PerThreadContext[index];
 
@@ -280,7 +280,7 @@ void TPCCRunner::TerminalReady(TTerminalTask::TCoroHandle handle, size_t termina
     }
 }
 
-void TPCCRunner::TransactionReady(TTransactionTask::TCoroHandle handle, size_t terminalId) {
+void TPCCRunner::TaskReady(TTransactionTask::TCoroHandle handle, size_t terminalId) {
     auto index = terminalId % PerThreadContext.size();
     auto& context = PerThreadContext[index];
 

@@ -10,6 +10,7 @@ namespace NYdb::NTPCC {
 
 struct TTransactionContext {
     size_t TerminalID;
+    IReadyTaskQueue& TaskQueue;
     std::shared_ptr<NYdb::NQuery::TQueryClient> Client;
     std::shared_ptr<TLog> Log;
 };

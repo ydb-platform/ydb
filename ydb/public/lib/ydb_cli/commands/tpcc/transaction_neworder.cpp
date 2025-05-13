@@ -1,7 +1,5 @@
 #include "transactions.h"
 
-#include <library/cpp/threading/future/core/coroutine_traits.h>
-
 #include <util/string/printf.h>
 
 #include "constants.h"
@@ -53,11 +51,14 @@ TTransactionTask GetNewOrderTask(TTransactionContext& context)
     int districtID = 0;
     int customerID = 10;
 
-    auto clientResult = co_await context.Client->RetryQuery(
+    auto clientFuture = context.Client->RetryQuery(
         [&path, warehouseID, districtID, customerID](TSession session) {
             return GetCustomer(session, path, warehouseID, districtID, customerID);
         }
     );
+
+    co_await TSuspendWithFuture(clientFuture, context.TaskQueue, context.TerminalID);
+    auto clientResult = clientFuture.GetValue();
 
     LOG_D("Terminal " << context.TerminalID << " finished NewOrder transaction, success: " << clientResult.IsSuccess());
     co_return TTransactionResult{};

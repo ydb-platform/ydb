@@ -22,12 +22,12 @@ TTerminal::TTerminal(size_t terminalID,
                      std::shared_ptr<TLog>& log)
     : TaskQueue(taskQueue)
     , Driver(driver)
-    , Context(terminalID, std::make_shared<NQuery::TQueryClient>(Driver), log)
+    , Context(terminalID, TaskQueue, std::make_shared<NQuery::TQueryClient>(Driver), log)
     , StopToken(stopToken)
     , StopWarmup(stopWarmup)
     , Task(Run())
 {
-    TaskQueue.TerminalReady(Task.Handle, Context.TerminalID);
+    TaskQueue.TaskReady(Task.Handle, Context.TerminalID);
 }
 
 TTerminalTask TTerminal::Run() {

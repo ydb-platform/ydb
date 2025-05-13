@@ -2,11 +2,15 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
+#include <library/cpp/threading/future/future.h>
+
 #include <exception>
 #include <coroutine>
 #include <utility>
 
 namespace NYdb::NTPCC {
+
+//-----------------------------------------------------------------------------
 
 // We have two types of coroutines:
 // * Terminal task. It can sleep (co_awaiting) or wait for another task representing transaction.
@@ -191,12 +195,56 @@ struct TTransactionResult {
 
 using TTransactionTask = TTask<TTransactionResult>;
 
+//-----------------------------------------------------------------------------
+
 class IReadyTaskQueue {
 public:
     virtual ~IReadyTaskQueue() = default;
 
-    virtual void TerminalReady(TTerminalTask::TCoroHandle handle, size_t terminalId) = 0;
-    virtual void TransactionReady(TTransactionTask::TCoroHandle handle, size_t terminalId) = 0;
+    virtual void TaskReady(TTerminalTask::TCoroHandle handle, size_t terminalId) = 0;
+    virtual void TaskReady(TTransactionTask::TCoroHandle handle, size_t terminalId) = 0;
+};
+
+//-----------------------------------------------------------------------------
+
+// we don't use library/cpp/threading/future/core/coroutine_traits.h, because we
+// want to resume terminal in its thread from IReadyTaskQueue and not to resume
+// by SDK thread who set the promise value.
+
+template <typename T>
+struct TSuspendWithFuture {
+    TSuspendWithFuture(NThreading::TFuture<T>& future, IReadyTaskQueue& taskQueue, size_t terminalId)
+        : Future(future)
+        , TaskQueue(taskQueue)
+        , TerminalId(terminalId)
+    {}
+
+    TSuspendWithFuture() = delete;
+    TSuspendWithFuture(const TSuspendWithFuture&) = delete;
+    TSuspendWithFuture& operator=(const TSuspendWithFuture&) = delete;
+
+    bool await_ready() {
+        return false;
+    }
+
+    void await_suspend(TTransactionTask::TCoroHandle handle) {
+        // we use subscribe as async wait and don't handle result here: resumed task will
+        if constexpr (std::is_void_v<T>) {
+            Future.NoexceptSubscribe([this, handle](const NThreading::TFuture<T>&) {
+                TaskQueue.TaskReady(handle, TerminalId);
+            });
+        } else {
+            Future.NoexceptSubscribe([this, handle](const NThreading::TFuture<T>&) {
+                TaskQueue.TaskReady(handle, TerminalId);
+            });
+        }
+    }
+
+    void await_resume() {}
+
+    NThreading::TFuture<T>& Future;
+    IReadyTaskQueue& TaskQueue;
+    size_t TerminalId;
 };
 
 } // namesapce NYdb::NTPCC

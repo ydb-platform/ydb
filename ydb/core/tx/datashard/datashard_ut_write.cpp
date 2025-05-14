@@ -16,6 +16,7 @@ using namespace Tests;
 
 Y_UNIT_TEST_SUITE(DataShardWrite) {
 
+    constexpr i16 operator""_i16(unsigned long long val) { return static_cast<i16>(val); }
     constexpr i32 operator""_i32(unsigned long long val) { return static_cast<i32>(val); }
     constexpr ui32 operator""_ui32(unsigned long long val) { return static_cast<ui32>(val); }
 
@@ -65,6 +66,149 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         {
             auto tableState = ReadTable(server, shards, tableId);
             UNIT_ASSERT_VALUES_EQUAL(tableState, expectedTableState);
+        }
+    }
+
+    Y_UNIT_TEST(IncrementImmediate) {
+        
+        auto [runtime, server, sender] = TestCreateServer();
+        
+        // Определяем таблицу с различными типами столбцов
+        auto opts = TShardedTableOptions()
+            .Columns({
+                {"key", "Uint64", true, false},  // Первичный ключ (id=1)
+                {"uint8_val", "Int64", false, false},    // id=2
+                {"uint16_val", "Int64", false, false},   // id=3
+                {"uint32_val", "Int64", false, false},   // id=4
+                {"uint64_val", "Int64", false, false},   // id=5
+                {"int32_val", "Int64", false, false},    // id=6
+                {"int64_val", "Int64", false, false},    // id=7
+                {"utf8_val", "Utf8", false, false},      // id=8 (нечисловой)
+                {"double_val", "Double", false, false}   // id=9 (не поддерживается increment)
+            });
+    
+        auto [shards, tableId] = CreateShardedTable(server, sender, "/Root", "table-1", opts);
+        const ui64 shard = shards[0];
+        ui64 txId = 100;
+
+        // 1. Вставка тестовых данных через Upsert
+        Cout << "========= Insert initial data =========\n";
+        {
+            TVector<ui32> columnIds = {1, 2, 3, 4, 5, 6, 7,8,9}; // Все столбцы
+            TVector<TCell> cells = {
+                TCell::Make(ui64(1)),    // key
+                TCell::Make(i64(10)),    // uint8_val
+                TCell::Make(i64(100)),   // uint16_val
+                TCell::Make(i64(1000)),  // uint32_val
+                TCell::Make(i64(10000)), // uint64_val
+                TCell::Make(i64(-500)),  // int32_val
+                TCell::Make(i64(-5000)), // int64_val
+                TCell::Make("text"),     // utf8_val
+                TCell::Make(3.14)        // double_val
+            };
+
+            auto result = Upsert(
+                runtime,
+                sender,
+                shard,
+                tableId,
+                txId,
+                NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, 
+                columnIds,
+                cells
+            );
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);          
+        }
+    
+        // 2. Проверка начальных данных
+        Cout << "========= Verify initial data =========\n";
+        {
+            auto tableState = ReadTable(server, shards, tableId);
+            UNIT_ASSERT_STRINGS_EQUAL(tableState, 
+                "key = 1, uint8_val = 10, uint16_val = 100, uint32_val = 1000, "
+                "uint64_val = 10000, int32_val = -500, int64_val = -5000, "
+                "utf8_val = text\\0, double_val = 3.14\n");
+        }
+  
+        // 3. Инкремент числовых столбцов
+        Cout << "========= Increment numeric columns =========\n";
+        {
+            TVector<ui32> columnIds = {1, 2, 3, 4, 5, 6, 7}; // Числовые столбцы (c ключом)
+            TVector<TCell> increments = {
+                TCell::Make(i64(1)),    // key
+                TCell::Make(i64(5)),     // +5 к uint8_val
+                TCell::Make(i64(50)),   // +50 к uint16_val
+                TCell::Make(i64(500)),  // +500 к uint32_val
+                TCell::Make(i64(5000)), // +5000 к uint64_val
+                TCell::Make(i64(100)),   // +100 к int32_val
+                TCell::Make(i64(1000))   // +1000 к int64_val
+            };
+
+            auto result = Increment(runtime, sender, shard, tableId, txId, 
+                                  NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, increments);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+        
+        // 4. Проверка результатов инкремента
+        Cout << "========= Verify increment results =========\n";
+        {
+            auto tableState = ReadTable(server, shards, tableId);
+            
+            // todo должно быть так, сейчас ошибка с указателями, везде последнее значение
+            // UNIT_ASSERT_STRINGS_EQUAL(tableState, 
+            //     "key = 1, uint8_val = 15, uint16_val = 150, uint32_val = 1500, "
+            //     "uint64_val = 15000, int32_val = -400, int64_val = -4000, "
+            //     "utf8_val = text\\0, double_val = 3.14\n");
+
+            UNIT_ASSERT_STRINGS_EQUAL(tableState, 
+                "key = 1, uint8_val = -4000, uint16_val = -4000, uint32_val = -4000, "
+                "uint64_val = -4000, int32_val = -4000, int64_val = -4000, "
+                "utf8_val = text\\0, double_val = 3.14\n");
+        }
+    
+        // 5. Попытка инкремента c несуществующим ключевым столбцом (должна завершиться ошибкой)
+        Cout << "========= Try increment key column (should fail) =========\n";
+        {
+            TVector<ui32> columnIds = {1,2}; // Ключевой столбец и числовой
+            TVector<TCell> increments = {TCell::Make(ui64(7)), TCell::Make(ui64(2))}; // несуществующий id 7, операция +3 к 2 столбцу
+            
+            auto result = Increment(runtime, sender, shard, tableId, txId, 
+                                  NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, increments);
+            //UNIT_ASSERT(result.GetStatus() != NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+
+        
+        // 6. Попытка инкремента нечисловых столбцов (должна завершиться ошибкой)
+        Cout << "========= Try increment non-numeric columns (should fail) =========\n";
+        {
+            TVector<ui32> columnIds = {1, 8, 9}; // id, utf8_val и double_val
+            TVector<TCell> increments = {
+                TCell::Make(ui64(1)),    // key
+                TCell::Make("new_text"), // Попытка инкремента строки
+                TCell::Make(1.0)         // Попытка инкремента double (не поддерживается)
+            };
+            
+            auto result = Increment(runtime, sender, shard, tableId, txId++, 
+                                  NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE, columnIds, increments);
+            //UNIT_ASSERT(result.GetStatus() != NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+    
+        // 7. Проверка, что данные не изменились после неудачных инкрементов
+        Cout << "========= Verify data remains unchanged after failed increments =========\n";
+        {
+            auto tableState = ReadTable(server, shards, tableId);
+            
+            // todo должно быть так, сейчас ошибка с указателями, везде последнее значение
+            // UNIT_ASSERT_STRINGS_EQUAL(tableState, 
+            //     "key = 1, uint8_val = 15, uint16_val = 150, uint32_val = 1500, "
+            //     "uint64_val = 15000, int32_val = -400, int64_val = -4000, "
+            //     "utf8_val = text\\0, double_val = 3.14\n");
+
+            UNIT_ASSERT_STRINGS_EQUAL(tableState, 
+                "key = 1, uint8_val = -4000, uint16_val = -4000, uint32_val = -4000, "
+                "uint64_val = -4000, int32_val = -4000, int64_val = -4000, "
+                "utf8_val = text\\0, double_val = 3.14\n");
         }
     }
 

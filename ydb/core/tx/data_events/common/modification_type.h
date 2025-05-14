@@ -8,7 +8,8 @@ enum class EModificationType {
     Insert,
     Update,
     Replace,
-    Delete
+    Delete,
+    Increment
 };
 
 }
@@ -30,6 +31,7 @@ public:
             case NEvWrite::EModificationType::Upsert:
             case NEvWrite::EModificationType::Delete:
             case NEvWrite::EModificationType::Update:
+            case NEvWrite::EModificationType::Increment:
                 return false;
             case NEvWrite::EModificationType::Insert:
             case NEvWrite::EModificationType::Replace:
@@ -42,6 +44,7 @@ public:
             case NEvWrite::EModificationType::Upsert:
             case NEvWrite::EModificationType::Delete:
             case NEvWrite::EModificationType::Update:
+            case NEvWrite::EModificationType::Increment:
                 return false;
             case NEvWrite::EModificationType::Insert:
             case NEvWrite::EModificationType::Replace:
@@ -61,6 +64,8 @@ public:
                 return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE;
             case NEvWrite::EModificationType::Update:
                 return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE;
+            case NEvWrite::EModificationType::Increment:
+                return NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT;
         }
     }
 
@@ -78,6 +83,9 @@ public:
                 return NEvWrite::EModificationType::Delete;
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE:
                 return NEvWrite::EModificationType::Replace;
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT:
+                return NEvWrite::EModificationType::Increment;
+
         }
     }
 
@@ -93,6 +101,9 @@ public:
                 return NKikimrTxColumnShard::TEvWrite::OPERATION_REPLACE;
             case NEvWrite::EModificationType::Update:
                 return NKikimrTxColumnShard::TEvWrite::OPERATION_UPDATE;
+            case NEvWrite::EModificationType::Increment:
+                return NKikimrTxColumnShard::TEvWrite::OPERATION_INCREMENT;
+
         }
     }
 
@@ -108,6 +119,8 @@ public:
                 return NEvWrite::EModificationType::Delete;
             case NKikimrTxColumnShard::TEvWrite::OPERATION_REPLACE:
                 return NEvWrite::EModificationType::Replace;
+            case NKikimrTxColumnShard::TEvWrite::OPERATION_INCREMENT:
+                return NEvWrite::EModificationType::Increment; 
         }
     }
 };

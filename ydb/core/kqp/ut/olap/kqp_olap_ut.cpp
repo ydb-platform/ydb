@@ -29,12 +29,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     TKikimrSettings GetDefaultKikimrSettings() {
         TKikimrSettings settings;
         settings.SetWithSampleTables(false);
-        settings.SetColumnShardAlterObjectEnabled(true);
-        
-        TFeatureFlags featureFlags;
-        TFeatureFlags().SetEnableDuplicateFilterInColumnShard(true);
-        settings.SetFeatureFlags(featureFlags);
-
         return settings;
     }
 
@@ -236,11 +230,13 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             //1. QueryService
             //1.1 Check that ALTER OBJECT is not working for column tables
             auto client = kikimr.GetQueryClient();
-            const auto result = client.ExecuteQuery(
-                "ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`, `COMPRESSION.LEVEL`=`4`)",
-                NYdb::NQuery::TTxControl::BeginTx().CommitTx()
-            ).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+            const auto result = client
+                                    .ExecuteQuery(
+                                        "ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, "
+                                        "`SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`, `COMPRESSION.LEVEL`=`4`)",
+                                        NYdb::NQuery::TTxControl::NoTx())
+                                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Error: ALTER OBJECT is disabled for column tables", result.GetIssues().ToString());
 
             //1.2 Check that ALTER TABLE is still working for column tables
@@ -1782,6 +1778,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetNodeCount(2);
+        settings.FeatureFlags.SetEnableWritePortionsOnInsert(true);
 
         Tests::TServer::TPtr server = new Tests::TServer(settings);
 
@@ -2252,8 +2249,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
-        auto settings = GetDefaultKikimrSettings()
-            .SetWithSampleTables(false);
+        auto settings = GetDefaultKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         auto tableClient = kikimr.GetTableClient();

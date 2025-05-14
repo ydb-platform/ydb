@@ -112,12 +112,16 @@ private:
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvDuplicateFilterDataFetched, Handle);
+            hFunc(NActors::TEvents::TEvPoison, Handle);
             default:
                 AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
         }
     }
 
     void Handle(const TEvDuplicateFilterDataFetched::TPtr&);
+    void Handle(const NActors::TEvents::TEvPoison::TPtr&) {
+        PassAway();
+    }
 
 public:
     void GetSourcesData(const std::vector<std::shared_ptr<IDataSource>>& sources,

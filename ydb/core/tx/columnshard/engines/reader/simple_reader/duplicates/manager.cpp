@@ -21,12 +21,10 @@ TDuplicateFilterConstructor::TDuplicateFilterConstructor(const TSpecialReadConte
         return cache;
     }())
     , Intervals([&context]() {
-        std::remove_const_t<decltype(TDuplicateFilterConstructor::Intervals)> intervals(
-            NArrow::TSimpleRow(arrow::RecordBatch::Make(context.GetReadMetadata()->GetIndexInfo().GetPrimaryKey(),
-                                   0,   // TODO: change tree implementation, don't require default value/constructor
-                                   std::vector<std::shared_ptr<arrow::Array>>()),
-                0));
         const auto& portions = context.GetReadMetadata()->SelectInfo->Portions;
+        std::remove_const_t<decltype(TDuplicateFilterConstructor::Intervals)> intervals(
+            portions.front()->IndexKeyStart()   // TODO: change tree implementation, don't require default value/constructor
+        );
         for (ui64 i = 0; i < portions.size(); ++i) {
             const auto& portion = portions[i];
             intervals.insert({ portion->IndexKeyStart(), portion->IndexKeyEnd() }, TSourceInfo(i, portion));
@@ -50,9 +48,12 @@ void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
             TInterval<NArrow::TSimpleRow>(source->GetPortionInfo().IndexKeyStart(), source->GetPortionInfo().IndexKeyEnd()), collector);
     }
 
+    AFL_VERIFY(sourcesToFetch.size());
     if (sourcesToFetch.size() == 1) {
         AFL_VERIFY(sourcesToFetch.front()->GetSourceId() == source->GetSourceId());
-        ev->Get()->GetSubscriber()->OnFilterReady(NArrow::TColumnFilter::BuildAllowFilter());
+        auto filter  = NArrow::TColumnFilter::BuildAllowFilter();
+        filter.Add(true, sourcesToFetch.front()->GetRecordsCount());
+        ev->Get()->GetSubscriber()->OnFilterReady(std::move(filter));
         return;
     }
 

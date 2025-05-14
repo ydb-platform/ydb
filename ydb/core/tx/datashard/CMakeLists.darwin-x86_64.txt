@@ -216,8 +216,6 @@ target_sources(core-tx-datashard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard_kqp_compute.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard_kqp_delete_rows.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard_kqp_effects.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard_kqp_lookup_table.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard_kqp_read_table.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard_kqp_upsert_rows.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard_loans.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/datashard_locks_db.cpp

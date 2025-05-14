@@ -693,6 +693,7 @@ void TPersQueue::HandleTransactionsReadResponse(NKikimrClient::TResponse&& resp,
         PQ_LOG_ERROR_AND_DIE("Transactions read error: " << resp.ShortDebugString());
         return;
     }
+
     const auto& result = resp.GetReadRangeResult(0);
     auto status = result.GetStatus();
     if (status != NKikimrProto::OVERRUN &&

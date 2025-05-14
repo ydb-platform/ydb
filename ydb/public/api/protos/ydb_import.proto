@@ -173,11 +173,30 @@ message ListObjectsInS3ExportResult {
     }
 
     repeated Item items = 1;
+
+    // This token allows you to get the next page of results for ListObjectsInS3Export requests,
+    // if the number of results is larger than `page_size` specified in the request.
+    // To get the next page, specify the value of `next_page_token` as a value for
+    // the `page_token` parameter in the next ListObjectsInS3Export request. Subsequent ListObjectsInS3Export
+    // requests will have their own `next_page_token` to continue paging through the results.
+    string next_page_token = 2;
 }
 
 message ListObjectsInS3ExportRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     ListObjectsInS3ExportSettings settings = 2 [(required) = true];
+
+    // The maximum number of results per page that should be returned. If the number of available
+    // results is larger than `page_size`, the service returns a `next_page_token` that can be used
+    // to get the next page of results in subsequent ListObjectsInS3Export requests.
+    // Acceptable values are 0 to 10000, inclusive.
+    // 0 means that server returns all objects.
+    // Default value: 0.
+    int64 page_size = 3;
+
+    // Page token. Set `page_token` to the `next_page_token` returned by a previous ListObjectsInS3Export
+    // request to get the next page of results.
+    string page_token = 4;
 }
 
 message ListObjectsInS3ExportResponse {

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "codecs.h"
-#include "read_events.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
@@ -123,6 +122,22 @@ private:
     TDuration MaxReadTimeLag_;
     TDuration MaxWriteTimeLag_;
     TDuration MaxCommittedTimeLag_;
+};
+
+// Topic partition location
+class TPartitionLocation {
+public:
+    TPartitionLocation(const Ydb::Topic::PartitionLocation& partitionLocation);
+    TPartitionLocation(i32 nodeId, i64 generation);
+    int32_t GetNodeId() const;
+    int64_t GetGeneration() const;
+
+private:
+    // Node identificator.
+    int32_t NodeId_ = 1;
+
+    // Partition generation.
+    int64_t Generation_ = 2;
 };
 
 class TPartitionInfo {

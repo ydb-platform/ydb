@@ -365,6 +365,7 @@ class DMLOperations():
             count += 1
 
     def create_statements(self, pk_types, all_types, index, ttl):
+        # delete if after https://github.com/ydb-platform/ydb/issues/16930
         statements = []
         for data_type in all_types.keys():
             if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':

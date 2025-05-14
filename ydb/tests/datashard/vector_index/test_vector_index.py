@@ -19,6 +19,19 @@ from ydb.tests.datashard.lib.types_of_variables import (
 
 
 class TestVectorIndex(VectorBase):
+    def setup_method(self):
+        self.dimensions = [{"levels": 2, "cluster": 50}, {"levels": 1, "cluster": 100}]
+        self.size_vector = 10
+        self.knn_type = {"Float": "ToBinaryStringFloat", "Uint8": "ToBinaryStringUint8", "Int8": "ToBinaryStringInt8"}
+        self.targets = {
+            "similarity": {"inner_product": "Knn::InnerProductSimilarity", "cosine": "Knn::CosineSimilarity"},
+            "distance": {
+                "cosine": "Knn::CosineDistance",
+                "manhattan": "Knn::ManhattanDistance",
+                "euclidean": "Knn::EuclideanDistance",
+            },
+        }
+    
     @pytest.mark.parametrize(
         "table_name, pk_types, all_types, index, vector_type",
         [
@@ -56,29 +69,17 @@ class TestVectorIndex(VectorBase):
         index: dict[str, str],
         vector_type: str,
     ):
-        self.dimensions = [{"levels": 2, "claster": 50}, {"levels": 1, "claster": 100}]
-        self.size_vector = 10
-        self.knn_type = {"Float": "ToBinaryStringFloat", "Uint8": "ToBinaryStringUint8", "Int8": "ToBinaryStringInt8"}
-        self.targets = {
-            "similarity": {"inner_product": "Knn::InnerProductSimilarity", "cosine": "Knn::CosineSimilarity"},
-            "distance": {
-                "cosine": "Knn::CosineDistance",
-                "manhattan": "Knn::ManhattanDistance",
-                "euclidean": "Knn::EuclideanDistance",
-            },
-        }
         dml = DMLOperations(self)
         all_types["String"] = lambda i: f"String {i}"
         dml.create_table(table_name, pk_types, all_types, index, "", "", "")
-        self.vectors = []
         self.upsert(table_name, all_types, pk_types, index, "", vector_type)
         cover = []
         for type_name in all_types.keys():
             if type_name != "String":
                 cover.append("col_" + cleanup_type_name(type_name))
         for dimension in self.dimensions:
-            for target in self.targets.keys():
-                for distance in self.targets[target].keys():
+            for target, distances in self.targets.items():
+                for distance, knn_func in distances.items():
                     sql_create_vector_index = create_vector_index_sql_request(
                         table_name,
                         f"{target}_{distance}_{dimension["levels"]}",
@@ -90,11 +91,11 @@ class TestVectorIndex(VectorBase):
                         "",
                         self.size_vector,
                         dimension["levels"],
-                        dimension["claster"],
+                        dimension["cluster"],
                         cover,
                     )
                     dml.query(sql_create_vector_index)
-                    self.select(
+                    self.select_and_check(
                         table_name,
                         f"{target}_{distance}_{dimension["levels"]}",
                         "col_String",
@@ -103,7 +104,7 @@ class TestVectorIndex(VectorBase):
                         all_types,
                         index,
                         "",
-                        self.targets[target][distance],
+                        knn_func,
                         dml,
                     )
 
@@ -144,7 +145,6 @@ class TestVectorIndex(VectorBase):
         vector_type: str,
     ):
         vector = self.get_vector(vector_type, value)
-        self.vectors.append(vector)
         statements_all_type = []
         statements_all_type_value = []
         for type_name in all_types.keys():
@@ -169,7 +169,7 @@ class TestVectorIndex(VectorBase):
         """
         self.query(upsert_sql)
 
-    def select(
+    def select_and_check(
         self,
         table_name,
         vector_name,
@@ -277,30 +277,18 @@ class TestVectorIndex(VectorBase):
         index: dict[str, str],
         vector_type: str,
     ):
-        self.dimensions = [{"levels": 2, "claster": 50}, {"levels": 1, "claster": 100}]
-        self.size_vector = 10
-        self.knn_type = {"Float": "ToBinaryStringFloat", "Uint8": "ToBinaryStringUint8", "Int8": "ToBinaryStringInt8"}
-        self.targets = {
-            "similarity": {"inner_product": "Knn::InnerProductSimilarity", "cosine": "Knn::CosineSimilarity"},
-            "distance": {
-                "cosine": "Knn::CosineDistance",
-                "manhattan": "Knn::ManhattanDistance",
-                "euclidean": "Knn::EuclideanDistance",
-            },
-        }
         dml = DMLOperations(self)
         index["String"] = lambda i: f"String {i}"
         all_types["String"] = lambda i: f"String {i}"
         dml.create_table(table_name, pk_types, all_types, index, "", "", "")
-        self.vectors = []
         self.upsert_for_prefix(table_name, all_types, pk_types, index, "", vector_type)
         cover = []
         for type_name in all_types.keys():
             if type_name != "String":
                 cover.append("col_" + cleanup_type_name(type_name))
         for dimension in self.dimensions:
-            for target in self.targets.keys():
-                for distance in self.targets[target].keys():
+            for target, distances in self.targets.items():
+                for distance, knn_func in distances.items():
                     sql_create_vector_index = create_vector_index_sql_request(
                         table_name,
                         f"{target}_{distance}_{dimension["levels"]}",
@@ -312,11 +300,11 @@ class TestVectorIndex(VectorBase):
                         "",
                         self.size_vector,
                         dimension["levels"],
-                        dimension["claster"],
+                        dimension["cluster"],
                         cover,
                     )
                     dml.query(sql_create_vector_index)
-                    self.select_for_prefix(
+                    self.select_and_check_for_prefix(
                         table_name,
                         f"{target}_{distance}_{dimension["levels"]}",
                         "col_String",
@@ -325,7 +313,7 @@ class TestVectorIndex(VectorBase):
                         all_types,
                         index,
                         "",
-                        self.targets[target][distance],
+                        knn_func,
                         dml,
                     )
 
@@ -355,7 +343,6 @@ class TestVectorIndex(VectorBase):
         if value_for_prefix == 0:
             value_for_prefix = 5
         vector = self.get_vector(vector_type, value)
-        self.vectors.append(vector)
         statements_all_type = []
         statements_all_type_value = []
         for type_name in all_types.keys():
@@ -386,7 +373,7 @@ class TestVectorIndex(VectorBase):
         """
         self.query(upsert_sql)
 
-    def select_for_prefix(
+    def select_and_check_for_prefix(
         self,
         table_name,
         vector_name,

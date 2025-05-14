@@ -549,7 +549,7 @@ struct TStateStorageInfo : public TThrRefBase {
     ui32 StateStorageVersion;
     TVector<ui32> CompatibleVersions;
 
-    void SelectReplicas(ui64 tabletId, TSelection *selection, size_t ringGroupIdx) const;
+    void SelectReplicas(ui64 tabletId, TSelection *selection, ui32 ringGroupIdx) const;
     TList<TActorId> SelectAllReplicas() const;
     ui32 ContentHash() const;
     ui32 RingGroupsSelectionSize() const;

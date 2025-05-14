@@ -64,7 +64,7 @@ public:
     }
 };
 
-void TStateStorageInfo::SelectReplicas(ui64 tabletId, TSelection *selection, size_t ringGroupIdx) const {
+void TStateStorageInfo::SelectReplicas(ui64 tabletId, TSelection *selection, ui32 ringGroupIdx) const {
     const ui32 hash = StateStorageHashFromTabletID(tabletId);
 
     Y_ABORT_UNLESS(ringGroupIdx < RingGroups.size());

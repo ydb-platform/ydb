@@ -901,6 +901,8 @@ private:
                 Revision = NYdb::TValueParser(parser.GetValue(0)).GetInt64();
             }
         }
+        if (Revision && !Guard)
+            Stuff->UpdateRevision(Revision);
         ReplyWith(ev->Get()->Results, ctx);
     }
 

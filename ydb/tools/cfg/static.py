@@ -1189,7 +1189,7 @@ class StaticConfigGenerator(object):
                         break
 
                 if not encryption_mode_0:
-                    raise RuntimeError(f"You named a storage pool '{pool.Kind}', but did not explicitly enable `pool_config.encryption_mode: 1`.")
+                    raise RuntimeError(f"You named a storage pool '{pool.Kind}', but did not explicitly enable `pool_config.encryption_mode: 1`. Either specify the value (0 or 1) or rename the pool")
 
             # Check disk type is specified for every pool
             type_defined = False

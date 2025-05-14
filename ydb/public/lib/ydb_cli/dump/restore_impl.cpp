@@ -470,10 +470,6 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
     // restore
     auto restoreResult = Result<TRestoreResult>();
     if (settings.Replace_) {
-        if (settings.DryRun_) {
-            LOG_E("Combination of the dry run and the replace options is not supported yet.");
-            return Result<TRestoreResult>();
-        }
         restoreResult = DropAndRestore(fsPath, dbPath, settings, oldEntries);
     } else {
         restoreResult = RestoreFolder(fsPath, dbPath, settings, oldEntries);
@@ -1062,9 +1058,13 @@ TRestoreResult TRestoreClient::RestoreFolder(
     return Result<TRestoreResult>();
 }
 
-TRestoreResult TRestoreClient::Drop(ESchemeEntryType type, const TString& path, bool verifyExistence) {
-    auto settings = TRemoveDirectoryRecursiveSettings().NotExistsIsOk(!verifyExistence);
-    auto remover = NInternal::CreateDefaultRemover(SchemeClient, TableClient, TopicClient, QueryClient, CoordinationNodeClient, settings);
+TRestoreResult TRestoreClient::Drop(ESchemeEntryType type, const TString& path, const TRestoreSettings& settings) {
+    LOG_D("Preparing to drop " << path.Quote());
+    if (settings.DryRun_) {
+        return Result<TRestoreResult>();
+    }
+
+    auto remover = NInternal::CreateDefaultRemover(SchemeClient, TableClient, TopicClient, QueryClient, CoordinationNodeClient, {});
     TSchemeEntry entry;
     entry.Type = type;
     entry.Name = path;
@@ -1132,14 +1132,14 @@ TRestoreResult TRestoreClient::DropAndRestoreExternals(const TVector<TFsBackupEn
     }
 
     for (const auto& [dbPath, i] : externalTables) {
-        auto result = Drop(ESchemeEntryType::ExternalTable, dbPath, settings.VerifyExistence_);
+        auto result = Drop(ESchemeEntryType::ExternalTable, dbPath, settings);
         if (!result.IsSuccess()) {
             return result;
         }
     }
     for (size_t i : externalDataSources) {
         const auto& [fsPath, dbPath, type] = backupEntries[i];
-        if (auto result = Drop(type, dbPath, settings.VerifyExistence_); !result.IsSuccess()) {
+        if (auto result = Drop(type, dbPath, settings); !result.IsSuccess()) {
             return result;
         }
         if (auto result = RestoreExternalDataSource(fsPath, dbPath, settings, false); !result.IsSuccess()) {
@@ -1178,13 +1178,13 @@ TRestoreResult TRestoreClient::DropAndRestoreTablesAndDependents(const TVector<T
 
     for (size_t i : views) {
         const auto& [fsPath, dbPath, type] = backupEntries[i];
-        if (auto result = Drop(type, dbPath, settings.VerifyExistence_); !result.IsSuccess()) {
+        if (auto result = Drop(type, dbPath, settings); !result.IsSuccess()) {
             return result;
         }
     }
 
     for (const auto& [dbPath, i] : replications) {
-        if (auto result = Drop(ESchemeEntryType::Replication, dbPath, settings.VerifyExistence_); !result.IsSuccess()) {
+        if (auto result = Drop(ESchemeEntryType::Replication, dbPath, settings); !result.IsSuccess()) {
             return result;
         }
     }
@@ -1192,7 +1192,7 @@ TRestoreResult TRestoreClient::DropAndRestoreTablesAndDependents(const TVector<T
     // the main loop: tables are restored here
     for (const auto& [_, i] : tables) {
         const auto& [fsPath, dbPath, type] = backupEntries[i];
-        if (auto result = Drop(type, dbPath, settings.VerifyExistence_); !result.IsSuccess()) {
+        if (auto result = Drop(type, dbPath, settings); !result.IsSuccess()) {
             return result;
         }
         if (auto result = RestoreTable(fsPath, dbPath, settings, false); !result.IsSuccess()) {
@@ -1224,12 +1224,21 @@ TRestoreResult TRestoreClient::DropAndRestore(const TFsPath& fsBackupRoot, const
     }
     LOG_D("List of entries in the backup: " << NJson::WriteJson(ConvertToJson(backupEntries), false));
 
-    // verify that types are matching
     for (const auto& [fsPath, dbPath, type] : backupEntries) {
-        if (const auto* existingType = existingEntries.FindPtr(dbPath); existingType && !TypesAreMatching(*existingType, type)) {
+        const auto* existingType = existingEntries.FindPtr(dbPath);
+
+        // verify that types are matching
+        if (existingType && !TypesAreMatching(*existingType, type)) {
             return Result<TRestoreResult>(fsPath, EStatus::BAD_REQUEST,
                 TStringBuilder() << "Type mismatch: " << dbPath.Quote() << " already exists and has " << *existingType << " type."
                     " It cannot be replaced with " << type << " from the backup."
+            );
+        }
+
+        // verify existence
+        if (!existingType && settings.VerifyExistence_) {
+            return Result<TRestoreResult>(fsPath, EStatus::BAD_REQUEST,
+                TStringBuilder() << "Object is present in the backup but is missing from the database"
             );
         }
     }
@@ -1289,7 +1298,7 @@ TRestoreResult TRestoreClient::DropAndRestore(const TFsPath& fsBackupRoot, const
 
     for (size_t i : regular) {
         const auto& [fsPath, dbPath, type] = backupEntries[i];
-        if (auto result = Drop(type, dbPath, settings.VerifyExistence_); !result.IsSuccess()) {
+        if (auto result = Drop(type, dbPath, settings); !result.IsSuccess()) {
             return result;
         }
         Y_ENSURE(dbPath.StartsWith(dbRestoreRoot), "dbPath must be built by appending a relative path to dbRestoreRoot");

@@ -37,16 +37,16 @@
 | `sys_log_to_stderr` | bool | false | Копировать логи в stderr в дополнение к syslog. |
 | `format` | string | "full" | Формат вывода логов. Возможные значения: "full", "short", "json". |
 | `cluster_name` | string | — | Имя кластера для включения в записи логов. Поле `cluster_name` добавляется в логи только при использовании формата `json` или при отправке в Unified Agent. В форматах `full` или `short` это поле не отображается. |
-| `allow_drop_entries` | bool | true | Разрешить отбрасывание записей логов, если система логирования перегружена. |
+| `allow_drop_entries` | bool | true | Разрешить отбрасывание записей логов, если система логирования перегружена. При включении этой опции записи логов буферизуются в памяти и записываются в вывод, когда накапливается 10 сообщений или истекает время, указанное в `time_threshold_ms`. Если буфер переполняется, сообщения с низким приоритетом могут быть отброшены, чтобы освободить место для сообщений с более высоким приоритетом. |
 | `use_local_timestamps` | bool | false | Использовать локальный часовой пояс для временных меток логов (по умолчанию используется UTC). |
 | `backend_file_name` | string | — | Имя файла для вывода логов. Если указано, логи записываются в этот файл. |
 | `sys_log_service` | string | — | Имя сервиса для syslog. Соответствует полю tag в старом протоколе syslog [RFC 3164](https://datatracker.ietf.org/doc/html/rfc3164) или полю app-name в современном протоколе [RFC 5424](https://datatracker.ietf.org/doc/html/rfc5424). |
 | `time_threshold_ms` | uint64 | 1000 | Пороговое значение времени для операций логирования в миллисекундах. |
 | `ignore_unknown_components` | bool | true | Игнорировать запросы логирования от неизвестных компонентов. |
-| `entry` | array | [] | Массив конфигураций логирования для конкретных компонентов. |
-| `uaclient_config` | object | — | Конфигурация для клиента Unified Agent. |
+| `entry` | array | [] | Конфигурация уровня логирования и/или семплирования для конкретных компонентов {{ ydb-short-name }}, cм. [{#T}](#entry-objects) ниже. |
+| `uaclient_config` | object | — | Конфигурация для клиента Unified Agent, см. [{#T}](#uaclient-config) ниже. |
 
-### Объекты Entry
+### Объекты Entry {#entry-objects}
 
 Поле `entry` содержит массив объектов со следующей структурой:
 
@@ -57,7 +57,7 @@
 | `sampling_level` | uint32 | Уровень семплирования для этого компонента. |
 | `sampling_rate` | uint32 | Частота семплирования для этого компонента. |
 
-### Объект UAClientConfig
+### Объект UAClientConfig {#uaclient-config}
 
 Поле `uaclient_config` настраивает интеграцию с [Unified Agent](https://yandex.cloud/ru/docs/monitoring/concepts/data-collection/unified-agent/):
 

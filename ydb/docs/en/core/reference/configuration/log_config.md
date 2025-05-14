@@ -37,17 +37,16 @@ When both `sys_log` and `uaclient_config` are enabled simultaneously, logs will 
 | `sys_log_to_stderr` | bool | false | Copy logs to stderr in addition to system log. |
 | `format` | string | "full" | Log output format. Possible values: "full", "short", "json". |
 | `cluster_name` | string | — | Cluster name to include in log records. The `cluster_name` field is added to logs only when using the `json` format or when sending to Unified Agent. In the `full` or `short` formats, this field is not displayed. |
-| `allow_drop_entries` | bool | true | Allow dropping log entries if the logging system is overloaded. |
+| `allow_drop_entries` | bool | true | Allow dropping log entries if the logging system is overloaded. When enabled, log entries are buffered in memory and written to the output when either 10 messages accumulate or the time specified by `time_threshold_ms` elapses. If the buffer becomes full, lower-priority messages may be dropped to make room for higher-priority ones. |
 | `use_local_timestamps` | bool | false | Use local time zone for log timestamps (UTC is used by default). |
 | `backend_file_name` | string | — | File name for log output. If specified, logs are written to this file. |
 | `sys_log_service` | string | — | Service name for syslog. Corresponds to the tag field in the old syslog [RFC 3164](https://datatracker.ietf.org/doc/html/rfc3164) or the app-name field in the modern [RFC 5424](https://datatracker.ietf.org/doc/html/rfc5424) protocol. |
 | `time_threshold_ms` | uint64 | 1000 | Time threshold for log operations in milliseconds. |
 | `ignore_unknown_components` | bool | true | Ignore logging requests from unknown components. |
-| `tenant_name` | string | — | Database name to include in log records. |
-| `entry` | array | [] | Array of component-specific logging configurations. |
-| `uaclient_config` | object | — | Configuration for the Unified Agent client. |
+| `entry` | array | [] | Configuration of logging level and/or sampling for specific {{ ydb-short-name }} components, see [{#T}](#entry-objects) below. |
+| `uaclient_config` | object | — | Configuration for the Unified Agent client, see [{#T}](#uaclient-config) below. |
 
-### Entry Objects
+### Entry Objects {#entry-objects}
 
 The `entry` field contains an array of objects with the following structure:
 
@@ -58,7 +57,7 @@ The `entry` field contains an array of objects with the following structure:
 | `sampling_level` | uint32 | Sampling level for this component. |
 | `sampling_rate` | uint32 | Sampling rate for this component. |
 
-### UAClientConfig Object
+### UAClientConfig Object {#uaclient-config}
 
 The `uaclient_config` field configures integration with [Unified Agent](https://yandex.cloud/en/docs/monitoring/concepts/data-collection/unified-agent/):
 

@@ -236,7 +236,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         return session;
     }
 
-    Y_UNIT_TEST(OrderByCosineDistanceNotNullableLevel1) {
+    Y_UNIT_TEST_QUAD(OrderByCosineLevel1, Nullable, UseSimilarity) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -247,23 +247,23 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-        
 
         auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableForPrefixedVectorIndex(db, false);
+        auto session = DoCreateTableForPrefixedVectorIndex(db, Nullable);
         {
-            const TString createIndex(Q_(R"(
+            const TString createIndex(Q_(Sprintf(R"(
                 ALTER TABLE `/Root/TestTable`
                     ADD INDEX index
                     GLOBAL USING vector_kmeans_tree
                     ON (user, emb)
-                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2);
-            )"));
+                    WITH (%s=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2);
+            )", UseSimilarity ? "similarity" : "distance")));
 
             auto result = session.ExecuteSchemeQuery(createIndex)
                           .ExtractValueSync();
 
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            // FIXME: result does not return failure/issues when index is created but fails to be filled with data
         }
         {
             auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
@@ -274,7 +274,9 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             std::vector<std::string> indexKeyColumns{"user", "emb"};
             UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), indexKeyColumns);
             const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetIndexSettings());
-            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
+            UNIT_ASSERT_EQUAL(settings.Settings.Metric, UseSimilarity
+                ? NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity
+                : NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
             UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
             UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
             UNIT_ASSERT_EQUAL(settings.Levels, 1);
@@ -283,7 +285,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);
     }
 
-    Y_UNIT_TEST(OrderByCosineSimilarityNotNullableLevel1) {
+    Y_UNIT_TEST_QUAD(OrderByCosineLevel2, Nullable, UseSimilarity) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableVectorIndex(true);
         auto setting = NKikimrKqp::TKqpSetting();
@@ -294,18 +296,17 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-        
 
         auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableForPrefixedVectorIndex(db, false);
+        auto session = DoCreateTableForPrefixedVectorIndex(db, Nullable);
         {
-            const TString createIndex(Q_(R"(
+            const TString createIndex(Q_(Sprintf(R"(
                 ALTER TABLE `/Root/TestTable`
                     ADD INDEX index
                     GLOBAL USING vector_kmeans_tree
                     ON (user, emb)
-                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2);
-            )"));
+                    WITH (%s=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+            )", UseSimilarity ? "similarity" : "distance")));
 
             auto result = session.ExecuteSchemeQuery(createIndex)
                           .ExtractValueSync();
@@ -321,148 +322,9 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             std::vector<std::string> indexKeyColumns{"user", "emb"};
             UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), indexKeyColumns);
             const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetIndexSettings());
-            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity);
-            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
-            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
-            UNIT_ASSERT_EQUAL(settings.Levels, 1);
-            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
-        }
-        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);
-    }
-
-    Y_UNIT_TEST(OrderByCosineDistanceNullableLevel1) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetFeatureFlags(featureFlags)
-            .SetKqpSettings({setting});
-
-        TKikimrRunner kikimr(serverSettings);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-        
-
-        auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableForPrefixedVectorIndex(db, true);
-        {
-            const TString createIndex(Q_(R"(
-                ALTER TABLE `/Root/TestTable`
-                    ADD INDEX index
-                    GLOBAL USING vector_kmeans_tree
-                    ON (user, emb)
-                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2);
-            )"));
-
-            auto result = session.ExecuteSchemeQuery(createIndex)
-                          .ExtractValueSync();
-
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-        {
-            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
-            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
-            UNIT_ASSERT_EQUAL(indexes.size(), 1);
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
-            std::vector<std::string> indexKeyColumns{"user", "emb"};
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), indexKeyColumns);
-            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetIndexSettings());
-            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
-            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
-            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
-            UNIT_ASSERT_EQUAL(settings.Levels, 1);
-            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
-        }
-        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);
-    }
-
-    Y_UNIT_TEST(OrderByCosineSimilarityNullableLevel1) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetFeatureFlags(featureFlags)
-            .SetKqpSettings({setting});
-
-        TKikimrRunner kikimr(serverSettings);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-        
-
-        auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableForPrefixedVectorIndex(db, true);
-        {
-            const TString createIndex(Q_(R"(
-                ALTER TABLE `/Root/TestTable`
-                    ADD INDEX index
-                    GLOBAL USING vector_kmeans_tree
-                    ON (user, emb)
-                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=1, clusters=2);
-            )"));
-
-            auto result = session.ExecuteSchemeQuery(createIndex)
-                          .ExtractValueSync();
-
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-        {
-            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
-            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
-            UNIT_ASSERT_EQUAL(indexes.size(), 1);
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
-            std::vector<std::string> indexKeyColumns{"user", "emb"};
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), indexKeyColumns);
-            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetIndexSettings());
-            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity);
-            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
-            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
-            UNIT_ASSERT_EQUAL(settings.Levels, 1);
-            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
-        }
-        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);
-    }
-
-    Y_UNIT_TEST(OrderByCosineDistanceNotNullableLevel2) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetFeatureFlags(featureFlags)
-            .SetKqpSettings({setting});
-
-        TKikimrRunner kikimr(serverSettings);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-        
-
-        auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableForPrefixedVectorIndex(db, false);
-        {
-            const TString createIndex(Q_(R"(
-                ALTER TABLE `/Root/TestTable`
-                    ADD INDEX index
-                    GLOBAL USING vector_kmeans_tree
-                    ON (user, emb)
-                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
-            )"));
-
-            auto result = session.ExecuteSchemeQuery(createIndex)
-                          .ExtractValueSync();
-
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-        {
-            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
-            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
-            UNIT_ASSERT_EQUAL(indexes.size(), 1);
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
-            std::vector<std::string> indexKeyColumns{"user", "emb"};
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), indexKeyColumns);
-            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetIndexSettings());
-            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
+            UNIT_ASSERT_EQUAL(settings.Settings.Metric, UseSimilarity
+                ? NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity
+                : NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
             UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
             UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
             UNIT_ASSERT_EQUAL(settings.Levels, 2);
@@ -558,147 +420,6 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
             UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
             UNIT_ASSERT_EQUAL(settings.Levels, 4);
-            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
-        }
-        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);
-    }
-
-    Y_UNIT_TEST(OrderByCosineSimilarityNotNullableLevel2) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetFeatureFlags(featureFlags)
-            .SetKqpSettings({setting});
-
-        TKikimrRunner kikimr(serverSettings);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-        
-
-        auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableForPrefixedVectorIndex(db, false);
-        {
-            const TString createIndex(Q_(R"(
-                ALTER TABLE `/Root/TestTable`
-                    ADD INDEX index
-                    GLOBAL USING vector_kmeans_tree
-                    ON (user, emb)
-                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
-            )"));
-
-            auto result = session.ExecuteSchemeQuery(createIndex)
-                          .ExtractValueSync();
-
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-        {
-            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
-            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
-            UNIT_ASSERT_EQUAL(indexes.size(), 1);
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
-            std::vector<std::string> indexKeyColumns{"user", "emb"};
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), indexKeyColumns);
-            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetIndexSettings());
-            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity);
-            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
-            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
-            UNIT_ASSERT_EQUAL(settings.Levels, 2);
-            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
-        }
-        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);
-    }
-
-    Y_UNIT_TEST(OrderByCosineDistanceNullableLevel2) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetFeatureFlags(featureFlags)
-            .SetKqpSettings({setting});
-
-        TKikimrRunner kikimr(serverSettings);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-        
-
-        auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableForPrefixedVectorIndex(db, true);
-        {
-            const TString createIndex(Q_(R"(
-                ALTER TABLE `/Root/TestTable`
-                    ADD INDEX index
-                    GLOBAL USING vector_kmeans_tree
-                    ON (user, emb)
-                    WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
-            )"));
-
-            auto result = session.ExecuteSchemeQuery(createIndex)
-                          .ExtractValueSync();
-
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-        {
-            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
-            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
-            UNIT_ASSERT_EQUAL(indexes.size(), 1);
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
-            std::vector<std::string> indexKeyColumns{"user", "emb"};
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), indexKeyColumns);
-            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetIndexSettings());
-            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance);
-            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
-            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
-            UNIT_ASSERT_EQUAL(settings.Levels, 2);
-            UNIT_ASSERT_EQUAL(settings.Clusters, 2);
-        }
-        DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);
-    }
-
-    Y_UNIT_TEST(OrderByCosineSimilarityNullableLevel2) {
-        NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableVectorIndex(true);
-        auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetFeatureFlags(featureFlags)
-            .SetKqpSettings({setting});
-
-        TKikimrRunner kikimr(serverSettings);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-        
-
-        auto db = kikimr.GetTableClient();
-        auto session = DoCreateTableForPrefixedVectorIndex(db, true);
-        {
-            const TString createIndex(Q_(R"(
-                ALTER TABLE `/Root/TestTable`
-                    ADD INDEX index
-                    GLOBAL USING vector_kmeans_tree
-                    ON (user, emb)
-                    WITH (similarity=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
-            )"));
-
-            auto result = session.ExecuteSchemeQuery(createIndex)
-                          .ExtractValueSync();
-
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-        {
-            auto result = session.DescribeTable("/Root/TestTable").ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
-            const auto& indexes = result.GetTableDescription().GetIndexDescriptions();
-            UNIT_ASSERT_EQUAL(indexes.size(), 1);
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexName(), "index");
-            std::vector<std::string> indexKeyColumns{"user", "emb"};
-            UNIT_ASSERT_EQUAL(indexes[0].GetIndexColumns(), indexKeyColumns);
-            const auto& settings = std::get<TKMeansTreeSettings>(indexes[0].GetIndexSettings());
-            UNIT_ASSERT_EQUAL(settings.Settings.Metric, NYdb::NTable::TVectorIndexSettings::EMetric::CosineSimilarity);
-            UNIT_ASSERT_EQUAL(settings.Settings.VectorType, NYdb::NTable::TVectorIndexSettings::EVectorType::Uint8);
-            UNIT_ASSERT_EQUAL(settings.Settings.VectorDimension, 2);
-            UNIT_ASSERT_EQUAL(settings.Levels, 2);
             UNIT_ASSERT_EQUAL(settings.Clusters, 2);
         }
         DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session);

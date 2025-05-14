@@ -2646,7 +2646,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         auto settings = TKikimrSettings()
             .SetAppConfig(appConfig)
-            .SetWithSampleTables(true);
+            .SetWithSampleTables(true)
+            .SetEnableTempTables(true);
 
         TKikimrRunner kikimr(settings);
         auto client = kikimr.GetQueryClient();

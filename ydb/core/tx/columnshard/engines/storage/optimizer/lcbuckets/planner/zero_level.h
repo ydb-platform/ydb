@@ -45,7 +45,7 @@ private:
         if (PortionsCountLimit && Portions.size() > *PortionsCountLimit) {
             return true;
         }
-        if (PortionsSizeLimit && PortionsInfo.GetBlobBytes() > *PortionsSizeLimit) {
+        if (PortionsSizeLimit && (ui64)PortionsInfo.GetBlobBytes() > (ui64)*PortionsSizeLimit) {
             return true;
         }
         return false;

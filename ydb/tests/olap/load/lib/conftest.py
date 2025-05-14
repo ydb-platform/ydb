@@ -61,28 +61,23 @@ class LoadSuiteBase:
         return result
 
     @classmethod
-    def _get_query_settings(cls, query_num: int) -> QuerySettings:
+    def _get_query_settings(cls, query_num: Optional[int], query_name: Optional[str]) -> QuerySettings:
         result = LoadSuiteBase.QuerySettings(
             iterations=cls.iterations,
             timeout=cls.timeout,
             query_prefix=cls.query_prefix
         )
-        q = cls.query_settings.get(query_num, LoadSuiteBase.QuerySettings())
-        if q.iterations is not None:
-            result.iterations = q.iterations
-        if q.timeout is not None:
-            result.timeout = q.timeout
-        if q.query_prefix is not None:
-            result.query_prefix = q.query_prefix
+        for key in query_name, query_num:
+            if key is None:
+                continue
+            q = cls.query_settings.get(key, LoadSuiteBase.QuerySettings())
+            if q.iterations is not None:
+                result.iterations = q.iterations
+            if q.timeout is not None:
+                result.timeout = q.timeout
+            if q.query_prefix is not None:
+                result.query_prefix = q.query_prefix
         return result
-
-    @classmethod
-    def _stat_name(cls, query_num: int) -> str:
-        return f'Query{query_num:02d}' if query_num >= 0 else '_Verification'
-
-    @classmethod
-    def _test_name(cls, query_num: int) -> str:
-        return cls._stat_name(query_num)
 
     @classmethod
     @allure.step('check tables size')
@@ -250,7 +245,7 @@ class LoadSuiteBase:
         return node_errors
 
     @classmethod
-    def process_query_result(cls, result: YdbCliHelper.WorkloadRunResult, query_num: int, iterations: int, upload: bool):
+    def process_query_result(cls, result: YdbCliHelper.WorkloadRunResult, query_name: str, upload: bool):
         def _get_duraton(stats, field):
             r = stats.get(field)
             return float(r) / 1e3 if r is not None else None
@@ -273,7 +268,6 @@ class LoadSuiteBase:
             if plan.stats is not None:
                 allure.attach(plan.stats, f'{name} stats', attachment_type=allure.attachment_type.TEXT)
 
-        test = cls._test_name(query_num)
         if result.query_out is not None:
             allure.attach(result.query_out, 'Query output', attachment_type=allure.attachment_type.TEXT)
 
@@ -314,10 +308,10 @@ class LoadSuiteBase:
             allure.attach(cls.__hide_query_text(result.stderr, query_text), 'Stderr', attachment_type=allure.attachment_type.TEXT)
         end_time = time()
         allure_test_description(
-            cls.suite(), test, refference_set=cls.refference,
+            cls.suite(), query_name, refference_set=cls.refference,
             start_time=result.start_time, end_time=end_time, node_errors=cls.check_nodes(result, end_time)
         )
-        stats = result.get_stats(cls._stat_name(query_num))
+        stats = result.get_stats(query_name)
         for p in ['Mean']:
             if p in stats:
                 allure.dynamic.parameter(p, _duration_text(stats[p] / 1000.))
@@ -328,7 +322,7 @@ class LoadSuiteBase:
             ResultsProcessor.upload_results(
                 kind='Load',
                 suite=cls.suite(),
-                test=test,
+                test=query_name,
                 timestamp=end_time,
                 is_successful=result.success,
                 min_duration=_get_duraton(stats, 'Min'),
@@ -359,25 +353,29 @@ class LoadSuiteBase:
                 result.add_error(str(e))
                 result.traceback = e.__traceback__
         result.iterations[0].time = time() - start_time
-        result.add_stat('_Verification', 'Mean', 1000 * result.iterations[0].time)
+        query_name = '_Verification'
+        result.add_stat(query_name, 'Mean', 1000 * result.iterations[0].time)
         nodes_start_time = [n.start_time for n in YdbCluster.get_cluster_nodes(db_only=False)]
         first_node_start_time = min(nodes_start_time) if len(nodes_start_time) > 0 else 0
         result.start_time = max(start_time - 600, first_node_start_time)
-        cls.process_query_result(result, -1, 1, True)
+        cls.process_query_result(result, query_name, True)
 
-    def run_workload_test(self, path: str, query_num: int) -> None:
+    def run_workload_test(self, path: str, query_num: Optional[int] = None, query_name: Optional[str] = None) -> None:
+        assert query_num is not None or query_name is not None
         for plugin in plugin_manager.get_plugin_manager().get_plugins():
             if isinstance(plugin, AllureListener):
                 allure_test_result = plugin.allure_logger.get_test(None)
                 if allure_test_result is not None:
                     for param in allure_test_result.parameters:
-                        if param.name == 'query_num':
+                        if param.name in {'query_num', 'query_name'}:
                             param.mode = allure.parameter_mode.HIDDEN.value
-        qparams = self._get_query_settings(query_num)
+        qparams = self._get_query_settings(query_num, query_name)
+        if query_name is None:
+            query_name = f'Query{query_num:02d}'
         self.save_nodes_state()
         result = YdbCliHelper.workload_run(
             path=path,
-            query_num=query_num,
+            query_name=query_name,
             iterations=qparams.iterations,
             workload_type=self.workload_type,
             timeout=qparams.timeout,
@@ -387,4 +385,4 @@ class LoadSuiteBase:
             query_prefix=qparams.query_prefix,
             external_path=self.get_external_path(),
         )
-        self.process_query_result(result, query_num, qparams.iterations, True)
+        self.process_query_result(result, query_name, True)

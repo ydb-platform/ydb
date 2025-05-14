@@ -13,7 +13,7 @@ class ExternalSuiteBase(LoadSuiteBase):
     @staticmethod
     def __get_query_list(path: str, name_prefix: list[str]) -> list[str]:
         if os.path.isfile(path):
-            return [f"Query_{'/'.join(name_prefix)}"] if path.endswith('.sql') or path.endswith('.yql') else []
+            return [f"{'.'.join(name_prefix)}"] if path.endswith('.sql') or path.endswith('.yql') else []
         if os.path.isdir(path):
             result = []
             for child in sorted(os.listdir(path)):
@@ -28,22 +28,18 @@ class ExternalSuiteBase(LoadSuiteBase):
         return cls.__query_list
 
     @classmethod
-    def _test_name(cls, query_num: int) -> str:
-        return cls.get_query_list()[query_num] if query_num >= 0 else super()._test_name(query_num)
-
-    @classmethod
     def do_setup_class(cls):
         if not cls.verify_data or os.getenv('NO_VERIFY_DATA', '0') == '1':
             return
         cls.check_tables_size(folder=cls.external_folder, tables={})
 
-    def test(self, query_num: int):
-        self.run_workload_test(f'{YdbCluster.tables_path}/{self.external_folder}', query_num)
+    def test(self, query_name: str):
+        self.run_workload_test(f'{YdbCluster.tables_path}/{self.external_folder}', query_name=query_name)
 
 
 def pytest_generate_tests(metafunc):
     if issubclass(metafunc.cls, ExternalSuiteBase):
-        metafunc.parametrize("query_num", [i for i in range(0, len(metafunc.cls.get_query_list()))], ids=metafunc.cls.get_query_list())
+        metafunc.parametrize("query_name", metafunc.cls.get_query_list())
 
 
 class TestExternalA1(ExternalSuiteBase):

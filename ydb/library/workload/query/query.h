@@ -31,7 +31,7 @@ protected:
 
 private:
     TQueryInfo MakeQuery(const TString& queryText, const TString& queryName) const;
-    TQueryInfoList GetWorkloadFromDir(const TFsPath& dir) const;
+    TQueryInfoList GetWorkloadFromDir(const TFsPath& dir, const TString namePrefix) const;
     std::string GetDDLQueriesFromDir(const TFsPath& dir) const;
 };
 

@@ -357,13 +357,13 @@ TQueryBenchmarkResult Explain(const TString& query, NQuery::TQueryClient& client
     return ExecuteImpl(query, client, settings, true);
 }
 
-NJson::TJsonValue GetQueryLabels(ui32 queryId) {
+NJson::TJsonValue GetQueryLabels(TStringBuf queryId) {
     NJson::TJsonValue labels(NJson::JSON_MAP);
-    labels.InsertValue("query", Sprintf("Query%02u", queryId));
+    labels.InsertValue("query", queryId);
     return labels;
 }
 
-NJson::TJsonValue GetSensorValue(TStringBuf sensor, TDuration& value, ui32 queryId) {
+NJson::TJsonValue GetSensorValue(TStringBuf sensor, TDuration& value, TStringBuf queryId) {
     NJson::TJsonValue sensorValue(NJson::JSON_MAP);
     sensorValue.InsertValue("sensor", sensor);
     sensorValue.InsertValue("value", value.MilliSeconds());
@@ -371,7 +371,7 @@ NJson::TJsonValue GetSensorValue(TStringBuf sensor, TDuration& value, ui32 query
     return sensorValue;
 }
 
-NJson::TJsonValue GetSensorValue(TStringBuf sensor, double value, ui32 queryId) {
+NJson::TJsonValue GetSensorValue(TStringBuf sensor, double value, TStringBuf queryId) {
     NJson::TJsonValue sensorValue(NJson::JSON_MAP);
     sensorValue.InsertValue("sensor", sensor);
     sensorValue.InsertValue("value", value);

@@ -41,23 +41,25 @@ TQueryInfo TQueryGenerator::MakeQuery(const TString& queryText, const TString& q
     query << "PRAGMA TablePathPrefix = \"" << Params.GetFullTableName(nullptr) << "\";" << Endl;
     query << queryText;
     result.Query = query;
+    result.QueryName = queryName;
     return result;
 }
 
-TQueryInfoList TQueryGenerator::GetWorkloadFromDir(const TFsPath& dir) const {
+TQueryInfoList TQueryGenerator::GetWorkloadFromDir(const TFsPath& dir, const TString namePrefix) const {
     TQueryInfoList result;
     TVector<TFsPath> children;
     dir.List(children);
     Sort(children, [](const TFsPath& a, const TFsPath& b) {return a.GetPath() < b.GetPath();});
     for (const auto& i : children) {
+        const auto name = namePrefix ? Join(".", namePrefix, i.GetName()) : i.GetName();
         if (i.IsDirectory()) {
-            result.splice(result.end(), GetWorkloadFromDir(i));
+            result.splice(result.end(), GetWorkloadFromDir(i, name));
         }
         if (!i.IsFile() || (i.GetExtension() != "sql" && i.GetExtension() != "yql")) {
             continue;
         }
         TFileInput fInput(i.GetPath());
-        result.emplace_back(MakeQuery(fInput.ReadAll(), i));
+        result.emplace_back(MakeQuery(fInput.ReadAll(), name));
     }
     return result;
 }
@@ -84,11 +86,11 @@ TQueryInfoList TQueryGenerator::GetWorkload(int /*type*/) {
     TQueryInfoList result;
     const auto runPath = Params.GetDataPath() / "run";
     if (Params.GetDataPath().IsDefined() && runPath.IsDirectory()) {
-        result.splice(result.end(), GetWorkloadFromDir(runPath));
+        result.splice(result.end(), GetWorkloadFromDir(runPath, ""));
     }
 
     for (size_t i = 0; i < Params.GetCustomQueries().size(); ++i) {
-        result.push_back(MakeQuery(Params.GetCustomQueries()[i], TStringBuilder() << "Coustom" << i));
+        result.push_back(MakeQuery(Params.GetCustomQueries()[i], TStringBuilder() << "Custom" << i));
     }
 
     return result;

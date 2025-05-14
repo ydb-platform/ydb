@@ -426,6 +426,10 @@ void TLogWorkloadParams::Validate() const {
     const bool dateFromPassed = !!TimestampDateFrom;
     const bool dateToPassed = !!TimestampDateTo;
 
+    Cerr << "TimestampDevPassed: " << timestampDevPassed << "\n";
+    Cerr << "DateFromPassed: " << dateFromPassed << "\n";
+    Cerr << "DateToPassed: " << dateToPassed << "\n";
+
     if (!timestampDevPassed && (!dateFromPassed || !dateToPassed)) {
         throw yexception() << "One of parameter should be provided - timestamp_deviation or date-from and date-to";
     }

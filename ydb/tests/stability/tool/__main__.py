@@ -762,89 +762,105 @@ class StabilityCluster:
 # Define a function to add timestamps to output
 timestamp_output() {{
   while IFS= read -r line; do
-    current_time=$(TZ=UTC date +'{DATE_FORMAT}')
+    current_time=$(date +'{DATE_FORMAT}')
     printf "[%s] %s\\n" "$current_time" "$line"
   done
 }}
 
 # Define cleanup function for timeout
 handle_timeout() {{
-  echo "[$(TZ=UTC date +'{DATE_FORMAT}')] TIMEOUT: Command took longer than {timeout_seconds} seconds"
-  echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Performing emergency cleanup for {workload_name}..."
+  echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] TIMEOUT: Command took longer than {timeout_seconds} seconds"
+  echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Performing emergency cleanup for {workload_name}..."
 
   # Сохраняем PID процесса bash, который запустил команду (если еще запущен)
   PIDS=$(ps -ef | grep "{command}" | grep -v grep | grep -v timeout | awk '{{print $2}}')
 
   if [ -n "$PIDS" ]; then
-    echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Found processes to kill: $PIDS"
+    echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Found processes to kill: $PIDS"
     for pid in $PIDS; do
-      echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Killing process $pid"
+      echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Killing process $pid"
       kill -9 $pid 2>/dev/null || true
     done
   else
-    echo "[$(TZ=UTC date +'{DATE_FORMAT}')] No matching processes found"
+    echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] No matching processes found"
   fi
 
   # Специальная очистка в зависимости от типа команды
   if [[ "{base_command}" == *"oltp_workload"* ]]; then
-    echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Performing oltp_workload specific cleanup"
+    echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Performing oltp_workload specific cleanup"
     # Убиваем Python процессы, связанные с oltp_workload
     pkill -9 -f "oltp_workload" || true
 
   elif [[ "{base_command}" == *"ydb_cli"* ]] && [[ "{command}" == *"workload log"* ]]; then
-    echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Performing workload log specific cleanup"
+    echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Performing workload log specific cleanup"
     # Убиваем процессы ydb_cli workload log
     pkill -9 -f "ydb_cli.*workload.*log" || true
 
   elif [[ "{base_command}" == *"simple_queue"* ]]; then
-    echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Performing simple_queue specific cleanup"
+    echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Performing simple_queue specific cleanup"
     # Убиваем процессы simple_queue
     pkill -9 -f "simple_queue" || true
 
   elif [[ "{base_command}" == *"olap_workload"* ]]; then
-    echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Performing olap_workload specific cleanup"
+    echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Performing olap_workload specific cleanup"
     # Убиваем процессы olap_workload
     pkill -9 -f "olap_workload" || true
   fi
 
-  echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Emergency cleanup completed"
+  echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Emergency cleanup completed"
 }}
 
 # Trap for SIGTERM to perform cleanup if the script itself is killed
 trap handle_timeout SIGTERM
 
 # Бесконечный цикл для выполнения команды
-echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Starting command in continuous loop: {command}"
+echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Starting command in continuous loop: {command}"
 while true; do
-  # Запускаем команду с таймаутом только если он указан
+  echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Running command..."
+  echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] COMMAND: {command}"
+  echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] === COMMAND OUTPUT START ==="
+
+  # Используем script для надежного перехвата всего вывода
   if {'true' if has_time_limit else 'false'}; then
-    echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Running command with {timeout_seconds}s timeout"
-    # Run the command with timeout and redirect stderr to stdout
-    timeout {timeout_seconds}s bash -c "TZ=UTC {command}" 2>&1 | timestamp_output
+    # Создаем временный файл для script
+    SCRIPT_FILE="/tmp/{workload_name}_transcript_$$.log"
+    
+    # Запускаем команду через script для перехвата всего возможного вывода
+    script -q -c "timeout -k 10 {timeout_seconds}s {command}" "$SCRIPT_FILE" >/dev/null 2>&1
     status=$?
-
-    # Check if timeout occurred (exit code 124)
-    if [ $status -eq 124 ]; then
-      echo "[$(TZ=UTC date +'{DATE_FORMAT}')] WARNING: Command reached timeout after {timeout_seconds} seconds"
-      handle_timeout
-    elif [ $status -ne 0 ]; then
-      echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Command exited with status $status, restarting in 5 seconds..."
-    else
-      echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Command completed successfully with status $status, restarting in 5 seconds..."
-    fi
+    
+    # Читаем временный файл и добавляем таймстемпы, стараясь сохранить форматирование
+    cat "$SCRIPT_FILE" | sed '/^Script .* started/d; /^Script .* done/d' | while IFS= read -r line || [[ -n "$line" ]]; do
+      echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] $line"
+    done
+    
+    # Удаляем временный файл
+    rm -f "$SCRIPT_FILE"
   else
-    echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Running command without timeout"
-    # Run the command without timeout
-    bash -c "TZ=UTC {command}" 2>&1 | timestamp_output
+    # То же самое для команд без таймаута
+    SCRIPT_FILE="/tmp/{workload_name}_transcript_$$.log"
+    
+    script -q -c "{command}" "$SCRIPT_FILE" >/dev/null 2>&1
     status=$?
-
-    if [ $status -ne 0 ]; then
-      echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Command exited with status $status, restarting in 5 seconds..."
-    else
-      echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Command completed successfully with status $status, restarting in 5 seconds..."
-    fi
+    
+    cat "$SCRIPT_FILE" | sed '/^Script .* started/d; /^Script .* done/d' | while IFS= read -r line || [[ -n "$line" ]]; do
+      echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] $line"
+    done
+    
+    rm -f "$SCRIPT_FILE"
   fi
-
+  
+  # Статус уже сохранен выше
+  # status=${{PIPESTATUS[0]}}
+  
+  echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] === COMMAND OUTPUT END ==="
+  
+  if {'true' if has_time_limit else 'false'} && [ $status -eq 124 ]; then
+    echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] WARNING: Command reached timeout after {timeout_seconds} seconds"
+  fi
+  
+  echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Command exited with status $status, restarting in 5 seconds..."
+  
   # Ждем перед перезапуском
   sleep 5
 done

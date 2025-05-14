@@ -92,6 +92,10 @@ void TCommandConfigFetch::Config(TConfig& config) {
         .StoreTrue(&DedicatedStorageSection);
     config.Opts->AddLongOption("dedicated-cluster-section", "Fetch dedicated cluster section")
         .StoreTrue(&DedicatedClusterSection);
+    config.Opts->AddLongOption("v2-internal-state", "Fetch all managed internal sections in v1 format (in order to downgrade)")
+        .StoreTrue(&FetchInternalState);
+    config.Opts->AddLongOption("v2-explicit-sections", "Add explicit sections to control managed entities manually")
+        .StoreTrue(&FetchExplicitSections);
     config.SetFreeArgsNum(0);
 
     config.AllowEmptyDatabase = AllowEmptyDatabase;
@@ -100,6 +104,12 @@ void TCommandConfigFetch::Config(TConfig& config) {
 
 void TCommandConfigFetch::Parse(TConfig& config) {
     TClientCommand::Parse(config);
+
+    if (FetchInternalState && FetchExplicitSections) {
+        ythrow yexception() << "Can't specify both --v2-internal-state and --v2-explicit-sections at the same time.";
+    } else if (UseLegacyApi && (FetchInternalState || FetchExplicitSections)) {
+        ythrow yexception() << "--v2-internal-state and --v2-explicit-sections can't be used with legacy API.";
+    }
 }
 
 int TCommandConfigFetch::Run(TConfig& config) {
@@ -116,12 +126,23 @@ int TCommandConfigFetch::Run(TConfig& config) {
 
     if (!UseLegacyApi) {
         NYdb::NConfig::TFetchAllConfigsSettings settings;
+        if (FetchInternalState) {
+            settings.Transform(NConfig::EFetchAllConfigsTransform::ADD_BLOB_STORAGE_AND_DOMAINS_CONFIG);
+        } else if (FetchExplicitSections) {
+            settings.Transform(NConfig::EFetchAllConfigsTransform::ADD_EXPLICIT_SECTIONS);
+        }
         result = client.FetchAllConfigs(settings).GetValueSync();
     }
 
     // if the new Config API is not supported, fallback to the old DynamicConfig API
     if (result.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED || result.GetStatus() == EStatus::UNSUPPORTED) {
         Cerr << "Warning: Fallback to DynamicConfig API" << Endl;
+
+        if (FetchInternalState || FetchExplicitSections) {
+            Cerr << "Error: --v2-internal-state and --v2-explicit-sections can't be used with legacy API." << Endl;
+            return EXIT_FAILURE;
+        }
+
         auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
         auto result = client.GetConfig().GetValueSync();
         NStatusHelpers::ThrowOnErrorOrPrintIssues(result);

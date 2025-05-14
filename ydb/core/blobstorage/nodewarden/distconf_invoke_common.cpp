@@ -115,7 +115,8 @@ namespace NKikimr::NStorage {
 
             case TQuery::kFetchStorageConfig: {
                 const auto& request = record.GetFetchStorageConfig();
-                return FetchStorageConfig(request.GetManual(), request.GetMainConfig(), request.GetStorageConfig());
+                return FetchStorageConfig(request.GetMainConfig(), request.GetStorageConfig(),
+                    request.GetAddExplicitConfigs(), request.GetAddSectionsForMigrationToV1());
             }
 
             case TQuery::kReplaceStorageConfig:

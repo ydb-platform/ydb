@@ -13,8 +13,11 @@ void TQueryWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComman
             break;
         case TWorkloadParams::ECommandType::Root:
             TWorkloadBaseParams::ConfigureOpts(opts, commandType, workloadType);
-            opts.AddLongOption('d', "data-path", "path to workload data")
-                .Required().RequiredArgument("PATH").StoreResult(&DataPath);
+            opts.AddLongOption('d', "data-path", "Path to workload data.")
+                .RequiredArgument("PATH").StoreResult(&DataPath);
+            break;
+        case TWorkloadParams::ECommandType::Run:
+            opts.AddLongOption('q', "query", "Query to execute. Can be used multiple times.").AppendTo(&CustomQueries);
             break;
     }
 }
@@ -31,6 +34,15 @@ TString TQueryWorkloadParams::GetWorkloadName() const {
     return "Query";
 }
 
+TQueryInfo TQueryGenerator::MakeQuery(const TString& queryText, const TString& queryName) const {
+    TQueryInfo result;
+    TStringBuilder query;
+    query << "-- Query " << queryName << Endl;
+    query << "PRAGMA TablePathPrefix = \"" << Params.GetFullTableName(nullptr) << "\";" << Endl;
+    query << queryText;
+    result.Query = query;
+    return result;
+}
 
 TQueryInfoList TQueryGenerator::GetWorkloadFromDir(const TFsPath& dir) const {
     TQueryInfoList result;
@@ -44,13 +56,8 @@ TQueryInfoList TQueryGenerator::GetWorkloadFromDir(const TFsPath& dir) const {
         if (!i.IsFile() || (i.GetExtension() != "sql" && i.GetExtension() != "yql")) {
             continue;
         }
-        TStringBuilder query;
-        query << "-- Query from " << i << Endl;
-        query << "PRAGMA TablePathPrefix = \"" << Params.GetFullTableName(nullptr) << "\";" << Endl;
         TFileInput fInput(i.GetPath());
-        query << fInput.ReadAll();
-        result.emplace_back();
-        result.back().Query = query;
+        result.emplace_back(MakeQuery(fInput.ReadAll(), i));
     }
     return result;
 }
@@ -73,17 +80,24 @@ std::string TQueryGenerator::GetDDLQueriesFromDir(const TFsPath& dir) const {
     return result.str();
 }
 
-TQueryInfoList TQueryGenerator::GetWorkload(int type) {
+TQueryInfoList TQueryGenerator::GetWorkload(int /*type*/) {
+    TQueryInfoList result;
     const auto runPath = Params.GetDataPath() / "run";
-    if (type || !runPath.IsDirectory()) {
-        return {};
+    if (Params.GetDataPath().IsDefined() && runPath.IsDirectory()) {
+        result.splice(result.end(), GetWorkloadFromDir(runPath));
     }
-    return GetWorkloadFromDir(runPath);
+
+    for (size_t i = 0; i < Params.GetCustomQueries().size(); ++i) {
+        result.push_back(MakeQuery(Params.GetCustomQueries()[i], TStringBuilder() << "Coustom" << i));
+    }
+
+    return result;
 }
 
 TVector<IWorkloadQueryGenerator::TWorkloadType> TQueryGenerator::GetSupportedWorkloadTypes() const {
     return {
-        IWorkloadQueryGenerator::TWorkloadType(0, "root", "Requests from external source", IWorkloadQueryGenerator::TWorkloadType::EKind::Benchmark)
+        IWorkloadQueryGenerator::TWorkloadType(0, "olap", "Hard analitics queries from external source. One thread, more stats for every query.", IWorkloadQueryGenerator::TWorkloadType::EKind::Benchmark),
+        IWorkloadQueryGenerator::TWorkloadType(0, "oltp", "Many light queries from external source, witch be lanch by some threads many times.", IWorkloadQueryGenerator::TWorkloadType::EKind::Workload)
     };
 }
 

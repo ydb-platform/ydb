@@ -14,7 +14,7 @@ public:
     TString GetWorkloadName() const override;
 
     YDB_READONLY_DEF(TFsPath, DataPath);
-    YDB_READONLY(EQuerySyntax, Syntax, EQuerySyntax::YQL);
+    YDB_READONLY_DEF(TVector<TString>, CustomQueries);
 };
 
 class TQueryGenerator final: public TWorkloadQueryGeneratorBase<TQueryWorkloadParams> {
@@ -30,6 +30,7 @@ protected:
     TQueryInfoList GetInitialData() override;
 
 private:
+    TQueryInfo MakeQuery(const TString& queryText, const TString& queryName) const;
     TQueryInfoList GetWorkloadFromDir(const TFsPath& dir) const;
     std::string GetDDLQueriesFromDir(const TFsPath& dir) const;
 };

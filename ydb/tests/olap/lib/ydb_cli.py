@@ -248,8 +248,10 @@ class YdbCliHelper:
                 'workload', str(self.workload_type), '--path', self.db_path]
             if self.external_path:
                 cmd += ['--data-path', self.external_path]
+            cmd += ['run']
+            if self.workload_type == WorkloadType.EXTERNAL:
+                cmd += ['olap']
             cmd += [
-                'run',
                 '--json', self._json_path,
                 '--output', self._query_output_path,
                 '--executer', 'generic',

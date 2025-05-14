@@ -86,7 +86,7 @@ bool TSplittedEntity::TBlobChunk::TakeEntityPartFrom(TBlobChunk& sourceNormal, c
                 if (i->GetSize() - c->GetPackedSize() + splitParts.back()->GetPackedSize() < maxSize &&
                     GetSize() + splitParts.front()->GetPackedSize() < maxSize) {
                     i->Exchange(c, splitParts);
-                    AddChunk(i->DetachEntityChunkVerified(chunks.front()));
+                    AddChunk(i->DetachEntityChunkVerified(splitParts.front()));
                 } else {
                     AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "grow_size_after_split")("start", c->GetPackedSize())(
                         "s1", splitParts.front()->GetPackedSize())("s2", splitParts.back()->GetPackedSize())("normal", i->GetSize())(

@@ -28,6 +28,7 @@ IF (NOT WITH_VALGRIND)
 
     SRCS(
         ut_split_merge.cpp
+        ut_find_split_key.cpp
     )
 
     END()

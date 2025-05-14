@@ -2079,11 +2079,16 @@ Y_UNIT_TEST_SUITE(DirectReadWithServer) {
 
         gotFirstMessage.GetFuture().Wait();
 
-        auto firstGenerationId = partitionSession->GetLocation()->GetGeneration();
+        auto getPartitionGeneration = [&client]() {
+            auto description = client.DescribePartition(TEST_TOPIC, 0, TDescribePartitionSettings().IncludeLocation(true)).GetValueSync();
+            return description.GetPartitionDescription().GetPartition().GetPartitionLocation()->GetGeneration();
+        };
+
+        auto firstGenerationId = getPartitionGeneration();
 
         setup.GetServer().KillTopicPqTablets(setup.GetTopicPath());
 
-        while (firstGenerationId == partitionSession->GetLocation()->GetGeneration()) {
+        while (firstGenerationId == getPartitionGeneration()) {
             Sleep(TDuration::MilliSeconds(100));
         }
 
@@ -2153,11 +2158,16 @@ Y_UNIT_TEST_SUITE(DirectReadWithServer) {
 
         gotFirstMessage.GetFuture().Wait();
 
-        auto firstGenerationId = partitionSession->GetLocation()->GetGeneration();
+        auto getPartitionGeneration = [&client]() {
+            auto description = client.DescribePartition(TEST_TOPIC, 0, TDescribePartitionSettings().IncludeLocation(true)).GetValueSync();
+            return description.GetPartitionDescription().GetPartition().GetPartitionLocation()->GetGeneration();
+        };
+
+        auto firstGenerationId = getPartitionGeneration();
 
         setup.GetServer().KillTopicPqrbTablet(setup.GetTopicPath());
 
-        while (firstGenerationId == partitionSession->GetLocation()->GetGeneration()) {
+        while (firstGenerationId == getPartitionGeneration()) {
             Sleep(TDuration::MilliSeconds(100));
         }
 

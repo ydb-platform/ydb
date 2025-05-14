@@ -2,11 +2,30 @@
 
 #include "codecs.h"
 #include "events_common.h"
-#include "control_plane.h"
 
 #include <util/datetime/base.h>
 
+namespace Ydb::Topic {
+    class PartitionLocation;
+}
+
 namespace NYdb::inline Dev::NTopic {
+
+// Topic partition location
+class TPartitionLocation {
+public:
+    TPartitionLocation(const Ydb::Topic::PartitionLocation& partitionLocation);
+    TPartitionLocation(i32 nodeId, i64 generation);
+    int32_t GetNodeId() const;
+    int64_t GetGeneration() const;
+
+private:
+    // Node identificator.
+    int32_t NodeId_ = 1;
+
+    // Partition generation.
+    int64_t Generation_ = 2;
+};
 
 //! Partition session.
 struct TPartitionSession: public TThrRefBase, public TPrintable<TPartitionSession> {
@@ -40,18 +59,6 @@ public:
     //! Partition id.
     uint64_t GetPartitionId() const {
         return PartitionId;
-    }
-
-    TMaybe<TPartitionLocation> GetLocation() const {
-        return Location;
-    }
-
-    /*TDirectReadId*/ i64 GetNextDirectReadId() const {
-        return NextDirectReadId;
-    }
-
-    TMaybe</*TDirectReadId*/ i64> GetLastDirectReadId() const {
-        return LastDirectReadId;
     }
 
 protected:

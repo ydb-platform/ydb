@@ -444,6 +444,70 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
         }
     }
 
+    Y_UNIT_TEST(UpdateOn) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE Test
+                    ON (Amount, Comment)
+                    VALUES (100ul, "None");
+            )");
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "BATCH UPDATE is unsupported with ON", result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(ColumnTable) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = Q_(R"(
+                CREATE TABLE TestOlap (
+                    Key Int32 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    STORE = COLUMN
+                );
+            )");
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto query = Q_(R"(
+                INSERT INTO TestOlap (Key, Value) VALUES
+                    (1, "1"),
+                    (2, "2"),
+                    (3, "3");
+            )");
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE TestOlap
+                    SET Value = "None"
+                    WHERE Key < 3;
+            )");
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "BATCH operations are not supported for column tables at the current time.", result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(HasTxControl) {
         TKikimrRunner kikimr(GetAppConfig());
         auto db = kikimr.GetQueryClient();

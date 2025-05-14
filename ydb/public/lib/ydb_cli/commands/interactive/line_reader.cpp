@@ -62,7 +62,7 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath, TClien
     : Prompt(std::move(prompt))
     , HistoryFilePath(std::move(historyFilePath))
     , HistoryFileHandle(HistoryFilePath.c_str(), EOpenModeFlag::OpenAlways | EOpenModeFlag::RdWr | EOpenModeFlag::AW | EOpenModeFlag::ARUser | EOpenModeFlag::ARGroup)
-    , YQLCompleter(MakeYQLCompleter(TColorSchema::Monaco(), TYdbCommand::CreateDriver(config), config.Database))
+    , YQLCompleter(MakeYQLCompleter(TColorSchema::Monaco(), TYdbCommand::CreateDriver(config), config.Database, config.IsVerbose()))
     , YQLHighlighter(MakeYQLHighlighter(TColorSchema::Monaco()))
 {
     Rx.install_window_change_handler();

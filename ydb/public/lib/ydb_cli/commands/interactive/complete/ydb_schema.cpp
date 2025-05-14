@@ -8,9 +8,10 @@ namespace NYdb::NConsoleClient {
 
     class TYDBSchema: public NSQLComplete::ISimpleSchema {
     public:
-        explicit TYDBSchema(TDriver driver, TString database)
+        explicit TYDBSchema(TDriver driver, TString database, bool isVerbose)
             : Driver_(std::move(driver))
             , Database_(std::move(database))
+            , IsVerbose_(isVerbose)
         {
         }
 
@@ -27,8 +28,8 @@ namespace NYdb::NConsoleClient {
 
         NThreading::TFuture<TVector<NSQLComplete::TFolderEntry>> List(TString folder) const override {
             return NScheme::TSchemeClient(Driver_)
-                .ListDirectory(Qualified(std::move(folder)))
-                .Apply([](auto f) { return Convert(f.ExtractValue()); });
+                .ListDirectory(Qualified(folder))
+                .Apply([this, folder](auto f) { return this->Convert(folder, f.ExtractValue()); });
         }
 
     private:
@@ -40,12 +41,12 @@ namespace NYdb::NConsoleClient {
             return folder;
         }
 
-        static TVector<NSQLComplete::TFolderEntry> Convert(NScheme::TListDirectoryResult result) {
+        TVector<NSQLComplete::TFolderEntry> Convert(TString folder, NScheme::TListDirectoryResult result) const {
             if (!result.IsSuccess()) {
-                // TODO(YQL-19747): Use Swallowing and Logging NameServices
-                // ythrow yexception()
-                //     << "ListDirectory('" << path << "') failed: "
-                //     << result.GetIssues().ToOneLineString();
+                if (IsVerbose_) {
+                    Cerr << "ListDirectory('" << folder << "') failed: "
+                         << result.GetIssues().ToOneLineString();
+                }
                 return {};
             }
 
@@ -110,10 +111,12 @@ namespace NYdb::NConsoleClient {
 
         TDriver Driver_;
         TString Database_;
+        bool IsVerbose_;
     };
 
-    NSQLComplete::ISimpleSchema::TPtr MakeYDBSchema(TDriver driver, TString database) {
-        return new TYDBSchema(std::move(driver), std::move(database));
+    NSQLComplete::ISimpleSchema::TPtr MakeYDBSchema(
+        TDriver driver, TString database, bool isVerbose) {
+        return new TYDBSchema(std::move(driver), std::move(database), isVerbose);
     }
 
 } // namespace NYdb::NConsoleClient

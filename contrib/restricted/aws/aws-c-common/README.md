@@ -122,7 +122,8 @@ have pre-slotted log subjects & error codes for each library. The currently allo
 | [0x3800, 0x3C00) | aws-c-s3 |
 | [0x3C00, 0x4000) | aws-c-sdkutils |
 | [0x4000, 0x4400) | aws-crt-kotlin |
-| [0x4400, 0x4800) | (reserved for future project) |
+| [0x4400, 0x4800) | aws-crt-swift |
+| [0x4800, 0x4C00) | (reserved for future project) |
 
 Each library should begin its error and log subject values at the beginning of its range and follow in sequence (don't skip codes). Upon
 adding an AWS maintained library, a new enum range must be approved and added to the above table.

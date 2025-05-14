@@ -9,11 +9,7 @@ std::string GetCreateTablesSQL(const std::string& prefix) {
 }
 
 std::string GetInitializeTablesSQL(const std::string& prefix) {
-    return prefix + "insert into `revision` (`stub`,`revision`,`timestamp`) values (false,0L,CurrentUtcDatetime());";
-}
-
-std::string GetLastRevisionSQL(const std::string& prefix) {
-    return prefix + "select `revision` from `revision` where not `stub`; select nvl(max(`id`), 1L) from `leases`;";
+    return prefix + "insert into `revision` (`stub`,`revision`,`timestamp`) values (false,0L,CurrentUtcDatetime()),(true,0L,CurrentUtcDatetime());";
 }
 
 }

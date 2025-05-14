@@ -1212,30 +1212,33 @@ private:
 
         if (rec.id())
             return "requested id isn't supported";
-
-        Lease = Stuff->Lease.fetch_add(1LL) + 1LL;
         return {};
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
-        sql << "insert into `leases` (`id`,`ttl`,`created`,`updated`)" << std::endl;
-        sql << '\t' << "values (" << AddParam("Lease", params, Lease) << ',' << AddParam("TimeToLive", params, TTL) << ",CurrentUtcDatetime(),CurrentUtcDatetime());" << std::endl;
+        const auto& ttlParamName = AddParam("TimeToLive", params, TTL);
+        sql << "$Next = select `stub`, `revision` + 1L as `revision`, CurrentUtcDatetime(`timestamp`) as `timestamp` from `revision` where `stub`;" << std::endl;
+        sql << "update `revision` on select * from $Next;" << std::endl;
+        sql << "insert into `leases` select `revision` as `id`," << ttlParamName << " as `ttl`,`timestamp` as `created`,`timestamp` as `updated` from $Next;" << std::endl;
+        sql << "select `revision` as `id`, " << ttlParamName << " - unwrap(cast(CurrentUtcDatetime(`timestamp`) - `timestamp` as Int64) / 1000000L) as `ttl` from $Next;" << std::endl;
     }
 
-    void ReplyWith(const NYdb::TResultSets&, const TActorContext& ctx) final {
-        etcdserverpb::LeaseGrantResponse response;
-        response.mutable_header()->set_revision(Revision);
-        response.set_id(Lease);
-        response.set_ttl(TTL);
-        Dump(std::cout) << '=' << response.id() << ',' << response.ttl() << std::endl;
-        return Reply(response, ctx);
+    void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
+        if (auto parser = NYdb::TResultSetParser(results.front()); parser.TryNextRow()) {
+            etcdserverpb::LeaseGrantResponse response;
+            response.mutable_header()->set_revision(Revision);
+            response.set_id(NYdb::TValueParser(parser.GetValue("id")).GetInt64());
+            response.set_ttl(NYdb::TValueParser(parser.GetValue("ttl")).GetInt64());
+            Dump(std::cout) << '=' << response.id() << ',' << response.ttl() << std::endl;
+            return Reply(response, ctx);
+        }
     }
 
     std::ostream& Dump(std::ostream& out) const final {
         return out << "Grant(" << TTL << ')';
     }
 
-    i64 Lease, TTL;
+    i64 TTL;
 };
 
 class TLeaseRevokeRequest

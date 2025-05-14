@@ -62,25 +62,6 @@ int TProxy::Discovery() {
 }
 
 int TProxy::StartServer() {
-    if (const auto res = Stuff->Client->ExecuteQuery(NEtcd::GetLastRevisionSQL(Stuff->TablePrefix), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); res.IsSuccess()) {
-        if (auto result = res.GetResultSetParser(0); result.TryNextRow()) {
-            Stuff->Revision.store(NYdb::TValueParser(result.GetValue(0)).GetInt64());
-        } else {
-            std::cout << "Unexpected result of get last revision." << std::endl;
-            return 1;
-        }
-        if (auto result = res.GetResultSetParser(1); result.TryNextRow()) {
-            Stuff->Lease.store(NYdb::TValueParser(result.GetValue(0)).GetInt64());
-        } else {
-            std::cout << "Unexpected result of get last lease." << std::endl;
-            return 1;
-        }
-        std::cout << "The last revision is " << Stuff->Revision.load() << ", the last lease is " << Stuff->Lease.load() << '.' << std::endl;
-    } else {
-        std::cout << res.GetIssues().ToString() << std::endl;
-        return 1;
-    }
-
     NYdbGrpc::TServerOptions opts;
     opts.SetPort(ListeningPort);
 
@@ -218,12 +199,11 @@ int TProxy::ImportDatabase() {
     }
 
     const auto& param = NYdb::TParamsBuilder().AddParam("$Prefix").String(ImportPrefix_).Build().Build();
-    if (const auto res = Stuff->Client->ExecuteQuery("insert into `history` select * from `current` where startswith(`key`,$Prefix);", NYdb::NQuery::TTxControl::NoTx(), param).ExtractValueSync(); !res.IsSuccess()) {
-        std::cout << res.GetIssues().ToString() << std::endl;
-        return 1;
-    }
-
-    if (const auto res = Stuff->Client->ExecuteQuery("insert into `revision` select false as `stub`, nvl(max(`modified`), 0L) as `revision`, CurrentUtcDatetime() as `timestamp` from `history`;", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); !res.IsSuccess()) {
+    if (const auto res = Stuff->Client->ExecuteQuery(R"(
+insert into `history` select * from `current` where startswith(`key`,$Prefix);
+insert into `revision` (`stub`,`revision`,`timestamp`) values (true,0L,CurrentUtcDatetime());
+insert into `revision` select false as `stub`, nvl(max(`modified`), 0L) as `revision`, CurrentUtcDatetime(`modified`) as `timestamp` from `history`;"
+    )", NYdb::NQuery::TTxControl::NoTx(), param).ExtractValueSync(); !res.IsSuccess()) {
         std::cout << res.GetIssues().ToString() << std::endl;
         return 1;
     }

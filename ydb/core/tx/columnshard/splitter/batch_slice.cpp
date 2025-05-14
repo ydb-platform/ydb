@@ -7,66 +7,9 @@
 
 namespace NKikimr::NOlap {
 
-class TChunksToSplit {
-private:
-    YDB_READONLY_DEF(std::vector<std::shared_ptr<IPortionDataChunk>>, Chunks);
-    i64 FullSize = 0;
-
-public:
-    ui64 GetFullSize() const {
-        return FullSize;
-    }
-
-    ui32 size() const {
-        return Chunks.size();
-    }
-
-    void Clear() {
-        Chunks.clear();
-        FullSize = 0;
-    }
-
-    const std::shared_ptr<IPortionDataChunk>& operator[](const ui32 index) const {
-        AFL_VERIFY(index < Chunks.size());
-        return Chunks[index];
-    }
-
-    void AddChunks(const std::vector<std::shared_ptr<IPortionDataChunk>>& chunks) {
-        for (auto&& i : chunks) {
-            FullSize += i->GetPackedSize();
-            Chunks.emplace_back(i);
-        }
-    }
-
-    void PopFront(const ui32 count) {
-        AFL_VERIFY(count <= Chunks.size());
-        for (ui32 i = 0; i < count; ++i) {
-            FullSize -= Chunks[i]->GetPackedSize();
-        }
-        AFL_VERIFY(FullSize >= 0);
-        Chunks.erase(Chunks.begin(), Chunks.begin() + count);
-    }
-
-    void Exchange(const ui32 index, std::vector<std::shared_ptr<IPortionDataChunk>>&& newChunks) {
-        AFL_VERIFY(index < Chunks.size());
-        FullSize -= Chunks[index]->GetPackedSize();
-        AFL_VERIFY(FullSize >= 0);
-        for (auto&& i : newChunks) {
-            FullSize += i->GetPackedSize();
-        }
-        Chunks.erase(Chunks.begin() + index);
-        Chunks.insert(Chunks.begin() + index, newChunks.begin(), newChunks.end());
-    }
-
-    bool IsEmpty() {
-        return Chunks.empty();
-    }
-};
-
 bool TGeneralSerializedSlice::GroupBlobsImpl(const NSplitter::TGroupFeatures& features, std::vector<TSplittedBlob>& blobs) {
     AFL_VERIFY(features.GetSplitSettings().GetMaxBlobSize() >= 2 * features.GetSplitSettings().GetMinBlobSize())(
                                                                    "event", "we need be sure that 2 * small < big");
-    TChunksToSplit chunksInProgress;
     std::sort(Data.begin(), Data.end());
     THashMap<ui32, TSplittedEntity::TNormalizedBlobChunks> chunksPreparation;
     for (auto&& i : Data) {

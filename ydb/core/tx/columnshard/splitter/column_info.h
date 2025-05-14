@@ -40,16 +40,12 @@ public:
         TSplittedEntity* Entity;
 
     public:
-        std::vector<std::shared_ptr<IPortionDataChunk>> SplitChunk(
-            const std::shared_ptr<IPortionDataChunk>& chunk, const ui32 size, const TColumnSaver& saver, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters) {
-            DetachEntityChunkVerified(chunk);
-            counters->BySizeSplitter.OnTrashSerialized(chunk->GetPackedSize());
-            auto result = chunk->InternalSplit(saver, counters, { size });
-            Entity->SwitchChunk(chunk, result);
-            for (auto&& i : result) {
+        void Exchange(const std::shared_ptr<IPortionDataChunk>& from, const std::vector<std::shared_ptr<IPortionDataChunk>>& to) {
+            DetachEntityChunkVerified(from);
+            Entity->SwitchChunk(from, to);
+            for (auto&& i : to) {
                 AddChunk(i);
             }
-            return result;
         }
 
         TEntityChunk DetachEntityChunkVerified(const std::shared_ptr<IPortionDataChunk>& chunk) {
@@ -152,36 +148,6 @@ public:
                 }
             }
             return result;
-        }
-    };
-
-    class TDetachInfo {
-    private:
-        std::map<ui64, ui32> Splittable;
-        std::map<ui64, ui32> Strict;
-
-    public:
-        const std::map<ui64, ui32>& GetSplittable() const {
-            return Splittable;
-        }
-        const std::map<ui64, ui32>& GetStrict() const {
-            return Strict;
-        }
-
-        void AddSplittable(const ui64 size, const ui32 count = 1) {
-            Splittable[size] += count;
-        }
-        void AddStrict(const ui64 size, const ui32 count = 1) {
-            Strict[size] += count;
-        }
-
-        void Merge(const TDetachInfo& info) {
-            for (auto&& i : info.Splittable) {
-                AddSplittable(i.first, i.second);
-            }
-            for (auto&& i : info.Strict) {
-                AddSplittable(i.first, i.second);
-            }
         }
     };
 

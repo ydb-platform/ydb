@@ -163,7 +163,7 @@ struct TUploadLimits {
     ui32 BackoffCeiling = 3;
 
     TDuration GetTimeoutBackouff(ui32 retryNo) const {
-        return TDuration::Seconds(1u << Max(retryNo, BackoffCeiling));
+        return TDuration::Seconds(1u << Min(retryNo, BackoffCeiling));
     }
 };
 

@@ -156,7 +156,7 @@ void TPDisk::PrintLogChunksInfo(const TString& msg) {
         return str.Str();
     };
 
-    LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK_TEST, debugPrint());
+    LOG_DEBUG_S(*ActorSystem, NKikimrServices::BS_PDISK_TEST, debugPrint());
 }
 
 bool TPDisk::LogNonceJump(ui64 previousNonce) {

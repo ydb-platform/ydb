@@ -136,8 +136,10 @@ NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
     if (baseTablePartitionConfig.HasKeepSnapshotTimeout()) {
         result.SetKeepSnapshotTimeout(baseTablePartitionConfig.GetKeepSnapshotTimeout());
     }
+    if (indexTableDesc.GetPartitionConfig().FollowerGroupsSize()) {
+        result.MutableFollowerGroups()->CopyFrom(indexTableDesc.GetPartitionConfig().GetFollowerGroups());
+    }
     // skip repeated NKikimrStorageSettings.TStorageRoom StorageRooms = 17;
-    // skip optional NKikimrHive.TFollowerGroup FollowerGroup = 23;
 
     return result;
 }

@@ -4,6 +4,8 @@
 
 #include <yt/yt/core/rpc/public.h>
 
+#include <yt/yt/core/ypath/public.h>
+
 namespace NYT::NSecurityClient {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -17,7 +19,7 @@ using TProxyRoleId = NObjectClient::TObjectId;
 using TAccountResourceUsageLeaseId = NObjectClient::TObjectId;
 
 extern const TString RootAccountName;
-extern const TString RootAccountCypressPath;
+extern const NYPath::TYPath RootAccountCypressPath;
 extern const TString TmpAccountName;
 extern const TString SysAccountName;
 extern const TString IntermediateAccountName;

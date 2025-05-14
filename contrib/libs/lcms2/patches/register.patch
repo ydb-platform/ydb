@@ -1,0 +1,5 @@
+--- a/include/lcms2.h	(index)
++++ b/include/lcms2.h	(working tree)
+@@ -62,1 +62,1 @@
+-// #define CMS_NO_REGISTER_KEYWORD 1
++#define CMS_NO_REGISTER_KEYWORD 1

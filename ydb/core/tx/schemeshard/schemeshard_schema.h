@@ -1377,6 +1377,10 @@ struct Schema : NIceDb::Schema {
         struct ReadRowsProcessed : Column<39, NScheme::NTypeIds::Uint64> {};
         struct ReadBytesProcessed : Column<40, NScheme::NTypeIds::Uint64> {};
 
+        struct StartTime : Column<41, NScheme::NTypeIds::Uint64> {};
+        struct EndTime : Column<42, NScheme::NTypeIds::Uint64> {};
+        struct UserSID : Column<43, NScheme::NTypeIds::Utf8> {};
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -1418,7 +1422,10 @@ struct Schema : NIceDb::Schema {
             UploadRowsProcessed,
             UploadBytesProcessed,
             ReadRowsProcessed,
-            ReadBytesProcessed
+            ReadBytesProcessed,
+            StartTime,
+            EndTime,
+            UserSID
         >;
     };
 
@@ -1598,6 +1605,7 @@ struct Schema : NIceDb::Schema {
         struct Issue : Column<10, NScheme::NTypeIds::Utf8> {};
         struct SrcPrefix : Column<17, NScheme::NTypeIds::Utf8> {};
         struct EncryptionIV : Column<18, NScheme::NTypeIds::String> {};
+        struct SrcPath : Column<19, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<ImportId, Index>;
         using TColumns = TableColumns<
@@ -1618,7 +1626,8 @@ struct Schema : NIceDb::Schema {
             NextChangefeedIdx,
             Issue,
             SrcPrefix,
-            EncryptionIV
+            EncryptionIV,
+            SrcPath
         >;
     };
 

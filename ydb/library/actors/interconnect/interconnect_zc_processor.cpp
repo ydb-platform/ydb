@@ -17,9 +17,14 @@
 
 #include <linux/errqueue.h>
 #include <linux/netlink.h>
+#include <linux/socket.h>
 
 #ifndef MSG_ZEROCOPY
 #define MSG_ZEROCOPY 0x4000000
+#endif
+
+#ifndef SO_ZEROCOPY
+#define SO_ZEROCOPY 60
 #endif
 
 static bool CmsgIsIpLevel(const cmsghdr& cmsg) {
@@ -145,6 +150,7 @@ size_t AdjustLen(std::span<const TConstIoVec> wbuf, std::span<const TOutgoingStr
 }
 
 void TInterconnectZcProcessor::DoProcessNotification(NInterconnect::TStreamSocket& socket) {
+#ifdef YDB_MSG_ZEROCOPY_SUPPORTED
     const TProcessErrQueueResult res = DoProcessErrQueue(socket);
 
     std::visit(TOverloaded{
@@ -172,6 +178,9 @@ void TInterconnectZcProcessor::DoProcessNotification(NInterconnect::TStreamSocke
         AddErr("Hidden copy during ZC operation");
         ZcState = ZC_DISABLED_HIDDEN_COPY;
     }
+#else
+    Y_UNUSED(socket);
+#endif
 }
 
 void TInterconnectZcProcessor::ApplySocketOption(NInterconnect::TStreamSocket& socket)
@@ -186,6 +195,8 @@ void TInterconnectZcProcessor::ApplySocketOption(NInterconnect::TStreamSocket& s
             ResetState();
         }
     }
+#else
+    Y_UNUSED(socket);
 #endif
 }
 
@@ -259,10 +270,6 @@ ssize_t TInterconnectZcProcessor::ProcessSend(std::span<TConstIoVec> wbuf, TStre
     return r;
 }
 
-TInterconnectZcProcessor::TInterconnectZcProcessor(bool enabled)
-    : ZcState(enabled ? ZC_OK : ZC_DISABLED)
-{}
-
 TString TInterconnectZcProcessor::GetCurrentStateName() const {
     switch (ZcState) {
         case ZC_DISABLED:
@@ -288,7 +295,22 @@ TString TInterconnectZcProcessor::ExtractErrText() {
     }
 }
 
+void TInterconnectZcProcessor::AddErr(const TString& err) {
+    if (LastErr) {
+        LastErr.reserve(err.size() + 2);
+        LastErr += ", ";
+        LastErr += err;
+    } else {
+        LastErr = err;
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////////
+
+#ifdef YDB_MSG_ZEROCOPY_SUPPORTED
+TInterconnectZcProcessor::TInterconnectZcProcessor(bool enabled)
+    : ZcState(enabled ? ZC_OK : ZC_DISABLED)
+{}
 
 // Guard part.
 // We must guarantee liveness of buffers used for zc
@@ -383,8 +405,10 @@ public:
     }
 
     void Terminate(std::unique_ptr<NActors::TEventHolderPool>&& pool, TIntrusivePtr<NInterconnect::TStreamSocket> socket, const NActors::TActorContext &ctx) override {
-        // must be registered on the same mailbox!
-        ctx.RegisterWithSameMailbox(new TGuardActor(Uncompleted, Confirmed, std::move(Delayed), socket, std::move(pool)));
+        if (!Delayed.empty()) {
+            // must be registered on the same mailbox!
+            ctx.RegisterWithSameMailbox(new TGuardActor(Uncompleted, Confirmed, std::move(Delayed), socket, std::move(pool)));
+        }
     }
 private:
     const ui64 Uncompleted;
@@ -392,20 +416,33 @@ private:
     std::list<TEventHolder> Delayed;
 };
 
-void TInterconnectZcProcessor::AddErr(const TString& err) {
-    if (LastErr) {
-        LastErr.reserve(err.size() + 2);
-        LastErr += ", ";
-        LastErr += err;
-    } else {
-        LastErr = err;
-    }
-}
-
-
 std::unique_ptr<IZcGuard> TInterconnectZcProcessor::GetGuard()
 {
     return std::make_unique<TGuardRunner>(SendAsZc, Confirmed);
 }
+
+#else
+TInterconnectZcProcessor::TInterconnectZcProcessor(bool)
+    : ZcState(ZC_DISABLED)
+{}
+
+class TDummyGuardRunner : public IZcGuard {
+public:
+    TDummyGuardRunner(ui64 uncompleted, ui64 confirmed)
+    {
+        Y_UNUSED(uncompleted);
+        Y_UNUSED(confirmed);
+    }
+
+    void ExtractToSafeTermination(std::list<TEventHolder>&) noexcept override {}
+    void Terminate(std::unique_ptr<NActors::TEventHolderPool>&&, TIntrusivePtr<NInterconnect::TStreamSocket>, const NActors::TActorContext&) override {}
+};
+
+std::unique_ptr<IZcGuard> TInterconnectZcProcessor::GetGuard()
+{
+    return std::make_unique<TDummyGuardRunner>(SendAsZc, Confirmed);
+}
+
+#endif
 
 }

@@ -37,6 +37,13 @@ struct TReadInfo {
     i32 GenerationId;
 };
 
+struct TConsumerOffset {
+    ui64 PartitionIndex;
+    ui64 Offset;
+    TString Metadata;
+};
+
+
 class TKafkaTestClient {
     public:
         TKafkaTestClient(ui16 port, const TString clientName = "TestClient");
@@ -61,7 +68,7 @@ class TKafkaTestClient {
 
         TMessagePtr<TInitProducerIdResponseData> InitProducerId(const TString& transactionalId = "");
 
-        TMessagePtr<TOffsetCommitResponseData> OffsetCommit(TString groupId, std::unordered_map<TString, std::vector<std::pair<ui64,ui64>>> topicsToPartions);
+        TMessagePtr<TOffsetCommitResponseData> OffsetCommit(TString groupId, std::unordered_map<TString, std::vector<TConsumerOffset>> topicsToConsumerOffsets);
 
         TMessagePtr<TProduceResponseData> Produce(const TString& topicName, ui32 partition, const TKafkaRecordBatch& batch);
 

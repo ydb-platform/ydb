@@ -16,7 +16,7 @@ class TestAlterCompression(ColumnFamilyTestBase):
         super(TestAlterCompression, cls).setup_class()
 
     def upsert_and_wait_portions(self, table: ColumnTableHelper, number_rows_for_insert: int, count_upsert: int):
-        prev_number_rows: int = table.get_row_count()
+        current_num_rows: int = table.get_row_count()
         for _ in range(count_upsert):
             self.ydb_client.query(
                 """
@@ -31,13 +31,13 @@ class TestAlterCompression(ColumnFamilyTestBase):
                 UPSERT INTO `%s`
                 SELECT * FROM AS_TABLE($rows);
             """
-                % (number_rows_for_insert, prev_number_rows, table.path)
+                % (number_rows_for_insert, current_num_rows, table.path)
             )
-            prev_number_rows += number_rows_for_insert
+            current_num_rows += number_rows_for_insert
             logger.info(
-                f"{prev_number_rows} rows inserted in {table.path}. portions: {table.get_portion_stat_by_tier()}, blobs: {table.get_blob_stat_by_tier()}"
+                f"{current_num_rows} rows in {table.path}. portions: {table.get_portion_stat_by_tier()}, blobs: {table.get_blob_stat_by_tier()}"
             )
-        assert table.get_row_count() == prev_number_rows
+        assert table.get_row_count() == current_num_rows
 
         if not self.wait_for(
             lambda: len(table.get_portion_stat_by_tier()) != 0, plain_or_under_sanitizer(70, 140)
@@ -45,7 +45,7 @@ class TestAlterCompression(ColumnFamilyTestBase):
             raise Exception("not all portions have been updated")
 
         if not self.wait_for(
-            lambda: table.get_portion_stat_by_tier()['__DEFAULT']['Rows'] == number_rows_for_insert * count_upsert, plain_or_under_sanitizer(70, 140)
+            lambda: table.get_portion_stat_by_tier()['__DEFAULT']['Rows'] == current_num_rows, plain_or_under_sanitizer(70, 140)
         ):
             raise Exception("not all portions have been updated")
 

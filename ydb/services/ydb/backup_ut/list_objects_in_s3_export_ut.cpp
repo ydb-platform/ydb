@@ -40,7 +40,7 @@ class TListObjectsInS3ExportTestFixture : public TS3BackupTestFixture {
 Y_UNIT_TEST_SUITE_F(ListObjectsInS3Export, TListObjectsInS3ExportTestFixture) {
     Y_UNIT_TEST(ExportWithSchemaMapping) {
         {
-            NExport::TExportToS3Settings exportSettings = MakeExportSettings("", "Prefix");
+            NExport::TExportToS3Settings exportSettings = MakeExportSettings("", "Prefix//");
             auto res = YdbExportClient().ExportToS3(exportSettings).GetValueSync();
             WaitOpSuccess(res);
         }

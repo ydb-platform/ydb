@@ -960,7 +960,6 @@ private:
             if (auto outputs = expr.Cast<TDqStageBase>().Outputs()) {
                 for (auto output : outputs.Cast()) {
                     if (auto sink = output.Maybe<TDqSink>()) {
-                        AFL_ENSURE(planNode.TypeName == "");
                         AFL_ENSURE(outputs.Cast().Size() == 1);
                         Visit(sink.Cast(), expr.Cast<TDqStageBase>(), planNode);
                     }

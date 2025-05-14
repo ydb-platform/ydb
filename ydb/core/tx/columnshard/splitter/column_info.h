@@ -92,6 +92,7 @@ public:
 
         void AddChunk(const std::shared_ptr<IPortionDataChunk>& chunk) {
             AFL_VERIFY(chunk);
+            AFL_VERIFY(chunk->GetPackedSize());
             for (auto&& i : Chunks) {
                 AFL_VERIFY(i->GetChunkIdxVerified() != chunk->GetChunkIdxVerified());
             }
@@ -157,6 +158,15 @@ public:
         THashMap<ui32, TEntityChunk> Entities;
 
     public:
+        TBlobChunk() = default;
+        TBlobChunk(std::vector<TBlobChunk>&& chunks) {
+            for (auto&& i : chunks) {
+                Merge(std::move(i));
+            }
+        }
+        TBlobChunk(TEntityChunk&& chunk) {
+            AddChunk(std::move(chunk));
+        }
         void EraseEntity(const ui32 id) {
             auto it = Entities.find(id);
             AFL_VERIFY(it != Entities.end());
@@ -204,9 +214,25 @@ public:
             }
         }
 
+        void AddChunk(TEntityChunk&& chunk) {
+            Size.Add(chunk.GetSize());
+            const ui32 entityId = chunk.GetEntityId();
+            auto it = Entities.find(chunk.GetEntityId());
+            if (it == Entities.end()) {
+                it = Entities.emplace(entityId, std::move(chunk)).first;
+            } else {
+                it->second.Merge(std::move(chunk));
+            }
+        }
+
         void Merge(TBlobChunk&& chunk) {
-            for (auto&& i : chunk.Entities) {
-                AddChunk(i.second);
+            if (Entities.empty() && Size == 0) {
+                Entities = std::move(chunk.Entities);
+                Size = chunk.Size;
+            } else {
+                for (auto&& i : chunk.Entities) {
+                    AddChunk(std::move(i.second));
+                }
             }
         }
     };
@@ -276,25 +302,28 @@ public:
             for (auto&& i : Normal) {
                 result.AddChunk(i);
             }
-            std::deque<TBlobChunk> smallLocal(Small.begin(), Small.end());
-            const auto pred = [](const TBlobChunk& l, const TBlobChunk& r) {
-                return r.GetSize() < l.GetSize();
-            };
-            std::sort(smallLocal.begin(), smallLocal.end(), pred);
-            while (smallLocal.size() > 1) {
-                if (smallLocal[0].GetSize() + smallLocal[1].GetSize() < MaxSize) {
-                    smallLocal[0].Merge(std::move(smallLocal[1]));
-                    std::swap(smallLocal[1], smallLocal[0]);
-                    smallLocal.pop_front();
-                    if (smallLocal[0].GetSize() > MinSize) {
-                        result.AddChunk(std::move(smallLocal[0]));
-                        smallLocal.pop_front();
-                    }
-                }
+            std::vector<TBlobChunk*> smallPtr;
+            for (auto&& i : Small) {
+                smallPtr.emplace_back(&i);
             }
-            AFL_VERIFY(smallLocal.size() <= 1);
-            if (smallLocal.size()) {
-                result.AddChunk(std::move(smallLocal[0]));
+            const auto pred = [](const TBlobChunk* l, const TBlobChunk* r) {
+                return r->GetSize() < l->GetSize();
+            };
+            std::sort(smallPtr.begin(), smallPtr.end(), pred);
+            std::vector<TBlobChunk> normal;
+            ui32 sumSize = 0;
+            for (auto&& i : smallPtr) {
+                if (sumSize + i->GetSize() > MaxSize) {
+                    AFL_VERIFY(normal.size() > 1);
+                    result.AddChunk(TBlobChunk(std::move(normal)));
+                    normal.clear();
+                    sumSize = 0;
+                }
+                normal.emplace_back(std::move(*i));
+                sumSize += i->GetSize();
+            }
+            if (normal.size()) {
+                result.AddChunk(TBlobChunk(std::move(normal)));
             }
             return result;
         }
@@ -354,13 +383,19 @@ public:
                 }
             }
         }
+        TEntityChunk eChunk(this);
         std::vector<TBlobChunk> bChunks;
-        bChunks.resize(Chunks.size());
+        bChunks.reserve(Chunks.size());
         for (ui32 idx = 0; idx < Chunks.size(); ++idx) {
             AFL_VERIFY(idx == Chunks[idx]->GetChunkIdxVerified());
-            TEntityChunk eChunk(this);
+            if (eChunk.GetSize() + Chunks[idx]->GetPackedSize() >= maxSize) {
+                bChunks.emplace_back(std::move(eChunk));
+                eChunk = TEntityChunk(this);
+            }
             eChunk.AddChunk(Chunks[idx]);
-            bChunks[idx].AddChunk(std::move(eChunk));
+        }
+        if (eChunk.GetSize()) {
+            bChunks.emplace_back(std::move(eChunk));
         }
         return bChunks;
     }

@@ -424,14 +424,26 @@ TString TDistributedTransaction::GetKey() const
     return GetTxKey(TxId);
 }
 
-void TDistributedTransaction::BindMsgToPipe(ui64 tabletId, const IEventBase& event)
-{
-    Y_ABORT_UNLESS(event.IsSerializable());
+//void TDistributedTransaction::BindMsgToPipe(ui64 tabletId, const IEventBase& event)
+//{
+//    Y_ABORT_UNLESS(event.IsSerializable());
+//
+//    TAllocChunkSerializer serializer;
+//    Y_ABORT_UNLESS(event.SerializeToArcadiaStream(&serializer));
+//    auto data = serializer.Release(event.CreateSerializationInfo());
+//    OutputMsgs[tabletId].emplace_back(event.Type(), std::move(data));
+//}
 
-    TAllocChunkSerializer serializer;
-    Y_ABORT_UNLESS(event.SerializeToArcadiaStream(&serializer));
-    auto data = serializer.Release(event.CreateSerializationInfo());
-    OutputMsgs[tabletId].emplace_back(event.Type(), std::move(data));
+void TDistributedTransaction::BindMsgToPipe(ui64 tabletId, const TEvTxProcessing::TEvReadSet& event)
+{
+    auto copy = std::make_unique<TEvTxProcessing::TEvReadSet>(event.Record.GetStep(),
+                                                              event.Record.GetTxId(),
+                                                              event.Record.GetTabletSource(),
+                                                              event.Record.GetTabletDest(),
+                                                              event.Record.GetTabletProducer(),
+                                                              event.Record.GetReadSet(),
+                                                              event.Record.GetSeqno());
+    OutputMsgs[tabletId].push_back(std::move(copy));
 }
 
 void TDistributedTransaction::UnbindMsgsFromPipe(ui64 tabletId)
@@ -439,13 +451,24 @@ void TDistributedTransaction::UnbindMsgsFromPipe(ui64 tabletId)
     OutputMsgs.erase(tabletId);
 }
 
-auto TDistributedTransaction::GetBindedMsgs(ui64 tabletId) -> const TVector<TSerializedMessage>&
+//auto TDistributedTransaction::GetBindedMsgs(ui64 tabletId) -> const TVector<TSerializedMessage>&
+//{
+//    if (auto p = OutputMsgs.find(tabletId); p != OutputMsgs.end()) {
+//        return p->second;
+//    }
+//
+//    static TVector<TSerializedMessage> empty;
+//
+//    return empty;
+//}
+
+auto TDistributedTransaction::GetBindedMsgs(ui64 tabletId) -> const TVector<TEvReadSetPtr>&
 {
     if (auto p = OutputMsgs.find(tabletId); p != OutputMsgs.end()) {
         return p->second;
     }
 
-    static TVector<TSerializedMessage> empty;
+    static TVector<TEvReadSetPtr> empty;
 
     return empty;
 }

@@ -403,9 +403,13 @@ private:
 
     void ClearNewConfig();
 
+    //void SendToPipe(ui64 tabletId,
+    //                TDistributedTransaction& tx,
+    //                std::unique_ptr<IEventBase> event,
+    //                const TActorContext& ctx);
     void SendToPipe(ui64 tabletId,
                     TDistributedTransaction& tx,
-                    std::unique_ptr<IEventBase> event,
+                    std::unique_ptr<TEvTxProcessing::TEvReadSet> event,
                     const TActorContext& ctx);
 
     void InitTransactions(const NKikimrClient::TKeyValueResponse::TReadRangeResult& readRange,

@@ -2945,6 +2945,20 @@ void TPersQueue::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActo
     RestartPipe(ev->Get()->TabletId, ctx);
 }
 
+//void TPersQueue::RestartPipe(ui64 tabletId, const TActorContext& ctx)
+//{
+//    for (ui64 txId : GetBindedTxs(tabletId)) {
+//        auto* tx = GetTransaction(ctx, txId);
+//        if (!tx) {
+//            continue;
+//        }
+//
+//        for (auto& message : tx->GetBindedMsgs(tabletId)) {
+//            PipeClientCache->Send(ctx, tabletId, message.Type, message.Data);
+//        }
+//    }
+//}
+
 void TPersQueue::RestartPipe(ui64 tabletId, const TActorContext& ctx)
 {
     for (ui64 txId : GetBindedTxs(tabletId)) {
@@ -2953,8 +2967,15 @@ void TPersQueue::RestartPipe(ui64 tabletId, const TActorContext& ctx)
             continue;
         }
 
-        for (auto& message : tx->GetBindedMsgs(tabletId)) {
-            PipeClientCache->Send(ctx, tabletId, message.Type, message.Data);
+        for (const auto& message : tx->GetBindedMsgs(tabletId)) {
+            auto event = std::make_unique<TEvTxProcessing::TEvReadSet>(message->Record.GetStep(),
+                                                                       message->Record.GetTxId(),
+                                                                       message->Record.GetTabletSource(),
+                                                                       message->Record.GetTabletDest(),
+                                                                       message->Record.GetTabletProducer(),
+                                                                       message->Record.GetReadSet(),
+                                                                       message->Record.GetSeqno());
+            PipeClientCache->Send(ctx, tabletId, event.release());
         }
     }
 }
@@ -4126,9 +4147,21 @@ void TPersQueue::SendEvProposeTransactionResult(const TActorContext& ctx,
     ctx.Send(tx.SourceActor, std::move(result));
 }
 
+//void TPersQueue::SendToPipe(ui64 tabletId,
+//                            TDistributedTransaction& tx,
+//                            std::unique_ptr<IEventBase> event,
+//                            const TActorContext& ctx)
+//{
+//    Y_ABORT_UNLESS(event);
+//
+//    BindTxToPipe(tabletId, tx.TxId);
+//    tx.BindMsgToPipe(tabletId, *event);
+//    PipeClientCache->Send(ctx, tabletId, event.release());
+//}
+
 void TPersQueue::SendToPipe(ui64 tabletId,
                             TDistributedTransaction& tx,
-                            std::unique_ptr<IEventBase> event,
+                            std::unique_ptr<TEvTxProcessing::TEvReadSet> event,
                             const TActorContext& ctx)
 {
     Y_ABORT_UNLESS(event);

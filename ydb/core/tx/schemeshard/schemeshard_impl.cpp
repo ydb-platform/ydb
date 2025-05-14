@@ -7444,7 +7444,6 @@ void TSchemeShard::ConfigureBackgroundCleaningQueue(
                  << ", InflightLimit# " << cleaningConfig.InflightLimit);
 }
 
-// void TScheme
 void TSchemeShard::ConfigureLoginProvider(
         const ::NKikimrProto::TAuthConfig& config,
         const TActorContext &ctx)
@@ -7456,10 +7455,18 @@ void TSchemeShard::ConfigureLoginProvider(
         .MinUpperCaseCount = passwordComplexityConfig.GetMinUpperCaseCount(),
         .MinNumbersCount = passwordComplexityConfig.GetMinNumbersCount(),
         .MinSpecialCharsCount = passwordComplexityConfig.GetMinSpecialCharsCount(),
-        .SpecialChars = (passwordComplexityConfig.GetSpecialChars().empty() ? NLogin::TPasswordComplexity::VALID_SPECIAL_CHARS : passwordComplexityConfig.GetSpecialChars()),
+        .SpecialChars = passwordComplexityConfig.GetSpecialChars(),
         .CanContainUsername = passwordComplexityConfig.GetCanContainUsername()
     });
     LoginProvider.UpdatePasswordCheckParameters(passwordComplexity);
+
+    auto getSpecialChars = [&passwordComplexity] () {
+        TStringBuilder result;
+        for (const auto& ch : passwordComplexity.SpecialChars) {
+            result << ch;
+        }
+        return result;
+    };
 
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                  "PasswordComplexity for LoginProvider configured: MinLength# " << passwordComplexity.MinLength
@@ -7467,7 +7474,7 @@ void TSchemeShard::ConfigureLoginProvider(
                  << ", MinUpperCaseCount# " << passwordComplexity.MinUpperCaseCount
                  << ", MinNumbersCount# " << passwordComplexity.MinNumbersCount
                  << ", MinSpecialCharsCount# " << passwordComplexity.MinSpecialCharsCount
-                 << ", SpecialChars# " << (passwordComplexityConfig.GetSpecialChars().empty() ? NLogin::TPasswordComplexity::VALID_SPECIAL_CHARS : passwordComplexityConfig.GetSpecialChars())
+                 << ", SpecialChars# " << getSpecialChars()
                  << ", CanContainUsername# " << (passwordComplexity.CanContainUsername ? "true" : "false"));
 }
 

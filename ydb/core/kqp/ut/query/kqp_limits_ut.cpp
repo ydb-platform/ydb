@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             if (!Allowed) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
                 UNIT_ASSERT_C(
-                    result.GetIssues().ToString().contains("Stream write queries aren't allowed."),
+                    result.GetIssues().ToString().contains("Out of buffer memory."),
                     result.GetIssues().ToString());
             } else {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -1498,7 +1498,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
         UNIT_ASSERT(!to_lower(TString{result.GetIssues().ToString()}).Contains("query result"));
         if (useSink) {
-            UNIT_ASSERT(result.GetIssues().ToString().contains("Stream write queries aren't allowed"));
+            UNIT_ASSERT(result.GetIssues().ToString().contains("Out of buffer memory"));
         }
     }
 }

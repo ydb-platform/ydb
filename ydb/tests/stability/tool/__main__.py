@@ -656,7 +656,7 @@ class StabilityCluster:
                         # Show only errors if requested
                         if mode in ['err', 'all']:
                             result = node.ssh_command(
-                                f'cat {log_file} 2>/dev/null | grep -E "Error:|ERROR|FATAL|WARN|WARNING|exit.*status" | tail -n {last_n_lines} || true',
+                                f'cat {log_file} 2>/dev/null | grep -E "error:|Error:|ERROR|FATAL|WARN|WARNING|exit.*status" | tail -n {last_n_lines} || true',
                                 raise_on_error=False
                             )
                             print(f"\n{bcolors.BOLD}{bcolors.FAIL}ERROR MESSAGES (last {last_n_lines} error/warning lines):{bcolors.ENDC}")
@@ -709,6 +709,53 @@ class StabilityCluster:
         if log_file is None:
             log_file = f'/tmp/{workload_name}.out.log'
         
+        # Проверяем наличие параметров ограничения времени
+        has_time_limit = False
+        timeout_seconds = 0  # По умолчанию нет таймаута
+        
+        # Проверяем наличие параметра --duration
+        if '--duration' in command:
+            has_time_limit = True
+            try:
+                duration_parts = command.split('--duration')
+                if len(duration_parts) > 1:
+                    duration_value = duration_parts[1].strip().split()[0]
+                    if duration_value.isdigit():
+                        # Добавляем только 5% к duration в качестве таймаута
+                        timeout_seconds = int(duration_value) * 1.05
+            except:
+                pass
+                
+        # Проверяем наличие параметра --seconds (он имеет приоритет, если указаны оба)
+        if '--seconds' in command:
+            has_time_limit = True
+            try:
+                seconds_parts = command.split('--seconds')
+                if len(seconds_parts) > 1:
+                    seconds_value = seconds_parts[1].strip().split()[0]
+                    if seconds_value.isdigit():
+                        # Добавляем только 5% к seconds в качестве таймаута
+                        timeout_seconds = int(seconds_value) * 1.05
+            except:
+                pass
+        
+        # Ограничиваем таймаут разумными пределами только если он указан
+        if has_time_limit:
+            if timeout_seconds < 30:
+                timeout_seconds = 30  # Минимум 30 секунд
+            elif timeout_seconds > 86400:
+                timeout_seconds = 86400  # Максимум 24 часа
+            
+            # Приводим к целому числу
+            timeout_seconds = int(timeout_seconds)
+            
+            print(f"Debug: Set timeout for {workload_name} to {timeout_seconds} seconds")
+        else:
+            print(f"Debug: No timeout set for {workload_name}, it will run without time limit")
+        
+        # Извлекаем базовую команду для определения очистки при таймауте
+        base_command = command.split()[0] if command else ""
+        
         # Create a script content with safer function-based approach
         script_content = f"""#!/bin/bash
 # Auto-generated script for {workload_name}
@@ -721,18 +768,86 @@ timestamp_output() {{
   done
 }}
 
-# Main loop
-while true; do
-  # Run the command and redirect stderr to stdout, then pipe through our timestamp function
-  # Both stdout and stderr will be captured in the screen log file
-  TZ=UTC {command} 2>&1 | timestamp_output
+# Define cleanup function for timeout
+handle_timeout() {{
+  echo "[$(TZ=UTC date +'{DATE_FORMAT}')] TIMEOUT: Command took longer than {timeout_seconds} seconds"
+  echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Performing emergency cleanup for {workload_name}..."
   
-  # If the command fails, log an error and wait before restarting
-  status=$?
-  if [ $status -ne 0 ]; then
-    echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Command exited with status $status, restarting in 1 second..."
+  # Сохраняем PID процесса bash, который запустил команду (если еще запущен)
+  PIDS=$(ps -ef | grep "{command}" | grep -v grep | grep -v timeout | awk '{{print $2}}')
+  
+  if [ -n "$PIDS" ]; then
+    echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Found processes to kill: $PIDS"
+    for pid in $PIDS; do
+      echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Killing process $pid"
+      kill -9 $pid 2>/dev/null || true
+    done
+  else
+    echo "[$(TZ=UTC date +'{DATE_FORMAT}')] No matching processes found"
   fi
-  sleep 1  # Prevent CPU spinning in case of immediate failures
+  
+  # Специальная очистка в зависимости от типа команды
+  if [[ "{base_command}" == *"oltp_workload"* ]]; then
+    echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Performing oltp_workload specific cleanup"
+    # Убиваем Python процессы, связанные с oltp_workload
+    pkill -9 -f "oltp_workload" || true
+    
+  elif [[ "{base_command}" == *"ydb_cli"* ]] && [[ "{command}" == *"workload log"* ]]; then
+    echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Performing workload log specific cleanup"
+    # Убиваем процессы ydb_cli workload log
+    pkill -9 -f "ydb_cli.*workload.*log" || true
+    
+  elif [[ "{base_command}" == *"simple_queue"* ]]; then
+    echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Performing simple_queue specific cleanup"
+    # Убиваем процессы simple_queue
+    pkill -9 -f "simple_queue" || true
+    
+  elif [[ "{base_command}" == *"olap_workload"* ]]; then
+    echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Performing olap_workload specific cleanup"
+    # Убиваем процессы olap_workload
+    pkill -9 -f "olap_workload" || true
+  fi
+  
+  echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Emergency cleanup completed"
+}}
+
+# Trap for SIGTERM to perform cleanup if the script itself is killed
+trap handle_timeout SIGTERM
+
+# Бесконечный цикл для выполнения команды
+echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Starting command in continuous loop: {command}"
+while true; do
+  # Запускаем команду с таймаутом только если он указан
+  if {'true' if has_time_limit else 'false'}; then
+    echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Running command with {timeout_seconds}s timeout"
+    # Run the command with timeout and redirect stderr to stdout
+    timeout {timeout_seconds}s bash -c "TZ=UTC {command}" 2>&1 | timestamp_output
+    status=$?
+    
+    # Check if timeout occurred (exit code 124)
+    if [ $status -eq 124 ]; then
+      echo "[$(TZ=UTC date +'{DATE_FORMAT}')] WARNING: Command reached timeout after {timeout_seconds} seconds"
+      handle_timeout
+    elif [ $status -ne 0 ]; then
+      echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Command exited with status $status, restarting in 5 seconds..."
+    else
+      echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Command completed successfully with status $status, restarting in 5 seconds..."
+    fi
+  else
+    echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Running command without timeout"
+    # Run the command without timeout
+    bash -c "TZ=UTC {command}" 2>&1 | timestamp_output
+    status=$?
+    
+    if [ $status -ne 0 ]; then
+      echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Command exited with status $status, restarting in 5 seconds..."
+    else
+      echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Command completed successfully with status $status, restarting in 5 seconds..."
+    fi
+  fi
+  
+  # Ждем перед перезапуском
+  sleep 5
 done
 """
         

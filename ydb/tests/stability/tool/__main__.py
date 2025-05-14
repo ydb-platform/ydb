@@ -8,7 +8,6 @@ import stat
 import sys
 import argparse
 import re
-import shlex
 from argparse import RawTextHelpFormatter
 
 from library.python import resource
@@ -137,7 +136,7 @@ class CustomArgumentParser(argparse.ArgumentParser):
         if "--name" in message:
             workload_choices = list(DICT_OF_PROCESSES.keys())
             self.print_usage(sys.stderr)
-            self.exit(2, f"{self.prog}: error: {message}\n\nAvailable workload names:\n" + 
+            self.exit(2, f"{self.prog}: error: {message}\n\nAvailable workload names:\n" +
                       "\n".join(f"  - {choice}" for choice in workload_choices) + "\n")
         # Если ошибка связана с неверным значением для ACTION
         elif "ACTION" in message and "invalid choice" in message:
@@ -168,14 +167,14 @@ class CustomArgumentParser(argparse.ArgumentParser):
                 "perform_checks": "Run safety and liveness checks on the cluster",
                 "get_workload_outputs": "Show output from workload processes (supports --mode and --last_n_lines)"
             }
-            
+
             self.print_usage(sys.stderr)
-            self.exit(2, f"{self.prog}: error: {message}\n\nAvailable actions:\n" + 
+            self.exit(2, f"{self.prog}: error: {message}\n\nAvailable actions:\n" +
                       "\n".join(f"  - {action}" for action in sorted(actions_help.keys())) + "\n")
         # Если ошибка связана с аргументом --mode
         elif "--mode" in message:
             self.print_usage(sys.stderr)
-            self.exit(2, f"{self.prog}: error: {message}\n\nAvailable modes for --mode:\n" + 
+            self.exit(2, f"{self.prog}: error: {message}\n\nAvailable modes for --mode:\n" +
                       "  - out (show stdout only)\n" +
                       "  - err (show stderr/errors only, default)\n" +
                       "  - all (show both stdout and stderr)\n")
@@ -381,37 +380,37 @@ class StabilityCluster:
                 'screen -ls || true',  # || true to handle case when no screens exist
                 raise_on_error=False
             )
-            
+
             if screen_sessions:
                 screen_output = screen_sessions.decode('utf-8')
                 print(f"{bcolors.OKCYAN}Debug: Screen sessions before cleanup:{bcolors.ENDC}")
                 for line in screen_output.splitlines():
                     print(f"{bcolors.OKCYAN}  {line}{bcolors.ENDC}")
-                
+
                 # Правильно завершаем каждую screen-сессию - живую и мертвую
                 node.ssh_command(
                     'screen -ls | grep -E "(Detached|Dead)" | cut -f1 -d"." | xargs -r kill -9',
                     raise_on_error=False
                 )
-                
+
                 # Пытаемся очистить мертвые сессии
                 node.ssh_command(
                     'screen -wipe',
                     raise_on_error=False
                 )
-            
+
             # На всякий случай убиваем все потенциальные процессы рабочих нагрузок
             node.ssh_command(
                 'pkill -f "SCREEN.*workload\\|simple_queue\\|olap_workload\\|oltp_workload"',
                 raise_on_error=False
             )
-            
+
             # Убиваем все wrapper-скрипты
             node.ssh_command(
                 'pkill -f "_wrapper.sh"',
                 raise_on_error=False
             )
-            
+
             # Надежно убиваем все основные процессы рабочих нагрузок
             for workload_pattern in [
                 "/Berkanavt/nemesis/bin/simple_queue",
@@ -423,19 +422,19 @@ class StabilityCluster:
                     f'pkill -9 -f "{workload_pattern}"',
                     raise_on_error=False
                 )
-                
+
             # На всякий случай попробуем еще раз убить все screen
             node.ssh_command(
                 'sudo pkill screen',
                 raise_on_error=False
             )
-            
+
             # Финальная проверка, остались ли какие-то сессии
             after_sessions = node.ssh_command(
                 'screen -ls || true',
                 raise_on_error=False
             )
-            
+
             if after_sessions:
                 after_output = after_sessions.decode('utf-8')
                 if "No Sockets found" not in after_output:
@@ -450,31 +449,31 @@ class StabilityCluster:
         if workload_name not in DICT_OF_PROCESSES:
             print(f"{bcolors.FAIL}Ошибка: Неизвестный workload '{workload_name}'{bcolors.ENDC}")
             return
-        
+
         print(f"{bcolors.BOLD}{bcolors.HEADER}=== Остановка {workload_name} на всех nodes ==={bcolors.ENDC}")
-        
+
         for node in self.kikimr_cluster.nodes.values():
             node_host = node.host.split(':')[0]
             print(f"{bcolors.BOLD}Останавливаем {workload_name} на {node_host}:{bcolors.ENDC}")
-            
+
             # Находим все связанные процессы с этой рабочей нагрузкой
             node.ssh_command(
                 f"pkill -9 -f '/tmp/{workload_name}_wrapper.sh'",
                 raise_on_error=False
             )
-            
+
             # Остановка всех screen-сессий с указанным именем, включая мертвые (Dead)
             node.ssh_command(
                 f"screen -ls | grep -E '(Detached|Dead).*{workload_name}' | cut -f1 -d'.' | xargs -r kill -9",
                 raise_on_error=False
             )
-            
+
             # Пытаемся удалить мертвые сессии напрямую
             node.ssh_command(
                 "screen -wipe",
                 raise_on_error=False
             )
-            
+
             # Убиваем процессы фактической рабочей нагрузки, нужный шаблон берем из конфигурации
             status_cmd = DICT_OF_PROCESSES[workload_name]['status']
             grep_pattern = next((line for line in status_cmd.split('\n') if 'grep' in line and '-v grep' not in line), '')
@@ -487,13 +486,13 @@ class StabilityCluster:
                         f"pkill -9 -f '{pattern}'",
                         raise_on_error=False
                     )
-            
+
             # Дополнительная проверка по имени нагрузки
             node.ssh_command(
                 f"ps aux | grep -E '{workload_name}|{workload_name.replace('_', '.*')}' | grep -v grep | awk '{{print $2}}' | xargs -r kill -9",
                 raise_on_error=False
             )
-            
+
             # Проверка результата
             result = node.ssh_command(DICT_OF_PROCESSES[workload_name]['status'], raise_on_error=False)
             status = result.decode('utf-8').replace('\n', '')
@@ -501,7 +500,7 @@ class StabilityCluster:
                 print(f"{bcolors.OKGREEN}Workload {workload_name} успешно остановлена на {node_host}{bcolors.ENDC}")
             else:
                 print(f"{bcolors.FAIL}Не удалось остановить {workload_name} на {node_host}, статус: {status}{bcolors.ENDC}")
-                
+
         print(f"{bcolors.OKGREEN}Завершено выполнение остановки {workload_name} на всех узлах{bcolors.ENDC}")
 
     def stop_nemesis(self):
@@ -573,7 +572,7 @@ class StabilityCluster:
         for node_id, node in enumerate(self.kikimr_cluster.nodes.values()):
             node_host = node.host.split(':')[0]
             print(f'\n{bcolors.BOLD}{bcolors.HEADER}=== {node_host} ==={bcolors.ENDC}')
-            
+
             # First check running processes to match get_state behavior
             running_workloads = {}  # workload_name -> pid
             for workload_name, workload in DICT_OF_PROCESSES.items():
@@ -593,10 +592,10 @@ class StabilityCluster:
                             running_workloads[workload_name] = None
                             print(f"{bcolors.WARNING}Warning: Could not extract PID for {workload_name} from ps output:{bcolors.ENDC}")
                             print(ps_result.decode('utf-8'))
-            
+
             if running_workloads:
                 print(f"{bcolors.OKCYAN}Found running workloads: {', '.join(running_workloads.keys())}{bcolors.ENDC}")
-            
+
             # Get list of running screen sessions with their proper names
             result = node.ssh_command(
                 'screen -ls || true',  # || true to handle case when no screens exist
@@ -610,16 +609,16 @@ class StabilityCluster:
             print(f"{bcolors.OKCYAN}Debug: Found screen sessions:{bcolors.ENDC}")
             for screen in screens:
                 print(f"{bcolors.OKCYAN}  {screen}{bcolors.ENDC}")
-            
+
             found_screens = False
             for screen in screens:
                 if not screen.strip() or 'Socket' in screen:  # Skip socket directory line
                     continue
-                
+
                 # Пропускаем мертвые сессии и выводим предупреждение
                 if 'Dead' in screen:
                     continue
-                
+
                 # Extract PID from screen listing (format: PID..hostname)
                 try:
                     screen_pid = screen.strip().split('.')[0].split('\t')[0]
@@ -634,10 +633,10 @@ class StabilityCluster:
                     if pid == screen_pid:
                         found_screens = True
                         print(f'\n{bcolors.BOLD}{bcolors.OKCYAN}=== {workload_name} ==={bcolors.ENDC}')
-                        
+
                         # Get log output - with our new approach, both stdout and stderr go to the same log file
                         log_file = f'/tmp/{workload_name}.out.log'
-                        
+
                         # Display all log lines if requested
                         if mode in ['out', 'all']:
                             result = node.ssh_command(
@@ -686,7 +685,7 @@ class StabilityCluster:
                     if result:
                         print(f"\n{bcolors.OKCYAN}Process info for {workload}:{bcolors.ENDC}")
                         print(result.decode('utf-8'))
-                    
+
                     # Also check for wrapper script
                     script_path = f'/tmp/{workload}_wrapper.sh'
                     result = node.ssh_command(f'cat {script_path} 2>/dev/null || true', raise_on_error=False)
@@ -697,22 +696,22 @@ class StabilityCluster:
     def _create_workload_command(self, workload_name, command, log_file=None):
         """
         Helper function to create a properly formatted screen command for running a workload.
-        
+
         Args:
             workload_name: Name of the workload (used for screen session name)
             command: The actual command to run in a loop (without TZ=UTC prefix)
             log_file: Optional custom log file path. Defaults to /tmp/{workload_name}.out.log
-            
+
         Returns:
             A joined string command ready to be passed to ssh_command
         """
         if log_file is None:
             log_file = f'/tmp/{workload_name}.out.log'
-        
+
         # Проверяем наличие параметров ограничения времени
         has_time_limit = False
         timeout_seconds = 0  # По умолчанию нет таймаута
-        
+
         # Проверяем наличие параметра --duration
         if '--duration' in command:
             has_time_limit = True
@@ -723,9 +722,9 @@ class StabilityCluster:
                     if duration_value.isdigit():
                         # Добавляем только 5% к duration в качестве таймаута
                         timeout_seconds = int(duration_value) * 1.05
-            except:
+            except Exception:
                 pass
-                
+
         # Проверяем наличие параметра --seconds (он имеет приоритет, если указаны оба)
         if '--seconds' in command:
             has_time_limit = True
@@ -736,26 +735,26 @@ class StabilityCluster:
                     if seconds_value.isdigit():
                         # Добавляем только 5% к seconds в качестве таймаута
                         timeout_seconds = int(seconds_value) * 1.05
-            except:
+            except Exception:
                 pass
-        
+
         # Ограничиваем таймаут разумными пределами только если он указан
         if has_time_limit:
             if timeout_seconds < 30:
                 timeout_seconds = 30  # Минимум 30 секунд
             elif timeout_seconds > 86400:
                 timeout_seconds = 86400  # Максимум 24 часа
-            
+
             # Приводим к целому числу
             timeout_seconds = int(timeout_seconds)
-            
+
             print(f"Debug: Set timeout for {workload_name} to {timeout_seconds} seconds")
         else:
             print(f"Debug: No timeout set for {workload_name}, it will run without time limit")
-        
+
         # Извлекаем базовую команду для определения очистки при таймауте
         base_command = command.split()[0] if command else ""
-        
+
         # Create a script content with safer function-based approach
         script_content = f"""#!/bin/bash
 # Auto-generated script for {workload_name}
@@ -772,10 +771,10 @@ timestamp_output() {{
 handle_timeout() {{
   echo "[$(TZ=UTC date +'{DATE_FORMAT}')] TIMEOUT: Command took longer than {timeout_seconds} seconds"
   echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Performing emergency cleanup for {workload_name}..."
-  
+
   # Сохраняем PID процесса bash, который запустил команду (если еще запущен)
   PIDS=$(ps -ef | grep "{command}" | grep -v grep | grep -v timeout | awk '{{print $2}}')
-  
+
   if [ -n "$PIDS" ]; then
     echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Found processes to kill: $PIDS"
     for pid in $PIDS; do
@@ -785,29 +784,29 @@ handle_timeout() {{
   else
     echo "[$(TZ=UTC date +'{DATE_FORMAT}')] No matching processes found"
   fi
-  
+
   # Специальная очистка в зависимости от типа команды
   if [[ "{base_command}" == *"oltp_workload"* ]]; then
     echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Performing oltp_workload specific cleanup"
     # Убиваем Python процессы, связанные с oltp_workload
     pkill -9 -f "oltp_workload" || true
-    
+
   elif [[ "{base_command}" == *"ydb_cli"* ]] && [[ "{command}" == *"workload log"* ]]; then
     echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Performing workload log specific cleanup"
     # Убиваем процессы ydb_cli workload log
     pkill -9 -f "ydb_cli.*workload.*log" || true
-    
+
   elif [[ "{base_command}" == *"simple_queue"* ]]; then
     echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Performing simple_queue specific cleanup"
     # Убиваем процессы simple_queue
     pkill -9 -f "simple_queue" || true
-    
+
   elif [[ "{base_command}" == *"olap_workload"* ]]; then
     echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Performing olap_workload specific cleanup"
     # Убиваем процессы olap_workload
     pkill -9 -f "olap_workload" || true
   fi
-  
+
   echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Emergency cleanup completed"
 }}
 
@@ -823,7 +822,7 @@ while true; do
     # Run the command with timeout and redirect stderr to stdout
     timeout {timeout_seconds}s bash -c "TZ=UTC {command}" 2>&1 | timestamp_output
     status=$?
-    
+
     # Check if timeout occurred (exit code 124)
     if [ $status -eq 124 ]; then
       echo "[$(TZ=UTC date +'{DATE_FORMAT}')] WARNING: Command reached timeout after {timeout_seconds} seconds"
@@ -838,32 +837,32 @@ while true; do
     # Run the command without timeout
     bash -c "TZ=UTC {command}" 2>&1 | timestamp_output
     status=$?
-    
+
     if [ $status -ne 0 ]; then
       echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Command exited with status $status, restarting in 5 seconds..."
     else
       echo "[$(TZ=UTC date +'{DATE_FORMAT}')] Command completed successfully with status $status, restarting in 5 seconds..."
     fi
   fi
-  
+
   # Ждем перед перезапуском
   sleep 5
 done
 """
-        
+
         # Create a temporary script path on the remote host
         script_path = f'/tmp/{workload_name}_wrapper.sh'
-        
+
         # Use cat with a heredoc approach for more reliable script generation
         cmd = f"cat > {script_path} << 'EOFSCRIPT'\n{script_content}\nEOFSCRIPT\n" + \
               f"chmod +x {script_path} && screen -S {workload_name} -d -m -L -Logfile {log_file} {script_path}"
-        
+
         return cmd
 
     def _clean_and_start_workload(self, node, workload_name, command, log_file=None):
         """
         Clean logs and start a workload.
-        
+
         Args:
             node: Node to run the workload on
             workload_name: Name of the workload
@@ -872,10 +871,10 @@ done
         """
         if log_file is None:
             log_file = f'/tmp/{workload_name}.out.log'
-            
+
         # Clean log file
         node.ssh_command(['rm', '-f', log_file], raise_on_error=False)
-        
+
         # Create and run command
         screen_command = self._create_workload_command(workload_name, command, log_file)
         print(f"Debug: Running command: {screen_command}")
@@ -907,7 +906,7 @@ Common usage scenarios:
 
 3. Check workload status:
    tool --cluster_path /path/to/cluster.yaml get_state
-   
+
 4. View workload outputs:
    tool --cluster_path /path/to/cluster.yaml get_workload_outputs --mode all
 
@@ -944,7 +943,7 @@ Common usage scenarios:
         type=str,
         help="SSH username for connecting to cluster nodes (defaults to current user)",
     )
-    
+
     # Define all available actions
     actions_help = {
         "get_errors": "Show all errors from YDB logs",
@@ -972,7 +971,7 @@ Common usage scenarios:
         "perform_checks": "Run safety and liveness checks on the cluster",
         "get_workload_outputs": "Show output from workload processes (supports --mode and --last_n_lines)"
     }
-    
+
     # Group actions by categories for better readability
     action_categories = {
         "CLUSTER MANAGEMENT": [
@@ -995,10 +994,10 @@ Common usage scenarios:
             "start_workload_log", "start_workload_log_column", "start_workload_log_row"
         ]
     }
-    
+
     # Создаем понятную структуру для справки с четкими отступами и переносами строк
     actions_help_str = "Actions to execute (one or more of the following):\n"
-    
+
     # Добавляем действия по категориям, каждое с новой строки и отступом
     for category, actions in action_categories.items():
         actions_help_str += f"\n{category}:\n"
@@ -1014,16 +1013,16 @@ Common usage scenarios:
         help=actions_help_str,
         metavar="ACTION",
     )
-    
+
     args, unknown = parser.parse_known_args()
-    
+
     # Add action-specific arguments
     if "stop_workload" in args.actions:
         workload_choices = list(DICT_OF_PROCESSES.keys())
         workload_help = "Available workloads:\n"
         for wl in workload_choices:
             workload_help += f"  {wl}\n"
-            
+
         parser.add_argument(
             "--name",
             type=str,
@@ -1039,7 +1038,7 @@ Common usage scenarios:
         for wl in workload_choices:
             if "log_" in wl:
                 workload_help += f"  {wl}\n"
-                
+
         parser.add_argument(
             "--name",
             type=str,
@@ -1178,14 +1177,22 @@ def main():
                     stability_cluster._clean_and_start_workload(
                         node,
                         f'workload_log_{store_type}',
-                        f'/Berkanavt/nemesis/bin/ydb_cli --endpoint grpc://localhost:{node.grpc_port} --database /Root/db1 workload log run bulk_upsert --rows 2000 --threads 10 --timestamp_deviation 180 --seconds 86400 --path log_workload_{store_type}'
+                        (
+                            f'/Berkanavt/nemesis/bin/ydb_cli --endpoint grpc://localhost:{node.grpc_port} '
+                            f'--database /Root/db1 workload log run bulk_upsert --rows 2000 --threads 10 '
+                            f'--timestamp_deviation 180 --seconds 86400 --path log_workload_{store_type}'
+                        )
                     )
 
                     node.ssh_command(['rm', '-f', f'/tmp/workload_log_{store_type}_select.out.log'], raise_on_error=False)
                     stability_cluster._clean_and_start_workload(
                         node,
                         f'workload_log_{store_type}_select',
-                        f'/Berkanavt/nemesis/bin/ydb_cli --verbose --endpoint grpc://localhost:{node.grpc_port} --database /Root/db1 workload log run select --client-timeout 1800000 --threads 1 --seconds 86400 --path log_workload_{store_type}',
+                        (
+                            f'/Berkanavt/nemesis/bin/ydb_cli --verbose --endpoint grpc://localhost:{node.grpc_port} '
+                            f'--database /Root/db1 workload log run select --client-timeout 1800000 --threads 1 '
+                            f'--seconds 86400 --path log_workload_{store_type}'
+                        ),
                         f'/tmp/workload_log_{store_type}_select.out.log'
                     )
             stability_cluster.get_state()
@@ -1216,11 +1223,11 @@ def main():
         if action == "start_workload_oltp_workload":
             first_node = stability_cluster.kikimr_cluster.nodes[1]
             stability_cluster.stop_workload('oltp_workload')
-            
+
             print(f"{bcolors.BOLD}{bcolors.HEADER}=== Запуск OLTP workload ==={bcolors.ENDC}")
             stability_cluster._clean_and_start_workload(
                 first_node,
-                'oltp_workload', 
+                'oltp_workload',
                 '/Berkanavt/nemesis/bin/oltp_workload --database /Root/db1 --path oltp_workload --duration 120'
             )
             stability_cluster.get_state()

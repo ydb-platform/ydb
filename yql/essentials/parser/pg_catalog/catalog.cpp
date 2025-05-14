@@ -2650,7 +2650,7 @@ ui64 CalcArgumentMatchScore(ui32 operArgTypeId, ui32 argTypeId, const TCatalog& 
     if (argTypeId == operArgTypeId) {
         return ArgExactTypeMatch;
     }
-    if (argTypeId == UnknownOid) {
+    if (argTypeId == UnknownOid || argTypeId == InvalidOid) {
         return ArgCoercibleTypeMatch;
     }
     // https://www.postgresql.org/docs/14/typeconv-oper.html, step 3.c

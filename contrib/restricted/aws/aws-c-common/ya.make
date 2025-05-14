@@ -3,6 +3,7 @@
 LIBRARY()
 
 LICENSE(
+    "(GPL-2.0-only OR BSD-3-Clause)" AND
     Apache-2.0 AND
     BSD-3-Clause AND
     MIT AND
@@ -11,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(0.8.23)
+VERSION(0.9.17)
 
-ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-common/archive/v0.8.23.tar.gz)
+ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-common/archive/v0.9.17.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/restricted/aws/aws-c-common/generated/include
@@ -30,6 +31,7 @@ CFLAGS(
     -DAWS_PTHREAD_SETNAME_TAKES_2ARGS
     -DCJSON_HIDE_SYMBOLS
     -DHAVE_SYSCONF
+    -DINTEL_NO_ITTNOTIFY_API
 )
 
 IF (MUSL)
@@ -56,8 +58,6 @@ ENDIF()
 
 IF (ARCH_X86_64)
     CFLAGS(
-        -DHAVE_MM256_EXTRACT_EPI64
-        -DHAVE_AVX2_INTRINSICS
         -DUSE_SIMD_ENCODING
     )
 ENDIF()
@@ -81,9 +81,11 @@ SRCS(
     source/fifo_cache.c
     source/file.c
     source/hash_table.c
+    source/host_utils.c
     source/json.c
     source/lifo_cache.c
     source/linked_hash_table.c
+    source/linux/system_info.c
     source/log_channel.c
     source/log_formatter.c
     source/log_writer.c
@@ -98,6 +100,7 @@ SRCS(
     source/ring_buffer.c
     source/statistics.c
     source/string.c
+    source/system_info.c
     source/task_scheduler.c
     source/thread_scheduler.c
     source/thread_shared.c
@@ -108,7 +111,7 @@ SRCS(
 
 IF (ARCH_ARM)
     SRCS(
-        source/arch/arm/asm/cpuid.c
+        source/arch/arm/auxv/cpuid.c
     )
 ELSEIF (ARCH_X86_64)
     SRCS(
@@ -122,6 +125,7 @@ IF (NOT OS_WINDOWS)
     SRCS(
         source/posix/clock.c
         source/posix/condition_variable.c
+        source/posix/cross_process_lock.c
         source/posix/device_random.c
         source/posix/environment.c
         source/posix/file.c
@@ -129,6 +133,7 @@ IF (NOT OS_WINDOWS)
         source/posix/process.c
         source/posix/rw_lock.c
         source/posix/system_info.c
+        source/posix/system_resource_utils.c
         source/posix/thread.c
         source/posix/time.c
     )

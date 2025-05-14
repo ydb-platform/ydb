@@ -82,6 +82,19 @@ void aws_array_list_init_static(
 }
 
 AWS_STATIC_IMPL
+void aws_array_list_init_static_from_initialized(
+    struct aws_array_list *AWS_RESTRICT list,
+    void *raw_array,
+    size_t item_count,
+    size_t item_size) {
+
+    aws_array_list_init_static(list, raw_array, item_count, item_size);
+    list->length = item_count;
+
+    AWS_POSTCONDITION(aws_array_list_is_valid(list));
+}
+
+AWS_STATIC_IMPL
 bool aws_array_list_is_valid(const struct aws_array_list *AWS_RESTRICT list) {
     if (!list) {
         return false;

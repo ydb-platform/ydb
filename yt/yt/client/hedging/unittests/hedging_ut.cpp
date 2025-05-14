@@ -58,7 +58,7 @@ NApi::IClientPtr CreateTestHedgingClient(
 IPenaltyProviderPtr CreateReplicationLagPenaltyProvider(
     const NYPath::TYPath& path,
     const std::string& cluster,
-    TDuration maxTabletLag,
+    TDuration maxReplicaLag,
     TDuration lagPenalty,
     NApi::IClientPtr client,
     const bool clearPenaltiesOnErrors = false,
@@ -68,8 +68,7 @@ IPenaltyProviderPtr CreateReplicationLagPenaltyProvider(
 
     config->TablePath = path;
     config->ReplicaClusters.push_back(cluster);
-    config->MaxTabletsWithLagFraction = 0.5;
-    config->MaxTabletLag = maxTabletLag;
+    config->MaxReplicaLag = maxReplicaLag;
     config->CheckPeriod = checkPeriod;
     config->LagPenalty = lagPenalty;
     config->ClearPenaltiesOnErrors = clearPenaltiesOnErrors;
@@ -382,34 +381,21 @@ TEST(THedgingClientTest, ResponseFromSecondClientWhenFirstHasReplicationLag)
     ASSERT_TRUE(queryResult.IsOK());
     EXPECT_EQ(queryResult.Value().AsStringBuf(), clientResult1.AsStringBuf());
 
-    auto maxTabletLag = TDuration::Seconds(10);
+    auto maxReplicaLag = TDuration::Seconds(10);
     auto lagPenalty = 2 * SleepQuantum;
 
-    NYson::TYsonString replicasResult("{\"575f-131-40502c5-201b420f\" = {\"cluster_name\" = \"cluster-0\"}}"_sb);
-    NYson::TYsonString tabletCountResult("1"_sb);
+    NYson::TYsonString replicasResult(TStringBuf(
+        "{\"575f-131-40502c5-201b420f\" = {\"cluster_name\" = \"cluster-0\"; \"content_type\" = \"data\"; \"replication_lag_time\" = 20000 }}"));
 
     auto mockClient3 = New<TStrictMockClient>();
 
     EXPECT_CALL(*mockClient3, GetNode(path + "/@replicas", _))
         .WillRepeatedly(Return(MakeFuture(replicasResult)));
 
-    EXPECT_CALL(*mockClient3, GetNode(path + "/@tablet_count", _))
-        .WillRepeatedly(Return(MakeFuture(tabletCountResult)));
-
-    std::vector<NApi::TTabletInfo> tabletInfos(1);
-    tabletInfos[0].TableReplicaInfos = std::make_optional(std::vector<NApi::TTabletInfo::TTableReplicaInfo>());
-    auto& replicaTabletsInfo = tabletInfos[0].TableReplicaInfos->emplace_back();
-    replicaTabletsInfo.ReplicaId = NTabletClient::TTableReplicaId::FromString("575f-131-40502c5-201b420f");
-    replicaTabletsInfo.LastReplicationTimestamp = NTransactionClient::TimestampFromUnixTime(
-        TInstant::Now().Seconds() - 2 * maxTabletLag.Seconds());
-
-    EXPECT_CALL(*mockClient3, GetTabletInfos(path, _, _))
-        .WillRepeatedly(Return(MakeFuture(tabletInfos)));
-
     auto penaltyProvier = CreateReplicationLagPenaltyProvider(
         path,
         "cluster-0",
-        maxTabletLag,
+        maxReplicaLag,
         lagPenalty,
         mockClient3);
     Sleep(2 * CheckPeriod);
@@ -473,34 +459,22 @@ TEST(THedgingClientTest, ResponseFromFirstClientWhenReplicationLagUpdaterFails)
     EXPECT_CALL(*mockClient2, ListNode(path, _))
         .WillRepeatedly(Return(MakeFuture(clientResult2)));
 
-    auto maxTabletLag = TDuration::Seconds(10);
+    auto maxReplicaLag = TDuration::Seconds(10);
     auto lagPenalty = 2 * SleepQuantum;
 
-    NYson::TYsonString replicasResult("{\"575f-131-40502c5-201b420f\" = {\"cluster_name\" = \"cluster-0\"}}"_sb);
-    NYson::TYsonString tabletCountResult("1"_sb);
+    NYson::TYsonString replicasResult(TStringBuf(
+        "{\"575f-131-40502c5-201b420f\" = {\"cluster_name\" = \"cluster-0\"; \"content_type\" = \"data\"; \"replication_lag_time\" = 20000 }}"));
 
     auto mockClient3 = New<TStrictMockClient>();
 
     EXPECT_CALL(*mockClient3, GetNode(path + "/@replicas", _))
-        .WillRepeatedly(Return(MakeFuture(replicasResult)));
-
-    EXPECT_CALL(*mockClient3, GetNode(path + "/@tablet_count", _))
-        .WillOnce(Return(MakeFuture(tabletCountResult)))
+        .WillOnce(Return(MakeFuture(replicasResult)))
         .WillRepeatedly(Return(MakeFuture<NYson::TYsonString>(TError("Failure"))));
-
-    std::vector<NApi::TTabletInfo> tabletInfos(1);
-    tabletInfos[0].TableReplicaInfos = std::make_optional(std::vector<NApi::TTabletInfo::TTableReplicaInfo>());
-    auto& replicaTabletsInfo = tabletInfos[0].TableReplicaInfos->emplace_back();
-    replicaTabletsInfo.ReplicaId = NTabletClient::TTableReplicaId::FromString("575f-131-40502c5-201b420f");
-    replicaTabletsInfo.LastReplicationTimestamp = NTransactionClient::TimestampFromUnixTime(TInstant::Now().Seconds() - 2 * maxTabletLag.Seconds());
-
-    EXPECT_CALL(*mockClient3, GetTabletInfos(path, _, _))
-        .WillRepeatedly(Return(MakeFuture(tabletInfos)));
 
     auto penaltyProvider = CreateReplicationLagPenaltyProvider(
         path,
         "cluster-0",
-        maxTabletLag,
+        maxReplicaLag,
         lagPenalty,
         mockClient3,
         true,

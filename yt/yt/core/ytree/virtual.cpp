@@ -63,7 +63,15 @@ void ExecuteBatchRead(
         for (int index = 0; index < std::ssize(batchIndexRanges); ++index) {
             auto batchWriter = New<TAsyncYsonWriter>(ysonFragmentType);
             batchWriters.push_back(batchWriter);
-            auto batchFuture = BIND([writeItems, batchWriter, batchIndexRange = batchIndexRanges[index]] {
+            auto batchFuture = BIND([
+                writeItems,
+                createReadOffloadGuard = offloadParams->CreateReadOffloadGuard,
+                batchWriter,
+                batchIndexRange = batchIndexRanges[index]
+            ] {
+                auto guard = createReadOffloadGuard
+                    ? createReadOffloadGuard()
+                    : nullptr;
                 writeItems(batchIndexRange, batchWriter);
             })
                 .AsyncVia(offloadParams->OffloadInvoker)

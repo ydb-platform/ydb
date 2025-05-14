@@ -5,6 +5,7 @@
 
 #include <aws/http/private/h2_stream.h>
 
+#include <aws/common/clock.h>
 #include <aws/http/private/h2_connection.h>
 #include <aws/http/private/strutil.h>
 #include <aws/http/status_code.h>
@@ -26,12 +27,17 @@ static int s_stream_write_data(
 
 static void s_stream_cross_thread_work_task(struct aws_channel_task *task, void *arg, enum aws_task_status status);
 static struct aws_h2err s_send_rst_and_close_stream(struct aws_h2_stream *stream, struct aws_h2err stream_error);
-static int s_stream_reset_stream_internal(struct aws_http_stream *stream_base, struct aws_h2err stream_error);
+static int s_stream_reset_stream_internal(
+    struct aws_http_stream *stream_base,
+    struct aws_h2err stream_error,
+    bool cancelling);
+static void s_stream_cancel(struct aws_http_stream *stream, int error_code);
 
 struct aws_http_stream_vtable s_h2_stream_vtable = {
     .destroy = s_stream_destroy,
     .update_window = s_stream_update_window,
     .activate = aws_h2_stream_activate,
+    .cancel = s_stream_cancel,
     .http1_write_chunk = NULL,
     .http2_reset_stream = s_stream_reset_stream,
     .http2_get_received_error_code = s_stream_get_received_error_code,
@@ -240,10 +246,17 @@ struct aws_h2_stream *aws_h2_stream_new_request(
     stream->base.on_incoming_headers = options->on_response_headers;
     stream->base.on_incoming_header_block_done = options->on_response_header_block_done;
     stream->base.on_incoming_body = options->on_response_body;
+    stream->base.on_metrics = options->on_metrics;
     stream->base.on_complete = options->on_complete;
     stream->base.on_destroy = options->on_destroy;
     stream->base.client_data = &stream->base.client_or_server_data.client;
     stream->base.client_data->response_status = AWS_HTTP_STATUS_CODE_UNKNOWN;
+    stream->base.metrics.send_start_timestamp_ns = -1;
+    stream->base.metrics.send_end_timestamp_ns = -1;
+    stream->base.metrics.sending_duration_ns = -1;
+    stream->base.metrics.receive_start_timestamp_ns = -1;
+    stream->base.metrics.receive_end_timestamp_ns = -1;
+    stream->base.metrics.receiving_duration_ns = -1;
     aws_linked_list_init(&stream->thread_data.outgoing_writes);
     aws_linked_list_init(&stream->synced_data.pending_write_list);
 
@@ -446,6 +459,9 @@ void aws_h2_stream_complete(struct aws_h2_stream *stream, int error_code) {
     s_h2_stream_destroy_pending_writes(stream);
 
     /* Invoke callback */
+    if (stream->base.on_metrics) {
+        stream->base.on_metrics(&stream->base, &stream->base.metrics, stream->base.user_data);
+    }
     if (stream->base.on_complete) {
         stream->base.on_complete(&stream->base, error_code, stream->base.user_data);
     }
@@ -515,12 +531,16 @@ static void s_stream_update_window(struct aws_http_stream *stream_base, size_t i
             .h2_code = AWS_HTTP2_ERR_INTERNAL_ERROR,
         };
         /* Only when stream is not initialized reset will fail. So, we can assert it to be succeed. */
-        AWS_FATAL_ASSERT(s_stream_reset_stream_internal(stream_base, stream_error) == AWS_OP_SUCCESS);
+        AWS_FATAL_ASSERT(
+            s_stream_reset_stream_internal(stream_base, stream_error, false /*cancelling*/) == AWS_OP_SUCCESS);
     }
     return;
 }
 
-static int s_stream_reset_stream_internal(struct aws_http_stream *stream_base, struct aws_h2err stream_error) {
+static int s_stream_reset_stream_internal(
+    struct aws_http_stream *stream_base,
+    struct aws_h2err stream_error,
+    bool cancelling) {
 
     struct aws_h2_stream *stream = AWS_CONTAINER_OF(stream_base, struct aws_h2_stream, base);
     struct aws_h2_connection *connection = s_get_h2_connection(stream);
@@ -542,21 +562,25 @@ static int s_stream_reset_stream_internal(struct aws_http_stream *stream_base, s
     } /* END CRITICAL SECTION */
 
     if (stream_is_init) {
+        if (cancelling) {
+            /* Not an error if we are just cancelling. */
+            AWS_LOGF_DEBUG(AWS_LS_HTTP_STREAM, "id=%p: Stream not in process, nothing to cancel.", (void *)stream);
+            return AWS_OP_SUCCESS;
+        }
         AWS_H2_STREAM_LOG(
             ERROR, stream, "Reset stream failed. Stream is in initialized state, please activate the stream first.");
         return aws_raise_error(AWS_ERROR_INVALID_STATE);
-    }
-    if (cross_thread_work_should_schedule) {
-        AWS_H2_STREAM_LOG(TRACE, stream, "Scheduling stream cross-thread work task");
-        /* increment the refcount of stream to keep it alive until the task runs */
-        aws_atomic_fetch_add(&stream->base.refcount, 1);
-        aws_channel_schedule_task_now(connection->base.channel_slot->channel, &stream->cross_thread_work_task);
-        return AWS_OP_SUCCESS;
     }
     if (reset_called) {
         AWS_H2_STREAM_LOG(DEBUG, stream, "Reset stream ignored. Reset stream has been called already.");
     }
 
+    if (cross_thread_work_should_schedule) {
+        AWS_H2_STREAM_LOG(TRACE, stream, "Scheduling stream cross-thread work task");
+        /* increment the refcount of stream to keep it alive until the task runs */
+        aws_atomic_fetch_add(&stream->base.refcount, 1);
+        aws_channel_schedule_task_now(connection->base.channel_slot->channel, &stream->cross_thread_work_task);
+    }
     return AWS_OP_SUCCESS;
 }
 
@@ -572,7 +596,16 @@ static int s_stream_reset_stream(struct aws_http_stream *stream_base, uint32_t h
         (void *)stream_base,
         aws_http2_error_code_to_str(http2_error),
         http2_error);
-    return s_stream_reset_stream_internal(stream_base, stream_error);
+    return s_stream_reset_stream_internal(stream_base, stream_error, false /*cancelling*/);
+}
+
+void s_stream_cancel(struct aws_http_stream *stream_base, int error_code) {
+    struct aws_h2err stream_error = {
+        .aws_code = error_code,
+        .h2_code = AWS_HTTP2_ERR_CANCEL,
+    };
+    s_stream_reset_stream_internal(stream_base, stream_error, true /*cancelling*/);
+    return;
 }
 
 static int s_stream_get_received_error_code(struct aws_http_stream *stream_base, uint32_t *out_http2_error) {
@@ -706,7 +739,8 @@ int aws_h2_stream_on_activated(struct aws_h2_stream *stream, enum aws_h2_stream_
         AWS_H2_STREAM_LOGF(ERROR, stream, "Failed to create HEADERS frame: %s", aws_error_name(aws_last_error()));
         goto error;
     }
-
+    AWS_ASSERT(stream->base.metrics.send_start_timestamp_ns == -1);
+    aws_high_res_clock_get_ticks((uint64_t *)&stream->base.metrics.send_start_timestamp_ns);
     /* Initialize the flow-control window size */
     stream->thread_data.window_size_peer =
         connection->thread_data.settings_peer[AWS_HTTP2_SETTINGS_INITIAL_WINDOW_SIZE];
@@ -721,6 +755,11 @@ int aws_h2_stream_on_activated(struct aws_h2_stream *stream, enum aws_h2_stream_
         /* If stream has no body, then HEADERS frame marks the end of outgoing data */
         stream->thread_data.state = AWS_H2_STREAM_STATE_HALF_CLOSED_LOCAL;
         AWS_H2_STREAM_LOG(TRACE, stream, "Sending HEADERS with END_STREAM. State -> HALF_CLOSED_LOCAL");
+        /* There is no further frames to be sent, now is the end timestamp of sending. */
+        AWS_ASSERT(stream->base.metrics.send_end_timestamp_ns == -1);
+        aws_high_res_clock_get_ticks((uint64_t *)&stream->base.metrics.send_end_timestamp_ns);
+        stream->base.metrics.sending_duration_ns =
+            stream->base.metrics.send_end_timestamp_ns - stream->base.metrics.send_start_timestamp_ns;
     }
 
     if (s_h2_stream_has_outgoing_writes(stream)) {
@@ -798,6 +837,11 @@ int aws_h2_stream_encode_data_frame(
      */
     if (input_stream_complete && ends_stream) {
         /* Done sending data. No more data will be sent. */
+        AWS_ASSERT(stream->base.metrics.send_end_timestamp_ns == -1);
+        aws_high_res_clock_get_ticks((uint64_t *)&stream->base.metrics.send_end_timestamp_ns);
+        stream->base.metrics.sending_duration_ns =
+            stream->base.metrics.send_end_timestamp_ns - stream->base.metrics.send_start_timestamp_ns;
+
         if (stream->thread_data.state == AWS_H2_STREAM_STATE_HALF_CLOSED_REMOTE) {
             /* Both sides have sent END_STREAM */
             stream->thread_data.state = AWS_H2_STREAM_STATE_CLOSED;
@@ -841,6 +885,7 @@ struct aws_h2err aws_h2_stream_on_decoder_headers_begin(struct aws_h2_stream *st
     if (aws_h2err_failed(stream_err)) {
         return s_send_rst_and_close_stream(stream, stream_err);
     }
+    aws_high_res_clock_get_ticks((uint64_t *)&stream->base.metrics.receive_start_timestamp_ns);
 
     return AWS_H2ERR_SUCCESS;
 }
@@ -1149,6 +1194,13 @@ struct aws_h2err aws_h2_stream_on_decoder_end_stream(struct aws_h2_stream *strea
     /* Not calling s_check_state_allows_frame_type() here because END_STREAM isn't
      * an actual frame type. It's a flag on DATA or HEADERS frames, and we
      * already checked the legality of those frames in their respective callbacks. */
+
+    AWS_ASSERT(stream->base.metrics.receive_start_timestamp_ns != -1);
+    AWS_ASSERT(stream->base.metrics.receive_end_timestamp_ns == -1);
+    aws_high_res_clock_get_ticks((uint64_t *)&stream->base.metrics.receive_end_timestamp_ns);
+    AWS_ASSERT(stream->base.metrics.receive_end_timestamp_ns >= stream->base.metrics.receive_start_timestamp_ns);
+    stream->base.metrics.receiving_duration_ns =
+        stream->base.metrics.receive_end_timestamp_ns - stream->base.metrics.receive_start_timestamp_ns;
 
     if (stream->thread_data.content_length_received) {
         if (stream->base.request_method != AWS_HTTP_METHOD_HEAD &&

@@ -612,9 +612,10 @@ public:
 class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStorageRingGroupProxyRequest> {
     TIntrusivePtr<TStateStorageInfo> Info;
     THashMap<TActorId, ui32> RingGroupActors;
+    THashMap<ui32, TActorId> RingGroupActorsByIndex;
 
     TActorId Source;
-    ui32 Replies;
+    THashSet<TActorId> Replies;
     ui32 RingGroupPassAwayCounter;
     bool WaitAllReplies;
 
@@ -642,6 +643,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
                 continue;
             auto actorId = RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, ringGroupIndex));
             RingGroupActors[actorId] = ringGroupIndex;
+            RingGroupActorsByIndex[ringGroupIndex] = actorId;
             Send(actorId, new TEvStateStorage::TEvLookup(*msg));
         }
     }
@@ -662,6 +664,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
             auto actorId = RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, ringGroupIndex));
             RingGroupActors[actorId] = ringGroupIndex;
+            RingGroupActorsByIndex[ringGroupIndex] = actorId;
             Send(actorId, new T(*msg, GetRingOffset(ringGroupIndex), Info->RingGroups[ringGroupIndex].NToSelect));
         }
     }
@@ -684,7 +687,7 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     }
 
     void ProcessEvInfo(ui32 ringGroupIdx, TEvStateStorage::TEvInfo *msg) {
-        if (Replies <= 1 || !Info->RingGroups[ringGroupIdx].WriteOnly) {
+        if (Replies.size() <= 1 || !Info->RingGroups[ringGroupIdx].WriteOnly) {
             TabletID = msg->TabletID;
             Cookie = msg->Cookie;
             CurrentLeader = msg->CurrentLeader;
@@ -701,18 +704,34 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         }
         UpdateSignature(ringGroupIdx, msg->Signature.Get(), msg->SignatureSz);
     }
+
     void Reply(NKikimrProto::EReplyStatus status) {
         auto* msg = new TEvStateStorage::TEvInfo(status, TabletID, Cookie, CurrentLeader, CurrentLeaderTablet, CurrentGeneration, CurrentStep, Locked, LockedFor, Signature.Get(), SignatureSz, Followers);
         BLOG_D("RingGroupProxyRequest::Reply ev: " << msg->ToString());
         Send(Source, msg);
     }
 
+    bool ShouldReply(NKikimrProto::EReplyStatus status) {
+        bool reply = Replies.size() == Info->RingGroups.size()
+            || (WaitAllReplies && status != NKikimrProto::EReplyStatus::OK)
+            || (!WaitAllReplies && status == NKikimrProto::EReplyStatus::OK);
+        if(!reply && WaitAllReplies) {
+            for(ui32 i : xrange(Info->RingGroups.size())) {
+                auto& rg = Info->RingGroups[i];
+                if(!rg.WriteOnly && RingGroupActorsByIndex.contains(i) && !Replies.contains(RingGroupActorsByIndex[i])) {
+                    return reply;
+                }
+            }
+            BLOG_D("RingGroupProxyRequest::FastReply: " << status);
+            return true;
+        }
+        return reply;
+    }
+
     void HandleResult(TEvStateStorage::TEvInfo::TPtr &ev) {
         TEvStateStorage::TEvInfo *msg = ev->Get();
-        Replies++;
-        bool reply = Replies == Info->RingGroups.size()
-            || (WaitAllReplies && msg->Status != NKikimrProto::EReplyStatus::OK)
-            || (!WaitAllReplies && msg->Status == NKikimrProto::EReplyStatus::OK);
+        Replies.insert(ev->Sender);
+        bool reply = ShouldReply(msg->Status);
         ProcessEvInfo(RingGroupActors[ev->Sender], msg);
         BLOG_D("RingGroupProxyRequest::HandleTEvInfo ev: " << msg->ToString());
         if (reply) {

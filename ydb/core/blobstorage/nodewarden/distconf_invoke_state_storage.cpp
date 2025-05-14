@@ -75,7 +75,8 @@ namespace NKikimr::NStorage {
                 }
             }
             if (!found) {
-                FinishWithError(TResult::ERROR, TStringBuilder() << "New StateStorage configuration first ring group should be equal to old config");
+                FinishWithError(TResult::ERROR, TStringBuilder() << 
+                    "New StateStorage configuration first ring group should be equal to old config old:" << oldSSInfo->ToString() <<" new: " << newSSInfo->ToString());
                 return;
             }
         } catch(std::exception &/*e*/) {

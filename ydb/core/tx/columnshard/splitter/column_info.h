@@ -167,11 +167,13 @@ public:
         TBlobChunk(TEntityChunk&& chunk) {
             AddChunk(std::move(chunk));
         }
-        void EraseEntity(const ui32 id) {
+        TEntityChunk ExtractChunk(const ui32 id) {
             auto it = Entities.find(id);
             AFL_VERIFY(it != Entities.end());
             Size.Sub(it->second.GetSize());
+            auto result = std::move(it->second);
             Entities.erase(it);
+            return result;
         }
 
         bool TakeEntityFrom(TBlobChunk& sourceNormal, const ui32 minSize, const ui32 maxSize) {
@@ -183,18 +185,15 @@ public:
                 return l->GetSize() < r->GetSize();
             };
             std::sort(chunks.begin(), chunks.end(), pred);
-            bool foundToMove = false;
             for (auto&& i : chunks) {
                 if (GetSize() + i->GetSize() < maxSize && sourceNormal.GetSize() >= minSize + i->GetSize()) {
-                    AddChunk(*i);
-                    sourceNormal.EraseEntity(i->GetEntityId());
-                    foundToMove = true;
+                    AddChunk(sourceNormal.ExtractChunk(i->GetEntityId()));
                     if (GetSize() >= minSize) {
                         return true;
                     }
                 }
             }
-            return foundToMove;
+            return false;
         }
 
         bool TakeEntityPartFrom(TBlobChunk& sourceNormal, const ui32 minSize, const ui32 maxSize,
@@ -202,16 +201,6 @@ public:
 
         const THashMap<ui32, TEntityChunk>& GetEntities() const {
             return Entities;
-        }
-
-        void AddChunk(const TEntityChunk& chunk) {
-            Size.Add(chunk.GetSize());
-            auto it = Entities.find(chunk.GetEntityId());
-            if (it == Entities.end()) {
-                it = Entities.emplace(chunk.GetEntityId(), chunk).first;
-            } else {
-                it->second.Merge(chunk);
-            }
         }
 
         void AddChunk(TEntityChunk&& chunk) {
@@ -275,17 +264,9 @@ public:
             }
         }
 
-        void AddChunk(const TBlobChunk& chunk) {
-            Size.Add(chunk.GetSize());
-            AFL_VERIFY(chunk.GetSize() < MaxSize);
-            if (chunk.GetSize() < MinSize) {
-                Small.emplace_back(chunk);
-            } else {
-                Normal.emplace_back(chunk);
-            }
-        }
-
         void Merge(TNormalizedBlobChunks&& normalizer) {
+            Normal.reserve(Normal.size() + normalizer.Normal.size());
+            Small.reserve(Small.size() + normalizer.Small.size());
             for (auto&& i : normalizer.Normal) {
                 AddChunk(std::move(i));
             }
@@ -300,7 +281,7 @@ public:
             }
             TNormalizedBlobChunks result(MinSize, MaxSize, Tolerance, Schema, Counters, *InternalSplitsCount);
             for (auto&& i : Normal) {
-                result.AddChunk(i);
+                result.AddChunk(std::move(i));
             }
             std::vector<TBlobChunk*> smallPtr;
             for (auto&& i : Small) {

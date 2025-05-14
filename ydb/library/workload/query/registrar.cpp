@@ -1,11 +1,11 @@
-#include "external.h"
+#include "query.h"
 #include <ydb/library/workload/abstract/workload_factory.h>
 
 namespace NYdbWorkload {
 
-namespace NExternal {
+namespace NQuery {
 
-TWorkloadFactory::TRegistrator<TExternalWorkloadParams> Registrar("external");
+TWorkloadFactory::TRegistrator<TQueryWorkloadParams> Registrar("query");
 
 } // namespace NLog
 

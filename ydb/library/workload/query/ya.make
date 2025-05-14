@@ -3,7 +3,7 @@ LIBRARY()
 SRCS(
     GLOBAL registrar.cpp
     data_generator.cpp
-    external.cpp
+    query.cpp
 )
 
 PEERDIR(

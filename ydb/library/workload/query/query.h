@@ -4,9 +4,9 @@
 
 namespace NYdbWorkload {
 
-namespace NExternal {
+namespace NQuery {
 
-class TExternalWorkloadParams final : public TWorkloadBaseParams {
+class TQueryWorkloadParams final : public TWorkloadBaseParams {
 public:
     void ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) override;
     THolder<IWorkloadQueryGenerator> CreateGenerator() const override;
@@ -17,20 +17,21 @@ public:
     YDB_READONLY(EQuerySyntax, Syntax, EQuerySyntax::YQL);
 };
 
-class TExternalGenerator final: public TWorkloadGeneratorBase {
+class TQueryGenerator final: public TWorkloadQueryGeneratorBase<TQueryWorkloadParams> {
 public:
-    explicit TExternalGenerator(const TExternalWorkloadParams& params);
+    using TBase = TWorkloadQueryGeneratorBase<TQueryWorkloadParams>;
+    using TBase::TBase;
     TQueryInfoList GetWorkload(int type) override;
     TVector<TWorkloadType> GetSupportedWorkloadTypes() const override;
+    std::string GetDDLQueries() const override;
+    TVector<std::string> GetCleanPaths() const override;
 
 protected:
-    TString GetTablesYaml() const override;
-    TWorkloadGeneratorBase::TSpecialDataTypes GetSpecialDataTypes() const override;
     TQueryInfoList GetInitialData() override;
 
 private:
     TQueryInfoList GetWorkloadFromDir(const TFsPath& dir) const;
-    const TExternalWorkloadParams& Params;
+    std::string GetDDLQueriesFromDir(const TFsPath& dir) const;
 };
 
 } // namespace NLog

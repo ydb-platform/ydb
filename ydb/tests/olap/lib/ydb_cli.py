@@ -16,7 +16,7 @@ class WorkloadType(StrEnum):
     Clickbench = 'clickbench'
     TPC_H = 'tpch'
     TPC_DS = 'tpcds'
-    EXTERNAL = 'external'
+    EXTERNAL = 'query'
 
 
 class CheckCanonicalPolicy(Enum):

@@ -11,15 +11,14 @@ class TestExternalE1(ExternalSuiteBase, FunctionalTestBase):
     def setup_class(cls) -> None:
         cls.setup_cluster()
         cls.run_cli([
-            'workload', 'external', '-d', cls.get_external_path(), '-p', f'olap_yatests/{cls.external_folder}',
-            'init', '--store=column'
+            'workload', 'query', '-d', cls.get_external_path(), '-p', f'olap_yatests/{cls.external_folder}', 'init'
         ])
         cls.run_cli([
-            'workload', 'external', '-d', cls.get_external_path(), '-p', f'olap_yatests/{cls.external_folder}',
+            'workload', 'query', '-d', cls.get_external_path(), '-p', f'olap_yatests/{cls.external_folder}',
             'import', 'dir', '--input', os.path.join(cls.get_external_path(), 'data')
         ])
         super().setup_class()
 
     @classmethod
     def teardown_class(cls) -> None:
-        cls.run_cli(['workload', 'external', '-d', cls.get_external_path(), '-p', f'olap_yatests/{cls.external_folder}', 'clean'])
+        cls.run_cli(['workload', 'query', '-d', cls.get_external_path(), '-p', f'olap_yatests/{cls.external_folder}', 'clean'])

@@ -50,9 +50,9 @@ public:
         AddHandler(0, &TKqlUpsertRowsBase::Match, HNDL(ExcessUpsertInputColumns));
         AddHandler(0, &TCoTake::Match, HNDL(DropTakeOverLookupTable));
         AddHandler(0, &TKqlReadTableBase::Match, HNDL(ApplyExtractMembersToReadTable<false>));
-        AddHandler(0, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTableRanges<false>));
+        AddHandler(0, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTable<false>));
         AddHandler(0, &TKqpReadOlapTableRangesBase::Match, HNDL(ApplyExtractMembersToReadOlapTable<false>));
-        AddHandler(0, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToLookupTable<false>));
+        AddHandler(0, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToReadTable<false>));
         AddHandler(0, &TCoTop::Match, HNDL(TopSortOverExtend));
         AddHandler(0, &TCoTopSort::Match, HNDL(TopSortOverExtend));
         AddHandler(0, &TCoUnorderedBase::Match, HNDL(UnorderedOverDqReadWrap));
@@ -80,9 +80,9 @@ public:
         AddHandler(3, &TKqlLookupTableBase::Match, HNDL(RewriteLookupTable));
 
         AddHandler(4, &TKqlReadTableBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
-        AddHandler(4, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTableRanges<true>));
+        AddHandler(4, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
         AddHandler(4, &TKqpReadOlapTableRangesBase::Match, HNDL(ApplyExtractMembersToReadOlapTable<true>));
-        AddHandler(4, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToLookupTable<true>));
+        AddHandler(4, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToReadTable<true>));
 
 #undef HNDL
 
@@ -351,29 +351,11 @@ protected:
     }
 
     template <bool IsGlobal>
-    TMaybeNode<TExprBase> ApplyExtractMembersToReadTableRanges(TExprBase node, TExprContext& ctx,
-        const TGetParents& getParents)
-    {
-        TExprBase output = KqpApplyExtractMembersToReadTableRanges(node, ctx, *getParents(), IsGlobal);
-        DumpAppliedRule("ApplyExtractMembersToReadTableRanges", node.Ptr(), output.Ptr(), ctx);
-        return output;
-    }
-
-    template <bool IsGlobal>
     TMaybeNode<TExprBase> ApplyExtractMembersToReadOlapTable(TExprBase node, TExprContext& ctx,
         const TGetParents& getParents)
     {
         TExprBase output = KqpApplyExtractMembersToReadOlapTable(node, ctx, *getParents(), IsGlobal);
         DumpAppliedRule("ApplyExtractMembersToReadOlapTable", node.Ptr(), output.Ptr(), ctx);
-        return output;
-    }
-
-    template <bool IsGlobal>
-    TMaybeNode<TExprBase> ApplyExtractMembersToLookupTable(TExprBase node, TExprContext& ctx,
-        const TGetParents& getParents)
-    {
-        TExprBase output = KqpApplyExtractMembersToLookupTable(node, ctx, *getParents(), IsGlobal);
-        DumpAppliedRule("ApplyExtractMembersToLookupTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

@@ -15,7 +15,6 @@ Logging is a critical part of the {{ ydb-short-name }} [observability](../observ
 - Default logging level
 - Component-specific logging levels
 - Log output format
-- Log rotation and storage
 - Integration with system logs or external logging services
 
 ## Configuration Options
@@ -24,7 +23,7 @@ Logging is a critical part of the {{ ydb-short-name }} [observability](../observ
 | --- | --- | --- | --- |
 | `default_level` | uint32 | 5 (NOTICE) | Default logging level for all components. |
 | `default_sampling_level` | uint32 | 7 (DEBUG) | Default sampling level for all components. |
-| `default_sampling_rate` | uint32 | 0 | Default sampling rate for all components. |
+| `default_sampling_rate` | uint32 | 0 | Default sampling rate for all components. If set to N (where N > 0), approximately 1 out of every N log messages with priority between `default_level` and `default_sampling_level` will be logged. For example, to log every 10th message, set to 10. A value of 0 means that no messages in this range will be logged (they are all dropped). |
 | `sys_log` | bool | false | Enable system logging via syslog. |
 | `sys_log_to_stderr` | bool | false | Copy logs to stderr in addition to system log. |
 | `format` | string | "full" | Log output format. Possible values: "full", "short", "json". |
@@ -93,75 +92,3 @@ log_config:
   format: "full"
   backend_file_name: "/var/log/ydb/ydb.log"
 ```
-
-### Setting Per-Component Log Levels
-
-```yaml
-log_config:
-  default_level: 5  # NOTICE
-  entry:
-    - component: U0NIRU1FU0hBUkQ=  # Base64 for "SCHEMESHARD"
-      level: 7  # DEBUG
-    - component: VEFCTEVUX01BSU4=  # Base64 for "TABLET_MAIN"
-      level: 6  # INFO
-  backend_file_name: "/var/log/ydb/ydb.log"
-```
-
-### JSON Format with Unified Agent Integration
-
-```yaml
-log_config:
-  default_level: 5  # NOTICE
-  format: "json"
-  cluster_name: "production-cluster"
-  sys_log: false
-  uaclient_config:
-    uri: "[fd53::1]:16400"
-    grpc_max_message_size: 4194304
-    log_name: "ydb_logs"
-```
-
-### Full Example
-
-```yaml
-log_config:
-  default_level: 5  # NOTICE
-  default_sampling_level: 7  # DEBUG
-  default_sampling_rate: 10
-  sys_log: true
-  sys_log_to_stderr: true
-  format: "json"
-  cluster_name: "production-cluster"
-  allow_drop_entries: true
-  use_local_timestamps: false
-  backend_file_name: "/var/log/ydb/ydb.log"
-  sys_log_service: "ydb"
-  time_threshold_ms: 2000
-  ignore_unknown_components: true
-  tenant_name: "main"
-  entry:
-    - component: U0NIRU1FU0hBUkQ=  # Base64 for "SCHEMESHARD"
-      level: 7  # DEBUG
-    - component: VEFCTEVUX01BSU4=  # Base64 for "TABLET_MAIN"
-      level: 6  # INFO
-    - component: QkxPQlNUT1JBR0U=  # Base64 for "BLOBSTORAGE"
-      level: 4  # WARN
-  uaclient_config:
-    uri: "[fd53::1]:16400"
-    grpc_max_message_size: 4194304
-    log_name: "ydb_logs"
-```
-
-## Notes
-
-- When specifying component names in the `entry` array, the component names must be base64-encoded.
-- Log levels are specified as numeric values rather than strings in the configuration. Use [the table above](#log-levels) to determine the numeric values of log levels.
-- If `backend_file_name` is specified, logs are written to that file. If `sys_log` is set to true, logs are sent to the system logger.
-- The `format` parameter determines how log entries are formatted. The "full" format includes all available information, "short" provides a more compact format, and "json" outputs logs in JSON format for easier parsing.
-
-## See Also
-
-- [{#T}](../observability/index.md)
-- [{#T}](../observability/metrics/index.md)
-- [{#T}](../observability/tracing/setup.md)
-- [{#T}](../../security/audit-log.md)

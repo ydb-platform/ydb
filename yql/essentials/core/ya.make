@@ -60,6 +60,7 @@ PEERDIR(
     library/cpp/random_provider
     library/cpp/threading/future
     library/cpp/time_provider
+    library/cpp/type_info/tz
     library/cpp/yson
     library/cpp/yson/node
     yql/essentials/ast
@@ -74,7 +75,6 @@ PEERDIR(
     yql/essentials/core/histogram
     yql/essentials/protos
     yql/essentials/public/udf
-    yql/essentials/public/udf/tz
     yql/essentials/public/langver
     yql/essentials/sql/settings
     yql/essentials/sql

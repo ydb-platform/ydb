@@ -9,12 +9,12 @@
 #include <yt/yql/providers/yt/common/yql_names.h>
 #include <yt/yql/providers/yt/gateway/lib/yt_helpers.h>
 #include <yql/essentials/utils/log/log.h>
-#include <yql/essentials/public/udf/tz/udf_tz.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/decimal/yql_decimal_serialize.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/utils/utf8.h>
 
+#include <library/cpp/type_info/tz/tz.h>
 #include <library/cpp/yson/node/node_io.h>
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/interface/serialize.h>
@@ -2326,7 +2326,7 @@ TExprBase RoundTz(const TExprBase& node, bool down, TExprContext& ctx) {
         TStringBuf value;
         GetNext(tzName, ',', value);
 
-        const auto& names = NUdf::GetTimezones();
+        const auto& names = NTi::GetTimezones();
         YQL_ENSURE(!names.empty());
 
         TStringBuf targetName;

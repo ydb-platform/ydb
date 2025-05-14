@@ -259,6 +259,12 @@ struct aws_mqtt5_client_operational_state {
     struct aws_linked_list write_completion_operations;
 
     /*
+     * heap of operation pointers where the timeout is the sort value.  Elements are added/removed from this
+     * data structure in exact synchronization with unacked_operations_table.
+     */
+    struct aws_priority_queue operations_by_ack_timeout;
+
+    /*
      * Is there an io message in transit (to the socket) that has not invoked its write completion callback yet?
      * The client implementation only allows one in-transit message at a time, and so if this is true, we don't
      * send additional ones/
@@ -342,7 +348,7 @@ struct aws_mqtt5_client {
     /*
      * Client configuration
      */
-    const struct aws_mqtt5_client_options_storage *config;
+    struct aws_mqtt5_client_options_storage *config;
 
     /*
      * The recurrent task that runs all client logic outside of external event callbacks.  Bound to the client's
@@ -489,6 +495,29 @@ struct aws_mqtt5_client {
      * with clean start set to false.
      */
     bool has_connected_successfully;
+
+    /*
+     * A flag that allows in-thread observers (currently the mqtt3_to_5 adapter) to signal that the connection
+     * should be torn down and re-established.  Only relevant to the CONNECTING state which is not interruptible:
+     *
+     * If the mqtt5 client is in the CONNECTING state (ie waiting for bootstrap to complete) and the 3-adapter
+     * is asked to connect, then we *MUST* discard the in-progress connection attempt in order to guarantee the
+     * connection we establish uses all of the configuration parameters that are passed during the mqtt3 API's connect
+     * call (host, port, tls options, socket options, etc...).  Since we can't interrupt the CONNECTING state, we
+     * instead set a flag that tells the mqtt5 client to tear down the connection as soon as the initial bootstrap
+     * completes.  The reconnect will establish the requested connection using the parameters passed to
+     * the mqtt3 API.
+     *
+     * Rather than try and catch every escape path from CONNECTING, we lazily reset this flag to false when we
+     * enter the CONNECTING state.  On a similar note, we only check this flag as we transition to MQTT_CONNECT.
+     *
+     * This flag is ultimately only needed when the 3 adapter and 5 client are used out-of-sync.  If you use the
+     * 3 adapter exclusively after 5 client creation, it never comes into play.
+     *
+     * Even the adapter shouldn't manipulate this directly.  Instead, use the aws_mqtt5_client_reset_connection private
+     * API to tear down an in-progress or established connection in response to a connect() request on the adapter.
+     */
+    bool should_reset_connection;
 };
 
 AWS_EXTERN_C_BEGIN
@@ -638,10 +667,44 @@ AWS_MQTT_API void aws_mqtt5_client_statistics_change_operation_statistic_state(
  */
 AWS_MQTT_API const char *aws_mqtt5_client_state_to_c_string(enum aws_mqtt5_client_state state);
 
-/*
- * Temporary, private API to turn on total incoming packet logging at the byte level.
+/**
+ * An internal API used by the MQTT3 adapter to force any existing-or-in-progress connection to
+ * be torn down and re-established.  Necessary because the MQTT3 interface allows overrides on a large number
+ * of configuration parameters through the connect() call.  We must honor those parameters and the safest thing
+ * to do is to just throw away the current connection (if it exists) and make a new one.  In the case that an MQTT5
+ * client is being driven entirely by the MQTT3 adapter, this case never actually happens.
+ *
+ * @param client client to reset an existing or in-progress connection for
+ * @return true if a connection reset was triggered, false if there was nothing to do
  */
-AWS_MQTT_API void aws_mqtt5_client_enable_full_packet_logging(struct aws_mqtt5_client *client);
+AWS_MQTT_API bool aws_mqtt5_client_reset_connection(struct aws_mqtt5_client *client);
+
+/**
+ * Event-loop-internal API used to switch the client's desired state.  Used by both start() and stop() cross-thread
+ * tasks as well as by the 3-to-5 adapter to make changes synchronously (when in the event loop).
+ *
+ * @param client mqtt5 client to update desired state for
+ * @param desired_state new desired state
+ * @param disconnect_op optional description of a DISCONNECT packet to send as part of a stop command
+ */
+AWS_MQTT_API void aws_mqtt5_client_change_desired_state(
+    struct aws_mqtt5_client *client,
+    enum aws_mqtt5_client_state desired_state,
+    struct aws_mqtt5_operation_disconnect *disconnect_op);
+
+/**
+ * Event-loop-internal API to add an operation to the client's queue.  Used by the 3-to-5 adapter to synchnrously
+ * inject the MQTT5 operation once the adapter operation has reached the event loop.
+ *
+ * @param client MQTT5 client to submit an operation to
+ * @param operation MQTT5 operation to submit
+ * @param is_terminated flag that indicates whether the submitter is shutting down or not.  Needed to differentiate
+ * between adapter submissions and MQTT5 client API submissions and correctly handle ref count adjustments.
+ */
+AWS_MQTT_API void aws_mqtt5_client_submit_operation_internal(
+    struct aws_mqtt5_client *client,
+    struct aws_mqtt5_operation *operation,
+    bool is_terminated);
 
 AWS_EXTERN_C_END
 

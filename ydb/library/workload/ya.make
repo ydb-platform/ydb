@@ -3,7 +3,7 @@ LIBRARY()
 PEERDIR(
     ydb/library/workload/abstract
     ydb/library/workload/clickbench
-    ydb/library/workload/external
+    ydb/library/workload/query
     ydb/library/workload/kv
     ydb/library/workload/log
     ydb/library/workload/mixed
@@ -18,7 +18,7 @@ RECURSE(
     abstract
     benchmark_base
     clickbench
-    external
+    query
     kv
     log
     mixed

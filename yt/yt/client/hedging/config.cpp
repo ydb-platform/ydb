@@ -31,11 +31,8 @@ void TReplicationLagPenaltyProviderOptions::Register(TRegistrar registrar)
     registrar.Parameter("table_path", &TThis::TablePath);
     registrar.Parameter("lag_penalty", &TThis::LagPenalty)
         .Default(TDuration::MilliSeconds(10));
-    registrar.Parameter("max_tablet_lag", &TThis::MaxTabletLag)
+    registrar.Parameter("max_replica_lag", &TThis::MaxReplicaLag)
         .Default(TDuration::Minutes(5));
-    registrar.Parameter("max_tablets_with_lag_fraction", &TThis::MaxTabletsWithLagFraction)
-        .Default(0.05)
-        .InRange(0.0, 1.0);
     registrar.Parameter("check_period", &TThis::CheckPeriod)
         .Default(TDuration::Minutes(1));
     registrar.Parameter("clear_penalties_on_errors", &TThis::ClearPenaltiesOnErrors)

@@ -41,20 +41,24 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         NOTICE [2:2]
+        include/aws/io/async_stream.h [2:2]
         include/aws/io/channel.h [4:4]
         include/aws/io/channel_bootstrap.h [5:5]
         include/aws/io/event_loop.h [5:5]
         include/aws/io/exports.h [5:5]
         include/aws/io/file_utils.h [5:5]
+        include/aws/io/future.h [2:2]
         include/aws/io/host_resolver.h [4:4]
         include/aws/io/io.h [5:5]
         include/aws/io/logging.h [5:5]
         include/aws/io/message_pool.h [4:4]
+        include/aws/io/pem.h [5:5]
         include/aws/io/pipe.h [5:5]
         include/aws/io/pkcs11.h [4:4]
         include/aws/io/private/pem_utils.h [5:5]
         include/aws/io/private/pki_utils.h [4:4]
         include/aws/io/private/tls_channel_handler_shared.h [4:4]
+        include/aws/io/private/tracing.h [5:5]
         include/aws/io/retry_strategy.h [4:4]
         include/aws/io/shared_library.h [5:5]
         include/aws/io/socket.h [4:4]
@@ -64,20 +68,21 @@ BELONGS ya.make
         include/aws/io/tls_channel_handler.h [4:4]
         include/aws/io/uri.h [4:4]
         source/alpn_handler.c [2:2]
+        source/async_stream.c [2:2]
         source/bsd/kqueue_event_loop.c [2:2]
         source/channel.c [2:2]
         source/channel_bootstrap.c [2:2]
         source/event_loop.c [2:2]
         source/exponential_backoff_retry_strategy.c [2:2]
+        source/future.c [2:2]
         source/host_resolver.c [2:2]
         source/io.c [2:2]
         source/linux/epoll_event_loop.c [2:2]
         source/message_pool.c [2:2]
-        source/pem_utils.c [2:2]
+        source/pem.c [2:2]
         source/pkcs11_lib.c [2:2]
         source/pkcs11_private.h [5:5]
         source/pkcs11_tls_op_handler.c [2:2]
-        source/pki_utils.c [2:2]
         source/posix/host_resolver.c [2:2]
         source/posix/pipe.c [2:2]
         source/posix/shared_library.c [2:2]
@@ -85,32 +90,10 @@ BELONGS ya.make
         source/retry_strategy.c [2:2]
         source/s2n/s2n_tls_channel_handler.c [2:2]
         source/socket_channel_handler.c [2:2]
+        source/socket_shared.c [2:2]
         source/standard_retry_strategy.c [2:2]
         source/statistics.c [2:2]
         source/stream.c [2:2]
         source/tls_channel_handler.c [2:2]
         source/tls_channel_handler_shared.c [2:2]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 2e35409d3a27ad4f26ee063de186689a
-BELONGS ya.make
-    License text:
-        Copyright (c) OASIS Open 2016. All Rights Reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        THIRD-PARTY-LICENSES.txt [3:3]
-
-KEEP     COPYRIGHT_SERVICE_LABEL b3779e02b4352ffc4ebd94151bac83c8
-BELONGS ya.make
-    License text:
-        /* Copyright (c) OASIS Open 2016. All Rights Reserved./
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        source/pkcs11/v2.40/pkcs11.h [1:1]
-        source/pkcs11/v2.40/pkcs11f.h [1:1]
-        source/pkcs11/v2.40/pkcs11t.h [1:1]
+        source/tracing.c [2:2]

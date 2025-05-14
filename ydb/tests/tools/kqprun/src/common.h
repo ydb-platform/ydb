@@ -85,14 +85,7 @@ struct TRequestOptions {
     TString Database;
     TDuration Timeout;
     size_t QueryId = 0;
+    std::unordered_map<TString, Ydb::TypedValue> Params;
 };
-
-template <typename TValue>
-TValue GetValue(size_t index, const std::vector<TValue>& values, TValue defaultValue) {
-    if (values.empty()) {
-        return defaultValue;
-    }
-    return values[std::min(index, values.size() - 1)];
-}
 
 }  // namespace NKqpRun

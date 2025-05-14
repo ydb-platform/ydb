@@ -314,11 +314,17 @@ private:
             ActorIdToProto(taskCtx.ComputeActorId, startedTask->MutableActorId());
         }
 
+        TCPULimits cpuLimits;
+        if (msg.GetPoolMaxCpuShare() > 0) {
+            // Share <= 0 means disabled limit
+            cpuLimits.DeserializeFromProto(msg).Validate();
+        }
+
         for (auto&& i : computesByStage) {
             for (auto&& m : i.second.MutableMetaInfo()) {
                 Register(CreateKqpScanFetcher(msg.GetSnapshot(), std::move(m.MutableActorIds()),
                     m.GetMeta(), runtimeSettingsBase, txId, lockTxId, lockNodeId, lockMode,
-                    scanPolicy, Counters, NWilson::TTraceId(ev->TraceId)));
+                    scanPolicy, Counters, NWilson::TTraceId(ev->TraceId), cpuLimits));
             }
         }
 
@@ -457,7 +463,6 @@ private:
         auto ptr = MakeIntrusive<NKikimr::NKqp::TWriteActorSettings>();
 
         ptr->InFlightMemoryLimitPerActorBytes = settings.GetInFlightMemoryLimitPerActorBytes();
-        ptr->MemoryLimitPerMessageBytes = settings.GetMemoryLimitPerMessageBytes();
 
         ptr->StartRetryDelay = TDuration::MilliSeconds(settings.GetStartRetryDelayMs());
         ptr->MaxRetryDelay = TDuration::MilliSeconds(settings.GetMaxRetryDelayMs());

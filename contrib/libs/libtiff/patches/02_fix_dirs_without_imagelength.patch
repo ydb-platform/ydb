@@ -1,0 +1,44 @@
+--- a/tif_dirread.c
++++ b/tif_dirread.c
+@@ -3750,5 +3750,4 @@
+     if (!TIFFFieldSet(tif, FIELD_IMAGEDIMENSIONS))
+     {
+-        MissingRequired(tif, "ImageLength");
+-        goto bad;
++        TIFFWarningExtR(tif, module, "TIFF directory is missing required ImageLength field");
+     }
+@@ -4263,4 +4263,3 @@
+     if (!tif->tif_scanlinesize) {
+-        TIFFErrorExtR(tif, module, "Cannot handle zero scanline size");
+-        return (0);
++        TIFFWarningExtR(tif, module, "Cannot handle zero scanline size");
+     }
+@@ -4263,4 +4263,3 @@
+         if (!tif->tif_tilesize) {
+-            TIFFErrorExtR(tif, module, "Cannot handle zero tile size");
+-            return (0);
++            TIFFWarningExtR(tif, module, "Cannot handle zero tile size");
+         }
+@@ -4263,4 +4263,3 @@
+         if (!TIFFStripSize(tif)) {
+-            TIFFErrorExtR(tif, module, "Cannot handle zero strip size");
+-            return (0);
++            TIFFWarningExt(tif, module, "Cannot handle zero strip size");
+         }
+@@ -5377,6 +5377,6 @@ static void MissingRequired(TIFF *tif, const char *tagname)
+ {
+     static const char module[] = "MissingRequired";
+ 
+-    TIFFErrorExtR(tif, module,
++    TIFFWarningExtR(tif, module,
+                   "TIFF directory is missing required \"%s\" field", tagname);
+ }
+--- a/tif_strip.c
++++ b/tif_strip.c
+@@ -300,5 +300,5 @@
+     if (scanline_size == 0)
+     {
+-        TIFFErrorExtR(tif, module, "Computed scanline size is zero");
++        TIFFWarningExtR(tif, module, "Computed scanline size is zero");
+         return 0;
+     }

@@ -529,7 +529,7 @@ TEST(TAsyncSlruCacheTest, AddRemoveStressTest)
             cookies.emplace_back(std::move(cookie));
         }
 
-        for (int i = 0; i < valueCount; ++i) {
+        for (int i = valueCount - 1; i >= 0; --i) {
             cookies.back().EndInsert(values[i]);
             cookies.pop_back();
         }

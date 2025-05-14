@@ -13,9 +13,63 @@
 
 namespace NKikimr::NOlap::NCompaction {
 
+class TResultBatchPage {
+private:
+    std::map<ui32, TColumnPortionResult> ColumnChunks;
+    std::optional<ui32> RecordsCount;
+
+public:
+    void AddColumn(const ui32 columnId, const TColumnPortionResult& data) {
+        AFL_VERIFY(ColumnChunks.emplace(columnId, data).second);
+        if (!RecordsCount) {
+            RecordsCount = data.GetRecordsCount();
+        } else {
+            AFL_VERIFY(*RecordsCount == data.GetRecordsCount())("new", data.GetRecordsCount())("control", RecordsCount);
+        }
+    }
+
+    TGeneralSerializedSlice BuildSlice(const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered,
+        const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats,
+        const std::shared_ptr<NColumnShard::TSplitterCounters>& counters) const {
+        std::shared_ptr<TDefaultSchemaDetails> schemaDetails(new TDefaultSchemaDetails(resultFiltered, stats));
+        THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> portionColumns;
+        for (auto&& [cId, cPage] : ColumnChunks) {
+            portionColumns.emplace(cId, cPage.GetChunks());
+        }
+        return TGeneralSerializedSlice(portionColumns, schemaDetails, counters);
+    }
+};
+
+class TResultBatchData {
+private:
+    std::vector<TResultBatchPage> Pages;
+
+public:
+    std::vector<TGeneralSerializedSlice> BuildSlices(const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered,
+        const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters) {
+        std::vector<TGeneralSerializedSlice> result;
+        for (auto&& i : Pages) {
+            result.emplace_back(i.BuildSlice(resultFiltered, stats, counters));
+        }
+        return result;
+    }
+
+    void AddColumnChunks(const ui32 columnId, const std::vector<TColumnPortionResult>& chunks) {
+        AFL_VERIFY(chunks.size());
+        if (Pages.size()) {
+            AFL_VERIFY(Pages.size() == chunks.size())("new", chunks.size())("control", Pages.size());
+        } else {
+            Pages.resize(chunks.size());
+        }
+        for (ui32 i = 0; i < chunks.size(); ++i) {
+            Pages[i].AddColumn(columnId, chunks[i]);
+        }
+    }
+};
+
 std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats,
-    const NArrow::NMerger::TIntervalPositions& checkPoints, const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered, const TInternalPathId pathId,
-    const std::optional<ui64> shardingActualVersion) {
+    const NArrow::NMerger::TIntervalPositions& checkPoints, const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered,
+    const TInternalPathId pathId, const std::optional<ui64> shardingActualVersion) {
     AFL_VERIFY(Batches.size() == Filters.size());
     std::vector<std::shared_ptr<arrow::RecordBatch>> batchResults;
     {
@@ -50,7 +104,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
         batchResults = mergeStream.DrainAllParts(checkPoints, indexFields);
     }
 
-    std::vector<std::map<ui32, std::vector<TColumnPortionResult>>> chunkGroups;
+    std::vector<TResultBatchData> chunkGroups;
     chunkGroups.resize(batchResults.size());
 
     using TColumnData = std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>;
@@ -106,7 +160,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
                 batchResult->num_rows() / (batchResult->num_rows() / NSplitter::TSplitSettings().GetExpectedRecordsCountOnPage() + 1) + 1;
 
             TChunkMergeContext context(portionRecordsCountLimit, batchIdx, batchResult->num_rows(), Context.Counters);
-            chunkGroups[batchIdx][columnId] = merger->Execute(context, mergingContext);
+            chunkGroups[batchIdx].AddColumnChunks(columnId, merger->Execute(context, mergingContext));
             ++batchIdx;
         }
     }
@@ -118,48 +172,30 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
     for (auto&& columnChunks : chunkGroups) {
         auto batchResult = batchResults[batchIdx];
         ++batchIdx;
-        Y_ABORT_UNLESS(columnChunks.size());
-
-        for (auto&& i : columnChunks) {
-            if (i.second.size() != columnChunks.begin()->second.size()) {
-                for (ui32 p = 0; p < std::min<ui32>(columnChunks.begin()->second.size(), i.second.size()); ++p) {
-                    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("p_first", columnChunks.begin()->second[p].DebugString())(
-                        "p", i.second[p].DebugString());
-                }
-            }
-            AFL_VERIFY(i.second.size() == columnChunks.begin()->second.size())("first", columnChunks.begin()->second.size())(
-                                              "current", i.second.size())("first_name", columnChunks.begin()->first)("current_name", i.first);
-        }
-        std::vector<TGeneralSerializedSlice> batchSlices;
-        std::shared_ptr<TDefaultSchemaDetails> schemaDetails(new TDefaultSchemaDetails(resultFiltered, stats));
-
-        for (ui32 i = 0; i < columnChunks.begin()->second.size(); ++i) {
-            THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> portionColumns;
-            for (auto&& p : columnChunks) {
-                portionColumns.emplace(p.first, p.second[i].GetChunks());
-            }
-            batchSlices.emplace_back(portionColumns, schemaDetails, Context.Counters.SplitterCounters);
-        }
+        std::vector<TGeneralSerializedSlice> batchSlices = columnChunks.BuildSlices(resultFiltered, stats, Context.Counters.SplitterCounters);
         NArrow::NSplitter::TSimilarPacker slicer(PortionExpectedSize);
         auto packs = slicer.Split(batchSlices);
 
+        std::shared_ptr<TDefaultSchemaDetails> schemaDetails(new TDefaultSchemaDetails(resultFiltered, stats));
         ui32 recordIdx = 0;
         for (auto&& i : packs) {
             TGeneralSerializedSlice slicePrimary(std::move(i));
-            auto dataWithSecondary = resultFiltered->GetIndexInfo()
+            auto dataWithSecondary =
+                resultFiltered->GetIndexInfo()
                     .AppendIndexes(slicePrimary.GetPortionChunksToHash(), SaverContext.GetStoragesManager(), slicePrimary.GetRecordsCount())
-                                         .DetachResult();
+                    .DetachResult();
             TGeneralSerializedSlice slice(dataWithSecondary.GetExternalData(), schemaDetails, Context.Counters.SplitterCounters);
 
             auto b = batchResult->Slice(recordIdx, slice.GetRecordsCount());
             const ui32 deletionsCount = IIndexInfo::CalcDeletions(b, false);
             auto constructor = TWritePortionInfoWithBlobsConstructor::BuildByBlobs(slice.GroupChunksByBlobs(groups),
                 dataWithSecondary.GetSecondaryInplaceData(), pathId, resultFiltered->GetVersion(), resultFiltered->GetSnapshot(),
-                SaverContext.GetStoragesManager());
+                SaverContext.GetStoragesManager(), EPortionType::Compacted);
 
             NArrow::TFirstLastSpecialKeys primaryKeys(slice.GetFirstLastPKBatch(resultFiltered->GetIndexInfo().GetReplaceKey()));
             NArrow::TMinMaxSpecialKeys snapshotKeys(b, TIndexInfo::ArrowSchemaSnapshot());
-            constructor.GetPortionConstructor().MutablePortionConstructor().AddMetadata(*resultFiltered, deletionsCount, primaryKeys, snapshotKeys);
+            constructor.GetPortionConstructor().MutablePortionConstructor().AddMetadata(
+                *resultFiltered, deletionsCount, primaryKeys, snapshotKeys);
             constructor.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetTierName(IStoragesManager::DefaultStorageId);
             if (shardingActualVersion) {
                 constructor.GetPortionConstructor().MutablePortionConstructor().SetShardingVersion(*shardingActualVersion);

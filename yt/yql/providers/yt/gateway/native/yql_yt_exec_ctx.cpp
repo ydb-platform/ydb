@@ -35,6 +35,25 @@ namespace NNative {
 
 using namespace NNodes;
 
+TInputInfo::TInputInfo(const TString& name, const NYT::TRichYPath& path, bool temp, bool strict, const TYtTableBaseInfo& info, const NYT::TNode& spec, ui32 group)
+    : Name(name)
+    , Path(path)
+    , Cluster(info.Cluster)
+    , Temp(temp)
+    , Dynamic(info.Meta->IsDynamic)
+    , Strict(strict)
+    , Records(info.Stat->RecordsCount)
+    , DataSize(info.Stat->DataSize)
+    , Spec(spec)
+    , Group(group)
+    , Lookup(info.Meta->Attrs.Value("optimize_for", "scan") != "scan")
+    , ErasureCodec(info.Meta->Attrs.Value("erasure_codec", "none"))
+    , CompressionCode(info.Meta->Attrs.Value("compression_codec", "none"))
+    , PrimaryMedium(info.Meta->Attrs.Value("primary_medium", "default"))
+    , Media(NYT::NodeFromYsonString(info.Meta->Attrs.Value("media", "#")))
+{
+}
+
 TExecContextBase::TExecContextBase(const TYtNativeServices& services,
     const TConfigClusters::TPtr& clusters,
     const TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler>& mkqlCompiler,
@@ -390,9 +409,10 @@ TTransactionCache::TEntry::TPtr TExecContextBase::GetOrCreateEntry(const TYtSett
 
 TExpressionResorceUsage TExecContextBase::ScanExtraResourceUsageImpl(const TExprNode& node, const TYtSettings::TConstPtr& config, bool withInput) {
     auto extraUsage = ScanExtraResourceUsage(node, *config);
-    if (withInput && AnyOf(InputTables_, [](const auto& input) { return input.Erasure; })) {
+    if (withInput && AnyOf(InputTables_, [](const auto& input) { return input.ErasureCodec != "none"_sb; })) {
         if (auto codecCpu = config->ErasureCodecCpu.Get(Cluster_)) {
             extraUsage.Cpu *= *codecCpu;
+            YQL_CLOG(DEBUG, ProviderYt) << "Increase cpu for erasure input by " << *codecCpu;
         }
     }
     return extraUsage;

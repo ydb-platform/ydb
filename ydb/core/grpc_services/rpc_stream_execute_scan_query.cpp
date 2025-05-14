@@ -358,27 +358,40 @@ private:
             ExecuterActorId_ = ev->Sender;
         }
 
+        auto& evRecord = ev->Get()->Record;
+
         Ydb::Table::ExecuteScanQueryPartialResponse response;
-        response.set_status(StatusIds::SUCCESS);
-        response.mutable_result()->mutable_result_set()->Swap(ev->Get()->Record.MutableResultSet());
+
+        {
+            response.set_status(StatusIds::SUCCESS);
+            auto result = response.mutable_result();
+            result->mutable_result_set()->Swap(evRecord.MutableResultSet());
+
+            if (evRecord.HasVirtualTimestamp()) {
+                auto snap = result->mutable_snapshot();
+                auto ts = evRecord.GetVirtualTimestamp();
+                snap->set_plan_step(ts.GetStep());
+                snap->set_tx_id(ts.GetTxId());
+            }
+        }
 
         TString out;
         Y_PROTOBUF_SUPPRESS_NODISCARD response.SerializeToString(&out);
 
         FlowControl_.PushResponse(out.size());
         const i64 freeSpaceBytes = FlowControl_.FreeSpaceBytes();
-        LastSeqNo_ = ev->Get()->Record.GetSeqNo();
+        LastSeqNo_ = evRecord.GetSeqNo();
         AckedFreeSpaceBytes_ = freeSpaceBytes;
 
         Request_->SendSerializedResult(std::move(out), StatusIds::SUCCESS);
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, this->SelfId() << " Send stream data ack"
-            << ", seqNo: " << ev->Get()->Record.GetSeqNo()
+            << ", seqNo: " << evRecord.GetSeqNo()
             << ", freeSpace: " << freeSpaceBytes
             << ", to: " << ev->Sender
             << ", queue: " << FlowControl_.QueueSize());
 
-        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
+        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(evRecord.GetSeqNo(), evRecord.GetChannelId());
         resp->Record.SetFreeSpace(freeSpaceBytes);
 
         ctx.Send(ev->Sender, resp.Release());

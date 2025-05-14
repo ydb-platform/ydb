@@ -50,7 +50,7 @@ public:
     virtual void ErasePortion(const NOlap::TPortionInfo& /*portion*/) override {
     }
     virtual bool LoadPortions(const std::optional<TInternalPathId> /*reqPathId*/,
-        const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& /*callback*/) override {
+        const std::function<void(std::unique_ptr<NOlap::TPortionInfoConstructor>&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& /*callback*/) override {
         return true;
     }
 

@@ -76,7 +76,7 @@ std::set<ui32> TPKRangesFilter::GetColumnIds(const TIndexInfo& indexInfo) const 
     return result;
 }
 
-bool TPKRangesFilter::CheckPoint(const NArrow::TReplaceKey& point) const {
+bool TPKRangesFilter::CheckPoint(const NArrow::TSimpleRow& point) const {
     for (auto&& i : SortedRanges) {
         if (i.CheckPoint(point)) {
             return true;
@@ -85,7 +85,7 @@ bool TPKRangesFilter::CheckPoint(const NArrow::TReplaceKey& point) const {
     return SortedRanges.empty();
 }
 
-TPKRangeFilter::EUsageClass TPKRangesFilter::GetUsageClass(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const {
+TPKRangeFilter::EUsageClass TPKRangesFilter::GetUsageClass(const NArrow::TSimpleRow& start, const NArrow::TSimpleRow& end) const {
     if (SortedRanges.empty()) {
         return TPKRangeFilter::EUsageClass::FullUsage;
     }
@@ -113,23 +113,15 @@ std::shared_ptr<arrow::RecordBatch> TPKRangesFilter::SerializeToRecordBatch(cons
         pkSchema->AddField(pkSchema->num_fields(), std::make_shared<arrow::Field>(".ydb_operation_type", arrow::uint32())));
     auto builders = NArrow::MakeBuilders(fullSchema, SortedRanges.size() * 2);
     for (auto&& i : SortedRanges) {
-        for (ui32 idx = 0; idx < (ui32)pkSchema->num_fields(); ++idx) {
-            if (idx < i.GetPredicateFrom().GetReplaceKey()->Size()) {
-                AFL_VERIFY(NArrow::Append(
-                    *builders[idx], i.GetPredicateFrom().GetReplaceKey()->Column(idx), i.GetPredicateFrom().GetReplaceKey()->GetPosition()));
-            } else {
-                NArrow::TStatusValidator::Validate(builders[idx]->AppendNull());
-            }
+        i.GetPredicateFrom().GetReplaceKey()->AddToBuilders(builders).Validate();
+        for (ui32 idx = i.GetPredicateFrom().GetReplaceKey()->GetColumnsCount(); idx < (ui32)pkSchema->num_fields(); ++idx) {
+            NArrow::TStatusValidator::Validate(builders[idx]->AppendNull());
         }
         NArrow::Append<arrow::UInt32Type>(*builders[pkSchema->num_fields()], (ui32)i.GetPredicateFrom().GetCompareType());
 
-        for (ui32 idx = 0; idx < (ui32)pkSchema->num_fields(); ++idx) {
-            if (idx < i.GetPredicateTo().GetReplaceKey()->Size()) {
-                AFL_VERIFY(NArrow::Append(
-                    *builders[idx], i.GetPredicateTo().GetReplaceKey()->Column(idx), i.GetPredicateTo().GetReplaceKey()->GetPosition()));
-            } else {
-                NArrow::TStatusValidator::Validate(builders[idx]->AppendNull());
-            }
+        i.GetPredicateTo().GetReplaceKey()->AddToBuilders(builders).Validate();
+        for (ui32 idx = i.GetPredicateTo().GetReplaceKey()->GetColumnsCount(); idx < (ui32)pkSchema->num_fields(); ++idx) {
+            NArrow::TStatusValidator::Validate(builders[idx]->AppendNull());
         }
         NArrow::Append<arrow::UInt32Type>(*builders[pkSchema->num_fields()], (ui32)i.GetPredicateTo().GetCompareType());
     }

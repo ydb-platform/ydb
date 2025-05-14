@@ -21,13 +21,6 @@ namespace {
         }
     }
 
-    NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec) {
-        NProtoBuf::Timestamp timestamp;
-        timestamp.set_seconds((i64)(sec));
-        timestamp.set_nanos(0);
-        return timestamp;
-    }
-
     TImportInfo::EState GetMinState(TImportInfo::TPtr importInfo) {
         TImportInfo::EState state = TImportInfo::EState::Invalid;
 
@@ -140,7 +133,8 @@ void TSchemeShard::PersistCreateImport(NIceDb::TNiceDb& db, const TImportInfo::T
         db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
             NIceDb::TUpdate<Schema::ImportItems::DstPathName>(item.DstPathName),
             NIceDb::TUpdate<Schema::ImportItems::State>(static_cast<ui8>(item.State)),
-            NIceDb::TUpdate<Schema::ImportItems::SrcPrefix>(item.SrcPrefix)
+            NIceDb::TUpdate<Schema::ImportItems::SrcPrefix>(item.SrcPrefix),
+            NIceDb::TUpdate<Schema::ImportItems::SrcPath>(item.SrcPath)
         );
     }
 }
@@ -153,7 +147,8 @@ void TSchemeShard::PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const T
         db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
             NIceDb::TUpdate<Schema::ImportItems::DstPathName>(item.DstPathName),
             NIceDb::TUpdate<Schema::ImportItems::State>(static_cast<ui8>(item.State)),
-            NIceDb::TUpdate<Schema::ImportItems::SrcPrefix>(item.SrcPrefix)
+            NIceDb::TUpdate<Schema::ImportItems::SrcPrefix>(item.SrcPrefix),
+            NIceDb::TUpdate<Schema::ImportItems::SrcPath>(item.SrcPath)
         );
         if (item.ExportItemIV) {
             db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(

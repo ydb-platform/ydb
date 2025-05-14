@@ -92,7 +92,7 @@ public:
 
     static TWritePortionInfoWithBlobsConstructor BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
         const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks, const TInternalPathId granule, const ui64 schemaVersion,
-        const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators);
+        const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators, const EPortionType type);
 
     static TWritePortionInfoWithBlobsConstructor BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
         const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks, TPortionAccessorConstructor&& constructor,

@@ -1923,6 +1923,8 @@ message TColumnShardConfig {
     optional uint64 MemoryLimitMergeOnCompactionRawData = 38 [default = 512000000];
     optional bool AlterObjectEnabled = 39 [default = false];
     optional EJsonDoubleOutOfRangeHandlingPolicy DoubleOutOfRangeHandling = 40 [default = REJECT];
+    optional bool PortionMetaV0Usage = 41 [default = true];
+    optional uint32 PeriodicWakeupActivationPeriodMs = 42 [default = 60000];
 }
 
 message TSchemeShardConfig {
@@ -2365,6 +2367,7 @@ message TYdbVersion {
     optional uint32 Year = 1;
     optional uint32 Major = 2;
     optional uint32 Minor = 3;
+    optional uint32 Patch = 5;
     optional uint32 Hotfix = 4;
 }
 

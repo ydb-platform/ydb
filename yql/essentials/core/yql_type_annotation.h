@@ -27,9 +27,12 @@
 #include <util/generic/vector.h>
 #include <util/digest/city.h>
 
+#include <functional>
 #include <vector>
 
 namespace NYql {
+
+using TTypeAnnCallableFactory = std::function<TAutoPtr<IGraphTransformer>()>;
 
 class IUrlLoader : public TThrRefBase {
 public:
@@ -449,6 +452,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 TimeOrderRecoverRowLimit = 1'000'000;
     // compatibility with v0 or raw s-expression code
     bool OrderedColumns = false;
+    bool DeriveColumnOrder = false;
     TColumnOrderStorage::TPtr ColumnOrderStorage = new TColumnOrderStorage;
     THashSet<TString> OptimizerFlags;
     THashSet<TString> PeepholeFlags;
@@ -466,6 +470,9 @@ struct TTypeAnnotationContext: public TThrRefBase {
     std::optional<bool> InitializeResult;
     EHiddenMode HiddenMode = EHiddenMode::Disable;
     EEngineType EngineType = EEngineType::Default;
+
+    // temporary flag to skip applying ExpandPg rules
+    bool IgnoreExpandPg = false;
 
     template <typename T>
     T GetRandom() const noexcept;

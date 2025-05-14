@@ -426,14 +426,7 @@ TString TDistributedTransaction::GetKey() const
 
 void TDistributedTransaction::BindMsgToPipe(ui64 tabletId, const TEvTxProcessing::TEvReadSet& event)
 {
-    auto copy = std::make_unique<TEvTxProcessing::TEvReadSet>(event.Record.GetStep(),
-                                                              event.Record.GetTxId(),
-                                                              event.Record.GetTabletSource(),
-                                                              event.Record.GetTabletDest(),
-                                                              event.Record.GetTabletProducer(),
-                                                              event.Record.GetReadSet(),
-                                                              event.Record.GetSeqno());
-    OutputMsgs[tabletId].push_back(std::move(copy));
+    OutputMsgs[tabletId].push_back(event.Record);
 }
 
 void TDistributedTransaction::UnbindMsgsFromPipe(ui64 tabletId)
@@ -441,13 +434,13 @@ void TDistributedTransaction::UnbindMsgsFromPipe(ui64 tabletId)
     OutputMsgs.erase(tabletId);
 }
 
-auto TDistributedTransaction::GetBindedMsgs(ui64 tabletId) -> const TVector<TEvReadSetPtr>&
+const TVector<NKikimrTx::TEvReadSet>& TDistributedTransaction::GetBindedMsgs(ui64 tabletId)
 {
     if (auto p = OutputMsgs.find(tabletId); p != OutputMsgs.end()) {
         return p->second;
     }
 
-    static TVector<TEvReadSetPtr> empty;
+    static TVector<NKikimrTx::TEvReadSet> empty;
 
     return empty;
 }

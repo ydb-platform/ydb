@@ -2955,13 +2955,8 @@ void TPersQueue::RestartPipe(ui64 tabletId, const TActorContext& ctx)
         }
 
         for (const auto& message : tx->GetBindedMsgs(tabletId)) {
-            auto event = std::make_unique<TEvTxProcessing::TEvReadSet>(message->Record.GetStep(),
-                                                                       message->Record.GetTxId(),
-                                                                       message->Record.GetTabletSource(),
-                                                                       message->Record.GetTabletDest(),
-                                                                       message->Record.GetTabletProducer(),
-                                                                       message->Record.GetReadSet(),
-                                                                       message->Record.GetSeqno());
+            auto event = std::make_unique<TEvTxProcessing::TEvReadSet>();
+            event->Record = message;
             PipeClientCache->Send(ctx, tabletId, event.release());
         }
     }

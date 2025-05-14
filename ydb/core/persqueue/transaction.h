@@ -97,13 +97,11 @@ struct TDistributedTransaction {
 
     TString LogPrefix() const;
 
-    using TEvReadSetPtr = std::unique_ptr<TEvTxProcessing::TEvReadSet>;
-
-    THashMap<ui64, TVector<TEvReadSetPtr>> OutputMsgs;
+    THashMap<ui64, TVector<NKikimrTx::TEvReadSet>> OutputMsgs;
 
     void BindMsgToPipe(ui64 tabletId, const TEvTxProcessing::TEvReadSet& event);
     void UnbindMsgsFromPipe(ui64 tabletId);
-    const TVector<TEvReadSetPtr>& GetBindedMsgs(ui64 tabletId);
+    const TVector<NKikimrTx::TEvReadSet>& GetBindedMsgs(ui64 tabletId);
 
     bool HasWriteOperations = false;
     size_t PredicateAcksCount = 0;

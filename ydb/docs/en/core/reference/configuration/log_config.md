@@ -30,8 +30,8 @@ When both `sys_log` and `uaclient_config` are enabled simultaneously, logs will 
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `default_level` | uint32 | 5 (NOTICE) | Default logging level for all components. |
-| `default_sampling_level` | uint32 | 7 (DEBUG) | Default sampling level for all components. |
+| `default_level` | uint32 | 5 (`NOTICE`) | Default logging level for all components. |
+| `default_sampling_level` | uint32 | 7 (`DEBUG`) | Default sampling level for all components. |
 | `default_sampling_rate` | uint32 | 0 | Default sampling rate for all components. If set to N (where N > 0), approximately 1 out of every N log messages with priority between `default_level` and `default_sampling_level` will be logged. For example, to log every 10th message, set to 10. A value of 0 means that no messages in this range will be logged (they are all dropped). |
 | `sys_log` | bool | false | Enable system logging via syslog. |
 | `sys_log_to_stderr` | bool | false | Copy logs to stderr in addition to system log. |
@@ -79,15 +79,15 @@ The `uaclient_config` field configures integration with [Unified Agent](https://
 
 | Level | Numeric value | Description |
 | --- | --- | --- |
-| EMERG | 0 | System outage (for example, cluster failure) is possible. |
-| ALERT | 1 | System degradation is possible, system components may fail. |
-| CRIT | 2 | A critical state. |
-| ERROR | 3 | A non-critical error. |
-| WARN | 4 | A warning, it should be responded to and fixed unless it's temporary. |
-| NOTICE | 5 | An event essential for the system or the user has occurred. |
-| INFO | 6 | Debugging information for collecting statistics. |
-| DEBUG | 7 | Debugging information for developers. |
-| TRACE | 8 | Detailed debugging information. |
+| `EMERG` | 0 | System outage (for example, cluster failure) is possible. |
+| `ALERT` | 1 | System degradation is possible, system components may fail. |
+| `CRIT` | 2 | A critical state. |
+| `ERROR` | 3 | A non-critical error. |
+| `WARN` | 4 | A warning, it should be responded to and fixed unless it's temporary. |
+| `NOTICE` | 5 | An event essential for the system or the user has occurred. |
+| `INFO` | 6 | Debugging information for collecting statistics. |
+| `DEBUG` | 7 | Debugging information for developers. |
+| `TRACE` | 8 | Detailed debugging information. |
 
 ## Examples
 
@@ -99,7 +99,7 @@ log_config:
   format: "full"
 ```
 
-This configuration outputs logs to stderr with logging level NOTICE and above.
+This configuration outputs logs to stderr with logging level `NOTICE` and above.
 
 ### File Output Configuration
 
@@ -110,7 +110,7 @@ log_config:
   backend_file_name: "/var/log/ydb/ydb.log"
 ```
 
-This configuration sends logs to a file while maintaining the default logging level of NOTICE.
+This configuration sends logs to a file while maintaining the default logging level of `NOTICE`.
 
 ### Syslog Output Configuration
 
@@ -150,7 +150,7 @@ log_config:
       sampling_rate: 100  # Log every 100th message between NOTICE and TRACE
 ```
 
-This configuration sets up sampling for logs. With default settings, every 10th message with priority between NOTICE and DEBUG will be logged. For the BLOBSTORAGE component, every 100th message with priority between NOTICE and TRACE will be logged.
+This configuration sets up sampling for logs. With default settings, every 10th message with priority between `NOTICE` and `DEBUG` will be logged. For the BLOBSTORAGE component, every 100th message with priority between `NOTICE` and `TRACE` will be logged.
 
 ### JSON Format Configuration
 

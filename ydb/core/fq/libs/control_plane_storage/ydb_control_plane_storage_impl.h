@@ -714,18 +714,20 @@ protected:
         requestCounters.Common->LatencyMs->Collect(delta.MilliSeconds());
     }
 
+    // Beware! Borrows ownership of ev content, nullify ev
     template <class ResponseEvent, class Result, class RequestEventPtr>
     TFuture<bool> SendResponse(const TString& name,
         NActors::TActorSystem* actorSystem,
         const TAsyncStatus& status,
         TActorId self,
-        const RequestEventPtr& ev,
+        RequestEventPtr&& ev,
         const TInstant& startTime,
         const TRequestCounters& requestCounters,
         const std::function<typename TPrepareResponseResultType<ResponseEvent, Result>::Type()>& prepare,
         TDebugInfoPtr debugInfo)
     {
-        return status.Apply([=, requestCounters=requestCounters](const auto& future) mutable {
+        using TRequestEventSharedPtr = std::shared_ptr<typename std::decay_t<RequestEventPtr>::TValueType>; // TEv*::TPtr is TAutoPtr
+        return status.Apply([prepare, debugInfo, startTime, actorSystem, self, name, ev=TRequestEventSharedPtr(ev.Release()), requestCounters=requestCounters](const auto& future) mutable {
             NYql::TIssues internalIssues;
             NYql::TIssues issues;
             Result result;

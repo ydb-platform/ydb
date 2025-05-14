@@ -1200,7 +1200,6 @@ class StaticConfigGenerator(object):
             if not type_defined:
                 logger.warning(f"pdisk_filter.property.type missing for pool {pool.Kind}. This pool name is unknown, no default has been generated, specify type by hand")
 
-
     def __generate_domains_from_proto(self, domains_config, domains_config_dict):
         domains = domains_config.Domain
         if len(domains) > 1:

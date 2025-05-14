@@ -1975,7 +1975,6 @@ namespace NActors {
                 ctx.Send(GetForwardedEvent().Release());
             } else {
                 while (Context->Queue->Head()) {
-                    HasReply = false;
                     ctx.Send(GetForwardedEvent().Release());
                     int count = 100;
                     while (!HasReply && count > 0) {
@@ -1983,7 +1982,7 @@ namespace NActors {
                             Runtime->DispatchEvents(DelegateeOptions);
                         } catch (TEmptyEventQueueException&) {
                             count--;
-                            Cerr << "No reply" << Endl;
+                            Cerr << "No reply RequestType# " << RequestType << Endl;
                         }
                     }
 
@@ -1994,11 +1993,15 @@ namespace NActors {
 
         TAutoPtr<IEventHandle> GetForwardedEvent() {
             IEventHandle* ev = Context->Queue->Head();
-            ReplyChecker->OnRequest(ev);
+            RequestType = ev->GetTypeRewrite();
+            HasReply = !ReplyChecker->OnRequest(ev);
             TAutoPtr<IEventHandle> forwardedEv = ev->HasEvent()
                     ? new IEventHandle(Delegatee, ReplyId, ev->ReleaseBase().Release(), ev->Flags, ev->Cookie)
                     : new IEventHandle(ev->GetTypeRewrite(), ev->Flags, Delegatee, ReplyId, ev->ReleaseChainBuffer(), ev->Cookie);
 
+            if (HasReply) {
+                delete Context->Queue->Pop();
+            }
             return forwardedEv;
         }
     private:
@@ -2011,6 +2014,7 @@ namespace NActors {
         TDispatchOptions DelegateeOptions;
         TTestActorRuntimeBase* Runtime;
         THolder<IReplyChecker> ReplyChecker;
+        ui32 RequestType;
     };
 
     void TStrandingActorDecorator::TReplyActor::StateFunc(STFUNC_SIG) {

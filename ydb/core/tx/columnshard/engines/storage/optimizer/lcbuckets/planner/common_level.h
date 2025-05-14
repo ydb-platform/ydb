@@ -17,7 +17,7 @@ private:
     std::shared_ptr<TSimplePortionsGroupInfo> SummaryPortionsInfo;
 
     ui64 GetLevelBlobBytesLimit() const {
-        return std::max(SizeLimitGuarantee, SummaryPortionsInfo->GetBlobBytes() * BytesLimitFraction);
+        return std::max<ui64>(SizeLimitGuarantee, SummaryPortionsInfo->GetBlobBytes() * BytesLimitFraction);
     }
 
     virtual NJson::TJsonValue DoSerializeToJson() const override {

@@ -1,5 +1,50 @@
 # Changelog
 
+## [8.25.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v8.24.1...v8.25.0) (2025-04-25)
+
+
+### Features
+
+* add endpoint to connect to db code snippets ([#2198](https://github.com/ydb-platform/ydb-embedded-ui/issues/2198)) ([6e45802](https://github.com/ydb-platform/ydb-embedded-ui/commit/6e45802dc05baf3fe9ff5cef26e396964b8d827a))
+
+
+### Bug Fixes
+
+* find out performance issue with big tables of nodes ([#2206](https://github.com/ydb-platform/ydb-embedded-ui/issues/2206)) ([5c22404](https://github.com/ydb-platform/ydb-embedded-ui/commit/5c2240477ef132c9b58ca96b2ae1549f6e410e3b))
+
+## [8.24.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v8.24.0...v8.24.1) (2025-04-23)
+
+
+### Bug Fixes
+
+* fix top shards path column and better overriding for advisor ([#2197](https://github.com/ydb-platform/ydb-embedded-ui/issues/2197)) ([57df88b](https://github.com/ydb-platform/ydb-embedded-ui/commit/57df88b27fc1e3315f1a901dd4ec7eaecbaf6fae))
+
+## [8.24.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v8.23.0...v8.24.0) (2025-04-22)
+
+
+### Features
+
+* add possibility to pass external columns ([#2187](https://github.com/ydb-platform/ydb-embedded-ui/issues/2187)) ([65b2e72](https://github.com/ydb-platform/ydb-embedded-ui/commit/65b2e72bd0516609257120b1b44d38f4336e368e))
+
+## [8.23.0](https://github.com/ydb-platform/ydb-embedded-ui/compare/v8.22.1...v8.23.0) (2025-04-22)
+
+
+### Features
+
+* enable basename for multi cluster version ([#2153](https://github.com/ydb-platform/ydb-embedded-ui/issues/2153)) ([91963b9](https://github.com/ydb-platform/ydb-embedded-ui/commit/91963b9e256be20682fbb0cbe9ae26b8d8f567a9))
+
+
+### Bug Fixes
+
+* display query settings banner for non-default api call or txmode ([#2152](https://github.com/ydb-platform/ydb-embedded-ui/issues/2152)) ([395efc7](https://github.com/ydb-platform/ydb-embedded-ui/commit/395efc718645762bf4b0ddf2b419035790bb94a1))
+* fix wrong pdisk id order ([#2170](https://github.com/ydb-platform/ydb-embedded-ui/issues/2170)) ([c840b21](https://github.com/ydb-platform/ydb-embedded-ui/commit/c840b21d3d95441202ac7a97472fc556c7b50d04))
+* normalizePathSlashes should normalize multiple leading slashes ([#2186](https://github.com/ydb-platform/ydb-embedded-ui/issues/2186)) ([3e09755](https://github.com/ydb-platform/ydb-embedded-ui/commit/3e097553a949e85c3e779594207dc45d4876e465))
+* table in queries sorts by string values after backend sort ([#2183](https://github.com/ydb-platform/ydb-embedded-ui/issues/2183)) ([fc66fbe](https://github.com/ydb-platform/ydb-embedded-ui/commit/fc66fbef10e105aa22c7cce235996e0d8f6f70b2))
+* **TableGroup:** prevent content border overflow ([#2166](https://github.com/ydb-platform/ydb-embedded-ui/issues/2166)) ([7cefb6d](https://github.com/ydb-platform/ydb-embedded-ui/commit/7cefb6d025c84cc3669cfa7704f7aaa199f6c077))
+* **Tenants:** show create DB button only when table is loaded ([#2175](https://github.com/ydb-platform/ydb-embedded-ui/issues/2175)) ([b82e029](https://github.com/ydb-platform/ydb-embedded-ui/commit/b82e029c9040fc2ead47353e3992ce2d35179970))
+* update PDisk errors colors ([#2171](https://github.com/ydb-platform/ydb-embedded-ui/issues/2171)) ([2bb7b2d](https://github.com/ydb-platform/ydb-embedded-ui/commit/2bb7b2dac480b080c4e730ebde6d50b0c930b5f0))
+* **Versions:** should calculate minor version to get color ([#2180](https://github.com/ydb-platform/ydb-embedded-ui/issues/2180)) ([f77f933](https://github.com/ydb-platform/ydb-embedded-ui/commit/f77f933e3a47c772e5795c6c8546fb2ae4e18818))
+
 ## [8.22.1](https://github.com/ydb-platform/ydb-embedded-ui/compare/v8.22.0...v8.22.1) (2025-04-15)
 
 

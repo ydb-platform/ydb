@@ -9,10 +9,12 @@
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
+#include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 
 #include <library/cpp/json/json_writer.h>
 
@@ -49,15 +51,42 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         return scheme;
     }
 
+    bool BuildTopicScheme(const NKikimrScheme::TEvDescribeSchemeResult& describeResult, TString& error) {
+        const auto& pathDesc = describeResult.GetPathDescription();
+        if (!pathDesc.HasPersQueueGroup()) {
+            error = "Path description does not contain a description of PersQueueGroup";
+            return false;
+        }
+        Ydb::Topic::DescribeTopicResult descTopicResult;
+        Ydb::StatusIds::StatusCode status;
+        if (!FillTopicDescription(descTopicResult, pathDesc.GetPersQueueGroup(), pathDesc.GetSelf(), Nothing(), status, error)) {
+            return false;
+        }
+
+        Ydb::Topic::CreateTopicRequest request;
+        NYdb::NTopic::TTopicDescription(std::move(descTopicResult)).SerializeTo(request);
+
+        return google::protobuf::TextFormat::PrintToString(request, &Scheme);
+    }
+
     bool BuildSchemeToUpload(const NKikimrScheme::TEvDescribeSchemeResult& describeResult, TString& error) {
-        const auto pathType = describeResult.GetPathDescription().GetSelf().GetPathType();
-        switch (pathType) {
+        static THashMap<NKikimrSchemeOp::EPathType, TString> TypeToFileName = {
+            {NKikimrSchemeOp::EPathType::EPathTypeView, "create_view.sql"},
+            {NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup, "create_topic.pb"},
+        };
+
+        PathType = describeResult.GetPathDescription().GetSelf().GetPathType();
+        FileName = TypeToFileName[PathType];
+        switch (PathType) {
             case NKikimrSchemeOp::EPathTypeView: {
                 Scheme = BuildViewScheme(describeResult.GetPath(), describeResult.GetPathDescription().GetViewDescription(), DatabaseRoot, error);
                 return !Scheme.empty();
             }
+            case NKikimrSchemeOp::EPathTypePersQueueGroup: {
+                return BuildTopicScheme(describeResult, error);
+            }
             default:
-                error = TStringBuilder() << "unsupported path type: " << pathType;
+                error = TStringBuilder() << "unsupported path type: " << PathType;
                 return false;
         }
     }
@@ -101,7 +130,7 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         }
 
         auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(Sprintf("%s/create_view.sql", DestinationPrefix->c_str()));
+            .WithKey(Sprintf("%s/%s", DestinationPrefix->c_str(), FileName.c_str()));
 
         Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(Scheme)));
         Become(&TThis::StateUploadScheme);
@@ -322,6 +351,8 @@ private:
     ui64 ExportId;
     ui32 ItemIdx;
     TPathId SourcePathId;
+    NKikimrSchemeOp::EPathType PathType;
+    TString FileName;
 
     NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
     TMaybe<TString> DestinationPrefix;

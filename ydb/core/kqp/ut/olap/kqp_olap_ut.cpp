@@ -232,12 +232,10 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             //1. QueryService
             //1.1 Check that ALTER OBJECT is not working for column tables
             auto client = kikimr.GetQueryClient();
-            const auto result = client
-                                    .ExecuteQuery(
-                                        "ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, "
-                                        "`SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`, `COMPRESSION.LEVEL`=`4`)",
-                                        NYdb::NQuery::TTxControl::NoTx())
-                                    .ExtractValueSync();
+            const auto result = client.ExecuteQuery(
+                "ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=message, `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`, `COMPRESSION.LEVEL`=`4`)",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+            ).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Error: ALTER OBJECT is disabled for column tables", result.GetIssues().ToString());
 

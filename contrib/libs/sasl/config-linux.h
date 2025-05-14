@@ -71,7 +71,7 @@
 /* Enable 'alwaystrue' password verifier? */
 /* #undef HAVE_ALWAYSTRUE */
 
-/* Define to 1 if you have the `asprintf' function. */
+/* Define to 1 if you have the 'asprintf' function. */
 #define HAVE_ASPRINTF 1
 
 /* Include support for Courier's authdaemond? */
@@ -83,17 +83,17 @@
 /* Define to 1 if you have the <des.h> header file. */
 /* #undef HAVE_DES_H */
 
-/* Define to 1 if you have the <dirent.h> header file, and it defines `DIR'.
+/* Define to 1 if you have the <dirent.h> header file, and it defines 'DIR'.
    */
 #define HAVE_DIRENT_H 1
 
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #define HAVE_DLFCN_H 1
 
-/* Define to 1 if you have the `dns_lookup' function. */
+/* Define to 1 if you have the 'dns_lookup' function. */
 /* #undef HAVE_DNS_LOOKUP */
 
-/* Define to 1 if you have the `dn_expand' function. */
+/* Define to 1 if you have the 'dn_expand' function. */
 #define HAVE_DN_EXPAND 1
 
 /* Define to 1 if you have the <fcntl.h> header file. */
@@ -102,28 +102,28 @@
 /* Do we have a getaddrinfo? */
 #define HAVE_GETADDRINFO /**/
 
-/* Define to 1 if you have the `getdomainname' function. */
+/* Define to 1 if you have the 'getdomainname' function. */
 #define HAVE_GETDOMAINNAME 1
 
-/* Define to 1 if you have the `gethostname' function. */
+/* Define to 1 if you have the 'gethostname' function. */
 #define HAVE_GETHOSTNAME 1
 
 /* Do we have a getnameinfo() function? */
 #define HAVE_GETNAMEINFO /**/
 
-/* Define to 1 if you have the `getpassphrase' function. */
+/* Define to 1 if you have the 'getpassphrase' function. */
 /* #undef HAVE_GETPASSPHRASE */
 
-/* Define to 1 if you have the `getpwnam' function. */
+/* Define to 1 if you have the 'getpwnam' function. */
 #define HAVE_GETPWNAM 1
 
-/* Define to 1 if you have the `getspnam' function. */
+/* Define to 1 if you have the 'getspnam' function. */
 #define HAVE_GETSPNAM 1
 
 /* do we have getsubopt()? */
 #define HAVE_GETSUBOPT /**/
 
-/* Define to 1 if you have the `gettimeofday' function. */
+/* Define to 1 if you have the 'gettimeofday' function. */
 #define HAVE_GETTIMEOFDAY 1
 
 /* Include GSSAPI/Kerberos 5 Support */
@@ -154,20 +154,20 @@
 /* Define if your GSSAPI implementation defines GSS_C_SEC_CONTEXT_SASL_SSF */
 /* #undef HAVE_GSS_C_SEC_CONTEXT_SASL_SSF */
 
-/* Define to 1 if you have the `gss_decapsulate_token' function. */
+/* Define to 1 if you have the 'gss_decapsulate_token' function. */
 /* #undef HAVE_GSS_DECAPSULATE_TOKEN */
 
-/* Define to 1 if you have the `gss_encapsulate_token' function. */
+/* Define to 1 if you have the 'gss_encapsulate_token' function. */
 /* #undef HAVE_GSS_ENCAPSULATE_TOKEN */
 
-/* Define to 1 if you have the `gss_get_name_attribute' function. */
+/* Define to 1 if you have the 'gss_get_name_attribute' function. */
 /* #undef HAVE_GSS_GET_NAME_ATTRIBUTE */
 
 /* Define if your GSSAPI implementation defines gss_inquire_sec_context_by_oid
    */
 /* #undef HAVE_GSS_INQUIRE_SEC_CONTEXT_BY_OID */
 
-/* Define to 1 if you have the `gss_oid_equal' function. */
+/* Define to 1 if you have the 'gss_oid_equal' function. */
 /* #undef HAVE_GSS_OID_EQUAL */
 
 /* Define if your GSSAPI implementation supports SPNEGO */
@@ -176,13 +176,13 @@
 /* Include HTTP form Support */
 /* #undef HAVE_HTTPFORM */
 
-/* Define to 1 if you have the `inet_aton' function. */
+/* Define to 1 if you have the 'inet_aton' function. */
 #define HAVE_INET_ATON 1
 
 /* Define to 1 if you have the <inttypes.h> header file. */
 #define HAVE_INTTYPES_H 1
 
-/* Define to 1 if you have the `jrand48' function. */
+/* Define to 1 if you have the 'jrand48' function. */
 #define HAVE_JRAND48 1
 
 /* Do we have Kerberos 4 Support? */
@@ -191,7 +191,7 @@
 /* Define to 1 if you have the <krb5.h> header file. */
 /* #undef HAVE_KRB5_H */
 
-/* Define to 1 if you have the `krb_get_err_text' function. */
+/* Define to 1 if you have the 'krb_get_err_text' function. */
 /* #undef HAVE_KRB_GET_ERR_TEXT */
 
 /* Define to 1 if you have the <lber.h> header file. */
@@ -203,7 +203,7 @@
 /* Define to 1 if you have the <ldap.h> header file. */
 /* #undef HAVE_LDAP_H */
 
-/* Define to 1 if you have the `resolv' library (-lresolv). */
+/* Define to 1 if you have the 'resolv' library (-lresolv). */
 #define HAVE_LIBRESOLV 1
 
 /* Define to 1 if you have the <limits.h> header file. */
@@ -212,22 +212,22 @@
 /* Define to 1 if you have the <malloc.h> header file. */
 #define HAVE_MALLOC_H 1
 
-/* Define to 1 if you have the `memcpy' function. */
+/* Define to 1 if you have the 'memcpy' function. */
 #define HAVE_MEMCPY 1
 
-/* Define to 1 if you have the `memmem' function. */
+/* Define to 1 if you have the 'memmem' function. */
 #define HAVE_MEMMEM 1
 
 /* Define to 1 if you have the <minix/config.h> header file. */
 /* #undef HAVE_MINIX_CONFIG_H */
 
-/* Define to 1 if you have the `mkdir' function. */
+/* Define to 1 if you have the 'mkdir' function. */
 #define HAVE_MKDIR 1
 
 /* Do we have mysql support? */
 /* #undef HAVE_MYSQL */
 
-/* Define to 1 if you have the <ndir.h> header file, and it defines `DIR'. */
+/* Define to 1 if you have the <ndir.h> header file, and it defines 'DIR'. */
 /* #undef HAVE_NDIR_H */
 
 /* Do we have OpenSSL? */
@@ -251,7 +251,7 @@
 /* Include support for saslauthd? */
 #define HAVE_SASLAUTHD /**/
 
-/* Define to 1 if you have the `select' function. */
+/* Define to 1 if you have the 'select' function. */
 #define HAVE_SELECT 1
 
 /* Do we have SHA512? */
@@ -266,7 +266,7 @@
 /* Does sockaddr have an sa_len? */
 /* #undef HAVE_SOCKADDR_SA_LEN */
 
-/* Define to 1 if you have the `socket' function. */
+/* Define to 1 if you have the 'socket' function. */
 #define HAVE_SOCKET 1
 
 /* Do we have a socklen_t? */
@@ -293,13 +293,13 @@
 /* Define to 1 if you have the <stdlib.h> header file. */
 #define HAVE_STDLIB_H 1
 
-/* Define to 1 if you have the `strchr' function. */
+/* Define to 1 if you have the 'strchr' function. */
 #define HAVE_STRCHR 1
 
-/* Define to 1 if you have the `strdup' function. */
+/* Define to 1 if you have the 'strdup' function. */
 #define HAVE_STRDUP 1
 
-/* Define to 1 if you have the `strerror' function. */
+/* Define to 1 if you have the 'strerror' function. */
 #define HAVE_STRERROR 1
 
 /* Define to 1 if you have the <strings.h> header file. */
@@ -308,19 +308,19 @@
 /* Define to 1 if you have the <string.h> header file. */
 #define HAVE_STRING_H 1
 
-/* Define to 1 if you have the `strlcat' function. */
-/* #undef HAVE_STRLCAT */
+/* Define to 1 if you have the 'strlcat' function. */
+#define HAVE_STRLCAT 1
 
-/* Define to 1 if you have the `strlcpy' function. */
-/* #undef HAVE_STRLCPY */
+/* Define to 1 if you have the 'strlcpy' function. */
+#define HAVE_STRLCPY 1
 
-/* Define to 1 if you have the `strspn' function. */
+/* Define to 1 if you have the 'strspn' function. */
 #define HAVE_STRSPN 1
 
-/* Define to 1 if you have the `strstr' function. */
+/* Define to 1 if you have the 'strstr' function. */
 #define HAVE_STRSTR 1
 
-/* Define to 1 if you have the `strtol' function. */
+/* Define to 1 if you have the 'strtol' function. */
 #define HAVE_STRTOL 1
 
 /* Do we have struct sockaddr_stroage? */
@@ -329,20 +329,20 @@
 /* Define to 1 if you have the <sysexits.h> header file. */
 #define HAVE_SYSEXITS_H 1
 
-/* Define to 1 if you have the `syslog' function. */
+/* Define to 1 if you have the 'syslog' function. */
 #define HAVE_SYSLOG 1
 
 /* Define to 1 if you have the <syslog.h> header file. */
 #define HAVE_SYSLOG_H 1
 
-/* Define to 1 if you have the <sys/dir.h> header file, and it defines `DIR'.
+/* Define to 1 if you have the <sys/dir.h> header file, and it defines 'DIR'.
    */
 /* #undef HAVE_SYS_DIR_H */
 
 /* Define to 1 if you have the <sys/file.h> header file. */
 #define HAVE_SYS_FILE_H 1
 
-/* Define to 1 if you have the <sys/ndir.h> header file, and it defines `DIR'.
+/* Define to 1 if you have the <sys/ndir.h> header file, and it defines 'DIR'.
    */
 /* #undef HAVE_SYS_NDIR_H */
 
@@ -445,7 +445,7 @@
 /* Use NDBM for SASLdb */
 /* #undef SASL_NDBM */
 
-/* The size of `long', as computed by sizeof. */
+/* The size of 'long', as computed by sizeof. */
 #define SIZEOF_LONG 8
 
 /* Link ANONYMOUS Statically */
@@ -493,7 +493,7 @@
 /* Link SRP Statically */
 /* #undef STATIC_SRP */
 
-/* Define to 1 if all of the C90 standard headers exist (not just the ones
+/* Define to 1 if all of the C89 standard headers exist (not just the ones
    required in a freestanding environment). This macro is provided for
    backward compatibility; new code need not use it. */
 #define STDC_HEADERS 1
@@ -504,7 +504,7 @@
 /* use the doors IPC API for saslauthd? */
 /* #undef USE_DOORS */
 
-/* Enable extensions on AIX 3, Interix.  */
+/* Enable extensions on AIX, Interix, z/OS.  */
 #ifndef _ALL_SOURCE
 # define _ALL_SOURCE 1
 #endif
@@ -565,11 +565,15 @@
 #ifndef __STDC_WANT_IEC_60559_DFP_EXT__
 # define __STDC_WANT_IEC_60559_DFP_EXT__ 1
 #endif
+/* Enable extensions specified by C23 Annex F.  */
+#ifndef __STDC_WANT_IEC_60559_EXT__
+# define __STDC_WANT_IEC_60559_EXT__ 1
+#endif
 /* Enable extensions specified by ISO/IEC TS 18661-4:2015.  */
 #ifndef __STDC_WANT_IEC_60559_FUNCS_EXT__
 # define __STDC_WANT_IEC_60559_FUNCS_EXT__ 1
 #endif
-/* Enable extensions specified by ISO/IEC TS 18661-3:2015.  */
+/* Enable extensions specified by C23 Annex H and ISO/IEC TS 18661-3:2015.  */
 #ifndef __STDC_WANT_IEC_60559_TYPES_EXT__
 # define __STDC_WANT_IEC_60559_TYPES_EXT__ 1
 #endif
@@ -607,16 +611,16 @@
 /* Use OpenSSL DES Implementation */
 #define WITH_SSL_DES /**/
 
-/* Define to empty if `const' does not conform to ANSI C. */
+/* Define to empty if 'const' does not conform to ANSI C. */
 /* #undef const */
 
-/* Define to `__inline__' or `__inline' if that's what the C compiler
+/* Define to '__inline__' or '__inline' if that's what the C compiler
    calls it, or to nothing if 'inline' is not supported under any name.  */
 #ifndef __cplusplus
 /* #undef inline */
 #endif
 
-/* Define to `int' if <sys/types.h> does not define. */
+/* Define to 'int' if <sys/types.h> does not define. */
 /* #undef mode_t */
 
 /* Define as a signed integer type capable of holding a process identifier. */

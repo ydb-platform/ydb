@@ -1,87 +1,17 @@
-{% if select_command == "SELECT STREAM" %}
-
-## GROUP BY ... HOP
-
-Group the table by the values of the specified columns or expressions and the time window.
-
-If GROUP BY is present in the query, then when selecting columns (between `SELECT STREAM ... FROM`) you can **only** use the following constructs:
-
-1. Columns by which grouping is performed (they are included in the `GROUP BY` argument).
-2. Aggregate functions (see the next section). Columns by which **no** grouping is made can only be included as arguments for an aggregate function.
-3. Functions that output the start and end time of the current window (`HOP_START` and `HOP_END`)
-4. Arbitrary calculations combining paragraphs 1-3.
-
-You can group by the result of calculating an arbitrary expression from the source columns. In this case, to access the result of this expression, we recommend you to assign a name to it using `AS`, see the second example.
-
-Aggregate functions automatically skip `NULL` in their arguments.
-
-Among the columns by which grouping is performed, make sure to use the `HOP` construct to define the time window for grouping.
-
-```yql
-HOP(time_extractor, hop, interval, delay)
-```
-
-The implemented version of the time window is called the **hopping window**. This is a window that moves forward in discrete intervals (the `hop` parameter). The total duration of the window is set by the `interval` parameter. To determine the time of each input event, the `time_extractor` parameter is used. This expression depends only on the input values of the stream's columns and must have the `Timestamp` type. It indicates where exactly to get the time value from input events.
-
-In each stream defined by the values of all the grouping columns, the window moves forward independently of other streams. Advancement of the window is totally dependent on the latest event of the stream. Since records in streams get somewhat mixed in time, the `delay` parameter has been added so you can delay the closing of the window by a specified period. Events arriving before the current window are ignored.
-
-The `interval` and `delay` parameters must be multiples of the `hop` parameter. Non-multiple intervals will be rounded down.
-
-To set `hop`, `interval` and `delay`, use a string expression compliant with [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601). This is the format that is used to construct the built-in type `Interval` [from a string](../builtins/basic.md#data-type-literals).
-
-Functions with omitted `HOP_START` and `HOP_END` parameters, return a value of the `Timestamp` type and correspond to the start and end of the current window.
-
-The **tumbling window** known in other systems is a special case of a **hopping window** when `interval` == `hop`.
-
-## Examples
-
-```yql
-SELECT STREAM
-    key,
-    COUNT(*)
-FROM my_stream
-GROUP BY
-    HOP(CAST(subkey AS Timestamp), "PT10S", "PT1M", "PT30S"),
-    key;
--- hop = 10 seconds
--- interval = 1 minute
--- delay = 30 seconds
-```
-
-```yql
-SELECT STREAM
-    double_key,
-    HOP_END() as time,
-    COUNT(*) as count
-FROM my_stream
-GROUP BY
-    key + key AS double_key,
-    HOP(ts, "PT1M", "PT1M", "PT1M");
-```
-
-
-
-## HAVING {#having}
-
-Filtering a `SELECT STREAM` based on the calculation results of [aggregate functions](../builtins/aggregation.md). The syntax is similar to [WHERE](select_stream.md#where).
-
-### Examples
-
-```yql
-SELECT STREAM
-    key
-FROM my_table
-GROUP BY key, HOP(ts, "PT1M", "PT1M", "PT1M")
-HAVING COUNT(value) > 100;
-```
-
-
-
-{% else %}
+{% if select_command != "SELECT STREAM" %}
 
 ## GROUP BY
 
 Group the `SELECT` results by the values of the specified columns or expressions. `GROUP BY` is often combined with [aggregate functions](../builtins/aggregation.md) (`COUNT`, `MAX`, `MIN`, `SUM`, `AVG`) to perform calculations in each group.
+
+If `GROUP BY` is present in the query, then when selecting columns (between `SELECT ... FROM`), you can use the following constructs:
+
+1. Columns by which grouping is performed (included in the `GROUP BY` argument).
+2. Aggregate functions (see the next section). Columns that **are not** used for grouping can only be included as arguments for an aggregate function.
+3. Functions that return the start and end times of the current window (`HOP_START` and `HOP_END`).
+4. Arbitrary calculations combining items 1–3.
+
+You can group by the result of an arbitrary expression computed from the source columns. In this case, to access the result of this expression, we recommend assigning a name to it using `AS`. See the second [example](#examples).
 
 ### Syntax
 
@@ -112,7 +42,7 @@ Aggregate functions ignore `NULL` in their arguments, except for `COUNT`.
 
 YQL also provides aggregation factories implemented by the functions [`AGGREGATION_FACTORY`](../builtins/basic.md#aggregationfactory) and [`AGGREGATE_BY`](../builtins/aggregation.md#aggregateby).
 
-### Examples
+### Examples {#examples}
 
 ```yql
 SELECT key, COUNT(*) FROM my_table
@@ -295,8 +225,6 @@ GROUP BY
 ;
 ```
 
-
-
 {% endif %}
 
 ## DISTINCT {#distinct}
@@ -343,7 +271,72 @@ ORDER BY count DESC
 LIMIT 3;
 ```
 
+{% endif %}
 
+## GROUP BY ... HOP
+
+Group the table by the values of the specified columns or expressions and subsets by time (the time window).
+
+Among the columns used for grouping, make sure to use the `HOP` construct to define the time window for grouping.
+
+```yql
+HOP(time_extractor, hop, interval, delay)
+```
+
+The implemented version of the time window is called the **hopping window**. This is a window that moves forward in discrete intervals (the `hop` parameter). The total duration of the window is set by the `interval` parameter. To determine the time of each input event, the `time_extractor` parameter is used. This expression depends only on the input values of the columns and must have the `Timestamp` type. It specifies where to extract the time value from data.
+
+{% if select_command != "SELECT STREAM" %}
+The following happens in this case:
+
+1. The input table is partitioned by the grouping keys specified in `GROUP BY`, ignoring HOP. If `GROUP BY` includes nothing more than HOP, then the input table gets into one partition.
+2. Each partition is sorted in ascending order of the expression `time_extractor`.
+3. Each partition is split into subsets of rows (possibly intersecting), on which aggregate functions are calculated.
+{% endif %}
+
+In each partition defined by the values of all the grouping columns, the window moves forward independently of other streams. The advancement of the window depends entirely on the latest event in the partition.
+
+{% if select_command == "SELECT STREAM" %}
+Since records in streams can be somewhat out of order, the `delay` parameter allows you to delay the closing of the window by a specified period. Events arriving before the current window are ignored.
+{% endif %}
+
+The `interval` and `delay` parameters must be multiples of the `hop` parameter. Non-multiple intervals are prohibited in the current implementation.
+The `interval` and `hop` parameters must be positive.
+
+{% if select_command != "SELECT STREAM" %}
+The `delay` parameter is ignored in the current implementation because the data in one partition is already sorted.
+{% endif %}
+
+To set `hop`, `interval`, and `delay`, use a string expression compliant with [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601). This format is used to construct the built-in `Interval` type [from a string](../builtins/basic.md#data-type-literals).
+
+When selecting columns (between `SELECT ... FROM`) you can use the `HOP_START` and `HOP_END` functions (without parameters), which return a value of  `Timestamp` type, corresponding to the start and end of the current window.
+
+The **tumbling window**, known in other systems, is a special case of a **hopping window** where `interval` == `hop`.
+
+## Examples
+
+```yql
+SELECT
+    key,
+    COUNT(*)
+FROM my_table
+GROUP BY
+    HOP(CAST(subkey AS Timestamp), "PT10S", "PT1M", "PT30S"),
+    key;
+-- hop = 10 seconds
+-- interval = 1 minute
+-- delay = 30 seconds
+```
+
+```yql
+SELECT
+    double_key,
+    HOP_END() as time,
+    COUNT(*) as count
+FROM my_table
+GROUP BY
+    key + key AS double_key,
+    HOP(ts, "PT1M", "PT1M", "PT1M");
+```
 
 ## HAVING {#having}
 
@@ -358,9 +351,3 @@ FROM my_table
 GROUP BY key
 HAVING COUNT(value) > 100;
 ```
-
-
-
-{% endif %}
-
-

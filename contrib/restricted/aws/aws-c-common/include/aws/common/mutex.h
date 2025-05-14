@@ -8,7 +8,7 @@
 
 #include <aws/common/common.h>
 #ifdef _WIN32
-/* NOTE: Do not use this macro before including Windows.h */
+/* NOTE: Do not use this macro before including windows.h */
 #    define AWSMUTEX_TO_WINDOWS(pMutex) (PSRWLOCK) & (pMutex)->mutex_handle
 #else
 #    include <pthread.h>

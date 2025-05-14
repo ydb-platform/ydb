@@ -135,7 +135,7 @@ void aws_task_scheduler_schedule_now(struct aws_task_scheduler *scheduler, struc
         (void *)task,
         task->type_tag);
 
-    task->priority_queue_node.current_index = SIZE_MAX;
+    aws_priority_queue_node_init(&task->priority_queue_node);
     aws_linked_list_node_reset(&task->node);
     task->timestamp = 0;
 
@@ -161,7 +161,7 @@ void aws_task_scheduler_schedule_future(
 
     task->timestamp = time_to_run;
 
-    task->priority_queue_node.current_index = SIZE_MAX;
+    aws_priority_queue_node_init(&task->priority_queue_node);
     aws_linked_list_node_reset(&task->node);
     int err = aws_priority_queue_push_ref(&scheduler->timed_queue, &task, &task->priority_queue_node);
     if (AWS_UNLIKELY(err)) {

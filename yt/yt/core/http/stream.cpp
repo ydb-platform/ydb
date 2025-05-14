@@ -24,7 +24,7 @@ static constexpr auto& Logger = HttpLogger;
 
 namespace {
 
-using TFilteredHeaderMap = THashSet<TString, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer>;
+using TFilteredHeaderMap = THashSet<std::string, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer>;
 YT_DEFINE_GLOBAL(const TFilteredHeaderMap, FilteredHeaders, {
     "transfer-encoding",
     "content-length",
@@ -565,9 +565,9 @@ std::optional<TString> THttpInput::TryGetRedirectUrl()
 {
     EnsureHeadersReceived();
     if (IsRedirectCode(GetStatusCode())) {
-        auto url = Headers_->Find("Location");
-        if (url) {
-            return *url;
+        if (auto url = Headers_->Find("Location")) {
+            // TODO(babenko): migrate to std::string
+            return TString(*url);
         }
     }
     return std::nullopt;

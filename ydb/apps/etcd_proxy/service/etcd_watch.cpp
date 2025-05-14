@@ -517,10 +517,12 @@ private:
             HFunc(TEvSubscribe, Handle);
             HFunc(TEvChange, Handle);
 
-            CFunc(TEvents::TEvWakeup::EventType, Wakeup);
+            cFunc(TEvents::TEvWakeup::EventType, Wakeup);
 
             HFunc(TEvQueryResult, Handle);
             HFunc(TEvQueryError, Handle);
+
+            hFunc(TEvReturnRevision, Handle);
         }
     }
 
@@ -593,15 +595,38 @@ private:
         }
     }
 
-    void Wakeup(const TActorContext&) {
-        Revision = Stuff->Revision.fetch_add(1LL) + 1LL;
+    void Wakeup() {
+        std::ostringstream sql;
+        sql << Stuff->TablePrefix;
+        sql << "$Leases = select `id` as `lease` from `leases` where unwrap(interval('PT1S') * `ttl` + `updated`) <= CurrentUtcDatetime(`id`);" << std::endl;
+        sql << "$Clean = select `lease` from $Leases as l left only join `current` view `lease` as c using(`lease`);" << std::endl;
+        sql << "$Dirty = select `lease` from $Leases as l left semi join `current` view `lease` as c using(`lease`);" << std::endl;
+        sql << "delete from `leases` where `id` in $Clean;" << std::endl;
+        sql << "select count(`lease`) from $Clean;" << std::endl;
+        sql << "select `lease` from $Dirty;" << std::endl;
 
+        Stuff->Client->ExecuteQuery(sql.str(), TTxControl::BeginTx().CommitTx()).Subscribe([my = this->SelfId(), stuff = TSharedStuff::TWeakPtr(Stuff)](const auto& future) {
+            if (const auto lock = stuff.lock()) {
+                if (const auto res = future.GetValue(); res.IsSuccess())
+                    lock->ActorSystem->Send(my, new TEvQueryResult(res.GetResultSets()));
+                else
+                    lock->ActorSystem->Send(my, new TEvQueryError(res.GetIssues()));
+            }
+        });
+    }
+
+    void Handle(TEvReturnRevision::TPtr& ev) {
+        Revision = ev->Get()->Revision;
         std::ostringstream sql;
         sql << Stuff->TablePrefix;
         NYdb::TParamsBuilder params;
         const auto& revName = AddParam("Revision", params, Revision);
+        auto& list = params.AddParam("$Expired").BeginList();
+        for (const auto lease : ExpiredLeases)
+            list.AddListItem().Int64(lease);
+        list.EndList().Build();
 
-        sql << "$Leases = select `id` as `lease` from `leases` where unwrap(interval('PT1S') * `ttl` + `updated`) <= CurrentUtcDatetime(`id`);" << std::endl;
+        sql << "$Leases = select `id` as `lease` from `leases` where  `id` in $Expired and unwrap(interval('PT1S') * `ttl` + `updated`) <= CurrentUtcDatetime(`id`);" << std::endl;
         sql << "$Victims = select `key`, `value`, `created`, `modified`, `version`, `lease` from `current` view `lease` as h left semi join $Leases as l using(`lease`);" << std::endl;
 
         sql << "insert into `history`" << std::endl;
@@ -627,36 +652,50 @@ private:
     }
 
     void Handle(TEvQueryResult::TPtr &ev, const TActorContext& ctx) {
-        i64 deleted = 0ULL;
-        if constexpr (NotifyWatchtower) {
-            for (auto parser = NYdb::TResultSetParser(ev->Get()->Results.front()); parser.TryNextRow(); ++deleted) {
-                TData oldData;
-                oldData.Value = NYdb::TValueParser(parser.GetValue("value")).GetString();
-                oldData.Created = NYdb::TValueParser(parser.GetValue("created")).GetInt64();
-                oldData.Modified = NYdb::TValueParser(parser.GetValue("modified")).GetInt64();
-                oldData.Version = NYdb::TValueParser(parser.GetValue("version")).GetInt64();
-                oldData.Lease = NYdb::TValueParser(parser.GetValue("lease")).GetInt64();
-                auto key = NYdb::TValueParser(parser.GetValue("key")).GetString();
+        ui64 deleted = 0ULL;
 
-                ctx.Send(ctx.SelfID, std::make_unique<TEvChange>(std::move(key), Revision, std::move(oldData)));
-            }
-        } else {
+        if (ExpiredLeases.empty()) {
             if (auto parser = NYdb::TResultSetParser(ev->Get()->Results.front()); parser.TryNextRow()) {
                 deleted = NYdb::TValueParser(parser.GetValue(0)).GetUint64();
+            }
+            for (auto parser = NYdb::TResultSetParser(ev->Get()->Results.back()); parser.TryNextRow();) {
+                ExpiredLeases.emplace_back(NYdb::TValueParser(parser.GetValue(0)).GetInt64());
+            }
+        } else {
+            ExpiredLeases.clear();
+            if constexpr (NotifyWatchtower) {
+                for (auto parser = NYdb::TResultSetParser(ev->Get()->Results.front()); parser.TryNextRow(); ++deleted) {
+                    TData oldData;
+                    oldData.Value = NYdb::TValueParser(parser.GetValue("value")).GetString();
+                    oldData.Created = NYdb::TValueParser(parser.GetValue("created")).GetInt64();
+                    oldData.Modified = NYdb::TValueParser(parser.GetValue("modified")).GetInt64();
+                    oldData.Version = NYdb::TValueParser(parser.GetValue("version")).GetInt64();
+                    oldData.Lease = NYdb::TValueParser(parser.GetValue("lease")).GetInt64();
+                    auto key = NYdb::TValueParser(parser.GetValue("key")).GetString();
+
+                    ctx.Send(ctx.SelfID, std::make_unique<TEvChange>(std::move(key), Revision, std::move(oldData)));
+                }
+            } else {
+                if (auto parser = NYdb::TResultSetParser(ev->Get()->Results.front()); parser.TryNextRow()) {
+                    deleted = NYdb::TValueParser(parser.GetValue(0)).GetUint64();
+                }
             }
         }
 
         if (deleted) {
             std::cout << deleted <<  " leases expired." << std::endl;
-        } else {
-            Stuff->Revision.compare_exchange_weak(Revision, Revision - 1LL);
         }
 
-        ctx.Schedule(TDuration::Seconds(3), new TEvents::TEvWakeup);
+        if (ExpiredLeases.empty())
+            ctx.Schedule(TDuration::Seconds(3), new TEvents::TEvWakeup);
+        else
+            ctx.Send(Stuff->MainGate, new TEvRequestRevision);
     }
 
     void Handle(TEvQueryError::TPtr &ev, const TActorContext& ctx) {
         std::cout << "Check leases SQL error received " << ev->Get()->Issues.ToString() << std::endl;
+        Revision = 0LL;
+        ExpiredLeases.clear();
         ctx.Schedule(TDuration::Seconds(7), new TEvents::TEvWakeup);
     }
 
@@ -670,6 +709,7 @@ private:
 
     size_t MinSizeOfPrefix = 0U;
     i64 Revision = 0LL;
+    std::vector<i64> ExpiredLeases;
 };
 
 }

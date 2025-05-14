@@ -1257,7 +1257,7 @@ private:
 
         if (EmptyLease) {
             sql << "$L = select `id` as `lease` from `leases` where `id`= " << leaseParamName << ';' << std::endl;
-            sql << "$Keys = select `ex` from (select 0UL = count(*) as `ex`, " << leaseParamName << " as `lease` from `current` as c" << std::endl;
+            sql << "$Keys = select `ex` from (select 0UL = count(*) as `ex`, " << leaseParamName << " as `lease` from `current` view `lease` as c" << std::endl;
             sql << "left semi join $L as l using(`lease`)) as k left semi join $L as l using(`lease`);" << std::endl;
             sql << "delete from `leases` where `id` = " << leaseParamName << " and $Keys;" << std::endl;
             sql << "select $Keys;" << std::endl;

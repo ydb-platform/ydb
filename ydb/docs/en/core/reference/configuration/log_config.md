@@ -40,7 +40,7 @@ When both `sys_log` and `uaclient_config` are enabled simultaneously, logs will 
 | `allow_drop_entries` | bool | true | Allow dropping log entries if the logging system is overloaded. |
 | `use_local_timestamps` | bool | false | Use local time zone for log timestamps (UTC is used by default). |
 | `backend_file_name` | string | — | File name for log output. If specified, logs are written to this file. |
-| `sys_log_service` | string | — | Service name for syslog. |
+| `sys_log_service` | string | — | Service name for syslog. Corresponds to the tag field in the old syslog [RFC 3164](https://datatracker.ietf.org/doc/html/rfc3164) or the app-name field in the modern [RFC 5424](https://datatracker.ietf.org/doc/html/rfc5424) protocol. |
 | `time_threshold_ms` | uint64 | 1000 | Time threshold for log operations in milliseconds. |
 | `ignore_unknown_components` | bool | true | Ignore logging requests from unknown components. |
 | `tenant_name` | string | — | Database name to include in log records. |
@@ -166,6 +166,10 @@ log_config:
 - Log levels are specified in the configuration as numeric values, not strings. Use the [table above](#log-levels) to map between numeric values and their meanings.
 - If the `backend_file_name` parameter is specified, logs are written to this file. If the `sys_log` parameter is true, logs are sent to the system logger.
 - The `format` parameter determines how log entries are formatted. The "full" format includes all available information, "short" provides a more compact format, and "json" outputs logs in JSON format for easier parsing.
+- The internal log buffer has the following size limits:
+  - Default total size: 10MB (10 * 1024 * 1024 bytes)
+  - Default grain size: 64KB (1024 * 64 bytes)
+  - Maximum message size: 1KB (1024 bytes)
 
 ## See Also
 

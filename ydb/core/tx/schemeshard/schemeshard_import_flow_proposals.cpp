@@ -365,7 +365,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTopicPropose(
     TSchemeShard* ss,
     TTxId txId,
     TImportInfo::TPtr importInfo,
-    ui32 itemIdx
+    ui32 itemIdx,
+    TString& error
 ) {
     Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items.at(itemIdx);
@@ -378,8 +379,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTopicPropose(
     const TFsPath dstPath = item.DstPathName;
     modifyScheme.SetWorkingDir(dstPath.Dirname());
 
-    TString error;
-    NGRpcProxy::V1::FillProposeRequestImpl(dstPath.GetName(), item.Topic.GetRef(), modifyScheme, AppData(), error, dstPath.Dirname());
+    auto codes = 
+        NGRpcProxy::V1::FillProposeRequestImpl(dstPath.GetName(), item.Topic.GetRef(), modifyScheme, AppData(), error, dstPath.Dirname());
+
+    if (codes.YdbCode != Ydb::StatusIds::SUCCESS) {
+        return nullptr;
+    }
 
     return propose;
 }

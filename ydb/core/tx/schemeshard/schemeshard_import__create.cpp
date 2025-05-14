@@ -425,7 +425,7 @@ private:
         Send(Self->SelfId(), std::move(propose));
     }
 
-    void CreateTopic(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
+    bool CreateTopic(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId, TString& error) {
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
 
@@ -438,10 +438,13 @@ private:
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
 
-        auto propose = CreateTopicPropose(Self, txId, importInfo, itemIdx);
-        Y_ABORT_UNLESS(propose);
+        auto propose = CreateTopicPropose(Self, txId, importInfo, itemIdx, error);
+        if (!propose) {
+            return false;
+        }
 
         Send(Self->SelfId(), std::move(propose));
+        return true;
     }
 
     void ExecutePreparedQuery(TTransactionContext& txc, TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
@@ -1242,7 +1245,11 @@ private:
                     break;
                 }
                 if (item.Topic) {
-                    CreateTopic(importInfo, i, txId);
+                    TString error;
+                    if (!CreateTopic(importInfo, i, txId, error)) {
+                        NIceDb::TNiceDb db(txc.DB);
+                        CancelAndPersist(db, importInfo, i, error, "creation topic failed");
+                    }
                     itemIdx = i;
                     break;
                 }

@@ -17,6 +17,15 @@ Logging is a critical part of the {{ ydb-short-name }} [observability](../observ
 - Log output format
 - Integration with system logs or external logging services
 
+## Log Output Methods
+
+- **To stderr**: by default, {{ ydb-short-name }} sends all logs to stderr.
+- **To file**: logs can be written to a file using the `backend_file_name` parameter.
+- **To syslog**: when the `sys_log: true` parameter is enabled, logs are redirected to the syslog and stop being output to stderr. Logs are sent using `/dev/log` socket.
+- **To Unified Agent**: when configuring the `uaclient_config` section, logs are sent to [Unified Agent](https://yandex.cloud/en/docs/monitoring/concepts/data-collection/unified-agent/) and stop being output to stderr.
+
+When both `sys_log` and `uaclient_config` are enabled simultaneously, logs will be sent to both syslog and Unified Agent. If you need to continue outputting logs to stderr while using other methods, activate `sys_log_to_stderr: true`.
+
 ## Configuration Options
 
 | Parameter | Type | Default | Description |
@@ -27,7 +36,7 @@ Logging is a critical part of the {{ ydb-short-name }} [observability](../observ
 | `sys_log` | bool | false | Enable system logging via syslog. |
 | `sys_log_to_stderr` | bool | false | Copy logs to stderr in addition to system log. |
 | `format` | string | "full" | Log output format. Possible values: "full", "short", "json". |
-| `cluster_name` | string | — | Cluster name to include in log records. |
+| `cluster_name` | string | — | Cluster name to include in log records. The `cluster_name` field is added to logs only when using the `json` format or when sending to Unified Agent. In the `full` or `short` formats, this field is not displayed. |
 | `allow_drop_entries` | bool | true | Allow dropping log entries if the logging system is overloaded. |
 | `use_local_timestamps` | bool | false | Use local time zone for log timestamps (UTC is used by default). |
 | `backend_file_name` | string | — | File name for log output. If specified, logs are written to this file. |
@@ -92,3 +101,75 @@ log_config:
   format: "full"
   backend_file_name: "/var/log/ydb/ydb.log"
 ```
+
+### Setting Per-Component Log Levels
+
+```yaml
+log_config:
+  default_level: 5  # NOTICE
+  entry:
+    - component: U0NIRU1FU0hBUkQ=  # Base64 for "SCHEMESHARD"
+      level: 7  # DEBUG
+    - component: VEFCTEVUX01BSU4=  # Base64 for "TABLET_MAIN"
+      level: 6  # INFO
+  backend_file_name: "/var/log/ydb/ydb.log"
+```
+
+### JSON Format with Unified Agent Integration
+
+```yaml
+log_config:
+  default_level: 5  # NOTICE
+  format: "json"
+  cluster_name: "production-cluster"
+  sys_log: false
+  uaclient_config:
+    uri: "[fd53::1]:16400"
+    grpc_max_message_size: 4194304
+    log_name: "ydb_logs"
+```
+
+### Full Example
+
+```yaml
+log_config:
+  default_level: 5  # NOTICE
+  default_sampling_level: 7  # DEBUG
+  default_sampling_rate: 10
+  sys_log: true
+  sys_log_to_stderr: true
+  format: "json"
+  cluster_name: "production-cluster"
+  allow_drop_entries: true
+  use_local_timestamps: false
+  backend_file_name: "/var/log/ydb/ydb.log"
+  sys_log_service: "ydb"
+  time_threshold_ms: 2000
+  ignore_unknown_components: true
+  tenant_name: "main"
+  entry:
+    - component: U0NIRU1FU0hBUkQ=  # Base64 for "SCHEMESHARD"
+      level: 7  # DEBUG
+    - component: VEFCTEVUX01BSU4=  # Base64 for "TABLET_MAIN"
+      level: 6  # INFO
+    - component: QkxPQlNUT1JBR0U=  # Base64 for "BLOBSTORAGE"
+      level: 4  # WARN
+  uaclient_config:
+    uri: "[fd53::1]:16400"
+    grpc_max_message_size: 4194304
+    log_name: "ydb_logs"
+```
+
+## Notes
+
+- When specifying component names in the `entry` array, component names must be base64-encoded.
+- Log levels are specified in the configuration as numeric values, not strings. Use the [table above](#log-levels) to map between numeric values and their meanings.
+- If the `backend_file_name` parameter is specified, logs are written to this file. If the `sys_log` parameter is true, logs are sent to the system logger.
+- The `format` parameter determines how log entries are formatted. The "full" format includes all available information, "short" provides a more compact format, and "json" outputs logs in JSON format for easier parsing.
+
+## See Also
+
+- [{#T}](../observability/index.md)
+- [{#T}](../observability/metrics/index.md)
+- [{#T}](../observability/tracing/setup.md)
+- [{#T}](../../security/audit-log.md)

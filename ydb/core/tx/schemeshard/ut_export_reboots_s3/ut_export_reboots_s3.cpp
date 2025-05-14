@@ -531,7 +531,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             case EPathType::EPathTypePersQueueGroup:
                 return RequestStringTopic;
             default:
-                Y_ABORT_UNLESS("not supported");
+                Y_ABORT("not supported");
             }
             
         }

@@ -5663,7 +5663,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             {
                 EPathTypePersQueueGroup,
                 R"(partitioning_settings {
-  min_active_partitions: 2
+  min_active_partitions: 1
   max_active_partitions: 1
   auto_partitioning_settings {
     strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
@@ -5677,31 +5677,29 @@ Y_UNIT_TEST_SUITE(TImportTests) {
   }
 }
 retention_period {
-  seconds: 10
+  seconds: 64800
 }
 supported_codecs {
 }
-partition_write_speed_bytes_per_second: 50000000
-partition_write_burst_bytes: 50000000
-attributes {
-  key: "__max_partition_message_groups_seqno_stored"
-  value: "6000000"
+partition_write_speed_bytes_per_second: 1048576
+partition_write_burst_bytes: 1048576
+consumers {
+  name: "consumer1"
+  read_from {
+  }
+  attributes {
+    key: "_service_type"
+    value: "data-streams"
+  }
 }
-attributes {
-  key: "_allow_unauthenticated_read"
-  value: "true"
-}
-attributes {
-  key: "_allow_unauthenticated_write"
-  value: "true"
-}
-attributes {
-  key: "_message_group_seqno_retention_period_ms"
-  value: "1382400000"
-}
-attributes {
-  key: "_partitions_per_tablet"
-  value: "1"
+consumers {
+  name: "consumer2"
+  read_from {
+  }
+  attributes {
+    key: "_service_type"
+    value: "data-streams"
+  }
 }
 )"});
 
@@ -6310,7 +6308,7 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
             {
                 EPathTypePersQueueGroup,
                 R"(partitioning_settings {
-  min_active_partitions: 2
+  min_active_partitions: 1
   max_active_partitions: 1
   auto_partitioning_settings {
     strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
@@ -6324,31 +6322,29 @@ Y_UNIT_TEST_SUITE(TImportWithRebootsTests) {
   }
 }
 retention_period {
-  seconds: 10
+  seconds: 64800
 }
 supported_codecs {
 }
-partition_write_speed_bytes_per_second: 50000000
-partition_write_burst_bytes: 50000000
-attributes {
-  key: "__max_partition_message_groups_seqno_stored"
-  value: "6000000"
+partition_write_speed_bytes_per_second: 1048576
+partition_write_burst_bytes: 1048576
+consumers {
+  name: "consumer1"
+  read_from {
+  }
+  attributes {
+    key: "_service_type"
+    value: "data-streams"
+  }
 }
-attributes {
-  key: "_allow_unauthenticated_read"
-  value: "true"
-}
-attributes {
-  key: "_allow_unauthenticated_write"
-  value: "true"
-}
-attributes {
-  key: "_message_group_seqno_retention_period_ms"
-  value: "1382400000"
-}
-attributes {
-  key: "_partitions_per_tablet"
-  value: "1"
+consumers {
+  name: "consumer2"
+  read_from {
+  }
+  attributes {
+    key: "_service_type"
+    value: "data-streams"
+  }
 }
 )"}
         }}, R"(

@@ -155,7 +155,8 @@ public:
                 if (!colStatsOpt) {
                     chunks = NArrow::NSplitter::TSimilarPacker::SplitWithExpected(p, settings.GetExpectedRecordsCountOnPage());
                 } else {
-                    chunks = colStatsOpt->SplitRecords(p, settings.GetExpectedRecordsCountOnPage(), settings.GetExpectedBlobPage());
+                    chunks = colStatsOpt->SplitRecords(
+                        p, settings.GetExpectedRecordsCountOnPage(), settings.GetExpectedBlobPage(), settings.GetMaxBlobSize() * 0.9);
                 }
                 Portions.back().AddColumnSplitting(c, std::move(chunks));
             }

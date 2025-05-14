@@ -22,7 +22,7 @@ public:
     TSimpleSerializationStat() = default;
     TSimpleSerializationStat(const ui64 bytes, const ui64 recordsCount, const ui64 rawBytes);
 
-    std::vector<i64> SplitRecords(const ui32 recordsCount, const ui32 expectedRecordsCount, const ui32 expectedColumnPageSize);
+    std::vector<i64> SplitRecords(const ui32 recordsCount, const ui32 expectedRecordsCount, const ui32 expectedColumnPageSize, const ui32 maxBlobSize);
 
     TString DebugString() const {
         return TStringBuilder() << "{"

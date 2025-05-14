@@ -198,7 +198,7 @@ public:
             Entities.erase(it);
         }
 
-        bool TakeEntityFrom(TBlobChunk& sourceNormal, const ui32 minSize, const ui32 maxSize, const ui32 tolerance) {
+        bool TakeEntityFrom(TBlobChunk& sourceNormal, const ui32 minSize, const ui32 maxSize) {
             std::vector<TEntityChunk*> chunks;
             for (auto&& i : sourceNormal.Entities) {
                 chunks.emplace_back(&i.second);
@@ -213,7 +213,7 @@ public:
                     AddChunk(*i);
                     sourceNormal.EraseEntity(i->GetEntityId());
                     foundToMove = true;
-                    if (GetSize() + tolerance >= minSize) {
+                    if (GetSize() >= minSize) {
                         return true;
                     }
                 }
@@ -221,7 +221,7 @@ public:
             return foundToMove;
         }
 
-        bool TakeEntityPartFrom(TBlobChunk& sourceNormal, const ui32 minSize, const ui32 maxSize, const ui32 tolerance,
+        bool TakeEntityPartFrom(TBlobChunk& sourceNormal, const ui32 minSize, const ui32 maxSize,
             const NArrow::NSplitter::ISchemaDetailInfo::TPtr& schema, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters, ui32& internalSplitsCount);
 
         const THashMap<ui32, TEntityChunk>& GetEntities() const {
@@ -351,7 +351,7 @@ public:
                 }
             }
             for (auto&& i : Normal) {
-                if (smallBlob.TakeEntityFrom(i, MinSize, MaxSize, Tolerance)) {
+                if (smallBlob.TakeEntityFrom(i, MinSize, MaxSize)) {
                     AFL_VERIFY(smallBlob.GetSize() < MaxSize);
                     Normal.emplace_back(std::move(smallBlob));
                     return;
@@ -360,7 +360,7 @@ public:
             for (auto&& i : Normal) {
                 Size.Sub(smallBlob.GetSize());
                 Size.Sub(i.GetSize());
-                if (smallBlob.TakeEntityPartFrom(i, MinSize, MaxSize, Tolerance, Schema, Counters, *InternalSplitsCount)) {
+                if (smallBlob.TakeEntityPartFrom(i, MinSize, MaxSize, Schema, Counters, *InternalSplitsCount)) {
                     Size.Add(smallBlob.GetSize());
                     Size.Add(i.GetSize());
                     AFL_VERIFY(smallBlob.GetSize() < MaxSize);

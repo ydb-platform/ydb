@@ -17,13 +17,18 @@ std::vector<TSplittedBlob> TSplittedEntity::TNormalizedBlobChunks::Finish(const 
         }
         TSplittedBlob sb(groupName, std::move(blobChunks));
         AFL_VERIFY(sb.GetSize() < MaxSize);
-        AFL_VERIFY(sb.GetSize() >= MinSize || Normal.size() == 1)("size", sb.GetSize())("min", MinSize)("size", Normal.size());
+        if (sb.GetSize() + Tolerance < MinSize) {
+            if (Normal.size() != 1) {
+                Counters->BySizeSplitter.OnSmallSerialized(sb.GetSize());
+            }
+            AFL_VERIFY_DEBUG(Normal.size() == 1)("size", sb.GetSize())("min", MinSize)("size", Normal.size());
+        }
         result.emplace_back(std::move(sb));
     }
     return result;
 }
 
-bool TSplittedEntity::TBlobChunk::TakeEntityPartFrom(TBlobChunk& sourceNormal, const ui32 minSize, const ui32 maxSize, const ui32 tolerance,
+bool TSplittedEntity::TBlobChunk::TakeEntityPartFrom(TBlobChunk& sourceNormal, const ui32 minSize, const ui32 maxSize,
     const NArrow::NSplitter::ISchemaDetailInfo::TPtr& schema, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters,
     ui32& internalSplitsCount) {
     AFL_VERIFY(sourceNormal.GetSize() + GetSize() >= maxSize);
@@ -43,13 +48,13 @@ bool TSplittedEntity::TBlobChunk::TakeEntityPartFrom(TBlobChunk& sourceNormal, c
                 const ui64 cSize = c->GetPackedSize();
                 if (GetSize() + cSize < maxSize && sourceNormal.GetSize() >= minSize + cSize) {
                     AddChunk(i->DetachEntityChunkVerified(c));
-                    if (GetSize() + tolerance >= minSize) {
+                    if (GetSize() >= minSize) {
                         return true;
                     }
                 }
             }
         }
-        AFL_VERIFY(GetSize() + tolerance < minSize);
+        AFL_VERIFY(GetSize() < minSize);
         AFL_VERIFY(sourceNormal.GetSize() >= minSize);
         {
             const auto chunks = i->GetChunks();
@@ -58,12 +63,16 @@ bool TSplittedEntity::TBlobChunk::TakeEntityPartFrom(TBlobChunk& sourceNormal, c
                     continue;
                 }
                 const ui64 cSize = c->GetPackedSize();
+                // sourceNormal.GetSize() + GetSize() >= maxSize > 2 * minSize
+                // -> sourceNormal.GetSize() - minSize >= minSize - GetSize()
                 const ui64 deltaSource = sourceNormal.GetSize() - minSize;
                 const ui64 deltaSelf = minSize - GetSize();
                 AFL_VERIFY(deltaSelf <= deltaSource);
+                //GetSize() + cSize >= maxSize 
+                // -> cSize >= maxSize - GetSize() > minSize - GetSize() = deltaSelf
                 AFL_VERIFY(deltaSelf <= cSize);
                 std::vector<std::shared_ptr<IPortionDataChunk>> chunks =
-                    i->SplitChunk(c, deltaSelf * 1.1, schema->GetColumnSaver(i->GetEntityId()), counters);
+                    i->SplitChunk(c, deltaSelf, schema->GetColumnSaver(i->GetEntityId()), counters);
                 ++internalSplitsCount;
                 AFL_VERIFY(chunks.size() == 2);
                 AddChunk(i->DetachEntityChunkVerified(chunks.front()));

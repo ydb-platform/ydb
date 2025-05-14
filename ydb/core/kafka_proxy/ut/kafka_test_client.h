@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/kafka_proxy/kafka_topic_partition.h>
 #include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
@@ -73,7 +74,7 @@ class TKafkaTestClient {
 
         TMessagePtr<TInitProducerIdResponseData> InitProducerId(const std::optional<TString>& transactionalId = {}, ui64 txnTimeoutMs = 1000);
 
-        TMessagePtr<TOffsetCommitResponseData> OffsetCommit(TString groupId, std::unordered_map<TString, std::vector<TConsumerOffset>> topicsToConsumerOffsets);
+        TMessagePtr<TOffsetCommitResponseData> OffsetCommit(TString groupId, std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> topicToConsumerOffsets);
 
         TMessagePtr<TProduceResponseData> Produce(const TString& topicName, ui32 partition, const TKafkaRecordBatch& batch);
 

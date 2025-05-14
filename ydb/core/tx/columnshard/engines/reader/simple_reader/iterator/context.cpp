@@ -106,7 +106,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
 
 TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
     : TBase(commonContext) {
-    if (GetReadMetadata()->GetDeduplicationPolicy() == EDeduplicationPolicy::NO_DUPLICATES) {
+    if (GetReadMetadata()->GetDeduplicationPolicy() == EDeduplicationPolicy::NO_DUPLICATES && GetReadMetadata()->SelectInfo->Portions.size()) {
         DuplicatesManager = NActors::TActivationContext::Register(new TDuplicateFilterConstructor(*this));
     }
 }

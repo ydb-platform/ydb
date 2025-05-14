@@ -701,9 +701,9 @@ private:
 
         auto shardId = CommonFillRecord<false>(ev->Record, shardIdx, buildInfo);
         ev->Record.SetSeed(ui64(shardId));
-        LOG_D("TTxBuildProgress: TEvPrefixKMeansRequest: " << ev->Record.ShortDebugString());
+        LOG_N("TTxBuildProgress: TEvPrefixKMeansRequest: " << ev->Record.ShortDebugString());
 
-        ToTabletSend.emplace_back(shardId, ui64(BuildId), std::move(ev));
+        ToTabletSend.emplace(shardId, std::move(ev));
     }
 
     void SendBuildSecondaryIndexRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -810,6 +810,9 @@ private:
     }
 
     void AddAllShards(TIndexBuildInfo& buildInfo) {
+        ToTabletSend.clear();
+        Self->IndexBuildPipes.CloseAll(BuildId, Self->ActorContext());
+
         for (const auto& [idx, status] : buildInfo.Shards) {
             AddShard(buildInfo, idx, status);
         }
@@ -1115,7 +1118,8 @@ public:
         Y_ABORT_UNLESS(buildInfoPtr);
         auto& buildInfo = *buildInfoPtr->Get();
 
-        LOG_I("TTxBuildProgress: Execute: " << BuildId << " " << buildInfo.State << " " << buildInfo);
+        LOG_N("TTxBuildProgress: Execute: " << BuildId << " " << buildInfo.State);
+        LOG_D("TTxBuildProgress: Execute: " << BuildId << " " << buildInfo.State << " " << buildInfo);
 
         switch (buildInfo.State) {
         case TIndexBuildInfo::EState::Invalid:

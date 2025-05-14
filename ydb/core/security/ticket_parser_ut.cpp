@@ -1661,17 +1661,17 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         UNIT_ASSERT_C(result->Error.empty(), result->Error);
         UNIT_ASSERT_C(result->Token->IsExist("something.read-bbbb4554@as"), result->Token->ShortDebugString());
 
-        // Authorization successful for gizmo resource
+        // Authorization successful for cluster resource
         accessServiceMock.AllowedResourceIds.clear();
-        accessServiceMock.AllowedResourceIds.emplace("gizmo");
+        accessServiceMock.AllowedResourceIds.emplace("folder");
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
                                         userToken,
-                                        {{"gizmo_id", "gizmo"}, },
+                                        {{"folder_id", "folder"}, },
                                         {"monitoring.view"})), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT_C(result->Error.empty(), result->Error);
         UNIT_ASSERT_C(result->Token->IsExist("monitoring.view@as"), result->Token->ShortDebugString());
-        UNIT_ASSERT_C(result->Token->IsExist("monitoring.view-gizmo@as"), result->Token->ShortDebugString());
+        UNIT_ASSERT_C(result->Token->IsExist("monitoring.view-folder@as"), result->Token->ShortDebugString());
     }
 
     Y_UNIT_TEST(Authorization) {

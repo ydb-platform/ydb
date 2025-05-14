@@ -62,13 +62,13 @@ inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> GetEntriesForAuthAnd
         });
         auto it = std::find_if(rootAttributes.begin(), rootAttributes.end(),
         [](const std::pair<TString, TString>& p) {
-            return p.first == "container_id";
+            return p.first == "folder_id";
         });
         if (it == rootAttributes.end()) {
             return {};
         }
         return {
-            {permissions, {{"gizmo_id", it->second}}}
+            {permissions, {{"folder_id", it->second}}}
         };
     } else {
         return {};

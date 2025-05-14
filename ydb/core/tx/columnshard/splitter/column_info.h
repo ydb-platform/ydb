@@ -267,7 +267,7 @@ public:
 
         void AddChunk(TBlobChunk&& chunk) {
             Size.Add(chunk.GetSize());
-            AFL_VERIFY(chunk.GetSize() < MaxSize);
+            AFL_VERIFY(chunk.GetSize() < MaxSize)("size", chunk.GetSize())("max", MaxSize);
             if (chunk.GetSize() < MinSize) {
                 Small.emplace_back(std::move(chunk));
             } else {
@@ -313,7 +313,7 @@ public:
             std::vector<TBlobChunk> normal;
             ui32 sumSize = 0;
             for (auto&& i : smallPtr) {
-                if (sumSize + i->GetSize() > MaxSize) {
+                if (sumSize + i->GetSize() >= MaxSize) {
                     AFL_VERIFY(normal.size() > 1);
                     result.AddChunk(TBlobChunk(std::move(normal)));
                     normal.clear();

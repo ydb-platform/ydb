@@ -96,10 +96,33 @@ The `uaclient_config` field configures integration with [Unified Agent](https://
 ```yaml
 log_config:
   default_level: 5  # NOTICE
-  sys_log: true
+  format: "full"
+```
+
+This configuration outputs logs to stderr with logging level NOTICE and above.
+
+### File Output Configuration
+
+```yaml
+log_config:
+  default_level: 5  # NOTICE
   format: "full"
   backend_file_name: "/var/log/ydb/ydb.log"
 ```
+
+This configuration sends logs to a file while maintaining the default logging level of NOTICE.
+
+### Syslog Output Configuration
+
+```yaml
+log_config:
+  default_level: 5  # NOTICE
+  sys_log: true
+  sys_log_service: "ydb"
+  format: "full"
+```
+
+This configuration sends logs to syslog with the service name "ydb".
 
 ### Setting Per-Component Log Levels
 
@@ -114,57 +137,42 @@ log_config:
   backend_file_name: "/var/log/ydb/ydb.log"
 ```
 
-### JSON Format with Unified Agent Integration
-
-```yaml
-log_config:
-  default_level: 5  # NOTICE
-  format: "json"
-  cluster_name: "production-cluster"
-  sys_log: false
-  uaclient_config:
-    uri: "[fd53::1]:16400"
-    grpc_max_message_size: 4194304
-    log_name: "ydb_logs"
-```
-
-### Full Example
+### Sampling Configuration
 
 ```yaml
 log_config:
   default_level: 5  # NOTICE
   default_sampling_level: 7  # DEBUG
-  default_sampling_rate: 10
-  sys_log: true
-  sys_log_to_stderr: true
+  default_sampling_rate: 10  # Log every 10th message between NOTICE and DEBUG
+  entry:
+    - component: QkxPQlNUT1JBR0U=  # Base64 for "BLOBSTORAGE"
+      sampling_level: 8  # TRACE
+      sampling_rate: 100  # Log every 100th message between NOTICE and TRACE
+```
+
+This configuration sets up sampling for logs. With default settings, every 10th message with priority between NOTICE and DEBUG will be logged. For the BLOBSTORAGE component, every 100th message with priority between NOTICE and TRACE will be logged.
+
+### JSON Format Configuration
+
+```yaml
+log_config:
+  default_level: 5  # NOTICE
   format: "json"
   cluster_name: "production-cluster"
-  allow_drop_entries: true
-  use_local_timestamps: false
-  backend_file_name: "/var/log/ydb/ydb.log"
-  sys_log_service: "ydb"
-  time_threshold_ms: 2000
-  ignore_unknown_components: true
-  tenant_name: "main"
-  entry:
-    - component: U0NIRU1FU0hBUkQ=  # Base64 for "SCHEMESHARD"
-      level: 7  # DEBUG
-    - component: VEFCTEVUX01BSU4=  # Base64 for "TABLET_MAIN"
-      level: 6  # INFO
-    - component: QkxPQlNUT1JBR0U=  # Base64 for "BLOBSTORAGE"
-      level: 4  # WARN
   uaclient_config:
     uri: "[fd53::1]:16400"
     grpc_max_message_size: 4194304
     log_name: "ydb_logs"
 ```
+
+This configuration outputs logs in JSON format and sends them to Unified Agent.
 
 ## Notes
 
 - When specifying component names in the `entry` array, component names must be base64-encoded.
 - Log levels are specified in the configuration as numeric values, not strings. Use the [table above](#log-levels) to map between numeric values and their meanings.
 - If the `backend_file_name` parameter is specified, logs are written to this file. If the `sys_log` parameter is true, logs are sent to the system logger.
-- The `format` parameter determines how log entries are formatted. The "full" format includes all available information, "short" provides a more compact format, and "json" outputs logs in JSON format for easier parsing.
+- The `format` parameter determines how log entries are formatted. The "full" format includes all available information, "short" provides a more compact format, and "json" outputs logs in JSON format, which is convenient for parsing by logging services.
 - The internal log buffer has the following size limits:
   - Default total size: 10MB (10 * 1024 * 1024 bytes)
   - Default grain size: 64KB (1024 * 64 bytes)

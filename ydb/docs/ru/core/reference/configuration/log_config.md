@@ -96,10 +96,33 @@
 ```yaml
 log_config:
   default_level: 5  # NOTICE
-  sys_log: true
+  format: "full"
+```
+
+Данная конфигурация выводит логи в stderr с уровнем логирования NOTICE и выше.
+
+### Конфигурация с выводом в файл
+
+```yaml
+log_config:
+  default_level: 5  # NOTICE
   format: "full"
   backend_file_name: "/var/log/ydb/ydb.log"
 ```
+
+Эта конфигурация отправляет логи в файл, сохраняя уровень логирования NOTICE по умолчанию.
+
+### Конфигурация с выводом в syslog
+
+```yaml
+log_config:
+  default_level: 5  # NOTICE
+  sys_log: true
+  sys_log_service: "ydb"
+  format: "full"
+```
+
+Эта конфигурация отправляет логи в syslog с именем сервиса "ydb".
 
 ### Настройка уровней логирования для отдельных компонентов
 
@@ -114,57 +137,42 @@ log_config:
   backend_file_name: "/var/log/ydb/ydb.log"
 ```
 
-### Формат JSON с интеграцией Unified Agent
-
-```yaml
-log_config:
-  default_level: 5  # NOTICE
-  format: "json"
-  cluster_name: "production-cluster"
-  sys_log: false
-  uaclient_config:
-    uri: "[fd53::1]:16400"
-    grpc_max_message_size: 4194304
-    log_name: "ydb_logs"
-```
-
-### Полный пример
+### Конфигурация семплирования
 
 ```yaml
 log_config:
   default_level: 5  # NOTICE
   default_sampling_level: 7  # DEBUG
-  default_sampling_rate: 10
-  sys_log: true
-  sys_log_to_stderr: true
+  default_sampling_rate: 10  # Логировать каждое 10-е сообщение между NOTICE и DEBUG
+  entry:
+    - component: QkxPQlNUT1JBR0U=  # Base64 для "BLOBSTORAGE"
+      sampling_level: 8  # TRACE
+      sampling_rate: 100  # Логировать каждое 100-е сообщение между NOTICE и TRACE
+```
+
+Эта конфигурация настраивает семплирование логов. При настройках по умолчанию каждое 10-е сообщение с приоритетом между NOTICE и DEBUG будет записано в лог. Для компонента BLOBSTORAGE каждое 100-е сообщение с приоритетом между NOTICE и TRACE будет записано в лог.
+
+### Конфигурация формата JSON
+
+```yaml
+log_config:
+  default_level: 5  # NOTICE
   format: "json"
   cluster_name: "production-cluster"
-  allow_drop_entries: true
-  use_local_timestamps: false
-  backend_file_name: "/var/log/ydb/ydb.log"
-  sys_log_service: "ydb"
-  time_threshold_ms: 2000
-  ignore_unknown_components: true
-  tenant_name: "main"
-  entry:
-    - component: U0NIRU1FU0hBUkQ=  # Base64 для "SCHEMESHARD"
-      level: 7  # DEBUG
-    - component: VEFCTEVUX01BSU4=  # Base64 для "TABLET_MAIN"
-      level: 6  # INFO
-    - component: QkxPQlNUT1JBR0U=  # Base64 для "BLOBSTORAGE"
-      level: 4  # WARN
   uaclient_config:
     uri: "[fd53::1]:16400"
     grpc_max_message_size: 4194304
     log_name: "ydb_logs"
 ```
+
+Эта конфигурация выводит логи в формате JSON и отправляет их в Unified Agent.
 
 ## Примечания
 
 - При указании имён компонентов в массиве `entry` имена компонентов должны быть закодированы в base64.
 - Уровни логирования указываются в конфигурации как числовые значения, а не строки. Используйте [таблицу выше](#log-levels) для сопоставления между числовыми значениями и их значениями.
 - Если указан параметр `backend_file_name`, логи записываются в этот файл. Если параметр `sys_log` имеет значение true, логи отправляются в системный регистратор.
-- Параметр `format` определяет, как форматируются записи логов. Формат "full" включает всю доступную информацию, "short" предоставляет более компактный формат, а "json" выводит логи в формате JSON для более простого разбора.
+- Параметр `format` определяет, как форматируются записи логов. Формат "full" включает всю доступную информацию, "short" предоставляет более компактный формат, а "json" выводит логи в формате JSON, который удобен для парсинга сервисами логирования.
 - Внутренний буфер логов имеет следующие ограничения по размеру:
   - Общий размер по умолчанию: 10МБ (10 * 1024 * 1024 байт)
   - Размер гранулы по умолчанию: 64КБ (1024 * 64 байт)

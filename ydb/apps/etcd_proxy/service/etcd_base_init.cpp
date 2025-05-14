@@ -13,7 +13,7 @@ std::string GetInitializeTablesSQL(const std::string& prefix) {
 }
 
 std::string GetLastRevisionSQL(const std::string& prefix) {
-    return prefix + "select nvl(max(`modified`), 1L) from `history`; select nvl(max(`id`), 1L) from `leases`;";
+    return prefix + "select `revision` from `revision` where not `stub`; select nvl(max(`id`), 1L) from `leases`;";
 }
 
 }

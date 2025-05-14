@@ -61,7 +61,7 @@ struct aws_byte_cursor {
  * Helper Macro for initializing a byte cursor from a string literal
  */
 #define AWS_BYTE_CUR_INIT_FROM_STRING_LITERAL(literal)                                                                 \
-    { .ptr = (uint8_t *)(const char *)(literal), .len = sizeof(literal) - 1 }
+    {.ptr = (uint8_t *)(const char *)(literal), .len = sizeof(literal) - 1}
 
 /**
  * Signature for function argument to trim APIs

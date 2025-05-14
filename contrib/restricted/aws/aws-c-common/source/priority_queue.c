@@ -7,7 +7,7 @@
 
 #include <string.h>
 
-#define PARENT_OF(index) (((index)&1) ? (index) >> 1 : (index) > 1 ? ((index)-2) >> 1 : 0)
+#define PARENT_OF(index) (((index) & 1) ? (index) >> 1 : (index) > 1 ? ((index) - 2) >> 1 : 0)
 #define LEFT_OF(index) (((index) << 1) + 1)
 #define RIGHT_OF(index) (((index) << 1) + 2)
 

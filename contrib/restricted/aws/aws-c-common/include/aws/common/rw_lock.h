@@ -25,11 +25,9 @@ struct aws_rw_lock {
 };
 
 #ifdef _WIN32
-#    define AWS_RW_LOCK_INIT                                                                                           \
-        { .lock_handle = NULL }
+#    define AWS_RW_LOCK_INIT {.lock_handle = NULL}
 #else
-#    define AWS_RW_LOCK_INIT                                                                                           \
-        { .lock_handle = PTHREAD_RWLOCK_INITIALIZER }
+#    define AWS_RW_LOCK_INIT {.lock_handle = PTHREAD_RWLOCK_INITIALIZER}
 #endif
 
 AWS_EXTERN_C_BEGIN

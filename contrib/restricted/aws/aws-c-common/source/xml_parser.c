@@ -40,6 +40,8 @@ static int s_load_node_decl(
     AWS_PRECONDITION(decl_body);
     AWS_PRECONDITION(node);
 
+    node->is_empty = decl_body->ptr[decl_body->len - 1] == '/';
+
     struct aws_array_list splits;
     AWS_ZERO_STRUCT(splits);
 
@@ -157,6 +159,14 @@ int s_advance_to_closing_tag(
     struct aws_byte_cursor *out_body) {
     AWS_PRECONDITION(parser);
     AWS_PRECONDITION(node);
+
+    if (node->is_empty) {
+        if (out_body) {
+            out_body->ptr = NULL;
+            out_body->len = 0;
+        }
+        return AWS_OP_SUCCESS;
+    }
 
     /* currently the max node name is 256 characters. This is arbitrary, but should be enough
      * for our uses. If we ever generalize this, we'll have to come back and rethink this. */

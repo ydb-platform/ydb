@@ -33,7 +33,7 @@ const char *aws_task_status_to_c_str(enum aws_task_status status) {
 
 void aws_task_run(struct aws_task *task, enum aws_task_status status) {
     AWS_ASSERT(task->fn);
-    AWS_LOGF_DEBUG(
+    AWS_LOGF_TRACE(
         AWS_LS_COMMON_TASK_SCHEDULER,
         "id=%p: Running %s task with %s status",
         (void *)task,
@@ -129,7 +129,7 @@ void aws_task_scheduler_schedule_now(struct aws_task_scheduler *scheduler, struc
     AWS_ASSERT(task);
     AWS_ASSERT(task->fn);
 
-    AWS_LOGF_DEBUG(
+    AWS_LOGF_TRACE(
         AWS_LS_COMMON_TASK_SCHEDULER,
         "id=%p: Scheduling %s task for immediate execution",
         (void *)task,
@@ -152,7 +152,7 @@ void aws_task_scheduler_schedule_future(
     AWS_ASSERT(task);
     AWS_ASSERT(task->fn);
 
-    AWS_LOGF_DEBUG(
+    AWS_LOGF_TRACE(
         AWS_LS_COMMON_TASK_SCHEDULER,
         "id=%p: Scheduling %s task for future execution at time %" PRIu64,
         (void *)task,

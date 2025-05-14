@@ -959,6 +959,12 @@
       - contrib/libs/nvidia/thrust/thrust/system/omp/detail/for_each.h
       - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/for_each.h
 
+    - __THRUST_DEVICE_SYSTEM_GATHER_HEADER:
+      - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/gather.h
+      - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/gather.h
+      - contrib/libs/nvidia/thrust/thrust/system/omp/detail/gather.h
+      - contrib/libs/nvidia/thrust/thrust/system/tbb/detail/gather.h
+
     - __THRUST_DEVICE_SYSTEM_GENERATE_HEADER:
       - contrib/libs/nvidia/thrust/thrust/system/cpp/detail/generate.h
       - contrib/libs/nvidia/thrust/thrust/system/cuda/detail/generate.h

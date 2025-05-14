@@ -690,6 +690,12 @@ void DbgPrintValue(TString &res, const TCell &r, NScheme::TTypeInfo typeInfo) {
         case NScheme::NTypeIds::Uint64:
             res += ToString(r.AsValue<ui64>());
             break;
+            case NScheme::NTypeIds::Int16:
+            res += ToString(r.AsValue<i16>());
+            break;
+        case NScheme::NTypeIds::Uint16:
+            res += ToString(r.AsValue<ui16>());
+            break;
         case NScheme::NTypeIds::Float:
             res += ToString(r.AsValue<float>());
             break;

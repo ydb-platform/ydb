@@ -10,21 +10,28 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 #include <ydb/core/wrappers/fake_storage.h>
+#include <ydb/core/wrappers/abstract.h>
 
 namespace NKikimr::NKqp {
 
+static constexpr TStringBuf DEFAULT_TABLE_NAME = "/Root/olapStore/olapTable";
+static constexpr TStringBuf DEFAULT_TIER_NAME = "/Root/tier1";
+static constexpr TStringBuf DEFAULT_COLUMN_NAME = "timestamp";
+
+template<class TCtrl = NOlap::TWaitCompactionController>
 class TTieringTestHelper {
 private:
+    using TCtrlGuard = NYDBTest::TControllers::TGuard<TCtrl>;
     std::optional<TTestHelper> TestHelper;
     std::optional<TLocalHelper> OlapHelper;
-    std::optional<NYDBTest::TControllers::TGuard<NOlap::TWaitCompactionController>> CsController;
+    std::optional<TCtrlGuard> Controller;
 
-    YDB_ACCESSOR(TString, TablePath, "/Root/olapStore/olapTable");
+    YDB_ACCESSOR(TString, TablePath, TString(DEFAULT_TABLE_NAME));
 
 public:
     TTieringTestHelper() {
-        CsController.emplace(NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>());
-        (*CsController)->SetSkipSpecialCheckForEvict(true);
+        Controller.emplace(NYDBTest::TControllers::RegisterCSControllerGuard<TCtrl>());
+        (*Controller)->SetSkipSpecialCheckForEvict(true);
 
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -48,9 +55,9 @@ public:
         return *OlapHelper;
     }
 
-    NYDBTest::TControllers::TGuard<NOlap::TWaitCompactionController>& GetCsController() {
-        AFL_VERIFY(CsController);
-        return *CsController;
+    TCtrlGuard& GetController() {
+        AFL_VERIFY(Controller);
+        return *Controller;
     }
 
     void WriteSampleData() {
@@ -83,7 +90,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 
     Y_UNIT_TEST(EvictionResetTiering) {
         TTieringTestHelper tieringHelper;
-        auto& csController = tieringHelper.GetCsController();
+        auto& csController = tieringHelper.GetController();
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
 
@@ -94,18 +101,18 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         csController->WaitActualization(TDuration::Seconds(5));
         tieringHelper.CheckAllDataInTier("__DEFAULT");
 
-        testHelper.SetTiering("/Root/olapStore/olapTable", "/Root/tier1", "timestamp");
+        testHelper.SetTiering(TString(DEFAULT_TABLE_NAME), TString(DEFAULT_TIER_NAME), TString(DEFAULT_COLUMN_NAME));
         csController->WaitActualization(TDuration::Seconds(5));
-        tieringHelper.CheckAllDataInTier("/Root/tier1");
+        tieringHelper.CheckAllDataInTier(TString(DEFAULT_TIER_NAME));
 
-        testHelper.ResetTiering("/Root/olapStore/olapTable");
+        testHelper.ResetTiering(TString(DEFAULT_TABLE_NAME));
         csController->WaitCompactions(TDuration::Seconds(5));
         tieringHelper.CheckAllDataInTier("__DEFAULT");
     }
 
     Y_UNIT_TEST(EvictionIncreaseDuration) {
         TTieringTestHelper tieringHelper;
-        auto& csController = tieringHelper.GetCsController();
+        auto& csController = tieringHelper.GetController();
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
 
@@ -116,9 +123,9 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         csController->WaitActualization(TDuration::Seconds(5));
         tieringHelper.CheckAllDataInTier("__DEFAULT");
 
-        testHelper.SetTiering("/Root/olapStore/olapTable", "/Root/tier1", "timestamp");
+        testHelper.SetTiering(TString(DEFAULT_TABLE_NAME), TString(DEFAULT_TIER_NAME), TString(DEFAULT_COLUMN_NAME));
         csController->WaitActualization(TDuration::Seconds(5));
-        tieringHelper.CheckAllDataInTier("/Root/tier1");
+        tieringHelper.CheckAllDataInTier(TString(DEFAULT_TIER_NAME));
 
         {
             const TString query = R"(ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval("P30000D") TO EXTERNAL DATA SOURCE `/Root/tier1` ON timestamp)";
@@ -131,14 +138,14 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 
     Y_UNIT_TEST(LoadTtlSettings) {
         TTieringTestHelper tieringHelper;
-        auto& csController = tieringHelper.GetCsController();
+        auto& csController = tieringHelper.GetController();
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
         tieringHelper.SetTablePath("/Root/olapTable");
 
         olapHelper.CreateTestOlapTableWithoutStore();
         testHelper.CreateTier("tier1");
-        testHelper.SetTiering("/Root/olapTable", "/Root/tier1", "timestamp");
+        testHelper.SetTiering("/Root/olapTable", TString(DEFAULT_TIER_NAME), TString(DEFAULT_COLUMN_NAME));
         {
             const TString query = R"(ALTER TABLE `/Root/olapTable` ADD COLUMN f Int32)";
             auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
@@ -149,12 +156,12 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         tieringHelper.WriteSampleData();
         csController->WaitCompactions(TDuration::Seconds(5));
         csController->WaitActualization(TDuration::Seconds(5));
-        tieringHelper.CheckAllDataInTier("/Root/tier1");
+        tieringHelper.CheckAllDataInTier(TString(DEFAULT_TIER_NAME));
     }
 
     Y_UNIT_TEST(EvictionWithStrippedEdsPath) {
         TTieringTestHelper tieringHelper;
-        auto& csController = tieringHelper.GetCsController();
+        auto& csController = tieringHelper.GetController();
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
 
@@ -162,9 +169,9 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         testHelper.CreateTier("tier1");
         tieringHelper.WriteSampleData();
 
-        testHelper.SetTiering("/Root/olapStore/olapTable", "Root/tier1", "timestamp");
+        testHelper.SetTiering(TString(DEFAULT_TABLE_NAME), "Root/tier1", TString(DEFAULT_COLUMN_NAME));
         csController->WaitActualization(TDuration::Seconds(5));
-        tieringHelper.CheckAllDataInTier("/Root/tier1");
+        tieringHelper.CheckAllDataInTier(TString(DEFAULT_TIER_NAME));
     }
 
     Y_UNIT_TEST(TieringValidation) {
@@ -187,12 +194,12 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
         }
 
-        testHelper.SetTiering("/Root/olapStore/olapTable", "/Root/tier1", "timestamp");
+        testHelper.SetTiering(TString(DEFAULT_TABLE_NAME), TString(DEFAULT_TIER_NAME), TString(DEFAULT_COLUMN_NAME));
     }
 
     Y_UNIT_TEST(DeletedTier) {
         TTieringTestHelper tieringHelper;
-        auto& csController = tieringHelper.GetCsController();
+        auto& csController = tieringHelper.GetController();
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
         NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
@@ -200,14 +207,14 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         olapHelper.CreateTestOlapTable();
         testHelper.CreateTier("tier1");
         tieringHelper.WriteSampleData();
-        testHelper.SetTiering("/Root/olapStore/olapTable", "/Root/tier1", "timestamp");
+        testHelper.SetTiering(TString(DEFAULT_TABLE_NAME), TString(DEFAULT_TIER_NAME), TString(DEFAULT_COLUMN_NAME));
         csController->WaitCompactions(TDuration::Seconds(5));
         csController->WaitActualization(TDuration::Seconds(5));
 
         csController->DisableBackground(NYDBTest::ICSController::EBackground::TTL);
-        testHelper.ResetTiering("/Root/olapStore/olapTable");
-        testHelper.RebootTablets("/Root/olapStore/olapTable");
-        tieringHelper.CheckAllDataInTier("/Root/tier1");
+        testHelper.ResetTiering(TString(DEFAULT_TABLE_NAME));
+        testHelper.RebootTablets(TString(DEFAULT_TABLE_NAME));
+        tieringHelper.CheckAllDataInTier(TString(DEFAULT_TIER_NAME));
 
         TString selectQuery = R"(SELECT MAX(level) AS level FROM `/Root/olapStore/olapTable`)";
         ui64 scanResult;
@@ -221,7 +228,8 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             auto result = testHelper.GetSession().ExecuteSchemeQuery(R"(DROP EXTERNAL DATA SOURCE `/Root/tier1`)").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
-        testHelper.RebootTablets("/Root/olapStore/olapTable");
+
+        testHelper.RebootTablets(TString(DEFAULT_TABLE_NAME));
 
         {
             auto it = tableClient.StreamExecuteScanQuery(selectQuery, NYdb::NTable::TStreamExecScanQuerySettings()).GetValueSync();
@@ -231,7 +239,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         }
 
         testHelper.CreateTier("tier1");
-        testHelper.RebootTablets("/Root/olapStore/olapTable");
+        testHelper.RebootTablets(TString(DEFAULT_TABLE_NAME));
 
         {
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
@@ -242,7 +250,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 
     Y_UNIT_TEST(TtlBorders) {
         TTieringTestHelper tieringHelper;
-        auto& csController = tieringHelper.GetCsController();
+        auto& csController = tieringHelper.GetController();
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
         NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
@@ -252,7 +260,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         {
             const TDuration tsInterval = TDuration::Days(3650);
             const ui64 rows = 10000;
-            WriteTestData(testHelper.GetKikimr(), "/Root/olapStore/olapTable", 0, (TInstant::Now() - tsInterval).MicroSeconds(), rows,
+            WriteTestData(testHelper.GetKikimr(), TString(DEFAULT_TABLE_NAME), 0, (TInstant::Now() - tsInterval).MicroSeconds(), rows,
                 false, tsInterval.MicroSeconds() / rows);
         }
 
@@ -263,7 +271,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 // 
 //             auto rows = ExecuteScanQuery(tableClient, selectQuery);
 //             UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
-//             UNIT_ASSERT_GT(GetTimestamp(rows[0].at("timestamp")), TInstant::Now() - TDuration::Days(100));
+//             UNIT_ASSERT_GT(GetTimestamp(rows[0].at(TString(DEFAULT_COLUMN_NAME))), TInstant::Now() - TDuration::Days(100));
 //         }
 
         {
@@ -298,7 +306,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 
     Y_UNIT_TEST(LocksInterference) {
         TTieringTestHelper tieringHelper;
-        auto& csController = tieringHelper.GetCsController();
+        auto& csController = tieringHelper.GetController();
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
         NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
@@ -314,12 +322,14 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             NColumnShard::TInternalPathId::FromRawValue(4),
             NColumnShard::TInternalPathId::FromRawValue(5),
         };
+
         csController->RegisterLock("table", std::make_shared<NOlap::NDataLocks::TListTablesLock>("table", std::move(pathsToLock), NOlap::NDataLocks::ELockCategory::Compaction));
         {
             const TString query = R"(ALTER TABLE `/Root/olapStore/olapTable` SET TTL Interval("PT1S") ON timestamp)";
             auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
+
         csController->WaitActualization(TDuration::Seconds(5));
         tieringHelper.CheckAllDataInTier("__DEFAULT");
 
@@ -341,7 +351,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 
     Y_UNIT_TEST(TieringGC) {
         TTieringTestHelper tieringHelper;
-        auto& csController = tieringHelper.GetCsController();
+        auto& csController = tieringHelper.GetController();
         csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
         csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
         auto& olapHelper = tieringHelper.GetOlapHelper();
@@ -351,14 +361,14 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         testHelper.CreateTier("tier1");
         tieringHelper.WriteSampleData();
 
-        testHelper.SetTiering("/Root/olapStore/olapTable", "/Root/tier1", "timestamp");
+        testHelper.SetTiering(TString(DEFAULT_TABLE_NAME), TString(DEFAULT_TIER_NAME), TString(DEFAULT_COLUMN_NAME));
         csController->WaitCompactions(TDuration::Seconds(5));
         csController->WaitActualization(TDuration::Seconds(5));
-        tieringHelper.CheckAllDataInTier("/Root/tier1", false);
+        tieringHelper.CheckAllDataInTier(TString(DEFAULT_TIER_NAME), false);
         UNIT_ASSERT_GT(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize(), 0);
 
         csController->DisableBackground(NYDBTest::ICSController::EBackground::GC);
-        testHelper.ResetTiering("/Root/olapStore/olapTable");
+        testHelper.ResetTiering(TString(DEFAULT_TABLE_NAME));
         csController->WaitActualization(TDuration::Seconds(5));
 
         tieringHelper.CheckAllDataInTier("__DEFAULT", false);
@@ -366,15 +376,43 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 
         csController->EnableBackground(NYDBTest::ICSController::EBackground::GC);
         csController->SetExternalStorageUnavailable(true);
-        testHelper.ResetTiering("/Root/olapStore/olapTable");
+        testHelper.ResetTiering(TString(DEFAULT_TABLE_NAME));
         csController->WaitCleaning(TDuration::Seconds(5));
         UNIT_ASSERT_GT(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize(), 0);
 
         csController->SetExternalStorageUnavailable(false);
-        testHelper.ResetTiering("/Root/olapStore/olapTable");
+        testHelper.ResetTiering(TString(DEFAULT_TABLE_NAME));
         csController->WaitCondition(TDuration::Seconds(60), []() {
             return Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize() == 0;
         });
+    }
+
+    Y_UNIT_TEST(NoBackoffUnavailableS3) {
+        TTieringTestHelper<NOlap::TAbortedWriteCounterController> tieringHelper;
+        auto& putController = tieringHelper.GetController();
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+        
+        
+        olapHelper.CreateTestOlapTable();
+        testHelper.CreateTier("tier1");
+        tieringHelper.WriteSampleData();
+        putController->WaitCompactions(TDuration::Seconds(5));
+    
+        putController->SetExternalStorageUnavailable(true);
+        testHelper.SetTiering(TString(DEFAULT_TABLE_NAME),
+                              TString(DEFAULT_TIER_NAME),
+                              TString(DEFAULT_COLUMN_NAME));
+
+        putController->WaitActualization(TDuration::Seconds(5));
+        Sleep(TDuration::Seconds(5));
+
+        UNIT_ASSERT_C(putController->GetAbortedWrites() > 20,
+                      "Expected load spike, but only "
+                      << putController->GetAbortedWrites() << " PutObject requests recorded"); // comment after fix
+        // UNIT_ASSERT_C(putController->GetAbortedWrites() < 10,
+        //               "Expected load spike, but was "
+        //               << putController->GetAbortedWrites() << " PutObject requests recorded"); // uncomment after fix
     }
 }
 

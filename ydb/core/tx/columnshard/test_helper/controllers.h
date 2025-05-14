@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/address.h>
+#include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 
 namespace NKikimr::NOlap {
 
@@ -39,6 +40,10 @@ protected:
         return TDuration::Zero();
     }
 public:
+    virtual ui64 GetAbortedWrites() const {
+        return 0;
+    }
+
     virtual bool CheckPortionForEvict(const TPortionInfo& portion) const override {
         if (SkipSpecialCheckForEvict) {
             return true;
@@ -91,4 +96,25 @@ private:
     size_t FailsCount = 0;
 };
 
-}
+class TAbortedWriteCounterController final
+        : public NOlap::TWaitCompactionController
+{
+public:
+    virtual ui64 GetAbortedWrites() const override {
+        return AbortedWrites.load();
+    }
+
+protected:
+    bool DoOnWriteIndexComplete(const NOlap::TColumnEngineChanges& change,
+                                const ::NKikimr::NColumnShard::TColumnShard& shard) override {
+        if (change.IsAborted()) {
+            ++AbortedWrites;
+        }
+
+        return NOlap::TWaitCompactionController::DoOnWriteIndexComplete(change, shard);
+    }
+
+private:
+    std::atomic<ui64> AbortedWrites{0};
+};
+} // namespace NKikimr::NOlap

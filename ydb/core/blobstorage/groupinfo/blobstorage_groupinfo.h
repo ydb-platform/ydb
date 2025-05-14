@@ -306,6 +306,8 @@ public:
     const TCypherKey* GetCypherKey() const { return &Key; }
     std::shared_ptr<TTopology> PickTopology() const { return Topology; }
 
+    const std::vector<TGroupId>& GetBridgeGroupIds() const { return BridgeGroupIds; }
+
     // for testing purposes; numFailDomains = 0 automatically selects possible minimum for provided erasure; groupId=0
     // and groupGen=1 for constructed group
     explicit TBlobStorageGroupInfo(TBlobStorageGroupType gtype, ui32 numVDisksPerFailDomain = 1,
@@ -443,6 +445,8 @@ private:
     TMaybe<TKikimrScopeId> AcceptedScope;
     TString StoragePoolName;
     NPDisk::EDeviceType DeviceType = NPDisk::DEVICE_TYPE_UNKNOWN;
+    // bridge mode fields
+    std::vector<TGroupId> BridgeGroupIds;
 };
 
 // physical fail domain description

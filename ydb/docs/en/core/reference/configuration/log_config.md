@@ -63,15 +63,15 @@ The `uaclient_config` field configures integration with [Unified Agent](https://
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `uri` | string | — | URI of the Unified Agent server. |
-| `shared_secret_key` | string | — | Shared secret key for authentication. |
-| `max_inflight_bytes` | uint64 | 100000000 | Maximum number of bytes in transit. |
+| `uri` | string | — | grpc URI of the Unified Agent server. |
+| `shared_secret_key` | string | — | Path to the file with the secret key for client connection authentication. |
+| `max_inflight_bytes` | uint64 | 100000000 | Maximum number of bytes in transit when sending data. |
 | `grpc_reconnect_delay_ms` | uint64 | — | Delay between reconnection attempts in milliseconds. |
 | `grpc_send_delay_ms` | uint64 | — | Delay between send attempts in milliseconds. |
 | `grpc_max_message_size` | uint64 | — | Maximum gRPC message size. |
 | `client_log_file` | string | — | Log file for the UA client itself. |
-| `client_log_priority` | uint32 | — | Log priority for the UA client. |
-| `log_name` | string | — | Log name for session metadata. |
+| `client_log_priority` | uint32 | — | Logging level for the UA client itself. |
+| `log_name` | string | — | Log name that is passed in session metadata. |
 
 ## Log Levels {#log-levels}
 

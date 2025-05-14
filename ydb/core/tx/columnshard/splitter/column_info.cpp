@@ -81,7 +81,7 @@ bool TSplittedEntity::TBlobChunk::TakeEntityPartFrom(TBlobChunk& sourceNormal, c
                 }
 
                 counters->BySizeSplitter.OnTrashSerialized(c->GetPackedSize());
-                auto splitParts = c->InternalSplit(schema->GetColumnSaver(i->GetEntityId()), counters, { 0.5 * (deltaSelf + std::min(deltaSource, cSize)) });
+                auto splitParts = c->InternalSplit(schema->GetColumnSaver(i->GetEntityId()), counters, { (ui64)(0.5 * (deltaSelf + std::min(deltaSource, cSize))) });
                 AFL_VERIFY(splitParts.size() == 2)("size", splitParts.size());
                 if (i->GetSize() - c->GetPackedSize() + splitParts.back()->GetPackedSize() < maxSize &&
                     GetSize() + splitParts.front()->GetPackedSize() < maxSize) {

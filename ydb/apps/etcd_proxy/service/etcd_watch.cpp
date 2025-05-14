@@ -596,16 +596,7 @@ private:
     }
 
     void Wakeup() {
-        std::ostringstream sql;
-        sql << Stuff->TablePrefix;
-        sql << "$Leases = select `id` as `lease` from `leases` where unwrap(interval('PT1S') * `ttl` + `updated`) <= CurrentUtcDatetime(`id`);" << std::endl;
-        sql << "$Clean = select `lease` from $Leases as l left only join `current` view `lease` as c using(`lease`);" << std::endl;
-        sql << "$Dirty = select `lease` from $Leases as l left semi join `current` view `lease` as c using(`lease`);" << std::endl;
-        sql << "delete from `leases` where `id` in $Clean;" << std::endl;
-        sql << "select count(`lease`) from $Clean;" << std::endl;
-        sql << "select `lease` from $Dirty;" << std::endl;
-
-        Stuff->Client->ExecuteQuery(sql.str(), TTxControl::BeginTx().CommitTx()).Subscribe([my = this->SelfId(), stuff = TSharedStuff::TWeakPtr(Stuff)](const auto& future) {
+        Stuff->Client->ExecuteQuery(Stuff->TablePrefix + NResource::Find("leases.sql"sv), TTxControl::BeginTx().CommitTx()).Subscribe([my = this->SelfId(), stuff = TSharedStuff::TWeakPtr(Stuff)](const auto& future) {
             if (const auto lock = stuff.lock()) {
                 if (const auto res = future.GetValue(); res.IsSuccess())
                     lock->ActorSystem->Send(my, new TEvQueryResult(res.GetResultSets()));
@@ -628,18 +619,15 @@ private:
 
         sql << "$Leases = select `id` as `lease` from `leases` where  `id` in $Expired and unwrap(interval('PT1S') * `ttl` + `updated`) <= CurrentUtcDatetime(`id`);" << std::endl;
         sql << "$Victims = select `key`, `value`, `created`, `modified`, `version`, `lease` from `current` view `lease` as h left semi join $Leases as l using(`lease`);" << std::endl;
-
         sql << "insert into `history`" << std::endl;
         sql << "select `key`, `created`, " << revName << " as `modified`, 0L as `version`, `value`, `lease` from $Victims;" << std::endl;
         sql << "delete from `current` on select `key` from $Victims;" << std::endl;
-
+        sql << "delete from `leases` where `id` in $Leases;" << std::endl;
         if constexpr (NotifyWatchtower) {
             sql << "select `key`, `value`, `created`, `modified`, `version`, `lease` from $Victims;" << std::endl;
         } else {
             sql << "select count(*) from $Victims;" << std::endl;
         }
-
-        sql << "delete from `leases` where `id` in $Leases;" << std::endl;
 
         Stuff->Client->ExecuteQuery(sql.str(), TTxControl::BeginTx().CommitTx(), params.Build()).Subscribe([my = this->SelfId(), stuff = TSharedStuff::TWeakPtr(Stuff)](const auto& future) {
             if (const auto lock = stuff.lock()) {

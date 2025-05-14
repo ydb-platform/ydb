@@ -22,6 +22,7 @@ PEERDIR(
 
 RESOURCE(
     ydb/apps/etcd_proxy/service/create.sql create.sql
+    ydb/apps/etcd_proxy/service/leases.sql leases.sql
     ydb/apps/etcd_proxy/service/revision.sql revision.sql
 )
 

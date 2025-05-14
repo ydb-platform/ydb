@@ -1,10 +1,16 @@
 # `log_config` configuration section
 
-The `log_config` section controls how {{ ydb-short-name }} server processes and manages its logs. It allows you to customize logging levels, formats, and destinations for different components.
+The `log_config` section controls how {{ ydb-short-name }} server processes and manages its logs. It allows you to customize logging levels for different components, as well as global log formats and output methods.
+
+{% note info %}
+
+This document describes application and system logging configuration. For security and audit logging, see [{#T}](../../security/audit-log.md).
+
+{% endnote %}
 
 ## Overview
 
-Logging is a critical part of {{ ydb-short-name }}'s observability. The `log_config` section lets you configure various aspects of logging, including:
+Logging is a critical part of the {{ ydb-short-name }} [observability](../observability/index.md) system. The `log_config` section lets you configure various aspects of logging, including:
 
 - Default logging level
 - Component-specific logging levels
@@ -158,3 +164,4 @@ log_config:
 - [{#T}](../observability/index.md)
 - [{#T}](../observability/metrics/index.md)
 - [{#T}](../observability/tracing/setup.md)
+- [{#T}](../../security/audit-log.md)

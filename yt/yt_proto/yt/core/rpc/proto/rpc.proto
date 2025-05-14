@@ -87,6 +87,7 @@ message TRequestHeader
      * resolve_depth                        119
      * ssl_credentials_ext                  120
      * caused_by_node_expiration            124
+     * multiproxy_target_ext                125
      * req_execute_ext                      200
      * req_multiread_ext                    201
      */
@@ -135,6 +136,15 @@ message TCustomMetadataExt
     }
 
     map<string, bytes> entries = 1;
+}
+
+message TMultiproxyTargetExt
+{
+    extend NRpc.NProto.TRequestHeader
+    {
+        optional TMultiproxyTargetExt multiproxy_target_ext = 125;
+    }
+    optional string cluster = 1;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

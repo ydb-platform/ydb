@@ -51,6 +51,7 @@ SRCS(
     api/rpc_proxy/table_mount_cache.cpp
     api/rpc_proxy/table_reader.cpp
     api/rpc_proxy/table_writer.cpp
+    api/rpc_proxy/target_cluster_injecting_channel.cpp
     api/rpc_proxy/timestamp_provider.cpp
     api/rpc_proxy/transaction.cpp
     api/rpc_proxy/transaction_impl.cpp

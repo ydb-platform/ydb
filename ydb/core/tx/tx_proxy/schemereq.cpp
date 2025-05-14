@@ -737,10 +737,13 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             ResolveForACL.push_back(toResolve);
 
             auto& config = pbModifyScheme.GetReplication().GetConfig();
-            auto toWriteTable = TPathToResolve(pbModifyScheme);
-            toWriteTable.Path = SplitPath(config.GetTransferSpecific().GetTarget().GetDstPath());
-            toWriteTable.RequireAccess = NACLib::EAccessRights::UpdateRow;
-            ResolveForACL.push_back(toWriteTable);
+            auto& target = config.GetTransferSpecific().GetTarget();
+            if (target.HasDstPath()) {
+                auto toWriteTable = TPathToResolve(pbModifyScheme);
+                toWriteTable.Path = SplitPath(target.GetDstPath());
+                toWriteTable.RequireAccess = NACLib::EAccessRights::UpdateRow;
+                ResolveForACL.push_back(toWriteTable);
+            }
 
             break;
         }
@@ -849,8 +852,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             ResolveForACL.push_back(toResolve);
 
             auto& config = pbModifyScheme.GetReplication().GetConfig();
+            auto& target = config.GetTransferSpecific().GetTarget();
             auto toWriteTable = TPathToResolve(pbModifyScheme);
-            toWriteTable.Path = SplitPath(config.GetTransferSpecific().GetTarget().GetDstPath());
+            toWriteTable.Path = SplitPath(target.GetDstPath());
             toWriteTable.RequireAccess = NACLib::EAccessRights::UpdateRow;
             ResolveForACL.push_back(toWriteTable);
 

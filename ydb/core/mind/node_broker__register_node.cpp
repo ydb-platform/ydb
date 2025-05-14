@@ -19,6 +19,10 @@ public:
         , NodeId(0)
         , ExtendLease(false)
         , FixNodeId(false)
+        , SetLocation(false)
+        , UpdateNodeAuthorizedByCertificate(false)
+        , AllocateSlotIndex(false)
+        , SlotIndexSubdomainChanged(false)
     {
     }
 
@@ -46,7 +50,7 @@ public:
         auto host = rec.GetHost();
         ui16 port = (ui16)rec.GetPort();
         TString addr = rec.GetAddress();
-        auto expire = rec.GetFixedNodeId() ? TInstant::Max() : Self->Epoch.NextEnd;
+        auto expire = rec.GetFixedNodeId() ? TInstant::Max() : Self->Dirty.Epoch.NextEnd;
 
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxRegisterNode Execute");
         LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
@@ -71,9 +75,9 @@ public:
         }
 
         // Already registered?
-        auto it = Self->Hosts.find(std::make_tuple(host, addr, port));
-        if (it != Self->Hosts.end()) {
-            auto &node = Self->Nodes.find(it->second)->second;
+        auto it = Self->Dirty.Hosts.find(std::make_tuple(host, addr, port));
+        if (it != Self->Dirty.Hosts.end()) {
+            auto &node = Self->Dirty.Nodes.find(it->second)->second;
             NodeId = node.NodeId;
 
             if (node.Address != rec.GetAddress()
@@ -90,46 +94,49 @@ public:
                              ctx);
             } else if (node.Location != loc) {
                 node.Location = loc;
-                Self->DbUpdateNodeLocation(node, txc);
+                Self->Dirty.DbUpdateNodeLocation(node, txc);
+                SetLocation = true;
             }
 
             if (!node.IsFixed() && rec.GetFixedNodeId()) {
-                Self->DbFixNodeId(node, txc);
+                Self->Dirty.DbFixNodeId(node, txc);
+                Self->Dirty.FixNodeId(node);
                 FixNodeId = true;
             } else if (!node.IsFixed() && node.Expire < expire) {
-                Self->DbUpdateNodeLease(node, txc);
+                Self->Dirty.DbUpdateNodeLease(node, txc);
+                Self->Dirty.ExtendLease(node);
                 ExtendLease = true;
             }
             if (node.AuthorizedByCertificate != rec.GetAuthorizedByCertificate()) {
                 node.AuthorizedByCertificate = rec.GetAuthorizedByCertificate();
-                Self->DbUpdateNodeAuthorizedByCertificate(node, txc);
+                Self->Dirty.DbUpdateNodeAuthorizedByCertificate(node, txc);
+                UpdateNodeAuthorizedByCertificate = true;
             }
 
             if (Self->EnableStableNodeNames) {
                 if (ServicedSubDomain != node.ServicedSubDomain) {
                     if (node.SlotIndex.has_value()) {
-                        Self->SlotIndexesPools[node.ServicedSubDomain].Release(node.SlotIndex.value());
+                        Self->Dirty.SlotIndexesPools[node.ServicedSubDomain].Release(node.SlotIndex.value());
                     }
                     node.ServicedSubDomain = ServicedSubDomain;
-                    node.SlotIndex = Self->SlotIndexesPools[node.ServicedSubDomain].AcquireLowestFreeIndex();
-                    Self->DbAddNode(node, txc);
+                    node.SlotIndex = Self->Dirty.SlotIndexesPools[node.ServicedSubDomain].AcquireLowestFreeIndex();
+                    Self->Dirty.DbAddNode(node, txc);
+                    SlotIndexSubdomainChanged = true;
                 } else if (!node.SlotIndex.has_value()) {
-                    node.SlotIndex = Self->SlotIndexesPools[node.ServicedSubDomain].AcquireLowestFreeIndex();
-                    Self->DbAddNode(node, txc);
+                    node.SlotIndex = Self->Dirty.SlotIndexesPools[node.ServicedSubDomain].AcquireLowestFreeIndex();
+                    Self->Dirty.DbAddNode(node, txc);
+                    AllocateSlotIndex = true;
                 }
             }
 
             Response->Record.MutableStatus()->SetCode(TStatus::OK);
-            Self->FillNodeInfo(node, *Response->Record.MutableNode());
-
             return true;
         }
 
-        if (Self->FreeIds.Empty())
+        if (Self->Dirty.FreeIds.Empty())
             return Error(TStatus::ERROR_TEMP, "No free node IDs", ctx);
 
-        NodeId = Self->FreeIds.FirstNonZeroBit();
-        Self->FreeIds.Reset(NodeId);
+        NodeId = Self->Dirty.FreeIds.FirstNonZeroBit();
 
         Node = MakeHolder<TNodeInfo>(NodeId, rec.GetAddress(), host, rec.GetResolveHost(), port, loc);
         Node->AuthorizedByCertificate = rec.GetAuthorizedByCertificate();
@@ -138,13 +145,15 @@ public:
 
         if (Self->EnableStableNodeNames) {
             Node->ServicedSubDomain = ServicedSubDomain;
-            Node->SlotIndex = Self->SlotIndexesPools[Node->ServicedSubDomain].AcquireLowestFreeIndex();
+            Node->SlotIndex = Self->Dirty.SlotIndexesPools[Node->ServicedSubDomain].AcquireLowestFreeIndex();
         }
 
         Response->Record.MutableStatus()->SetCode(TStatus::OK);
 
-        Self->DbAddNode(*Node, txc);
-        Self->DbUpdateEpochVersion(Self->Epoch.Version + 1, txc);
+        Self->Dirty.DbAddNode(*Node, txc);
+        Self->Dirty.AddNode(*Node);
+        Self->Dirty.DbUpdateEpochVersion(Self->Dirty.Epoch.Version + 1, txc);
+        Self->Dirty.UpdateEpochVersion();
 
         return true;
     }
@@ -154,18 +163,37 @@ public:
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxRegisterNode Complete");
 
         if (Node) {
-            Self->AddNode(*Node);
-            Self->UpdateEpochVersion();
+            Self->Committed.AddNode(*Node);
+            Self->Committed.UpdateEpochVersion();
             Self->AddNodeToEpochCache(*Node);
         } else if (ExtendLease)
-            Self->ExtendLease(Self->Nodes.at(NodeId));
+            Self->Committed.ExtendLease(Self->Committed.Nodes.at(NodeId));
         else if (FixNodeId)
-            Self->FixNodeId(Self->Nodes.at(NodeId));
+            Self->Committed.FixNodeId(Self->Committed.Nodes.at(NodeId));
+
+        if (SetLocation) {
+            Self->Committed.Nodes.at(NodeId).Location = TNodeLocation(Event->Get()->Record.GetLocation());
+        }
+
+        if (UpdateNodeAuthorizedByCertificate) {
+            Self->Committed.Nodes.at(NodeId).AuthorizedByCertificate = Event->Get()->Record.GetAuthorizedByCertificate();
+        }
+
+        if (AllocateSlotIndex) {
+            Self->Committed.Nodes.at(NodeId).SlotIndex = Self->Committed.SlotIndexesPools[ServicedSubDomain].AcquireLowestFreeIndex();
+        } else if (SlotIndexSubdomainChanged) {
+            auto& node = Self->Committed.Nodes.at(NodeId);
+            if (node.SlotIndex.has_value()) {
+                Self->Committed.SlotIndexesPools[node.ServicedSubDomain].Release(node.SlotIndex.value());
+            }
+            node.ServicedSubDomain = ServicedSubDomain;
+            node.SlotIndex = Self->Committed.SlotIndexesPools[ServicedSubDomain].AcquireLowestFreeIndex();
+        }
 
         Y_ABORT_UNLESS(Response);
         // With all modifications applied we may fill node info.
         if (Response->Record.GetStatus().GetCode() == TStatus::OK)
-            Self->FillNodeInfo(Self->Nodes.at(NodeId), *Response->Record.MutableNode());
+            Self->FillNodeInfo(Self->Committed.Nodes.at(NodeId), *Response->Record.MutableNode());
         LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER,
                     "TTxRegisterNode reply with: " << Response->Record.ShortDebugString());
 
@@ -176,8 +204,6 @@ public:
         }
 
         ctx.Send(Event->Sender, Response.Release());
-
-        Self->TxCompleted(this, ctx);
     }
 
 private:
@@ -189,6 +215,10 @@ private:
     ui32 NodeId;
     bool ExtendLease;
     bool FixNodeId;
+    bool SetLocation;
+    bool UpdateNodeAuthorizedByCertificate;
+    bool AllocateSlotIndex;
+    bool SlotIndexSubdomainChanged;
 };
 
 ITransaction *TNodeBroker::CreateTxRegisterNode(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev)

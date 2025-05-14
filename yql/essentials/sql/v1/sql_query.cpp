@@ -3506,12 +3506,18 @@ TNodePtr TSqlQuery::Build(const TRule_delete_stmt& stmt) {
     TSourcePtr source = BuildTableSource(Ctx.Pos(), table);
 
     TNodePtr options = nullptr;
+    const bool isBatch = stmt.HasBlock1();
+
     if (stmt.HasBlock6()) {
+        if (isBatch) {
+            Ctx.Error(GetPos(stmt.GetToken2()))
+                << "BATCH DELETE is unsupported with RETURNING";
+            return nullptr;
+        }
+
         options = ReturningList(stmt.GetBlock6().GetRule_returning_columns_list1());
         options = options->Y(options);
     }
-
-    const bool isBatch = stmt.HasBlock1();
 
     if (stmt.HasBlock5()) {
         switch (stmt.GetBlock5().Alt_case()) {
@@ -3569,13 +3575,19 @@ TNodePtr TSqlQuery::Build(const TRule_update_stmt& stmt) {
         return nullptr;
     }
 
+    const bool isBatch = stmt.HasBlock1();
     TNodePtr options = nullptr;
+
     if (stmt.HasBlock5()) {
+        if (isBatch) {
+            Ctx.Error(GetPos(stmt.GetToken2()))
+                << "BATCH UPDATE is unsupported with RETURNING";
+            return nullptr;
+        }
+
         options = ReturningList(stmt.GetBlock5().GetRule_returning_columns_list1());
         options = options->Y(options);
     }
-
-    const bool isBatch = stmt.HasBlock1();
 
     switch (stmt.GetBlock4().Alt_case()) {
         case TRule_update_stmt_TBlock4::kAlt1: {

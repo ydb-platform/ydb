@@ -97,26 +97,12 @@ struct TDistributedTransaction {
 
     TString LogPrefix() const;
 
-    //struct TSerializedMessage {
-    //    ui32 Type;
-    //    TIntrusivePtr<TEventSerializedData> Data;
-
-    //    TSerializedMessage(ui32 type, TIntrusivePtr<TEventSerializedData> data) :
-    //        Type(type),
-    //        Data(data)
-    //    {
-    //    }
-    //};
-
     using TEvReadSetPtr = std::unique_ptr<TEvTxProcessing::TEvReadSet>;
 
-    //THashMap<ui64, TVector<TSerializedMessage>> OutputMsgs;
     THashMap<ui64, TVector<TEvReadSetPtr>> OutputMsgs;
 
-    //void BindMsgToPipe(ui64 tabletId, const IEventBase& event);
     void BindMsgToPipe(ui64 tabletId, const TEvTxProcessing::TEvReadSet& event);
     void UnbindMsgsFromPipe(ui64 tabletId);
-    //const TVector<TSerializedMessage>& GetBindedMsgs(ui64 tabletId);
     const TVector<TEvReadSetPtr>& GetBindedMsgs(ui64 tabletId);
 
     bool HasWriteOperations = false;

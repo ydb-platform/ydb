@@ -403,10 +403,6 @@ private:
 
     void ClearNewConfig();
 
-    //void SendToPipe(ui64 tabletId,
-    //                TDistributedTransaction& tx,
-    //                std::unique_ptr<IEventBase> event,
-    //                const TActorContext& ctx);
     void SendToPipe(ui64 tabletId,
                     TDistributedTransaction& tx,
                     std::unique_ptr<TEvTxProcessing::TEvReadSet> event,

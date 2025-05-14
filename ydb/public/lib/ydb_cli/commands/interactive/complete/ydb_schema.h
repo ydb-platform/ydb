@@ -8,6 +8,6 @@
 
 namespace NYdb::NConsoleClient {
 
-    NSQLComplete::ISimpleSchema::TPtr MakeYDBSchema(TDriver driver, TString database);
+    NSQLComplete::ISimpleSchema::TPtr MakeYDBSchema(TDriver driver, TString database, bool isVerbose);
 
 } // namespace NYdb::NConsoleClient

@@ -23,6 +23,7 @@ namespace NYdb::NConsoleClient {
         virtual ~IYQLCompleter() = default;
     };
 
-    IYQLCompleter::TPtr MakeYQLCompleter(TColorSchema color, TDriver driver, TString database);
+    IYQLCompleter::TPtr MakeYQLCompleter(
+        TColorSchema color, TDriver driver, TString database, bool isVerbose);
 
 } // namespace NYdb::NConsoleClient

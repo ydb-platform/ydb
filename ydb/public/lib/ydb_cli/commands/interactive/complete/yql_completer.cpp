@@ -116,7 +116,8 @@ namespace NYdb::NConsoleClient {
         };
     }
 
-    IYQLCompleter::TPtr MakeYQLCompleter(TColorSchema color, TDriver driver, TString database) {
+    IYQLCompleter::TPtr MakeYQLCompleter(
+        TColorSchema color, TDriver driver, TString database, bool isVerbose) {
         NSQLComplete::TLexerSupplier lexer = MakePureLexerSupplier();
 
         NSQLComplete::IRanking::TPtr ranking = NSQLComplete::MakeDefaultRanking();
@@ -128,7 +129,7 @@ namespace NYdb::NConsoleClient {
             statics,
             NSQLComplete::MakeSchemaNameService(
                 NSQLComplete::MakeSimpleSchema(
-                    MakeYDBSchema(std::move(driver), std::move(database)))),
+                    MakeYDBSchema(std::move(driver), std::move(database), isVerbose))),
         };
 
         TVector<NSQLComplete::INameService::TPtr> lighties = {

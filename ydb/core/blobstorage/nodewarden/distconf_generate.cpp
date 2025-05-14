@@ -390,11 +390,13 @@ namespace NKikimr::NStorage {
             }
 
             ui32 maxSlots = defaultMaxSlots;
+            auto slotSizeUnits = NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED;
             if (item.Record.HasPDiskConfig()) {
                 const auto& pdiskConfig = item.Record.GetPDiskConfig();
                 if (pdiskConfig.HasExpectedSlotCount()) {
                     maxSlots = pdiskConfig.GetExpectedSlotCount();
                 }
+                slotSizeUnits = pdiskConfig.GetSlotSizeUnits();
             }
 
             mapper.RegisterPDisk({
@@ -403,6 +405,7 @@ namespace NKikimr::NStorage {
                 .Usable = item.Usable,
                 .NumSlots = item.UsedSlots,
                 .MaxSlots = maxSlots,
+                .SlotSizeUnits = slotSizeUnits,
                 .Groups{},
                 .SpaceAvailable = item.SpaceAvailable,
                 .Operational = true,

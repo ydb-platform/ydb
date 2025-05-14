@@ -301,6 +301,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TProposeStoragePools& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TReassignGroupDisk& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TMoveGroups& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TResizeGroups& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TQueryBaseConfig& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TReadSettings& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDropDonorDisk& cmd, TStatus& status);

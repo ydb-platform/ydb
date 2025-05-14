@@ -139,16 +139,24 @@ struct TEvYardInit : TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit> {
     TActorId CutLogID; // ask this actor about log cut
     TActorId WhiteboardProxyId;
     ui32 SlotId;
+    NKikimrBlobStorage::TPDiskSlotSizeUnits::E SlotSizeUnits;
 
-    TEvYardInit(TOwnerRound ownerRound, const TVDiskID &vdisk, ui64 pDiskGuid,
-            const TActorId &cutLogID = TActorId(), const TActorId& whiteboardProxyId = {},
-            ui32 slotId = Max<ui32>())
+    TEvYardInit(
+            TOwnerRound ownerRound,
+            const TVDiskID &vdisk,
+            ui64 pDiskGuid,
+            const TActorId &cutLogID = TActorId(),
+            const TActorId& whiteboardProxyId = {},
+            ui32 slotId = Max<ui32>(),
+            NKikimrBlobStorage::TPDiskSlotSizeUnits::E slotSizeUnits = NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED
+        )
         : OwnerRound(ownerRound)
         , VDisk(vdisk)
         , PDiskGuid(pDiskGuid)
         , CutLogID(cutLogID)
         , WhiteboardProxyId(whiteboardProxyId)
         , SlotId(slotId)
+        , SlotSizeUnits(slotSizeUnits)
     {}
 
     TString ToString() const {
@@ -162,6 +170,8 @@ struct TEvYardInit : TEventLocal<TEvYardInit, TEvBlobStorage::EvYardInit> {
         str << " PDiskGuid# " << record.PDiskGuid;
         str << " CutLogID# " << record.CutLogID;
         str << " WhiteboardProxyId# " << record.WhiteboardProxyId;
+        str << " SlotId# " << record.SlotId;
+        str << " SlotSizeUnits# " << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(record.SlotSizeUnits);
         str << "}";
         return str.Str();
     }
@@ -239,11 +249,66 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
     }
 };
 
-struct TEvLogResult;
+////////////////////////////////////////////////////////////////////////////
+// CHANGE SLOT SIZE UNITS
+////////////////////////////////////////////////////////////////////////////
+struct TEvYardResize : TEventLocal<TEvYardResize, TEvBlobStorage::EvYardResize> {
+    TOwner Owner;
+    TOwnerRound OwnerRound;
+    TVDiskID VDisk;
+    NKikimrBlobStorage::TPDiskSlotSizeUnits::E SlotSizeUnits;
+
+    TEvYardResize(TOwner owner, TOwnerRound ownerRound, TVDiskID vdisk, NKikimrBlobStorage::TPDiskSlotSizeUnits::E slotSizeUnits)
+        : Owner(owner)
+        , OwnerRound(ownerRound)
+        , VDisk(vdisk)
+        , SlotSizeUnits(slotSizeUnits)
+    {}
+
+    TString ToString() const {
+        return ToString(*this);
+    }
+
+    static TString ToString(const TEvYardResize &record) {
+        TStringStream str;
+        str << "{EvYardResize Owner# " << record.Owner;
+        str << " OwnerRound# " << record.OwnerRound;
+        str << " VDisk# " << record.VDisk.ToString();
+        str << " SlotSizeUnits# " << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(record.SlotSizeUnits);
+        str << "}";
+        return str.Str();
+    }
+};
+
+struct TEvYardResizeResult : TEventLocal<TEvYardResizeResult, TEvBlobStorage::EvYardResizeResult> {
+    NKikimrProto::EReplyStatus Status;
+    TStatusFlags StatusFlags;
+    TVDiskID VDiskId;
+
+    TEvYardResizeResult(
+            NKikimrProto::EReplyStatus status,
+            TStatusFlags statusFlags,
+            TVDiskID vDiskId)
+        : Status(status)
+        , StatusFlags(statusFlags)
+        , VDiskId(vDiskId)
+    {}
+
+    TString ToString() const {
+        TStringStream str;
+        str << "{TEvYardResizeResult Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
+        str << " StatusFlags# " << StatusFlagsToString(StatusFlags);
+        str << " VDiskId# " << VDiskId.ToString();
+        str << "}";
+        return str.Str();
+    }
+};
 
 ////////////////////////////////////////////////////////////////////////////
 // LOG
 ////////////////////////////////////////////////////////////////////////////
+struct TEvLogResult;
+
 struct TEvLog : TEventLocal<TEvLog, TEvBlobStorage::EvLog> {
     struct ICallback {
         virtual ~ICallback() = default;
@@ -1310,12 +1375,20 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
     ui32 TotalChunks; // contains common limit in shared free space mode, Total != Free + Used
     ui32 UsedChunks; // number of chunks allocated by requesting owner
     ui32 NumSlots; // number of VSlots over PDisk
+    ui32 NumActiveSlots; // $ \sum_i{ceil(VSlot[i].SlotSizeUnits / PDisk.SlotSizeUnits)} $
     double Occupancy = 0;
     TString ErrorReason;
     TStatusFlags LogStatusFlags;
 
-    TEvCheckSpaceResult(NKikimrProto::EReplyStatus status, TStatusFlags statusFlags, ui32 freeChunks,
-            ui32 totalChunks, ui32 usedChunks, ui32 numSlots, TString errorReason,
+    TEvCheckSpaceResult(
+            NKikimrProto::EReplyStatus status,
+            TStatusFlags statusFlags,
+            ui32 freeChunks,
+            ui32 totalChunks,
+            ui32 usedChunks,
+            ui32 numSlots,
+            ui32 numActiveSlots,
+            TString errorReason,
             TStatusFlags logStatusFlags = {})
         : Status(status)
         , StatusFlags(statusFlags)
@@ -1323,6 +1396,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
         , TotalChunks(totalChunks)
         , UsedChunks(usedChunks)
         , NumSlots(numSlots)
+        , NumActiveSlots(numActiveSlots)
         , ErrorReason(std::move(errorReason))
         , LogStatusFlags(logStatusFlags)
     {}
@@ -1335,6 +1409,7 @@ struct TEvCheckSpaceResult : TEventLocal<TEvCheckSpaceResult, TEvBlobStorage::Ev
         str << " TotalChunks# " << TotalChunks;
         str << " UsedChunks# " << UsedChunks;
         str << " NumSlots# " << NumSlots;
+        str << " NumActiveSlots# " << NumActiveSlots;
         str << " ErrorReason# \"" << ErrorReason << "\"";
         str << " LogStatusFlags# " << StatusFlagsToString(LogStatusFlags);
         str << "}";

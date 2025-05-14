@@ -2289,6 +2289,10 @@ namespace NKikimr {
                                     TABLED() {str << Config->BaseInfo.PDiskId;}
                                 }
                                 TABLER() {
+                                    TABLED() {str << "SlotSizeUnits";}
+                                    TABLED() {str << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(GInfo->SlotSizeUnits);}
+                                }
+                                TABLER() {
                                     TABLED() {str << "BlobStorage GroupId (decimal)";}
                                     TABLED() {str << GInfo->GroupID;}
                                 }

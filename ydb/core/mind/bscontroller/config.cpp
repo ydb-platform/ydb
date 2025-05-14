@@ -189,6 +189,9 @@ namespace NKikimr::NBsController {
                 if (const TGroupInfo *group = State.Groups.Find(vslotInfo.GroupId); group && mood != TMood::Delete) {
                     item.SetStoragePoolName(State.StoragePools.Get().at(group->StoragePoolId).Name);
 
+                    auto slotSizeUnits = group->SlotSizeUnits.GetOrElse(NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED);
+                    item.MutableSlotSizeUnits()->SetValue(slotSizeUnits);
+
                     const TVSlotFinder vslotFinder{[this](TVSlotId vslotId, auto&& callback) {
                         if (const TVSlotInfo *vslot = State.VSlots.Find(vslotId)) {
                             callback(*vslot);
@@ -957,6 +960,9 @@ namespace NKikimr::NBsController {
             pb->SetNumGroups(pool.NumGroups);
             pb->SetRandomizeGroupMapping(pool.RandomizeGroupMapping);
 
+            auto defaultSlotSizeUnits = pool.DefaultSlotSizeUnits.GetOrElse(NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED);
+            pb->MutableDefaultSlotSizeUnits()->SetValue(defaultSlotSizeUnits);
+
             for (const auto &userId : pool.UserIds) {
                 pb->AddUserId(std::get<2>(userId));
             }
@@ -1048,6 +1054,9 @@ namespace NKikimr::NBsController {
             }
             pb->SetReady(vslot.IsReady);
             pb->SetReadOnly(vslot.Mood == TMood::ReadOnly);
+            // if (auto slotSizeUnits = vslot.GetSlotSizeUnits()) {
+            //     pb->MutableSlotSizeUnits()->SetValue(slotSizeUnits);
+            // }
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TBaseConfig::TGroup *pb, const TGroupInfo &group) {
@@ -1060,6 +1069,9 @@ namespace NKikimr::NBsController {
             pb->SetBoxId(std::get<0>(group.StoragePoolId));
             pb->SetStoragePoolId(std::get<1>(group.StoragePoolId));
             pb->SetSeenOperational(group.SeenOperational);
+            
+            auto slotSizeUnits = group.SlotSizeUnits.GetOrElse(NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED);
+            pb->MutableSlotSizeUnits()->SetValue(slotSizeUnits);
 
             const auto& status = group.Status;
             pb->SetOperatingStatus(status.OperatingStatus);
@@ -1187,6 +1199,9 @@ namespace NKikimr::NBsController {
             if (groupInfo.DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE) {
                 group->SetDecommitStatus(groupInfo.DecommitStatus);
             }
+
+            auto slotSizeUnits = groupInfo.SlotSizeUnits.GetOrElse(NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED);
+            group->SetSlotSizeUnits(slotSizeUnits);
         }
 
         void TBlobStorageController::SerializeSettings(NKikimrBlobStorage::TUpdateSettings *settings) {

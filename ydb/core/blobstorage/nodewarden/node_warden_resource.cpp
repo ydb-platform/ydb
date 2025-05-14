@@ -40,6 +40,7 @@ void TNodeWarden::IssuePendingMessages(const TActorId& actorId) {
 
 void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSet &serviceSet, bool isStatic,
         bool comprehensive, bool updateCache, const char *origin) {
+    Cerr << (TStringBuilder() << "[ PD30 ] TNodeWarden::ApplyServiceSet ServiceSet# " << serviceSet << Endl);
     if (Cfg->IsCacheEnabled() && updateCache) {
         Y_ABORT_UNLESS(!isStatic);
         return EnqueueSyncOp(WrapCacheOp(UpdateServiceSet(serviceSet, comprehensive, [=] {

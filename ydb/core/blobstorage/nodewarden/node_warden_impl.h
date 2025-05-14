@@ -401,6 +401,7 @@ namespace NKikimr::NStorage {
             // 2. Incrementing generation.
             // 3. Becoming a donor.
             // 4. Deleting disk.
+            // 5. Changing SlotSizeUnits
             NKikimrBlobStorage::TNodeWardenServiceSet::TVDisk Config;
 
             // Runtime configuration of VDisk.
@@ -409,6 +410,7 @@ namespace NKikimr::NStorage {
                 ui32 OrderNumber;
                 bool DonorMode;
                 bool ReadOnly;
+                // NKikimrBlobStorage::TPDiskSlotSizeUnits::E SlotSizeUnits;
             };
             std::optional<TRuntimeData> RuntimeData;
             bool ShutdownPending = false;

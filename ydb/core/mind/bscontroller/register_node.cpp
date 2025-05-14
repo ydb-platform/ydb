@@ -517,6 +517,12 @@ void TBlobStorageController::ReadVSlot(const TVSlotInfo& vslot, TEvBlobStorage::
         const TStoragePoolInfo& info = StoragePools.at(group->StoragePoolId);
         vDisk->SetStoragePoolName(info.Name);
 
+        if (group->SlotSizeUnits.Defined()) {
+            if (auto slotSizeUnits = *group->SlotSizeUnits.Get()) {
+                vDisk->MutableSlotSizeUnits()->SetValue(slotSizeUnits);
+            }
+        }
+
         const TVSlotFinder vslotFinder{[this](TVSlotId vslotId, auto&& callback) {
             if (const TVSlotInfo *vslot = FindVSlot(vslotId)) {
                 callback(*vslot);

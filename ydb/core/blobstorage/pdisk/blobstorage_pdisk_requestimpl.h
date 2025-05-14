@@ -131,6 +131,7 @@ public:
     TActorId CutLogId;
     TActorId WhiteboardProxyId;
     ui32 SlotId;
+    NKikimrBlobStorage::TPDiskSlotSizeUnits::E SlotSizeUnits;
 
     TYardInit(const NPDisk::TEvYardInit &ev, const TActorId &sender, TAtomicBase reqIdx)
         : TRequestBase(sender, TReqId(TReqId::YardInit, reqIdx), 0, ev.OwnerRound, NPriInternal::Other)
@@ -139,6 +140,7 @@ public:
         , CutLogId(ev.CutLogID)
         , WhiteboardProxyId(ev.WhiteboardProxyId)
         , SlotId(ev.SlotId)
+        , SlotSizeUnits(ev.SlotSizeUnits)
     {}
 
     ERequestType GetType() const override {
@@ -157,10 +159,38 @@ public:
         str << "VDisk# " << VDisk.ToString();
         str << " PDiskGuid# " << PDiskGuid;
         str << " SlotId# " << SlotId;
+        str << " SlotSizeUnits# " << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(SlotSizeUnits);
         str << "}";
         return str.Str();
     }
 };
+
+//
+// TYardResize
+//
+class TYardResize : public TRequestBase {
+    public:
+        TVDiskID VDiskId;
+        ui32 Weight;
+        // ui32 PDiskId;
+        // ui32 VSlotId;
+
+        TYardResize(const NPDisk::TEvYardResize &ev, const TActorId &sender, TAtomicBase reqIdx)
+            : TRequestBase(sender, TReqId(TReqId::YardResize, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
+            , VDiskId(ev.VDisk)
+            , Weight(0)
+        {}
+
+        // TChangeOwnerWeight(TVDiskID vDiskId, const TOwner owner, const TOwnerRound ownerRound, ui32 weight, const TActorId &sender, TAtomicBase reqIdx)
+        //     : TRequestBase(sender, TReqId(TReqId::ChangeOwnerWeight, reqIdx), owner, ownerRound, NPriInternal::Other)
+        //     , VDiskId(vDiskId)
+        //     , Weight(weight)
+        // {}
+
+        ERequestType GetType() const override {
+            return ERequestType::RequestYardResize;
+        }
+    };
 
 //
 // TCheckSpace

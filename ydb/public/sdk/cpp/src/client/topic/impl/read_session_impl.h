@@ -665,6 +665,21 @@ public:
     }
 
     template <bool V = UseMigrationProtocol, class = std::enable_if_t<!V>>
+    TMaybe<TPartitionLocation> GetLocation() const {
+        return TAPartitionStream<false>::Location;
+    }
+
+    template <bool V = UseMigrationProtocol, class = std::enable_if_t<!V>>
+    TMaybe<NTopic::TDirectReadId> GetLastDirectReadId() const {
+        return TAPartitionStream<false>::LastDirectReadId;
+    }
+
+    template <bool V = UseMigrationProtocol, class = std::enable_if_t<!V>>
+    NTopic::TDirectReadId GetNextDirectReadId() const {
+        return TAPartitionStream<false>::NextDirectReadId;
+    }
+
+    template <bool V = UseMigrationProtocol, class = std::enable_if_t<!V>>
     void SetNextDirectReadId(const i64 id) {
         TAPartitionStream<false>::NextDirectReadId = id;
     }

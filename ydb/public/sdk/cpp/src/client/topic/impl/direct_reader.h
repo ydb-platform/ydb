@@ -2,7 +2,6 @@
 
 #include "common.h"
 
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_session.h>
 #include <ydb/public/sdk/cpp/src/client/topic/common/callback_context.h>
 

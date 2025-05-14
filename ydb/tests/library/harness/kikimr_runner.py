@@ -296,12 +296,12 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
     def make_config_dir(self, source_config_yaml_path, target_config_dir_path):
         if not os.path.exists(source_config_yaml_path):
-            raise FileNotFoundError(f"Source config file not found: {source_config_yaml_path}")
+            raise FileNotFoundError("Source config file not found: %s" % source_config_yaml_path)
 
         try:
             os.makedirs(target_config_dir_path, exist_ok=True)
         except Exception as e:
-            raise RuntimeError(f"Unexpected error initializing config for node {self.node_id}.") from e
+            raise RuntimeError("Unexpected error initializing config for node %s: %s" % (str(self.node_id), str(e)))
 
 
 class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
@@ -810,7 +810,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 return None
             return result.std_out.decode('utf-8')
         except Exception as e:
-            logger.error(f"Error fetching config: {e}", exc_info=True)
+            logger.error("Error fetching config: %s", str(e), exc_info=True)
             return None
 
     def generate_config(self):

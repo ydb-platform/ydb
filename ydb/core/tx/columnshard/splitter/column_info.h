@@ -240,6 +240,11 @@ public:
         ui32* InternalSplitsCount = nullptr;
 
     public:
+        void Reserve(const ui32 count) {
+            Normal.reserve(count);
+            Small.reserve(count);
+        }
+
         TNormalizedBlobChunks(const ui32 minSize, const ui32 maxSize, const ui32 tolerance, const NArrow::NSplitter::ISchemaDetailInfo::TPtr& schema, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters,
             ui32& internalSplitsCount)
             : MinSize(minSize)
@@ -265,8 +270,6 @@ public:
         }
 
         void Merge(TNormalizedBlobChunks&& normalizer) {
-            Normal.reserve(Normal.size() + normalizer.Normal.size());
-            Small.reserve(Small.size() + normalizer.Small.size());
             for (auto&& i : normalizer.Normal) {
                 AddChunk(std::move(i));
             }
@@ -396,10 +399,6 @@ public:
             i->SetChunkIdx(idx++);
         }
         Chunks = std::move(result);
-    }
-
-    bool operator<(const TSplittedEntity& item) const {
-        return Size > item.Size;
     }
 
     std::shared_ptr<arrow::Scalar> GetFirstScalar() const {

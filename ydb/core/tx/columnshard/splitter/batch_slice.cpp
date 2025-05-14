@@ -9,23 +9,34 @@ namespace NKikimr::NOlap {
 
 bool TGeneralSerializedSlice::GroupBlobsImpl(const NSplitter::TGroupFeatures& features, std::vector<TSplittedBlob>& blobs) {
     AFL_VERIFY(features.GetSplitSettings().GetMaxBlobSize() >= 2 * features.GetSplitSettings().GetMinBlobSize())(
-                                                                   "event", "we need be sure that 2 * small < big");
-    std::sort(Data.begin(), Data.end());
-    THashMap<ui32, TSplittedEntity::TNormalizedBlobChunks> chunksPreparation;
+                                        "event", "we need be sure that 2 * small < big");
+    const auto pred = [](const TSplittedEntity* l, const TSplittedEntity* r) {
+        return r->GetSize() < l->GetSize();
+    };
+    std::vector<TSplittedEntity*> dataPtr;
     for (auto&& i : Data) {
         if (!features.Contains(i.GetEntityId())) {
             continue;
         }
+        dataPtr.emplace_back(&i);
+    }
+    std::sort(dataPtr.begin(), dataPtr.end(), pred);
+    ui32 count = 0;
+    THashMap<ui32, TSplittedEntity::TNormalizedBlobChunks> chunksPreparation;
+    for (auto&& i : dataPtr) {
+        count += i->GetChunks().size() * 2;
         TSplittedEntity::TNormalizedBlobChunks normalizedChunks(features.GetSplitSettings().GetMinBlobSize(),
             features.GetSplitSettings().GetMaxBlobSize(), features.GetSplitSettings().GetBlobSizeTolerance(), Schema, Counters, InternalSplitsCount);
-        auto chunksInit = i.BuildBlobChunks(features.GetSplitSettings().GetMaxBlobSize(), Schema, Counters, InternalSplitsCount);
+        normalizedChunks.Reserve(i->GetChunks().size() * 2);
+        auto chunksInit = i->BuildBlobChunks(features.GetSplitSettings().GetMaxBlobSize(), Schema, Counters, InternalSplitsCount);
         for (auto&& c : chunksInit) {
             normalizedChunks.AddChunk(std::move(c));
         }
-        chunksPreparation.emplace(i.GetEntityId(), normalizedChunks.Normalize());
+        chunksPreparation.emplace(i->GetEntityId(), normalizedChunks.Normalize());
     }
     TSplittedEntity::TNormalizedBlobChunks result(features.GetSplitSettings().GetMinBlobSize(), features.GetSplitSettings().GetMaxBlobSize(),
         features.GetSplitSettings().GetBlobSizeTolerance(), Schema, Counters, InternalSplitsCount);
+    result.Reserve(count);
     for (auto&& i : chunksPreparation) {
         result.Merge(std::move(i.second));
     }

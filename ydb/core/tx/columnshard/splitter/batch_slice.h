@@ -128,10 +128,6 @@ public:
     void MergeSlice(TGeneralSerializedSlice&& slice);
 
     bool GroupBlobs(std::vector<TSplittedBlob>& blobs, const NSplitter::TEntityGroups& groups);
-
-    bool operator<(const TGeneralSerializedSlice& item) const {
-        return Size < item.Size;
-    }
 };
 
 }

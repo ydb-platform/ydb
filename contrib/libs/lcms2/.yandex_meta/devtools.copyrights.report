@@ -1,0 +1,156 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 07c8fa7554d50e315318be35b61d4793
+BELONGS utils/jpgicc/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        utils/jpgicc/LICENSE_iccjpeg [52:55]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 153b1c67d98d8dd69d7dcaaa31389bec
+BELONGS utils/jpgicc/ya.make
+    License text:
+        This software is copyright (C) 1991-2013, Thomas G. Lane, Guido Vollbeding.
+        All Rights Reserved except as specified below.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        utils/jpgicc/LICENSE_iccjpeg [20:21]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5ee4826b249c6ccf20c7c34d02e9c0c6
+BELONGS utils/jpgicc/ya.make utils/linkicc/ya.make utils/psicc/ya.make utils/tificc/ya.make utils/transicc/ya.make ya.make
+    License text:
+        //  Copyright (c) 1998-2024 Marti Maria Saguer
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/lcms2_plugin.h [4:4]
+        src/cmsalpha.c [4:4]
+        src/cmscam02.c [4:4]
+        src/cmscgats.c [4:4]
+        src/cmscnvrt.c [4:4]
+        src/cmserr.c [4:4]
+        src/cmsgamma.c [4:4]
+        src/cmsgmt.c [4:4]
+        src/cmshalf.c [4:4]
+        src/cmsintrp.c [4:4]
+        src/cmsio0.c [4:4]
+        src/cmsio1.c [4:4]
+        src/cmslut.c [4:4]
+        src/cmsmd5.c [4:4]
+        src/cmsmtrx.c [4:4]
+        src/cmsnamed.c [4:4]
+        src/cmsopt.c [4:4]
+        src/cmspack.c [4:4]
+        src/cmspcs.c [4:4]
+        src/cmsplugin.c [4:4]
+        src/cmsps2.c [4:4]
+        src/cmssamp.c [4:4]
+        src/cmssm.c [4:4]
+        src/cmstypes.c [4:4]
+        src/cmsvirt.c [4:4]
+        src/cmswtpnt.c [4:4]
+        src/cmsxform.c [4:4]
+        src/lcms2_internal.h [4:4]
+        utils/common/utils.h [5:5]
+        utils/common/vprf.c [4:4]
+        utils/common/xgetopt.c [5:5]
+        utils/jpgicc/jpgicc.c [4:4]
+        utils/jpgicc/jpgicc.c [1254:1255]
+        utils/linkicc/linkicc.c [4:4]
+        utils/linkicc/linkicc.c [274:275]
+        utils/psicc/psicc.c [4:4]
+        utils/psicc/psicc.c [216:217]
+        utils/tificc/tificc.c [4:4]
+        utils/tificc/tificc.c [1042:1043]
+        utils/transicc/transicc.c [4:4]
+        utils/transicc/transicc.c [1258:1259]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 64f2d63d2b00328fea99840ca606a3a7
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 1998-2025 Marti Maria Saguer
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/lcms2.h [4:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9855ff798e83714c245975bd9091c84b
+BELONGS utils/jpgicc/ya.make
+    License text:
+        Copyright property of CompuServe Incorporated
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        utils/jpgicc/LICENSE_iccjpeg [65:67]
+
+KEEP     COPYRIGHT_SERVICE_LABEL aa60f9f901d8a70162904fc48f222c49
+BELONGS utils/jpgicc/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        utils/jpgicc/LICENSE_iccjpeg [52:55]
+
+KEEP     COPYRIGHT_SERVICE_LABEL dc1c978ad126171c001998b8a02b43a8
+BELONGS ya.make
+    License text:
+        Copyright (c) 2023 Marti Maria Saguer
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e40f0af5a3901b7c40a36232bb6f92a9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/cmssm.c [207:211]

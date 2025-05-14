@@ -17,7 +17,7 @@ TKikimrRunner CreateKikimrRunner(bool isOlap = false) {
     return TKikimrRunner(settings);
 }
 
-void FillAllTypesOltp(TQueryClient& client) {
+void CreateAllColumnsOltp(TQueryClient& client) {
     auto createResult = client.ExecuteQuery(R"(
         --!syntax_v1
         CREATE TABLE `/Root/OltpTable` (
@@ -58,7 +58,7 @@ void FillAllTypesOltp(TQueryClient& client) {
     UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
 }
 
-void FillAllTypesOlap(TQueryClient& client) {
+void CreateAllColumnsOlap(TQueryClient& client) {
     auto createResult = client.ExecuteQuery(R"(
         --!syntax_v1
         CREATE TABLE `/Root/OlapTable` (
@@ -96,6 +96,16 @@ void FillAllTypesOlap(TQueryClient& client) {
     UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
 }
 
+void CompareResultSets(const TResultSet& messageResultSet, const TResultSet& arrowResultSet) {
+    UNIT_ASSERT_VALUES_EQUAL(messageResultSet.RowsCount(), arrowResultSet.RowsCount());
+    UNIT_ASSERT_VALUES_EQUAL(messageResultSet.ColumnsCount(), arrowResultSet.ColumnsCount());
+
+    std::shared_ptr<arrow::RecordBatch> batch = arrowResultSet.GetArrowBatch();
+
+    UNIT_ASSERT_VALUES_EQUAL(messageResultSet.RowsCount(), static_cast<size_t>(batch->num_rows()));
+    UNIT_ASSERT_VALUES_EQUAL(messageResultSet.ColumnsCount(), static_cast<size_t>(batch->num_columns()));
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
@@ -104,9 +114,9 @@ Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
         auto client = kikimr.GetQueryClient();
 
         if (isOlap) {
-            FillAllTypesOlap(client);
+            CreateAllColumnsOlap(client);
         } else {
-            FillAllTypesOltp(client);
+            CreateAllColumnsOltp(client);
         }
 
         const TString query = Sprintf(R"(
@@ -123,16 +133,7 @@ Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
         UNIT_ASSERT_C(messageResponse.IsSuccess(), messageResponse.GetIssues().ToString());
         UNIT_ASSERT_C(arrowResponse.IsSuccess(), arrowResponse.GetIssues().ToString());
 
-        const auto& messageResultSet = messageResponse.GetResultSet(0);
-        const auto& arrowResultSet = arrowResponse.GetResultSet(0);
-
-        UNIT_ASSERT_VALUES_EQUAL(messageResultSet.RowsCount(), arrowResultSet.RowsCount());
-        UNIT_ASSERT_VALUES_EQUAL(messageResultSet.ColumnsCount(), arrowResultSet.ColumnsCount());
-
-        std::shared_ptr<arrow::RecordBatch> batch = arrowResultSet.GetArrowBatch();
-
-        UNIT_ASSERT_VALUES_EQUAL(messageResultSet.RowsCount(), static_cast<size_t>(batch->num_rows()));
-        UNIT_ASSERT_VALUES_EQUAL(messageResultSet.ColumnsCount(), static_cast<size_t>(batch->num_columns()));
+        CompareResultSets(messageResponse.GetResultSet(0), arrowResponse.GetResultSet(0));
     }
 
     Y_UNIT_TEST(LargeTable) {
@@ -155,16 +156,7 @@ Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
         UNIT_ASSERT_C(messageResponse.IsSuccess(), messageResponse.GetIssues().ToString());
         UNIT_ASSERT_C(arrowResponse.IsSuccess(), arrowResponse.GetIssues().ToString());
 
-        const auto& messageResultSet = messageResponse.GetResultSet(0);
-        const auto& arrowResultSet = arrowResponse.GetResultSet(0);
-
-        UNIT_ASSERT_VALUES_EQUAL(messageResultSet.RowsCount(), arrowResultSet.RowsCount());
-        UNIT_ASSERT_VALUES_EQUAL(messageResultSet.ColumnsCount(), arrowResultSet.ColumnsCount());
-
-        std::shared_ptr<arrow::RecordBatch> batch = arrowResultSet.GetArrowBatch();
-
-        UNIT_ASSERT_VALUES_EQUAL(messageResultSet.RowsCount(), static_cast<size_t>(batch->num_rows()));
-        UNIT_ASSERT_VALUES_EQUAL(messageResultSet.ColumnsCount(), static_cast<size_t>(batch->num_columns()));
+        CompareResultSets(messageResponse.GetResultSet(0), arrowResponse.GetResultSet(0));
     }
 
     Y_UNIT_TEST(LargeLimitTable) {
@@ -187,16 +179,47 @@ Y_UNIT_TEST_SUITE(KqpArrowResultSetType) {
         UNIT_ASSERT_C(messageResponse.IsSuccess(), messageResponse.GetIssues().ToString());
         UNIT_ASSERT_C(arrowResponse.IsSuccess(), arrowResponse.GetIssues().ToString());
 
-        const auto& messageResultSet = messageResponse.GetResultSet(0);
-        const auto& arrowResultSet = arrowResponse.GetResultSet(0);
+        CompareResultSets(messageResponse.GetResultSet(0), arrowResponse.GetResultSet(0));
+    }
 
-        UNIT_ASSERT_VALUES_EQUAL(messageResultSet.RowsCount(), arrowResultSet.RowsCount());
-        UNIT_ASSERT_VALUES_EQUAL(messageResultSet.ColumnsCount(), arrowResultSet.ColumnsCount());
+    Y_UNIT_TEST_TWIN(Returning, isOlap) {
+        auto kikimr = CreateKikimrRunner(isOlap);
+        auto client = kikimr.GetQueryClient();
 
-        std::shared_ptr<arrow::RecordBatch> batch = arrowResultSet.GetArrowBatch();
+        TString query;
 
-        UNIT_ASSERT_VALUES_EQUAL(messageResultSet.RowsCount(), static_cast<size_t>(batch->num_rows()));
-        UNIT_ASSERT_VALUES_EQUAL(messageResultSet.ColumnsCount(), static_cast<size_t>(batch->num_columns()));
+        if (isOlap) {
+            CreateAllColumnsOlap(client);
+            query = R"(
+                --!syntax_v1
+                UPSERT INTO `/Root/OlapTable` (Key, Int8Value, Uint8Value, Int16Value, Uint16Value, Int32Value, Uint32Value, Int64Value, Uint64Value, FloatValue, DoubleValue, StringValue, Utf8Value, DateValue, DatetimeValue, TimestampValue, JsonValue, YsonValue, JsonDocumentValue) VALUES
+                (43, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), "[12]", "[13]", JsonDocument("[14]")),
+                (44, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), "[12]", "[13]", JsonDocument("[14]")),
+                (45, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), "[12]", "[13]", JsonDocument("[14]"))
+                RETURNING *;
+            )";
+        } else {
+            CreateAllColumnsOltp(client);
+            query = R"(
+                --!syntax_v1
+                UPSERT INTO `/Root/OltpTable` (Key, BoolValue, Int8Value, Uint8Value, Int16Value, Uint16Value, Int32Value, Uint32Value, Int64Value, Uint64Value, FloatValue, DoubleValue, StringValue, Utf8Value, DateValue, DatetimeValue, TimestampValue, IntervalValue, DecimalValue, JsonValue, YsonValue, JsonDocumentValue, DyNumberValue, Int32NotNullValue) VALUES
+                (43, true, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), Interval("P10D"), CAST("11.11" AS Decimal(22, 9)), "[12]", "[13]", JsonDocument("[14]"), DyNumber("15.15"), 123),
+                (44, true, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), Interval("P10D"), CAST("11.11" AS Decimal(22, 9)), "[12]", "[13]", JsonDocument("[14]"), DyNumber("15.15"), 123),
+                (45, true, -1, 1, -2, 2, -3, 3, -4, 4, CAST(3.0 AS Float), 4.0, "five", Utf8("six"), Date("2007-07-07"), Datetime("2008-08-08T08:08:08Z"), Timestamp("2009-09-09T09:09:09.09Z"), Interval("P10D"), CAST("11.11" AS Decimal(22, 9)), "[12]", "[13]", JsonDocument("[14]"), DyNumber("15.15"), 123)
+                RETURNING *;
+            )";
+        }
+
+        auto messageResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
+            TExecuteQuerySettings().ResultSetType(TResultSet::EType::Message)).GetValueSync();
+
+        auto arrowResponse = client.ExecuteQuery(query, TTxControl::BeginTx().CommitTx(),
+            TExecuteQuerySettings().ResultSetType(TResultSet::EType::Arrow)).GetValueSync();
+
+        UNIT_ASSERT_C(messageResponse.IsSuccess(), messageResponse.GetIssues().ToString());
+        UNIT_ASSERT_C(arrowResponse.IsSuccess(), arrowResponse.GetIssues().ToString());
+
+        CompareResultSets(messageResponse.GetResultSet(0), arrowResponse.GetResultSet(0));
     }
 }
 

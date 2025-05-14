@@ -2788,6 +2788,7 @@ TFuture<TShuffleHandlePtr> TClient::StartShuffle(
 TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
     const TShuffleHandlePtr& shuffleHandle,
     int partitionIndex,
+    std::optional<std::pair<int, int>> writerIndexRange,
     const TTableReaderConfigPtr& config)
 {
     auto proxy = CreateApiServiceProxy();
@@ -2798,6 +2799,11 @@ TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
     req->set_shuffle_handle(ConvertToYsonString(shuffleHandle).ToString());
     req->set_partition_index(partitionIndex);
     req->set_reader_config(ConvertToYsonString(config).ToString());
+    if (writerIndexRange) {
+        auto* writerIndexRangeProto = req->mutable_writer_index_range();
+        writerIndexRangeProto->set_begin(writerIndexRange->first);
+        writerIndexRangeProto->set_end(writerIndexRange->second);
+    }
 
     return CreateRpcClientInputStream(std::move(req))
         .ApplyUnique(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
@@ -2808,6 +2814,7 @@ TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
 TFuture<IRowBatchWriterPtr> TClient::CreateShuffleWriter(
     const TShuffleHandlePtr& shuffleHandle,
     const std::string& partitionColumn,
+    std::optional<int> writerIndex,
     const TTableWriterConfigPtr& config)
 {
     auto proxy = CreateApiServiceProxy();
@@ -2817,6 +2824,9 @@ TFuture<IRowBatchWriterPtr> TClient::CreateShuffleWriter(
     req->set_shuffle_handle(ConvertToYsonString(shuffleHandle).ToString());
     req->set_partition_column(ToProto(partitionColumn));
     req->set_writer_config(ConvertToYsonString(config).ToString());
+    if (writerIndex) {
+        req->set_writer_index(*writerIndex);
+    }
 
     return CreateRpcClientOutputStream(std::move(req))
         .ApplyUnique(BIND([] (IAsyncZeroCopyOutputStreamPtr&& outputStream) {

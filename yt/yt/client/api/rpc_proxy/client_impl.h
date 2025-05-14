@@ -605,11 +605,13 @@ public:
     TFuture<IRowBatchReaderPtr> CreateShuffleReader(
         const TShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
+        std::optional<std::pair<int, int>> writerIndexRange,
         const NTableClient::TTableReaderConfigPtr& config) override;
 
     TFuture<IRowBatchWriterPtr> CreateShuffleWriter(
         const TShuffleHandlePtr& shuffleHandle,
         const std::string& partitionColumn,
+        std::optional<int> writerIndex,
         const NTableClient::TTableWriterConfigPtr& config) override;
 
 private:

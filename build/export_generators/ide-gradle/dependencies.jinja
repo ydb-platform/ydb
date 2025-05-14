@@ -1,15 +1,8 @@
 {%- macro AnnotationProcessors(funcName, annotation_processors) -%}
 {%-     if annotation_processors|length -%}
-{%-         set lomboks = annotation_processors|select('startsWith', 'contrib/java/org/projectlombok/lombok') -%}
-{%-         for lombok in lomboks %}
-    {{ funcName }}(files("$arcadia_root/{{ lombok }}"))
-{%-         endfor -%}
-{%-         set annotation_processors = annotation_processors|reject('in', lomboks) -%}
-{%-         if annotation_processors|length -%}
-{%-             for annotation_processor in annotation_processors %}
+{%-         for annotation_processor in annotation_processors %}
     {{ funcName }}(files("$arcadia_root/{{ annotation_processor }}"))
-{%-             endfor -%}
-{%-         endif -%}
+{%-         endfor -%}
 {%-     endif -%}
 {%- endmacro -%}
 
@@ -75,15 +68,12 @@
 {%- set test_file_jars = test_file_deps|map(attribute='jar')|reject("in", file_jars)|unique|sort -%}
 
 dependencies {
-{%- if has_errorprone -%}
-{%-     set errorprones = target.consumer|selectattr('classpath')|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations') -%}
-{%-     if errorprones|length -%}
-{%-         for errorprone in errorprones -%}
-{%-             set errorprone_version = errorprone.jar|replace("contrib/java/com/google/errorprone/error_prone_annotations/", "") -%}
-{%-             set errorprone_parts = split(errorprone_version, '/', 2) %}
+{%- if errorprones|length -%}
+{%-     for errorprone in errorprones -%}
+{%-         set errorprone_version = errorprone.jar|replace("contrib/java/com/google/errorprone/error_prone_annotations/", "") -%}
+{%-         set errorprone_parts = split(errorprone_version, '/', 2) %}
     errorprone("com.google.errorprone:error_prone_core:{{ errorprone_parts[0] }}")
-{%-         endfor -%}
-{%-     endif -%}
+{%-     endfor -%}
 {%- endif -%}
 {#- glue -#}
 {{ AnnotationProcessors("annotationProcessor", target.use_annotation_processor) }}
@@ -92,6 +82,8 @@ dependencies {
 {%- endfor -%}
 {%- if with_kapt -%}
 {{ Kapts("kapt", target.kapt.classpaths) }}
+{%- endif -%}
+{%- if with_test_kapt -%}
 {%-     for extra_target in extra_targets -%}
 {{ Kapts("testKapt", extra_target.kapt.classpaths) }}
 {%-     endfor -%}

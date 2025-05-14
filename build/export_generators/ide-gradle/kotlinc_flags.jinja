@@ -1,6 +1,6 @@
 {%- if with_kotlin -%}
 
-{%-     if target.kotlinc.flags|length or target.kapt.opts|length %}
+{%-     if target.kotlinc.flags|length or (with_kapt and target.kapt.opts|length) %}
 
 tasks.compileKotlin.configure {
     compilerOptions {
@@ -9,7 +9,7 @@ tasks.compileKotlin.configure {
         freeCompilerArgs.add({{ PatchRoots(kotlinc_flag, true) }})
 {%-             endfor -%}
 {%-         endif -%}
-{%-         if target.kapt.opts|length -%}
+{%-         if with_kapt and (target.kapt.opts|length) -%}
 {%-             for kapt_opt in target.kapt.opts|reject('eq', '-P')|unique %}
         freeCompilerArgs.add("-P")
         freeCompilerArgs.add("{{ kapt_opt|replace(export_root, "$baseBuildDir") }}")
@@ -28,7 +28,7 @@ tasks.compileKotlin.configure {
 {%-             set extra_kotlinc_flags = target.kotlinc.flags -%}
 {%-         endif -%}
 {%-     endif -%}
-{%-     if extra_kotlinc_flags|length or extra_kapt_opts|length %}
+{%-     if extra_kotlinc_flags|length or ((with_kapt or with_test_kapt) and extra_kapt_opts|length) %}
 
 tasks.compileTestKotlin.configure {
     compilerOptions {
@@ -37,7 +37,7 @@ tasks.compileTestKotlin.configure {
         freeCompilerArgs.add({{ PatchRoots(kotlinc_flag, true) }})
 {%-             endfor -%}
 {%-         endif -%}
-{%-         if extra_kapt_opts|length -%}
+{%-         if (with_kapt or with_test_kapt) and (extra_kapt_opts|length) -%}
 {%-             set extra_kapt_opts = extra_kapt_opts|reject('eq', '-P')|unique -%}
 {#-             Use only first value for sources, classes, stubs (may be many tests with different values) -#}
 {%-             set extra_kapt_opts_sources = extra_kapt_opts|select('startsWith', 'plugin:org.jetbrains.kotlin.kapt3:sources=')|first -%}

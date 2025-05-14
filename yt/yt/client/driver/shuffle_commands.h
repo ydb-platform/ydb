@@ -37,6 +37,8 @@ public:
 private:
     NApi::TShuffleHandlePtr ShuffleHandle;
     int PartitionIndex;
+    std::optional<int> WriterIndexBegin;
+    std::optional<int> WriterIndexEnd;
 
     void DoExecute(ICommandContextPtr context) override;
 };
@@ -55,6 +57,7 @@ private:
     NApi::TShuffleHandlePtr ShuffleHandle;
     std::string PartitionColumn;
     i64 MaxRowBufferSize;
+    std::optional<int> WriterIndex;
 
     void DoExecute(ICommandContextPtr context) override;
 };

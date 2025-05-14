@@ -53,15 +53,40 @@ void TReadShuffleDataCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("shuffle_handle", &TThis::ShuffleHandle);
     registrar.Parameter("partition_index", &TThis::PartitionIndex);
+    registrar.Parameter("writer_index_begin", &TThis::WriterIndexBegin)
+        .Default()
+        .GreaterThanOrEqual(0);
+    registrar.Parameter("writer_index_end", &TThis::WriterIndexEnd)
+        .Default();
+    registrar.Postprocessor([] (TThis* config) {
+        if (config->WriterIndexBegin.has_value() != config->WriterIndexEnd.has_value()) {
+            THROW_ERROR_EXCEPTION("Request has only one writer range limit")
+                << TErrorAttribute("writer_index_begin", config->WriterIndexBegin)
+                << TErrorAttribute("writer_index_end", config->WriterIndexEnd);
+        }
+
+        if (config->WriterIndexBegin.has_value() && *config->WriterIndexBegin > *config->WriterIndexEnd) {
+            THROW_ERROR_EXCEPTION(
+                "Lower limit of mappers range %v cannot be greater than upper limit %v",
+                *config->WriterIndexBegin,
+                *config->WriterIndexEnd);
+        }
+    });
 }
 
 void TReadShuffleDataCommand::DoExecute(ICommandContextPtr context)
 {
     auto client = context->GetClient();
 
+    std::optional<std::pair<int, int>> writerIndexRange;
+    if (WriterIndexBegin.has_value()) {
+        writerIndexRange = std::pair(*WriterIndexBegin, *WriterIndexEnd);
+    }
+
     auto reader = WaitFor(context->GetClient()->CreateShuffleReader(
         ShuffleHandle,
         PartitionIndex,
+        writerIndexRange,
         Options))
         .ValueOrThrow();
 
@@ -96,6 +121,9 @@ void TWriteShuffleDataCommand::Register(TRegistrar registrar)
     registrar.Parameter("partition_column", &TThis::PartitionColumn);
     registrar.Parameter("max_row_buffer_size", &TThis::MaxRowBufferSize)
         .Default(1_MB);
+    registrar.Parameter("writer_index", &TThis::WriterIndex)
+        .Default()
+        .GreaterThanOrEqual(0);
 }
 
 void TWriteShuffleDataCommand::DoExecute(ICommandContextPtr context)
@@ -105,6 +133,7 @@ void TWriteShuffleDataCommand::DoExecute(ICommandContextPtr context)
     auto writer = WaitFor(context->GetClient()->CreateShuffleWriter(
         ShuffleHandle,
         PartitionColumn,
+        WriterIndex,
         Options))
         .ValueOrThrow();
 

@@ -320,6 +320,13 @@ size_t aws_cbor_decoder_get_remaining_length(const struct aws_cbor_decoder *deco
     return decoder->src.len;
 }
 
+void aws_cbor_decoder_reset_src(struct aws_cbor_decoder *decoder, struct aws_byte_cursor src) {
+    decoder->src = src;
+    /* Reset all cached state */
+    decoder->cached_context.type = AWS_CBOR_TYPE_UNKNOWN;
+    decoder->error_code = AWS_ERROR_SUCCESS;
+}
+
 #define LIBCBOR_VALUE_CALLBACK(field, callback_type, cbor_type)                                                        \
     static void s_##field##_callback(void *ctx, callback_type val) {                                                   \
         struct aws_cbor_decoder *decoder = ctx;                                                                        \

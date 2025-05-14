@@ -127,6 +127,12 @@ int aws_xml_parse(struct aws_allocator *allocator, const struct aws_xml_parser_o
             goto clean_up;
         }
 
+        if (start > location) {
+            AWS_LOGF_ERROR(AWS_LS_COMMON_XML_PARSER, "XML document is invalid.");
+            parser.error = aws_raise_error(AWS_ERROR_INVALID_XML);
+            goto clean_up;
+        }
+
         aws_byte_cursor_advance(&parser.doc, start - parser.doc.ptr);
         /* if these are preamble statements, burn them. otherwise don't seek at all
          * and assume it's just the doc with no preamble statements. */
@@ -227,6 +233,7 @@ int s_advance_to_closing_tag(
                 }
             }
             size_t skip_len = close_find_result.ptr - parser->doc.ptr;
+
             aws_byte_cursor_advance(&parser->doc, skip_len + closing_cmp_buf.len);
             depth_count--;
             break;
@@ -288,7 +295,7 @@ int aws_xml_node_traverse(
 
         const uint8_t *end_location = memchr(parser->doc.ptr, '>', parser->doc.len);
 
-        if (!end_location) {
+        if (!end_location || next_location >= end_location) {
             AWS_LOGF_ERROR(AWS_LS_COMMON_XML_PARSER, "XML document is invalid.");
             aws_raise_error(AWS_ERROR_INVALID_XML);
             goto error;
@@ -301,7 +308,6 @@ int aws_xml_node_traverse(
         }
 
         size_t node_name_len = end_location - next_location;
-
         aws_byte_cursor_advance(&parser->doc, end_location - parser->doc.ptr + 1);
 
         if (parent_closed) {
@@ -368,13 +374,14 @@ int s_node_next_sibling(struct aws_xml_parser *parser) {
     const uint8_t *next_location = memchr(parser->doc.ptr, '<', parser->doc.len);
 
     if (!next_location) {
-        return parser->error;
+        AWS_LOGF_ERROR(AWS_LS_COMMON_XML_PARSER, "XML document is invalid.");
+        return aws_raise_error(AWS_ERROR_INVALID_XML);
     }
 
     aws_byte_cursor_advance(&parser->doc, next_location - parser->doc.ptr);
     const uint8_t *end_location = memchr(parser->doc.ptr, '>', parser->doc.len);
 
-    if (!end_location) {
+    if (!end_location || next_location >= end_location) {
         AWS_LOGF_ERROR(AWS_LS_COMMON_XML_PARSER, "XML document is invalid.");
         return aws_raise_error(AWS_ERROR_INVALID_XML);
     }

@@ -7740,7 +7740,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 }
             }
 
-            auto udfInfo = ctx.Types.UdfModules.FindPtr(moduleName);
+            TStringBuf normalizedModuleName, normalizedFuncName;
+            YQL_ENSURE(SplitUdfName(cached.NormalizedName, normalizedModuleName, normalizedFuncName));
+            auto udfInfo = ctx.Types.UdfModules.FindPtr(normalizedModuleName);
             TStringBuf fileAlias = udfInfo ? udfInfo->FileAlias : ""_sb;
             auto ret = ctx.Expr.Builder(input->Pos())
                 .Callable("Udf")

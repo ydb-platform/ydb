@@ -10,7 +10,7 @@
 
 struct aws_allocator;
 struct aws_byte_cursor;
-struct aws_mqtt_client_connection;
+struct aws_mqtt_client_connection_311_impl;
 struct aws_string;
 
 AWS_EXTERN_C_BEGIN

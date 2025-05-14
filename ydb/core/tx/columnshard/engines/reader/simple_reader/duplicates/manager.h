@@ -86,16 +86,16 @@ private:
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvRequestFilter, Handle);
+            hFunc(NActors::TEvents::TEvPoison, Handle);
             default:
                 AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
         }
     }
 
     void Handle(const TEvRequestFilter::TPtr&);
-
-    void AbortAndPassAway(const TString& reason);
-    void StartAllocation(const ui64 sourceId, const std::shared_ptr<IDataSource>& requester);
-    void StartMergingColumns(const ui32 intervalIdx);
+    void Handle(const NActors::TEvents::TEvPoison::TPtr&) {
+        PassAway();
+    }
 
 public:
     TDuplicateFilterConstructor(const TSpecialReadContext& context);

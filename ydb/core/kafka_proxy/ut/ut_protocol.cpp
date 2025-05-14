@@ -4,6 +4,7 @@
 
 #include "kafka_test_client.h"
 
+#include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/kafka_proxy/kafka_constants.h>
 #include <ydb/core/kafka_proxy/actors/actors.h>
@@ -1049,10 +1050,10 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         {
             // Check commit
-            std::unordered_map<TString, std::vector<TConsumerOffset>> offsets;
-            std::vector<TConsumerOffset> partitionsAndOffsets;
+            std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets;
+            std::vector<NKafka::TEvKafka::PartitionConsumerOffset> partitionsAndOffsets;
             for (ui64 i = 0; i < minActivePartitions; ++i) {
-                partitionsAndOffsets.emplace_back(TConsumerOffset{i, static_cast<ui64>(recordsCount), commitedMetaData});
+                partitionsAndOffsets.emplace_back(i, static_cast<ui64>(recordsCount), commitedMetaData);
             }
             offsets[firstTopicName] = partitionsAndOffsets;
             offsets[shortTopicName] = partitionsAndOffsets;
@@ -1080,15 +1081,12 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             topicsToPartions[firstTopicName] = std::vector<i32>{0, 1, 2 , 3 };
             auto msg = client.OffsetFetch(firstConsumerName, topicsToPartions);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
             const auto& partitions = msg->Groups[0].Topics[0].Partitions;
             UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 4);
             auto partition0 = std::find_if(partitions.begin(), partitions.end(), [](const auto& partition) { return partition.PartitionIndex == 0; });
             UNIT_ASSERT_VALUES_UNEQUAL(partition0, partitions.end());
             UNIT_ASSERT_VALUES_EQUAL(partition0->CommittedOffset, 5);
-            // ToDo: return here to change ASSERT to check that metadata is transfered correctly
-            // after realization of metadata saving is completed.
             for (auto p = partitions.begin(); p != partitions.end(); p++) {
                 UNIT_ASSERT_VALUES_EQUAL(p->Metadata, "");
             }
@@ -1109,10 +1107,10 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         {
             // Check commit with nonexistent topic
-            std::unordered_map<TString, std::vector<TConsumerOffset>> offsets;
-            std::vector<TConsumerOffset> partitionsAndOffsets;
+            std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets;
+            std::vector<NKafka::TEvKafka::PartitionConsumerOffset> partitionsAndOffsets;
             for (ui64 i = 0; i < minActivePartitions; ++i) {
-                partitionsAndOffsets.emplace_back(TConsumerOffset{i, static_cast<ui64>(recordsCount), commitedMetaData});
+                partitionsAndOffsets.emplace_back(i, static_cast<ui64>(recordsCount), commitedMetaData);
             }
             offsets[firstTopicName] = partitionsAndOffsets;
             offsets[notExistsTopicName] = partitionsAndOffsets;
@@ -1142,8 +1140,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         {
             // Check commit with nonexistent consumer
-            std::unordered_map<TString, std::vector<TConsumerOffset>> offsets;
-            std::vector<TConsumerOffset> partitionsAndOffsets;
+            std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets;
+            std::vector<NKafka::TEvKafka::PartitionConsumerOffset> partitionsAndOffsets;
             for (ui64 i = 0; i < minActivePartitions; ++i) {
                 partitionsAndOffsets.emplace_back(i, static_cast<ui64>(recordsCount), commitedMetaData);
             }

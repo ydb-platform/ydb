@@ -31,7 +31,7 @@ class TestVectorIndex(VectorBase):
                 "euclidean": "Knn::EuclideanDistance",
             },
         }
-    
+
     @pytest.mark.parametrize(
         "table_name, pk_types, all_types, index, vector_type",
         [

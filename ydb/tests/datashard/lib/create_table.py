@@ -42,7 +42,20 @@ def create_ttl_sql_request(ttl: str, inteval: dict[str, str], time: str, table_n
     return sql_ttl
 
 
-def create_vector_index_sql_request(table_name: str, name_vector_index, embedding: str, prefix: str, function: str, distance: str, vector_type: str, sync, vector_dimension: int, levels: int, clusters: int, cover):
+def create_vector_index_sql_request(
+    table_name: str,
+    name_vector_index,
+    embedding: str,
+    prefix: str,
+    function: str,
+    distance: str,
+    vector_type: str,
+    sync,
+    vector_dimension: int,
+    levels: int,
+    clusters: int,
+    cover,
+):
     create_vector_index = f"""
         ALTER TABLE {table_name}
         ADD INDEX {name_vector_index}

@@ -12,7 +12,7 @@ std::vector<TSplittedBlob> TSplittedEntity::TNormalizedBlobChunks::Finish(const 
         std::vector<std::shared_ptr<IPortionDataChunk>> blobChunks;
         for (auto&& [_, chunks] : i.GetEntities()) {
             for (auto&& c : chunks.GetChunks()) {
-                counters->BySizeSplitter.OnCorrectSerialized(c->GetPackedSize());
+                Counters->BySizeSplitter.OnCorrectSerialized(c->GetPackedSize());
                 blobChunks.emplace_back(c);
             }
         }

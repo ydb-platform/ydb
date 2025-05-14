@@ -120,6 +120,7 @@ To get portion info for a table, use ydb cli:
                                      """)
     parser.add_argument("-i", "--input-file", help="File with primary_index_portion_stats data in json per row format", required=True)
     parser.add_argument("-t", "--type", help="First PK column type: Integer or Timestamp", required=True)
+    parser.add_argument("-o", "--output-file", help="Output file", required=False)
     args = parser.parse_args()
     inputFile = args.input_file
     pk0Type = FirstPkColumnType[args.type]
@@ -130,7 +131,9 @@ To get portion info for a table, use ydb cli:
     levelColors = GetLevelColours(portions.MaxCompactionLevel)
     rectangles = [p.ToRectangle(levelColors) for p in portions.Portions]
 
-    fig, ax = plt.subplots()
+    dpi = 300
+    figsize = (12000 / dpi, 9000 / dpi)
+    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
     ax.set_title("Column table portions")
     ax.add_collection(PatchCollection(rectangles, match_original=True))
 
@@ -156,4 +159,7 @@ To get portion info for a table, use ydb cli:
     dy = yMax - yMin
     ax.set_ylim(yMin - 0.05 * dy, yMax + 0.05 * dy)
 
-    plt.show()
+    if args.output_file is None:
+        plt.show()
+    else:
+        plt.savefig(args.output_file, dpi=dpi)

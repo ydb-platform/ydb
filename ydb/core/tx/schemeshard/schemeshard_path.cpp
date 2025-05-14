@@ -946,6 +946,7 @@ const TPath::TChecker& TPath::TChecker::IsSupportedInExports(EStatus status) con
     // and we might cause the process to be aborted.
     if (Path.Base()->IsTable()
         || (Path.Base()->IsView() && AppData()->FeatureFlags.GetEnableViewExport())
+        || Path.Base()->IsPQGroup()
     )  {
         return *this;
     }

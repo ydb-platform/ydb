@@ -819,23 +819,62 @@ while true; do
   echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Running command..."
   echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] COMMAND: {command}"
   echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] === COMMAND OUTPUT START ==="
-
-  # Используем stdbuf для отключения буферизации и обеспечения вывода в реальном времени
+  
+  # Гибридный подход для перехвата вывода
+  # Создаем временный файл для хранения вывода в случае необходимости
+  TMP_OUT_FILE="/tmp/{workload_name}_output_$$.log"
+  
   if {'true' if has_time_limit else 'false'}; then
-    # Запускаем команду с отключенной буферизацией и таймаутом
-    stdbuf -o0 -e0 timeout -k 10 {timeout_seconds}s {command} 2>&1 | while IFS= read -r line || [[ -n "$line" ]]; do
+    # Первый метод: прямой запуск с отключенной буферизацией
+    stdbuf -o0 -e0 timeout -k 10 {timeout_seconds}s {command} 2>&1 | tee "$TMP_OUT_FILE" | while IFS= read -r line || [[ -n "$line" ]]; do
       echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] $line"
     done
-    # Получаем статус первой команды в пайпе
+    
     status=${{PIPESTATUS[0]}}
+    LINES_COUNT=$(wc -l < "$TMP_OUT_FILE")
+    
+    # Если вывод почти пустой и код возврата ошибочный, пробуем второй метод
+    if [ $status -eq 1 ] && [ $LINES_COUNT -lt 3 ]; then
+      echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Switching to script method for better output capture"
+      SCRIPT_FILE="/tmp/{workload_name}_transcript_$$.txt"
+      
+      # Второй метод: запуск через script для перехвата особого вывода
+      script -q -c "timeout -k 10 {timeout_seconds}s {command}" "$SCRIPT_FILE" >/dev/null 2>&1
+      status=$?
+      
+      # Обработка и вывод результата с таймстемпами
+      cat "$SCRIPT_FILE" | grep -v "^Script " | while IFS= read -r line || [[ -n "$line" ]]; do
+        echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] $line"
+      done
+      
+      rm -f "$SCRIPT_FILE"
+    fi
   else
     # То же самое для команд без таймаута
-    stdbuf -o0 -e0 {command} 2>&1 | while IFS= read -r line || [[ -n "$line" ]]; do
+    stdbuf -o0 -e0 {command} 2>&1 | tee "$TMP_OUT_FILE" | while IFS= read -r line || [[ -n "$line" ]]; do
       echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] $line"
     done
-    # Получаем статус первой команды в пайпе
+    
     status=${{PIPESTATUS[0]}}
+    LINES_COUNT=$(wc -l < "$TMP_OUT_FILE")
+    
+    if [ $status -eq 1 ] && [ $LINES_COUNT -lt 3 ]; then
+      echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] Switching to script method for better output capture"
+      SCRIPT_FILE="/tmp/{workload_name}_transcript_$$.txt"
+      
+      script -q -c "{command}" "$SCRIPT_FILE" >/dev/null 2>&1
+      status=$?
+      
+      cat "$SCRIPT_FILE" | grep -v "^Script " | while IFS= read -r line || [[ -n "$line" ]]; do
+        echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] $line"
+      done
+      
+      rm -f "$SCRIPT_FILE"
+    fi
   fi
+  
+  # Удаляем временный файл
+  rm -f "$TMP_OUT_FILE"
   
   echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] === COMMAND OUTPUT END ==="
   

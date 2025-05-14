@@ -277,6 +277,11 @@ int TCommandRestore::Run(TConfig& config) {
         settings.Mode(NDump::TRestoreSettings::EMode::ImportData);
     }
 
+    if (VerifyExistence && !Replace) {
+        throw TMisuseException()
+            << "the --verify-existence option must be used together with the --replace option";
+    }
+
     auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));
     log->SetFormatter(GetPrefixLogFormatter(""));
 

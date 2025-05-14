@@ -189,10 +189,8 @@ message ListObjectsInS3ExportRequest {
     // The maximum number of results per page that should be returned. If the number of available
     // results is larger than `page_size`, the service returns a `next_page_token` that can be used
     // to get the next page of results in subsequent ListObjectsInS3Export requests.
-    // Acceptable values are 0 to 10000, inclusive.
     // 0 means that server returns all objects.
-    // Default value: 0.
-    int64 page_size = 3;
+    int64 page_size = 3 [(value) = "<= 10000"];
 
     // Page token. Set `page_token` to the `next_page_token` returned by a previous ListObjectsInS3Export
     // request to get the next page of results.

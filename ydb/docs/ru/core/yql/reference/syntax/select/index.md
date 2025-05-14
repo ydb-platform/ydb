@@ -22,16 +22,16 @@ SELECT 2 + 2;
 * определяется набор входных таблиц – вычисляются выражения после [FROM](../select/from.md);
 * к входным таблицам применяется [MATCH_RECOGNIZE](match_recognize.md)
 * вычисляется [SAMPLE](sample.md) / [TABLESAMPLE](sample.md)
-* выполняется [FLATTEN COLUMNS](../flatten.md#flatten-columns) или [FLATTEN BY](../flatten.md); алиасы, заданные во `FLATTEN BY`, становятся видны после этой точки;
+* выполняется [FLATTEN COLUMNS](flatten.md#flatten-columns) или [FLATTEN BY](flatten.md); алиасы, заданные во `FLATTEN BY`, становятся видны после этой точки;
 {% if feature_join %}
-* выполняются все [JOIN](../join.md);
+* выполняются все [JOIN](join.md);
 {% endif %}
-* к полученным данным добавляются (или заменяются) колонки, заданные в [GROUP BY ... AS ...](../group_by.md);
+* к полученным данным добавляются (или заменяются) колонки, заданные в [GROUP BY ... AS ...](group-by.md);
 * выполняется [WHERE](where.md) &mdash; все данные не удовлетворяющие предикату отфильтровываются;
-* выполняется [GROUP BY](../group_by.md), вычисляются значения агрегатных функций;
-* выполняется фильтрация [HAVING](../group_by.md#having);
+* выполняется [GROUP BY](group-by.md), вычисляются значения агрегатных функций;
+* выполняется фильтрация [HAVING](group-by.md#having);
 {% if feature_window_functions %}
-* вычисляются значения [оконных функций](../window.md);
+* вычисляются значения [оконных функций](window.md);
 {% endif %}
 * вычисляются выражения в `SELECT`;
 * выражениям в `SELECT` назначаются имена заданные алиасами;
@@ -57,7 +57,7 @@ SELECT 2 + 2;
 
 {% if feature_join %}
 
-* порядок колонок после [JOIN](../join.md): сначала колонки левой стороны, потом правой. Если порядок какой-либо из сторон присутствующей в выходе `JOIN` не определен, порядок колонок результата также не определен;
+* порядок колонок после [JOIN](join.md): сначала колонки левой стороны, потом правой. Если порядок какой-либо из сторон присутствующей в выходе `JOIN` не определен, порядок колонок результата также не определен;
 
 {% endif %}
 
@@ -224,6 +224,10 @@ SELECT * FROM FILTER(
 * [SAMPLE](sample.md)
 * [TABLESAMPLE](sample.md)
 * [MATCH_RECOGNIZE](match_recognize.md)
+* [JOIN](join.md)
+* [GROUP BY](group-by.md)
+* [FLATTEN](flatten.md)
+* [WINDOW](window.md)
 
 {% if yt %}
 

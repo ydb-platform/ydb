@@ -2123,7 +2123,7 @@ Y_UNIT_TEST_F(Limit_On_The_Number_Of_Transactons, TPQTabletFixture)
     }
 
     size_t preparedCount = 0;
-    size_t abortedCount = 0;
+    size_t overloadedCount = 0;
 
     for (ui64 i = 0; i < 1002; ++i) {
         auto event = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>();
@@ -2136,8 +2136,8 @@ Y_UNIT_TEST_F(Limit_On_The_Number_Of_Transactons, TPQTabletFixture)
         case NKikimrPQ::TEvProposeTransactionResult::PREPARED:
             ++preparedCount;
             break;
-        case NKikimrPQ::TEvProposeTransactionResult::ABORTED:
-            ++abortedCount;
+        case NKikimrPQ::TEvProposeTransactionResult::OVERLOADED:
+            ++overloadedCount;
             break;
         default:
             UNIT_FAIL("unexpected transaction status " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(status));
@@ -2145,7 +2145,7 @@ Y_UNIT_TEST_F(Limit_On_The_Number_Of_Transactons, TPQTabletFixture)
     }
 
     UNIT_ASSERT_EQUAL(preparedCount, 1000);
-    UNIT_ASSERT_EQUAL(abortedCount, 2);
+    UNIT_ASSERT_EQUAL(overloadedCount, 2);
 }
 
 }

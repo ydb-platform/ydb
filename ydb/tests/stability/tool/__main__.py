@@ -820,38 +820,22 @@ while true; do
   echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] COMMAND: {command}"
   echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] === COMMAND OUTPUT START ==="
 
-  # Используем script для надежного перехвата всего вывода
+  # Используем stdbuf для отключения буферизации и обеспечения вывода в реальном времени
   if {'true' if has_time_limit else 'false'}; then
-    # Создаем временный файл для script
-    SCRIPT_FILE="/tmp/{workload_name}_transcript_$$.log"
-    
-    # Запускаем команду через script для перехвата всего возможного вывода
-    script -q -c "timeout -k 10 {timeout_seconds}s {command}" "$SCRIPT_FILE" >/dev/null 2>&1
-    status=$?
-    
-    # Читаем временный файл и добавляем таймстемпы, стараясь сохранить форматирование
-    cat "$SCRIPT_FILE" | sed '/^Script .* started/d; /^Script .* done/d' | while IFS= read -r line || [[ -n "$line" ]]; do
+    # Запускаем команду с отключенной буферизацией и таймаутом
+    stdbuf -o0 -e0 timeout -k 10 {timeout_seconds}s {command} 2>&1 | while IFS= read -r line || [[ -n "$line" ]]; do
       echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] $line"
     done
-    
-    # Удаляем временный файл
-    rm -f "$SCRIPT_FILE"
+    # Получаем статус первой команды в пайпе
+    status=${{PIPESTATUS[0]}}
   else
     # То же самое для команд без таймаута
-    SCRIPT_FILE="/tmp/{workload_name}_transcript_$$.log"
-    
-    script -q -c "{command}" "$SCRIPT_FILE" >/dev/null 2>&1
-    status=$?
-    
-    cat "$SCRIPT_FILE" | sed '/^Script .* started/d; /^Script .* done/d' | while IFS= read -r line || [[ -n "$line" ]]; do
+    stdbuf -o0 -e0 {command} 2>&1 | while IFS= read -r line || [[ -n "$line" ]]; do
       echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] $line"
     done
-    
-    rm -f "$SCRIPT_FILE"
+    # Получаем статус первой команды в пайпе
+    status=${{PIPESTATUS[0]}}
   fi
-  
-  # Статус уже сохранен выше
-  # status=${{PIPESTATUS[0]}}
   
   echo "[$(date +'%Y-%m-%d %H:%M:%S.%N')] === COMMAND OUTPUT END ==="
   

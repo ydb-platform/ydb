@@ -1047,11 +1047,12 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_UNEQUAL(partition0, partitions.end());
             UNIT_ASSERT_VALUES_EQUAL(partition0->CommittedOffset, 0);
         }
-
         {
-            // Check commit
             std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets;
             std::vector<NKafka::TEvKafka::PartitionConsumerOffset> partitionsAndOffsets;
+        {
+            // Check commit
+
             for (ui64 i = 0; i < minActivePartitions; ++i) {
                 partitionsAndOffsets.emplace_back(i, static_cast<ui64>(recordsCount), commitedMetaData);
             }
@@ -1087,11 +1088,9 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             auto partition0 = std::find_if(partitions.begin(), partitions.end(), [](const auto& partition) { return partition.PartitionIndex == 0; });
             UNIT_ASSERT_VALUES_UNEQUAL(partition0, partitions.end());
             UNIT_ASSERT_VALUES_EQUAL(partition0->CommittedOffset, 5);
-            for (auto p = partitions.begin(); p != partitions.end(); p++) {
-                UNIT_ASSERT_VALUES_EQUAL(p->Metadata, "");
-            }
+            UNIT_ASSERT_VALUES_EQUAL(partition0->Metadata, commitedMetaData);
         }
-
+    }
         {
             // Check fetch offsets with nonexistent topic
             std::map<TString, std::vector<i32>> topicsToPartions;
@@ -1107,6 +1106,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         {
             // Check commit with nonexistent topic
+
             std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets;
             std::vector<NKafka::TEvKafka::PartitionConsumerOffset> partitionsAndOffsets;
             for (ui64 i = 0; i < minActivePartitions; ++i) {

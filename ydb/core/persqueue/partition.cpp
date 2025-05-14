@@ -169,8 +169,8 @@ void TPartition::ReplyOk(const TActorContext& ctx, const ui64 dst, NWilson::TSpa
 }
 
 void TPartition::ReplyGetClientOffsetOk(const TActorContext& ctx, const ui64 dst, const i64 offset,
-    const TInstant writeTimestamp, const TInstant createTimestamp, bool consumerHasAnyCommits) {
-    ctx.Send(Tablet, MakeReplyGetClientOffsetOk(dst, offset, writeTimestamp, createTimestamp, consumerHasAnyCommits).Release());
+    const TInstant writeTimestamp, const TInstant createTimestamp, bool consumerHasAnyCommits, const TString& committedMetadata) {
+    ctx.Send(Tablet, MakeReplyGetClientOffsetOk(dst, offset, writeTimestamp, createTimestamp, consumerHasAnyCommits, committedMetadata).Release());
 }
 
 NKikimrClient::TKeyValueRequest::EStorageChannel GetChannel(ui32 i) {
@@ -760,6 +760,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
                 clientInfo->SetConsumer(userInfo.User);
                 clientInfo->set_errorcode(NPersQueue::NErrorCode::EErrorCode::OK);
                 clientInfo->SetCommitedOffset(userInfo.Offset);
+                clientInfo->SetCommittedMetadata(userInfo.CommittedMetadata);
                 requiredConsumers.extract(userInfo.User);
             }
             continue;
@@ -781,6 +782,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
 
             auto read = clientInfo->MutableReadPosition();
             read->SetOffset(readOffset);
+            // метадата?
             read->SetWriteTimestamp(snapshot.LastReadMessage.WriteTimestamp.MilliSeconds());
             read->SetCreateTimestamp(snapshot.LastReadMessage.CreateTimestamp.MilliSeconds());
             read->SetSize(GetSizeLag(readOffset));
@@ -2712,6 +2714,7 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
             userInfo.Generation = actual->Generation;
             userInfo.Step = actual->Step;
             userInfo.Offset = actual->Offset;
+            userInfo.CommittedMetadata = actual->CommittedMetadata;
             if (userInfo.Offset <= (i64)BlobEncoder.StartOffset) {
                 userInfo.AnyCommits = false;
             }
@@ -3195,6 +3198,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
 {
     const TString& user = act.ClientId;
     ui64 offset = act.Offset;
+    const TString& committedMetadata = act.CommittedMetadata ? act.CommittedMetadata : userInfo.CommittedMetadata;
     const TString& session = act.SessionId;
     ui32 generation = act.Generation;
     ui32 step = act.Step;
@@ -3210,6 +3214,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         userInfo.Generation = userInfo.Step = 0;
         userInfo.Offset = 0;
         userInfo.AnyCommits = false;
+        userInfo.CommittedMetadata = "";
 
         PQ_LOG_D("Topic '" << TopicName() << "' partition " << Partition << " user " << user
                     << " drop done"
@@ -3226,6 +3231,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         userInfo.Generation = userInfo.Step = 0;
         userInfo.Offset = 0;
         userInfo.AnyCommits = false;
+        userInfo.CommittedMetadata = "";
 
         if (userInfo.Important) {
             userInfo.Offset = BlobEncoder.StartOffset;
@@ -3233,6 +3239,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
     } else {
         if (createSession || dropSession) {
             offset = userInfo.Offset;
+
             auto *ui = UsersInfoStorage->GetIfExists(userInfo.User);
             auto ts = ui ? GetTime(*ui, userInfo.Offset) : std::make_pair<TInstant, TInstant>(TInstant::Zero(), TInstant::Zero());
 
@@ -3264,6 +3271,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         );
 
         userInfo.Offset = offset;
+        userInfo.CommittedMetadata = committedMetadata;
         if (userInfo.Offset <= (i64)BlobEncoder.StartOffset) {
             userInfo.AnyCommits = false;
         }
@@ -3287,14 +3295,14 @@ void TPartition::ScheduleReplyGetClientOffsetOk(const ui64 dst,
                                                 const i64 offset,
                                                 const TInstant writeTimestamp,
                                                 const TInstant createTimestamp,
-                                                bool consumerHasAnyCommits)
+                                                bool consumerHasAnyCommits, TString committedMetadata)
 {
     Replies.emplace_back(Tablet,
                          MakeReplyGetClientOffsetOk(dst,
                                                     offset,
                                                     writeTimestamp,
                                                     createTimestamp,
-                                                    consumerHasAnyCommits).Release());
+                                                    consumerHasAnyCommits, committedMetadata).Release());
 
 }
 
@@ -3370,7 +3378,7 @@ void TPartition::AddCmdWrite(NKikimrClient::TKeyValueRequest& request,
                              ui64 offset, ui32 gen, ui32 step, const TString& session,
                              ui64 readOffsetRewindSum,
                              ui64 readRuleGeneration,
-                             bool anyCommits)
+                             bool anyCommits, const TString& committedMetadata)
 {
     TBuffer idata;
     {
@@ -3382,6 +3390,7 @@ void TPartition::AddCmdWrite(NKikimrClient::TKeyValueRequest& request,
         userData.SetOffsetRewindSum(readOffsetRewindSum);
         userData.SetReadRuleGeneration(readRuleGeneration);
         userData.SetAnyCommits(anyCommits);
+        userData.SetCommittedMetadata(committedMetadata);
 
         TString out;
         Y_PROTOBUF_SUPPRESS_NODISCARD userData.SerializeToString(&out);
@@ -3443,7 +3452,7 @@ void TPartition::AddCmdWriteUserInfos(NKikimrClient::TKeyValueRequest& request)
                         userInfo->Session,
                         ui ? ui->ReadOffsetRewindSum : 0,
                         userInfo->ReadRuleGeneration,
-                        userInfo->AnyCommits);
+                        userInfo->AnyCommits, userInfo->CommittedMetadata);
         } else {
             AddCmdDeleteRange(request,
                               ikey, ikeyDeprecated);
@@ -3485,6 +3494,7 @@ TUserInfoBase& TPartition::GetOrCreatePendingUser(const TString& user,
             newPendingUserIt->second.Generation = userIt->Generation;
             newPendingUserIt->second.Step = userIt->Step;
             newPendingUserIt->second.Offset = userIt->Offset;
+            newPendingUserIt->second.CommittedMetadata = userIt->CommittedMetadata;
             newPendingUserIt->second.ReadRuleGeneration = userIt->ReadRuleGeneration;
             newPendingUserIt->second.Important = userIt->Important;
             newPendingUserIt->second.ReadFromTimestamp = userIt->ReadFromTimestamp;
@@ -3523,7 +3533,8 @@ THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyGetClientOffsetOk(const ui
                                                                         const i64 offset,
                                                                         const TInstant writeTimestamp,
                                                                         const TInstant createTimestamp,
-                                                                        bool consumerHasAnyCommits)
+                                                                        bool consumerHasAnyCommits,
+                                                                        const TString& committedMetadata)
 {
     auto response = MakeHolder<TEvPQ::TEvProxyResponse>(dst);
     NKikimrClient::TResponse& resp = *response->Response;
@@ -3534,6 +3545,10 @@ THolder<TEvPQ::TEvProxyResponse> TPartition::MakeReplyGetClientOffsetOk(const ui
     auto user = resp.MutablePartitionResponse()->MutableCmdGetClientOffsetResult();
     if (offset > -1)
         user->SetOffset(offset);
+
+    if (committedMetadata) {
+        user->SetCommittedMetadata(committedMetadata);
+    }
     if (writeTimestamp)
         user->SetWriteTimestampMS(writeTimestamp.MilliSeconds());
     if (createTimestamp) {

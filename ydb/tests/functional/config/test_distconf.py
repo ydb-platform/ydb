@@ -270,25 +270,11 @@ class KiKiMRDistConfReassignStateStorageTest(DistConfKiKiMRTest):
         for info in actual_tablet_info:
             if info.TabletId not in generations:
                 generations[info.TabletId] = info.Generation
+            else:
+                assert_that(generations[info.TabletId] == info.Generation)
         self.check_hive_is_same()
         # self.check_kikimr_is_operational(table_path, tablet_ids)
         return res
-
-    def test_cluster_change_state_storage_distconf_bad_cases(self):
-        assert_that(self.do_request({"ReconfigStateStorage": {"NewStateStorageConfig": {"RingGroups": []}}})
-                    ["ErrorReason"] == "New configuration RingGroups is not filled in")
-        assert_that(self.do_request({"ReconfigStateStorage": {"NewStateStorageConfig": {"Ring": {"Node": [1]}}}})
-                    ["ErrorReason"] == "New configuration Ring option is not allowed use RingGroups")
-        assert_that(self.do_request({"ReconfigStateStorage": {"NewStateStorageConfig": {"RingGroups": [{"Ring": [{"Node": [4]}]}]}}})
-                    ["ErrorReason"] == "StateStorage invalid ring group selection")
-        assert_that(self.do_request({"ReconfigStateStorage": {"NewStateStorageConfig": {"RingGroups": [{"NToSelect": 1, "Ring": [{"Ring": [{"Node": [4]}]}]}]}}})
-                    ["ErrorReason"] == "StateStorage too deep nested ring declaration")
-        assert_that(self.do_request({"ReconfigStateStorage": {"NewStateStorageConfig": {"RingGroups": [{"NToSelect": 1, "Ring": [{"Node": [4]}]}]}}})
-                    ["ErrorReason"] == "New StateStorage configuration first ring group should be equal to old config")
-        assert_that(self.do_request({"ReconfigStateStorage": {"NewStateStorageConfig": {"RingGroups": [{"NToSelect": 2, "Ring": [{"Node": [4]}]}]}}})
-                    ["ErrorReason"] == "StateStorage invalid ring group selection")
-        assert_that(self.do_request({"ReconfigStateStorage": {"NewStateStorageConfig": {"RingGroups": [{"WriteOnly": True, "NToSelect": 1, "Ring": [{"Node": [4]}]}]}}})
-                    ["ErrorReason"] == "New configuration first RingGroup is writeOnly")
 
     def do_test_change_state_storage(self, defaultRingGroup, newRingGroup):
         logger.info(f"Current State Storage config: {defaultRingGroup}")
@@ -316,6 +302,24 @@ class KiKiMRDistConfReassignStateStorageTest(DistConfKiKiMRTest):
                     ["StateStorageConfig"] == {"Ring": newRingGroup})
         logger.info(self.do_load_and_test({"ReconfigStateStorage": {"NewStateStorageConfig": {
                     "RingGroups": [newRingGroup]}}}, generations))
+
+
+class TestKiKiMRDistConfReassignStateStorageBadCases(KiKiMRDistConfReassignStateStorageTest):
+    def test_cluster_change_state_storage_distconf_bad_cases(self):
+        assert_that(self.do_request({"ReconfigStateStorage": {"NewStateStorageConfig": {"RingGroups": []}}})
+                    ["ErrorReason"] == "New configuration RingGroups is not filled in")
+        assert_that(self.do_request({"ReconfigStateStorage": {"NewStateStorageConfig": {"Ring": {"Node": [1]}}}})
+                    ["ErrorReason"] == "New configuration Ring option is not allowed use RingGroups")
+        assert_that(self.do_request({"ReconfigStateStorage": {"NewStateStorageConfig": {"RingGroups": [{"Ring": [{"Node": [4]}]}]}}})
+                    ["ErrorReason"] == "StateStorage invalid ring group selection")
+        assert_that(self.do_request({"ReconfigStateStorage": {"NewStateStorageConfig": {"RingGroups": [{"NToSelect": 1, "Ring": [{"Ring": [{"Node": [4]}]}]}]}}})
+                    ["ErrorReason"] == "StateStorage too deep nested ring declaration")
+        assert_that(self.do_request({"ReconfigStateStorage": {"NewStateStorageConfig": {"RingGroups": [{"NToSelect": 1, "Ring": [{"Node": [4]}]}]}}})
+                    ["ErrorReason"] == "New StateStorage configuration first ring group should be equal to old config")
+        assert_that(self.do_request({"ReconfigStateStorage": {"NewStateStorageConfig": {"RingGroups": [{"NToSelect": 2, "Ring": [{"Node": [4]}]}]}}})
+                    ["ErrorReason"] == "StateStorage invalid ring group selection")
+        assert_that(self.do_request({"ReconfigStateStorage": {"NewStateStorageConfig": {"RingGroups": [{"WriteOnly": True, "NToSelect": 1, "Ring": [{"Node": [4]}]}]}}})
+                    ["ErrorReason"] == "New configuration first RingGroup is writeOnly")
 
 
 class TestKiKiMRDistConfReassignStateStorage(KiKiMRDistConfReassignStateStorageTest):

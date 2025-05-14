@@ -5,16 +5,28 @@
 {%- if extra_targets|length -%}
 {%-     set all_targets = all_targets + extra_targets -%}
 {%- endif -%}
+
 {%- set publish = all_targets|selectattr('publish', 'eq', true)|length -%}
+
+{#-     Kotlin -#}
 {%- set with_kotlin = all_targets|selectattr('with_kotlin', 'eq', true)|length -%}
 {%- if with_kotlin -%}
 {%-     set kotlin_version = all_targets|selectattr('kotlin_version')|map(attribute='kotlin_version')|first -%}
 {%-     set with_kotlinc_plugin_allopen = all_targets|selectattr('with_kotlinc_plugin_allopen')|map(attribute='with_kotlinc_plugin_allopen')|sum -%}
 {%-     set with_kotlinc_plugin_noarg = all_targets|selectattr('with_kotlinc_plugin_noarg')|map(attribute='with_kotlinc_plugin_noarg')|sum -%}
-{%-     set with_kapt = all_targets|selectattr('with_kapt', 'eq', true)|map(attribute='with_kapt')|length -%}
-{#-     WAIT ya-bin release -#}
+{#-     KAPT -#}
+{%-     set with_kapt = target.with_kapt -%}
+{%-     set with_test_kapt = extra_targets|selectattr('with_kapt', 'eq', true)|map(attribute='with_kapt')|length -%}
+{#-         WAIT ya-bin release, disable just now -#}
 {%-     set with_kapt = false -%}
+{%-     set with_test_kapt = false -%}
 {%- endif -%}
-{%- set has_errorprone = all_targets|selectattr('use_errorprone', 'eq', true)|length and not disable_errorprone and extra_targets|selectattr('consumer')|map(attribute='consumer')|sum|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|length -%}
+
+{#-     ErrorProne -#}
+{%- set with_errorprone = not(disable_errorprone) and (target.use_errorprone) and (target.consumer|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|length) -%}
+{%- set with_test_errorprone = not(disable_errorprone) and (extra_targets|selectattr('use_errorprone', 'eq', true)|length) and (extra_targets|selectattr('consumer')|map(attribute='consumer')|sum|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|length) -%}
+{%- if with_errorprone or with_test_errorprone -%}
+{%-     set errorprones = all_targets|selectattr('consumer')|map(attribute='consumer')|sum|selectattr('classpath')|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|unique -%}
+{%- endif -%}
 
 {%- include "[generator]/jdk.jinja" -%}

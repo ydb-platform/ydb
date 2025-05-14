@@ -127,7 +127,7 @@ TWorkerGraph::TWorkerGraph(
     };
 
     NKikimr::NMiniKQL::TExploringNodeVisitor explorer;
-    explorer.Walk(rootNode.GetNode(), Env_);
+    explorer.Walk(rootNode.GetNode(), Env_.GetNodeStack());
 
     auto compositeNodeFactory = NKikimr::NMiniKQL::GetCompositeWithBuiltinFactory(
         {NKikimr::NMiniKQL::GetYqlFactory(), NYql::GetPgFactory()}

@@ -5,9 +5,9 @@ import re
 
 def main():
     REGEXP = """^("(.+)",|"",//(.+))$"""
-    OUTPUT = "../udf_tz.gen"
+    OUTPUT = "../tz.gen"
     INPUT = OUTPUT
-    CONTRIB_ZONES = "../../../../../../../contrib/libs/cctz/tzdata/ya.make.resources"
+    CONTRIB_ZONES = "../../../../../contrib/libs/cctz/tzdata/ya.make.resources"
     RES_PREFIX = "/cctz/tzdata/"
 
     print("process %s into %s" % (INPUT, OUTPUT))

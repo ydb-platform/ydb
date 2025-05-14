@@ -1,14 +1,11 @@
 LIBRARY()
 
 SRCS(
-    udf_tz.cpp
-    udf_tz.h
+    tz.cpp
 )
 
 PEERDIR(
 )
-
-PROVIDES(YqlUdfTz)
 
 END()
 

@@ -235,11 +235,11 @@ oneAPI Threading Building Blocks is licensed under [Apache License, Version 2.0]
 
 
 ====================Apache-2.0====================
-Licensing is very important to open source projects. It helps ensure the software continues to be available under the terms that the author desired. The oneTBB project uses the [Apache 2.0 License](https://github.com/oneapi-src/oneTBB/blob/master/LICENSE.txt), a permissive open source license that allows you to freely use, modify, and distribute your own products that include Apache 2.0 licensed software. By contributing to the oneTBB project, you agree to the license and copyright terms therein and release your own contributions under these terms. 
+Licensing is very important to open source projects. It helps ensure the software continues to be available under the terms that the author desired. The oneTBB project uses the [Apache 2.0 License](https://github.com/uxlfoundation/oneTBB/blob/master/LICENSE.txt), a permissive open source license that allows you to freely use, modify, and distribute your own products that include Apache 2.0 licensed software. By contributing to the oneTBB project, you agree to the license and copyright terms therein and release your own contributions under these terms. 
 
 
 ====================Apache-2.0 AND Apache-2.0====================
-[![Apache License Version 2.0](https://img.shields.io/badge/license-Apache_2.0-green.svg)](LICENSE.txt) [![oneTBB CI](https://github.com/oneapi-src/oneTBB/actions/workflows/ci.yml/badge.svg)](https://github.com/oneapi-src/oneTBB/actions/workflows/ci.yml?query=branch%3Amaster)
+[![Apache License Version 2.0](https://img.shields.io/badge/license-Apache_2.0-green.svg)](LICENSE.txt) [![oneTBB CI](https://github.com/uxlfoundation/oneTBB/actions/workflows/ci.yml/badge.svg)](https://github.com/uxlfoundation/oneTBB/actions/workflows/ci.yml?query=branch%3Amaster)
 
 
 ====================COPYRIGHT====================
@@ -259,7 +259,19 @@ Licensing is very important to open source projects. It helps ensure the softwar
 
 
 ====================COPYRIGHT====================
+    Copyright (c) 2005-2025 Intel Corporation
+
+
+====================COPYRIGHT====================
     Copyright (c) 2017-2021 Intel Corporation
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2017-2024 Intel Corporation
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2017-2025 Intel Corporation
 
 
 ====================COPYRIGHT====================
@@ -284,6 +296,10 @@ Licensing is very important to open source projects. It helps ensure the softwar
 
 ====================COPYRIGHT====================
     Copyright (c) 2020-2024 Intel Corporation
+
+
+====================COPYRIGHT====================
+    Copyright (c) 2020-2025 Intel Corporation
 
 
 ====================COPYRIGHT====================

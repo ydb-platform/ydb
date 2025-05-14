@@ -1504,7 +1504,8 @@ private:
                 RuntimeError(
                     NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                     NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-                    TStringBuilder() << "Stream write can't be used for this query.",
+                    TStringBuilder() << "Out of buffer memory. Used " << GetMemory()
+                        << " bytes of " << MessageSettings.InFlightMemoryLimitPerActorBytes << " bytes.",
                     {});
                 return;
             }
@@ -1904,7 +1905,8 @@ public:
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                 NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-                TStringBuilder() << "Stream write queries aren't allowed.",
+                TStringBuilder() << "Out of buffer memory. Used " << GetTotalMemory()
+                        << " bytes of " << MessageSettings.InFlightMemoryLimitPerActorBytes << " bytes.",
                 {});
             return false;
         }

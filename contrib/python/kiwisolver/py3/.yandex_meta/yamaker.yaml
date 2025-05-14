@@ -1,0 +1,5 @@
+requirements:
+  - cppy
+copy:
+  - kiwi/*
+  - py/*

@@ -56,8 +56,6 @@ tbb = CMakeNinjaNixProject(
     disable_includes=[
         # if defined(__OpenBSD__) || __TBB_has_include(<sys/futex.h>)
         "sys/futex.h",
-        # if __TBB_CPP17_MEMORY_RESOURCE_PRESENT
-        "memory_resource",
         "tbb_misc.h",
     ],
     post_install=post_install,

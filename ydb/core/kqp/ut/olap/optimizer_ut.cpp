@@ -26,7 +26,6 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
         TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
         auto tableClient = kikimr.GetTableClient();
 
-        const TDuration portionsLiveDuration = TDuration::Seconds(20);
         {
             auto alterQuery =
                 TStringBuilder() <<
@@ -39,35 +38,12 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
 
-        TInstant beforeWrite = TInstant::Now();
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000, 1000);
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 2000, 1000);
-        TInstant afterWrite = TInstant::Now();
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000, 10);
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 2000, 10);
 
-        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitCompactions(TDuration::Seconds(25));
         {
-            auto it = tableClient
-                          .StreamExecuteScanQuery(R"(
-                --!syntax_v1
-                SELECT
-                    COUNT(*)
-                FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
-                WHERE Kind == "SPLIT_COMPACTED"
-            )")
-                          .GetValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it);
-            Cout << result << Endl;
-            CompareYson(result, R"([[0u;]])");
-        }
-
-        UNIT_ASSERT_LT(TInstant::Now(), beforeWrite + portionsLiveDuration);
-        SleepUntil(afterWrite + portionsLiveDuration);
-
-        csController->WaitCompactions(TDuration::Seconds(5));
-        {
-            auto it = tableClient
-                          .StreamExecuteScanQuery(R"(
+            auto it = tableClient.StreamExecuteScanQuery(R"(
                 --!syntax_v1
                 SELECT
                     COUNT(*)

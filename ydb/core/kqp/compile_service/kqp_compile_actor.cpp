@@ -654,6 +654,7 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnableSpilling = serviceConfig.GetEnableQueryServiceSpilling();
     kqpConfig.EnableSnapshotIsolationRW = serviceConfig.GetEnableSnapshotIsolationRW();
     kqpConfig.AllowMultiBroadcasts = serviceConfig.GetAllowMultiBroadcasts();
+    kqpConfig.EnableNewRBO = serviceConfig.GetEnableNewRBO();
 
     if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
         kqpConfig._KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));

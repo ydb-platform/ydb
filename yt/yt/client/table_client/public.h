@@ -160,7 +160,7 @@ DEFINE_ENUM(ECompatOptimizeFor,
     ((Scan)    (1))
 );
 
-DEFINE_ENUM_WITH_UNDERLYING_TYPE(EOptimizeFor, int,
+DEFINE_ENUM_WITH_UNDERLYING_TYPE(EOptimizeFor, i32,
     ((Lookup)  (0))
     ((Scan)    (1))
 );

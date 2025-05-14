@@ -41,6 +41,7 @@ static constexpr ui32 CACHE_SIZE = 100_MB;
 static constexpr ui32 MAX_BYTES = 25_MB;
 static constexpr ui32 MAX_SOURCE_ID_LENGTH = 2048;
 static constexpr ui32 MAX_HEARTBEAT_SIZE = 2_KB;
+static constexpr ui32 MAX_TXS = 1000;
 
 struct TChangeNotification {
     TChangeNotification(const TActorId& actor, const ui64 txId)
@@ -3274,10 +3275,6 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
         return;
     }
 
-    //
-    // TODO(abcdef): сохранить пока инициализируемся. TEvPersQueue::TEvHasDataInfo::TPtr как образец. не только конфиг. Inited==true
-    //
-
     if (txBody.OperationsSize() <= 0) {
         PQ_LOG_D("TxId " << event.GetTxId() << " empty list of operations");
         SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
@@ -3346,7 +3343,6 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
         return;
     }
 
-
     if (txBody.GetImmediate()) {
         PQ_LOG_D("immediate transaction");
         TPartitionId originalPartitionId(txBody.GetOperations(0).GetPartitionId());
@@ -3360,6 +3356,15 @@ void TPersQueue::HandleDataTransaction(TAutoPtr<TEvPersQueue::TEvProposeTransact
 
         ctx.Send(partition.Actor, ev.Release());
     } else {
+        if ((EvProposeTransactionQueue.size() + Txs.size()) >= MAX_TXS) {
+            SendProposeTransactionAbort(ActorIdFromProto(event.GetSourceActor()),
+                                        event.GetTxId(),
+                                        NKikimrPQ::TError::ERROR,
+                                        "too many transactions",
+                                        ctx);
+            return;
+        }
+
         PQ_LOG_D("distributed transaction");
         EvProposeTransactionQueue.emplace_back(ev.Release());
 

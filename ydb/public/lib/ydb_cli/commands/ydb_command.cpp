@@ -60,7 +60,7 @@ size_t TYdbCommand::GetNetworkThreadNum(TConfig& config) {
             // To not break things this heuristic tries to use this constant as well.
             return 16;
         } else {
-            return std::min(2UL, cpuCount / 2);
+            return std::min(size_t(2), cpuCount / 2);
         }
     }
     return 1; // TODO: check default

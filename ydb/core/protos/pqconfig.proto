@@ -853,6 +853,7 @@ message TStatusResponse {
 
         optional bool ReadingFinished = 10;
         optional uint64 CommitedLagMs = 11;
+        optional string CommittedMetadata = 12;
     }
 
 
@@ -907,6 +908,7 @@ message TUserInfo {
     optional uint64 ReadRuleGeneration = 6;
     optional uint64 PartitionSessionId = 7;
     optional bool AnyCommits = 8;
+    optional string CommittedMetadata = 9;
 }
 
 message TPartitionClientInfo {

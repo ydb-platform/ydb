@@ -8,7 +8,7 @@ YDB Topics — совместимый с Apache Kafka корпоративный
 
 Вебинар полезен разработчикам микросервисов, инженерам и архитекторам данных.
 
-@[yandex](https://runtime.strm.yandex.ru/player/episode/vpled3lm6gfqgtdb3gtw?autoplay=0&mute=1&color=white&rel=0)
+@[](https://runtime.strm.yandex.ru/player/episode/vpled3lm6gfqgtdb3gtw?autoplay=0&branding=0&from=documentation&mute=0&redirect_from=ugc)
 
 ### Как Яндекс разработал алгоритм для стоимостного оптимизатора в YDB
 
@@ -20,7 +20,7 @@ YDB Topics — совместимый с Apache Kafka корпоративный
 
 Вебинар полезен тем, кто интересуется алгоритмами оптимизации, разработкой баз данных, динамическим программированием, — архитекторами и инженерам баз данных, разработчикам прикладного ПО и специалистам по системной интеграции.
 
-@[yandex](https://runtime.strm.yandex.ru/player/episode/vpledjxhhhm7dev3cg72?autoplay=0&mute=1&color=white&rel=0)
+@[](https://runtime.strm.yandex.ru/player/episode/vpledjxhhhm7dev3cg72?autoplay=0&branding=0&from=documentation&mute=0&redirect_from=ugc)
 
 ### YDB (СУБД Яндекса) для задач интеграции данных и бизнес-аналитики
 
@@ -36,7 +36,7 @@ YDB Topics — совместимый с Apache Kafka корпоративный
 
 Вебинар будет полезен бизнес-аналитикам, архитекторам данных и специалистам, работающим с хранилищами данных.
 
-@[yandex](https://runtime.strm.yandex.ru/player/episode/vpleedipvdfxfl7upbjb?autoplay=0&mute=0&color=white&rel=0)
+@[](https://runtime.strm.yandex.ru/player/episode/vpleedipvdfxfl7upbjb?autoplay=0&branding=0&from=documentation&mute=0&redirect_from=ugc)
 
 ### Внутреннее устройство аналитической СУБД Яндекса — YDB DWH
 
@@ -50,7 +50,7 @@ YDB Topics — совместимый с Apache Kafka корпоративный
 
 Вебинар полезен разработчикам систем хранения данных, инженерам по оптимизации производительности и архитекторам распределённых систем, желающим глубже понять принципы работы современных СУБД.
 
-@[yandex](https://runtime.strm.yandex.ru/player/episode/vplenkblbdqdawpj2qoa?autoplay=0&color=white&mute=0&rel=0)
+@[](https://runtime.strm.yandex.ru/player/episode/vplenkblbdqdawpj2qoa?autoplay=0&branding=0&from=documentation&mute=0&redirect_from=ugc)
 
 ### Новые возможности YDB (СУБД Яндекса) для аналитических систем
 
@@ -60,4 +60,4 @@ YDB Topics — совместимый с Apache Kafka корпоративный
 
 Вебинар будет полезен архитекторам и инженерам баз данных, SRE-инженерам, разработчикам прикладного ПО и специалистам по системной интеграции.
 
-@[yandex](https://runtime.strm.yandex.ru/player/episode/vplemmlcgopqfspnvggi?autoplay=0&mute=0)
+@[](https://runtime.strm.yandex.ru/player/episode/vplemmlcgopqfspnvggi?autoplay=0&branding=0&from=documentation&mute=0&redirect_from=ugc)

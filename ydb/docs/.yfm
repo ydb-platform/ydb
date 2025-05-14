@@ -17,6 +17,7 @@ resources:
         - "https://login.vk.com"
         - "https://runtime.strm.yandex.ru"
         - "https://www.youtube.com"
+
 docs-viewer:
   project-name: ydb
   # no-index: true # Remove this after the public release

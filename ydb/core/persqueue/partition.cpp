@@ -362,6 +362,8 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
         avg.Update(now);
     }
 
+    UpdateCompactionCounters();
+
     TryRunCompaction();
 }
 

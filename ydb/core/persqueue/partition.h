@@ -930,6 +930,10 @@ private:
     NKikimr::NPQ::TMultiCounter MsgsDiscarded;
     NKikimr::NPQ::TMultiCounter BytesDiscarded;
 
+    TMultiCounter CompactionUnprocessedCount;
+    TMultiCounter CompactionUnprocessedBytes;
+    TMultiCounter CompactionTimeLag;
+
     // Writing blob with topic quota variables
     ui64 TopicQuotaRequestCookie = 0;
     ui64 NextTopicWriteQuotaRequestCookie = 1;
@@ -1042,6 +1046,10 @@ private:
 
     size_t GetBodyKeysCountLimit() const;
     ui64 GetCumulativeSizeLimit() const;
+
+    void UpdateCompactionCounters();
+    bool ThereIsUncompactedData() const;
+    TInstant GetFirstUncompactedBlobTimestamp() const;
 };
 
 } // namespace NKikimr::NPQ

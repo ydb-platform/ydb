@@ -77,7 +77,9 @@ std::string TQueryGenerator::GetDDLQueriesFromDir(const TFsPath& dir) const {
         }
         result << "PRAGMA TablePathPrefix = \"" << Params.GetFullTableName(nullptr) << "\";" << std::endl;
         TFileInput fInput(i.GetPath());
-        result << fInput.ReadAll() << std::endl;
+        auto query = fInput.ReadAll();
+        SubstGlobal(query, "{db}", Params.GetFullTableName(nullptr));
+        result << query << std::endl;
     }
     return result.str();
 }

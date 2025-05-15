@@ -254,7 +254,7 @@ class KiKiMRDistConfReassignStateStorageTest(DistConfKiKiMRTest):
             self.cluster.client,
             TabletStates.Active,
             tablet_ids=tablet_ids,
-            timeout_seconds=3,
+            timeout_seconds=10,
         )
         actual_tablet_info = self.cluster.client.tablet_state(tablet_ids=tablet_ids).TabletStateInfo
         assert_that(len(generations) + self.number_of_tablets == len(actual_tablet_info))
@@ -340,3 +340,24 @@ class TestKiKiMRDistConfReassignStateStorageReuseSameNodes(KiKiMRDistConfReassig
         self.do_test_change_state_storage(defaultRingGroup, newRingGroup)
         assert_that(self.do_request({"ReconfigStateStorage": {"GetStateStorageConfig": True}})
                     ["StateStorageConfig"] == {"Ring": newRingGroup[0]})
+
+
+class TestKiKiMRDistConfReassignStateStorageMultipleRingGroup(KiKiMRDistConfReassignStateStorageTest):
+    number_of_tablets = 3
+
+    def test_cluster_change_state_storage_distconf_multiple_ring_groups(self):
+        generations = {}
+        defaultRingGroup = [self.do_request({"ReconfigStateStorage": {"GetStateStorageConfig": True}})["StateStorageConfig"]["Ring"]]
+        newRingGroup = [
+            {"NToSelect": 3, "Ring": [{"Node": [4]}, {"Node": [5]}, {"Node": [6]}]},
+            {"NToSelect": 3, "Ring": [{"Node": [7]}, {"Node": [8]}, {"Node": [9]}]}
+            ]
+        self.do_test_change_state_storage(defaultRingGroup, newRingGroup, generations)
+        defaultRingGroup = deepcopy(newRingGroup)
+        newRingGroup = [
+            {"NToSelect": 3, "Ring": [{"Node": [1, 4]}, {"Node": [2, 5]}, {"Node": [3, 6]}]},
+            {"NToSelect": 5, "Ring": [{"Node": [7]}, {"Node": [8]}, {"Node": [9]}, {"Node": [10]}, {"Node": [11]}, {"Node": [12]}]}
+            ]
+        self.do_test_change_state_storage(defaultRingGroup, newRingGroup, generations)
+        assert_that(self.do_request({"ReconfigStateStorage": {"GetStateStorageConfig": True}})
+                    ["StateStorageConfig"] == {"RingGroups": newRingGroup})

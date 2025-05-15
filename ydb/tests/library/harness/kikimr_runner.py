@@ -296,7 +296,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
     def make_config_dir(self, source_config_yaml_path, target_config_dir_path):
         if not os.path.exists(source_config_yaml_path):
-            raise FileNotFoundError("Source config file not found: %s" % source_config_yaml_path)
+            raise RuntimeError("Source config file not found: %s" % source_config_yaml_path)
 
         try:
             os.makedirs(target_config_dir_path, exist_ok=True)

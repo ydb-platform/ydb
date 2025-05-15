@@ -6,7 +6,6 @@ import "ydb/core/protos/auth.proto";
 import "ydb/core/protos/blobstorage.proto";
 import "ydb/core/protos/blobstorage_base3.proto";
 import "ydb/core/protos/blobstorage_config.proto";
-import "ydb/core/protos/blobstorage_disk_color.proto";
 import "ydb/core/protos/blobstorage_pdisk_config.proto";
 import "ydb/core/protos/blobstorage_vdisk_config.proto";
 import "ydb/core/protos/bootstrap.proto";
@@ -332,23 +331,7 @@ message TBlobStorageConfig {
     repeated NKikimrBlobStorage.TDefineHostConfig DefineHostConfig = 10;
     optional NKikimrBlobStorage.TDefineBox DefineBox = 11;
 
-    message TBscSettings {
-        optional uint32 DefaultMaxSlots = 1;
-        optional bool EnableSelfHeal = 2;
-        optional bool EnableDonorMode = 3;
-        optional uint64 ScrubPeriodicitySeconds = 4;
-        optional uint32 PDiskSpaceMarginPromille = 5;
-        optional uint32 GroupReserveMin = 6;
-        optional uint32 GroupReservePartPPM = 7;
-        optional uint32 MaxScrubbedDisksAtOnce = 8;
-        optional NKikimrBlobStorage.TPDiskSpaceColor.E PDiskSpaceColorBorder = 9;
-        optional bool EnableGroupLayoutSanitizer = 10;
-        optional bool AllowMultipleRealmsOccupation = 11;
-        optional bool UseSelfHealLocalPolicy = 12;
-        optional bool TryToRelocateBrokenDisksLocallyFirst = 13;
-    }
-
-    optional TBscSettings BscSettings = 12;
+    optional NKikimrBlobStorage.TUpdateSettings BscSettings = 12;
  }
 
 message TSelfManagementConfig {

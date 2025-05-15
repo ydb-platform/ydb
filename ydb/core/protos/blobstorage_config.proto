@@ -461,21 +461,21 @@ message TUpdateSettings {
     // each value may be specified either one time, or zero times; when it is specified, its value is written to State
     // and applied immediately; when no value specified, setting kept unchanged; if value is specified more than one
     // time, then last value is applied
-    repeated uint32 DefaultMaxSlots = 1;
-    repeated bool EnableSelfHeal = 2;
-    repeated bool EnableDonorMode = 3;
-    repeated uint64 ScrubPeriodicitySeconds = 4;
-    repeated uint32 PDiskSpaceMarginPromille = 5;
-    repeated uint32 GroupReserveMin = 6;
-    repeated uint32 GroupReservePartPPM = 7;
-    repeated uint32 MaxScrubbedDisksAtOnce = 8;
-    repeated NKikimrBlobStorage.TPDiskSpaceColor.E PDiskSpaceColorBorder = 9;
-    repeated bool EnableGroupLayoutSanitizer = 10;
+    optional uint32 DefaultMaxSlots = 1;
+    optional bool EnableSelfHeal = 2;
+    optional bool EnableDonorMode = 3;
+    optional uint64 ScrubPeriodicitySeconds = 4;
+    optional uint32 PDiskSpaceMarginPromille = 5;
+    optional uint32 GroupReserveMin = 6;
+    optional uint32 GroupReservePartPPM = 7;
+    optional uint32 MaxScrubbedDisksAtOnce = 8;
+    optional NKikimrBlobStorage.TPDiskSpaceColor.E PDiskSpaceColorBorder = 9;
+    optional bool EnableGroupLayoutSanitizer = 10;
     // TODO
-    // repeated TSerialManagementStage.E SerialManagementStage = 11;
-    repeated bool AllowMultipleRealmsOccupation = 12;
-    repeated bool UseSelfHealLocalPolicy = 13;
-    repeated bool TryToRelocateBrokenDisksLocallyFirst = 14;
+    // optional TSerialManagementStage.E SerialManagementStage = 11;
+    optional bool AllowMultipleRealmsOccupation = 12;
+    optional bool UseSelfHealLocalPolicy = 13;
+    optional bool TryToRelocateBrokenDisksLocallyFirst = 14;
 }
 
 message TBoxStoragePoolId {

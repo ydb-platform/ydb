@@ -293,8 +293,6 @@ void TBlobStorageController::ApplyBscSettings(const NKikimrConfig::TBlobStorageC
         return;
     }
 
-    const auto& newBscSettings = bsConfig.GetBscSettings();
-
     auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
     auto& r = ev->Record;
     auto *request = r.MutableRequest();
@@ -302,62 +300,10 @@ void TBlobStorageController::ApplyBscSettings(const NKikimrConfig::TBlobStorageC
 
     auto updateSettings = command->MutableUpdateSettings();
 
-    if (newBscSettings.HasDefaultMaxSlots()) {
-        updateSettings->AddDefaultMaxSlots(newBscSettings.GetDefaultMaxSlots());
-    }
+    updateSettings->CopyFrom(bsConfig.GetBscSettings());
 
-    if (newBscSettings.HasEnableSelfHeal()) {
-        updateSettings->AddEnableSelfHeal(newBscSettings.GetEnableSelfHeal());
-    }
-    
-    if (newBscSettings.HasEnableDonorMode()) {
-        updateSettings->AddEnableDonorMode(newBscSettings.GetEnableDonorMode());
-    }
-
-    if (newBscSettings.HasScrubPeriodicitySeconds()) {
-        updateSettings->AddScrubPeriodicitySeconds(newBscSettings.GetScrubPeriodicitySeconds());
-    }
-
-    if (newBscSettings.HasPDiskSpaceMarginPromille()) {
-        updateSettings->AddPDiskSpaceMarginPromille(newBscSettings.GetPDiskSpaceMarginPromille());
-    }
-
-    if (newBscSettings.HasGroupReserveMin()) {
-        updateSettings->AddGroupReserveMin(newBscSettings.GetGroupReserveMin());
-    }
-
-    if (newBscSettings.HasGroupReservePartPPM()) {
-        updateSettings->AddGroupReservePartPPM(newBscSettings.GetGroupReservePartPPM());
-    }
-
-    if (newBscSettings.HasMaxScrubbedDisksAtOnce()) {
-        updateSettings->AddMaxScrubbedDisksAtOnce(newBscSettings.GetMaxScrubbedDisksAtOnce());
-    }
-
-    if (newBscSettings.HasPDiskSpaceColorBorder()) {
-        updateSettings->AddPDiskSpaceColorBorder(newBscSettings.GetPDiskSpaceColorBorder());
-    }
-
-    if (newBscSettings.HasEnableGroupLayoutSanitizer()) {
-        updateSettings->AddEnableGroupLayoutSanitizer(newBscSettings.GetEnableGroupLayoutSanitizer());
-    }
-
-    if (newBscSettings.HasAllowMultipleRealmsOccupation()) {
-        updateSettings->AddAllowMultipleRealmsOccupation(newBscSettings.GetAllowMultipleRealmsOccupation());
-    }
-
-    if (newBscSettings.HasUseSelfHealLocalPolicy()) {
-        updateSettings->AddUseSelfHealLocalPolicy(newBscSettings.GetUseSelfHealLocalPolicy());
-    }
-
-    if (newBscSettings.HasTryToRelocateBrokenDisksLocallyFirst()) {
-        updateSettings->AddTryToRelocateBrokenDisksLocallyFirst(newBscSettings.GetTryToRelocateBrokenDisksLocallyFirst());
-    }
-
-    if (request->CommandSize()) {
-        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC17, "ApplyBSCSettings", (Request, r));
-        Send(SelfId(), ev.release());
-    }
+    STLOG(PRI_DEBUG, BS_CONTROLLER, BSC17, "ApplyBSCSettings", (Request, r));
+    Send(SelfId(), ev.release());
 }
 
 void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {

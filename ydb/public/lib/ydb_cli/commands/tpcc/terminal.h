@@ -26,7 +26,7 @@ class alignas(64) TTerminal {
 public:
     TTerminal(
         size_t terminalID,
-        IReadyTaskQueue& taskQueue,
+        ITaskQueue& taskQueue,
         TDriver& driver,
         std::stop_token stopToken,
         std::atomic<bool>& stopWarmup,
@@ -40,7 +40,7 @@ public:
     bool IsDone() const;
 
 private:
-    IReadyTaskQueue& TaskQueue;
+    ITaskQueue& TaskQueue;
     TDriver Driver;
     TTransactionContext Context;
     std::stop_token StopToken;

@@ -15,7 +15,7 @@ namespace std {
 namespace NYdb::NTPCC {
 
 TTerminal::TTerminal(size_t terminalID,
-                     IReadyTaskQueue& taskQueue,
+                     ITaskQueue& taskQueue,
                      TDriver& driver,
                      std::stop_token stopToken,
                      std::atomic<bool>& stopWarmup,

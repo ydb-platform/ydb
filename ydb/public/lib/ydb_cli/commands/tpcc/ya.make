@@ -5,6 +5,7 @@ SRCS(
     command_run.cpp
     common_queries.cpp
     runner.cpp
+    task_queue.cpp
     terminal.cpp
     transaction_neworder.cpp
 )

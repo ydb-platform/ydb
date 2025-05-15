@@ -6,7 +6,10 @@
 
 #include <exception>
 #include <coroutine>
+#include <memory>
 #include <utility>
+
+class TLog;
 
 namespace NYdb::NTPCC {
 
@@ -212,13 +215,31 @@ using TTransactionTask = TTask<TTransactionResult>;
 
 //-----------------------------------------------------------------------------
 
-class IReadyTaskQueue {
+class ITaskQueue {
 public:
-    virtual ~IReadyTaskQueue() = default;
+    ITaskQueue() = default;
+    virtual ~ITaskQueue() = default;
+
+    // non copyable / non moveable
+
+    ITaskQueue(const ITaskQueue&) = delete;
+    ITaskQueue& operator=(const ITaskQueue&) = delete;
+
+    ITaskQueue(ITaskQueue&&) = delete;
+    ITaskQueue& operator=(ITaskQueue&&) = delete;
+
+    virtual void Run() = 0;
+    virtual void Join() = 0;
 
     virtual void TaskReady(TTerminalTask::TCoroHandle handle, size_t terminalId) = 0;
     virtual void TaskReady(TTransactionTask::TCoroHandle handle, size_t terminalId) = 0;
 };
+
+std::unique_ptr<ITaskQueue> CreateTaskQueue(
+    size_t threadCount,
+    size_t maxReadyTerminals,
+    size_t maxReadyTransactions,
+    std::shared_ptr<TLog> log);
 
 //-----------------------------------------------------------------------------
 
@@ -228,7 +249,7 @@ public:
 
 template <typename T>
 struct TSuspendWithFuture {
-    TSuspendWithFuture(NThreading::TFuture<T>& future, IReadyTaskQueue& taskQueue, size_t terminalId)
+    TSuspendWithFuture(NThreading::TFuture<T>& future, ITaskQueue& taskQueue, size_t terminalId)
         : Future(future)
         , TaskQueue(taskQueue)
         , TerminalId(terminalId)
@@ -258,7 +279,7 @@ struct TSuspendWithFuture {
     void await_resume() {}
 
     NThreading::TFuture<T>& Future;
-    IReadyTaskQueue& TaskQueue;
+    ITaskQueue& TaskQueue;
     size_t TerminalId;
 };
 

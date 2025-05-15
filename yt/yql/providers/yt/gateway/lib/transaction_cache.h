@@ -32,6 +32,7 @@ public:
     using TSpecProvider = std::function<NYT::TNode()>;
 
     struct TEntry : public TThrRefBase {
+        TString Cluster;
         TString Server;
         NYT::IClientPtr Client;
         NYT::ITransactionPtr Tx;
@@ -166,7 +167,7 @@ public:
     TTransactionCache(const TString& userName);
 
     TEntry::TPtr GetEntry(const TString& server);
-    TEntry::TPtr GetOrCreateEntry(const TString& server, const TString& token, const TMaybe<TString>& impersonationUser, const TSpecProvider& specProvider, const TYtSettings::TConstPtr& config, IMetricsRegistryPtr metrics);
+    TEntry::TPtr GetOrCreateEntry(const TString& cluster, const TString& server, const TString& token, const TMaybe<TString>& impersonationUser, const TSpecProvider& specProvider, const TYtSettings::TConstPtr& config, IMetricsRegistryPtr metrics);
     TEntry::TPtr TryGetEntry(const TString& server);
 
     void Commit(const TString& server);

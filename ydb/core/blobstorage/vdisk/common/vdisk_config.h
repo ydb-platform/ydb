@@ -54,6 +54,7 @@ namespace NKikimr {
                     ui32 pdiskId,
                     NPDisk::EDeviceType deviceType,
                     ui32 vdiskSlotId,
+                    // NKikimrBlobStorage::TPDiskSlotSizeUnits::E slotSizeUnits,
                     EKind kind,
                     ui64 initOwnerRound,
                     TString storagePoolName,
@@ -70,6 +71,7 @@ namespace NKikimr {
                 , PDiskId(pdiskId)
                 , DeviceType(deviceType)
                 , VDiskSlotId(vdiskSlotId)
+                // , SlotSizeUnits(slotSizeUnits)
                 , Kind(kind)
                 , StoragePoolName(storagePoolName)
                 , DonorMode(donorMode)
@@ -222,6 +224,7 @@ namespace NKikimr {
         bool EnableVDiskCooldownTimeout;
         TControlWrapper EnableVPatch = true;
         bool UseActorSystemTimeInBSQueue = false;
+        NKikimrBlobStorage::TPDiskSlotSizeUnits::E SlotSizeUnits = NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED;
 
         ///////////// BALANCING SETTINGS ////////////////////
         bool BalancingEnableSend = false;

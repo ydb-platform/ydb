@@ -248,9 +248,12 @@ namespace NKikimr::NStorage {
         vdiskConfig->BalancingEpochTimeout = TDuration::MilliSeconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetEpochTimeoutMs());
         vdiskConfig->BalancingTimeToSleepIfNothingToDo = TDuration::Seconds(Cfg->BlobStorageConfig.GetVDiskBalancingConfig().GetSecondsToSleepIfNothingToDo());
 
+        vdiskConfig->SlotSizeUnits = groupInfo->SlotSizeUnits;
+        
         // issue initial report to whiteboard before creating actor to avoid races
         Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate(vdiskId, groupInfo->GetStoragePoolName(),
-            vslotId.PDiskId, vslotId.VDiskSlotId, pdiskGuid, kind, donorMode, whiteboardInstanceGuid, std::move(donors)));
+            vslotId.PDiskId, vslotId.VDiskSlotId, pdiskGuid, kind, donorMode, whiteboardInstanceGuid, std::move(donors),
+            vdiskConfig->SlotSizeUnits));
         vdisk.WhiteboardVDiskId.emplace(vdiskId);
         vdisk.WhiteboardInstanceGuid = whiteboardInstanceGuid;
 
@@ -278,6 +281,7 @@ namespace NKikimr::NStorage {
             .OrderNumber = groupInfo->GetOrderNumber(TVDiskIdShort(vdiskId)),
             .DonorMode = donorMode,
             .ReadOnly = readOnly,
+            // .SlotSizeUnits = groupInfo->SlotSizeUnits,
         });
 
         vdisk.Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;

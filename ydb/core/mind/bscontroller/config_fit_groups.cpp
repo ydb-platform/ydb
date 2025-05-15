@@ -130,7 +130,9 @@ namespace NKikimr {
                 TGroupInfo *groupInfo = State.Groups.ConstructInplaceNewEntry(groupId, groupId, 1,
                     0, Geometry.GetErasure(), desiredPDiskCategory.GetOrElse(0), StoragePool.VDiskKind,
                     StoragePool.EncryptionMode.GetOrElse(0), lifeCyclePhase, mainKeyId, encryptedGroupKey,
-                    groupKeyNonce, MainKeyVersion, false, false, StoragePoolId, Geometry.GetNumFailRealms(),
+                    groupKeyNonce, MainKeyVersion, false, false,
+                    StoragePool.DefaultSlotSizeUnits.GetOrElse(NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED),
+                    StoragePoolId, Geometry.GetNumFailRealms(),
                     Geometry.GetNumFailDomainsPerFailRealm(), Geometry.GetNumVDisksPerFailDomain());
 
                 // bind group to storage pool

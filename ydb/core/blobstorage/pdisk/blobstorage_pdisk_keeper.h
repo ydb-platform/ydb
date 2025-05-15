@@ -43,6 +43,10 @@ public:
     //
 
     bool Reset(const TKeeperParams& params, const TColorLimits &limits, TString &outErrorReason) {
+        Cerr << (TStringBuilder() << "[ PD15 ] TKeeper::Reset"
+            << ", TotalChunks# " << params.TotalChunks
+            << ", ExpectedOwnerCount# " << params.ExpectedOwnerCount
+            << Endl);
         return ChunkTracker.Reset(params, limits, outErrorReason);
     }
 
@@ -58,8 +62,21 @@ public:
     // Add/remove owner
     //
 
-    void AddOwner(TOwner owner, TVDiskID vdiskId) {
-        ChunkTracker.AddOwner(owner, vdiskId);
+    void AddOwner(TOwner owner, TVDiskID vdiskId, ui32 weight) {
+        Cerr << (TStringBuilder() << "[ PD11 ] TKeeper::AddOwner"
+            << ", Owner# " << owner
+            << ", VDiskID# " << vdiskId
+            << ", Weight# " << weight
+            << Endl);
+        ChunkTracker.AddOwner(owner, vdiskId, weight);
+    }
+
+    void SetOwnerWeight(TOwner owner, ui32 weight) {
+        Cerr << (TStringBuilder() << "[ PD12 ] TKeeper::SetOwnerWeight"
+            << ", Owner# " << owner
+            << ", Weight# " << weight
+            << Endl);
+        ChunkTracker.SetOwnerWeight(owner, weight);
     }
 
     void RemoveOwner(TOwner owner) {
@@ -91,6 +108,10 @@ public:
 
     i64 GetLogChunkCount() const {
         return ChunkTracker.GetLogChunkCount();
+    }
+
+    ui32 GetNumActiveSlots() const {
+        return ChunkTracker.GetNumActiveSlots();
     }
 
     TChunkIdx PopOwnerFreeChunk(TOwner owner, TString &outErrorReason) {

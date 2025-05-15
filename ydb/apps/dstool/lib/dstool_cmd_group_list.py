@@ -1,4 +1,5 @@
 import ydb.core.protos.blobstorage_config_pb2 as kikimr_bsconfig
+import ydb.core.protos.blobstorage_pdisk_config_pb2 as kikimr_pdisk_config
 import ydb.apps.dstool.lib.common as common
 import ydb.apps.dstool.lib.table as table
 import sys
@@ -32,6 +33,7 @@ def do(args):
         'PoolId',
         'Generation',
         'ErasureSpecies',
+        'SlotSizeUnits',
         'ExpectedStatus',
         'OperatingStatus',
         'SeenOperational',
@@ -56,6 +58,7 @@ def do(args):
         'PoolName',
         'Generation',
         'ErasureSpecies',
+        'SlotSizeUnits',
         'OperatingStatus',
         'VDisks_TOTAL',
     ]
@@ -86,6 +89,7 @@ def do(args):
         group_stat['GroupId'] = group.GroupId
         group_stat['Generation'] = group.GroupGeneration
         group_stat['ErasureSpecies'] = group.ErasureSpecies
+        group_stat['SlotSizeUnits'] = kikimr_pdisk_config.TPDiskSlotSizeUnits.E.Name(group.SlotSizeUnits and group.SlotSizeUnits.Value or 0)
         group_stat['ExpectedStatus'] = kikimr_bsconfig.TGroupStatus.E.Name(group.ExpectedStatus)
         group_stat['OperatingStatus'] = kikimr_bsconfig.TGroupStatus.E.Name(group.OperatingStatus)
         group_stat['SeenOperational'] = group.SeenOperational

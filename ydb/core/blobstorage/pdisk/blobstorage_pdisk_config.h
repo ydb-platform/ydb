@@ -137,6 +137,8 @@ struct TPDiskConfig : public TThrRefBase {
     bool UseSpdkNvmeDriver;
 
     ui64 ExpectedSlotCount = 0;
+    NKikimrBlobStorage::TPDiskSlotSizeUnits::E SlotSizeUnits =
+        NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED;
 
     // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
     ui32 ChunkBaseLimit = 130;
@@ -316,6 +318,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " BufferPoolBufferCount# " << BufferPoolBufferCount << x;
         str << " MaxQueuedCompletionActions# " << MaxQueuedCompletionActions << x;
         str << " ExpectedSlotCount# " << ExpectedSlotCount << x;
+        str << " SlotSizeUnits# " << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(SlotSizeUnits) << x;
 
         str << " ReserveLogChunksMultiplier# " << ReserveLogChunksMultiplier << x;
         str << " InsaneLogChunksMultiplier# " << InsaneLogChunksMultiplier << x;
@@ -420,9 +423,27 @@ struct TPDiskConfig : public TThrRefBase {
         if (cfg->HasUseNoopScheduler()) {
             UseNoopScheduler = cfg->GetUseNoopScheduler();
         }
+
         if (cfg->HasPlainDataChunks()) {
             PlainDataChunks = cfg->GetPlainDataChunks();
         }
+
+        if (cfg->HasSlotSizeUnits()) {
+            SlotSizeUnits = cfg->GetSlotSizeUnits();
+        }
+    }
+
+    ui32 GetOwnerWeight(NKikimrBlobStorage::TPDiskSlotSizeUnits::E ownerSizeUnits) {
+        ui32 u_vdisk = ownerSizeUnits ?: 1;
+        ui32 u_pdisk = SlotSizeUnits ?: 1;
+        ui32 ret = int(u_vdisk / u_pdisk) + !!(u_vdisk % u_pdisk);
+        Cerr << (TStringBuilder() << "[ PD20 ] GetOwnerWeight"
+            << ", PDiskId# " << PDiskId
+            << ", ownerSizeUnits# " << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(ownerSizeUnits) 
+            << ", PDisk.SlotSizeUnits# " << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(SlotSizeUnits) 
+            << ", ret# " << ret
+            << Endl); 
+        return ret;
     }
 };
 

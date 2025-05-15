@@ -268,7 +268,7 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
         }
     }
     SysLogRecord = *sysLogRecord;
-    SysLogRecord.Version = PDISK_SYS_LOG_RECORD_VERSION_7;
+    SysLogRecord.Version = PDISK_SYS_LOG_RECORD_VERSION_8;
 
     // Set initial chunk owners
     // Use actual format info to set busy chunks mask
@@ -499,8 +499,35 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
         }
     }
 
+    char *ownersSizeUnitsInfoEnd = nullptr;
+    if (sysLogRecord->Version >= PDISK_SYS_LOG_RECORD_VERSION_8) {
+        Y_VERIFY_S(compatibilityInfoEnd, PCtx->PDiskLogPrefix);
+        ui32 *protoSizePtr = reinterpret_cast<ui32*>(compatibilityInfoEnd);
+        ui32 *protoSizePtrEnd = protoSizePtr + 1;
+
+        ui64 minSize = (ui64)((char*)protoSizePtrEnd - (char*)sysLogRecord);
+        Y_VERIFY_S(lastSysLogRecord.size() >= minSize, PCtx->PDiskLogPrefix
+                << "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
+
+        ui32 protoSize = ReadUnaligned<ui32>(protoSizePtr);
+
+        char *ownersSizeUnitsInfo = reinterpret_cast<char*>(protoSizePtrEnd);
+        ownersSizeUnitsInfoEnd = ownersSizeUnitsInfo + protoSize;
+
+        minSize += protoSize;
+        Y_VERIFY_S(lastSysLogRecord.size() >= minSize, PCtx->PDiskLogPrefix
+            << "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
+
+        for (ui32 i = 0; i < protoSize/2; ++i) {
+            TOwner owner = ownersSizeUnitsInfo[i*2 + 0];
+            ui8 slotSizeUnits = ownersSizeUnitsInfo[i*2 + 1];
+
+            OwnerData[owner].SlotSizeUnits = NKikimrBlobStorage::TPDiskSlotSizeUnits::E(slotSizeUnits);
+        }
+    }
+
     // needed for further parsing
-    Y_UNUSED(compatibilityInfoEnd);
+    Y_UNUSED(ownersSizeUnitsInfoEnd);
 
     PrintChunksDebugInfo();
     return true;
@@ -743,9 +770,25 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
         Y_VERIFY_S(success, PCtx->PDiskLogPrefix);
     }
     ui32 compatibilityInfoSize = SerializedCompatibilityInfo->size();
+    std::vector<std::pair<TOwner, ui8>> ownersSizeUnitsInt;
+    TStringStream str;
+
+    for (ui32 owner = 0; owner < OwnerData.size(); ++owner) {
+        if (OwnerData[owner].VDiskId != TVDiskID::InvalidId) {
+            str << (ownersSizeUnitsInt.empty() ? "" : ", ") << owner << ": " << int(OwnerData[owner].SlotSizeUnits);
+            ownersSizeUnitsInt.push_back(std::make_pair(owner, OwnerData[owner].SlotSizeUnits));
+        }
+    }
+    Cerr << (TStringBuilder() << "[ PD45 ] TPDisk::WriteSysLogRestorePoint"
+        " Owners# {"<< str.Str() << "}"
+        << Endl);
+
+    ui32 ownersSizeUnitsIntSize = sizeof(ownersSizeUnitsInt[0]) * ownersSizeUnitsInt.size();
+    Y_ASSERT(sizeof(ownersSizeUnitsInt[0]) == 2);
 
     ui32 recordSize = sizeof(TSysLogRecord) + chunkOwnersSize + sizeof(TSysLogFirstNoncesToKeep)
-        + sizeof(ui64) + chunkIsTrimmedSize + sizeof(ui32) + sizeof(ui32) + compatibilityInfoSize;
+        + sizeof(ui64) + chunkIsTrimmedSize + sizeof(ui32) + sizeof(ui32) + compatibilityInfoSize
+        + sizeof(ownersSizeUnitsIntSize) + ownersSizeUnitsIntSize;
     ui64 beginSectorIdx = SysLogger->SectorIdx;
     *Mon.BandwidthPSysLogPayload += recordSize;
     *Mon.BandwidthPSysLogRecordHeader += sizeof(TFirstLogPageHeader);
@@ -759,6 +802,10 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
     SysLogger->LogDataPart(&FirstLogChunkToParseCommits, sizeof(FirstLogChunkToParseCommits), reqId, traceId);
     SysLogger->LogDataPart(&compatibilityInfoSize, sizeof(compatibilityInfoSize), reqId, traceId);
     SysLogger->LogDataPart(SerializedCompatibilityInfo->data(), compatibilityInfoSize, reqId, traceId);
+    SysLogger->LogDataPart(&ownersSizeUnitsIntSize, sizeof(ownersSizeUnitsIntSize), reqId, traceId);
+    if (ownersSizeUnitsIntSize > 0) {
+        SysLogger->LogDataPart(&ownersSizeUnitsInt[0], ownersSizeUnitsIntSize, reqId, traceId);
+    }
     SysLogger->TerminateLog(reqId, traceId);
     SysLogger->Flush(reqId, traceId, action);
 
@@ -1367,7 +1414,7 @@ void TPDisk::OnLogCommitDone(TLogCommitDone &req) {
     // Decrement log chunk user counters and release unused log chunks
     TOwnerData &ownerData = OwnerData[req.OwnerId];
     ui64 currentFirstLsnToKeep = ownerData.CurrentFirstLsnToKeep;
-    
+
     auto it = LogChunks.begin();
     bool isChunkReleased = false;
     if (req.Lsn <= ownerData.LastWrittenCommitLsn) {
@@ -1616,7 +1663,16 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                 params.ChunkBaseLimit = Cfg->ChunkBaseLimit;
                 for (ui32 ownerId = OwnerBeginUser; ownerId < OwnerEndUser; ++ownerId) {
                     if (OwnerData[ownerId].VDiskId != TVDiskID::InvalidId) {
-                        params.OwnersInfo[ownerId] = {usedForOwner[ownerId], OwnerData[ownerId].VDiskId};
+                        params.OwnersInfo[ownerId] = {
+                            .ChunksOwned = usedForOwner[ownerId],
+                            .VDiskId = OwnerData[ownerId].VDiskId,
+                            .Weight = Cfg->GetOwnerWeight(OwnerData[ownerId].SlotSizeUnits),
+                        };
+                        Cerr << (TStringBuilder() << "[ PD14 ] Processed OwnerData"
+                            << ", ownerId#" << ownerId
+                            << ", SlotSizeUnits#" << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(OwnerData[ownerId].SlotSizeUnits)
+                            << ", PDiskId# " << PCtx->PDiskId
+                            << Endl);
                         if (OwnerData[ownerId].IsStaticGroupOwner()) {
                             params.HasStaticGroups = true;
                         }

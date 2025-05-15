@@ -2289,6 +2289,10 @@ namespace NKikimr {
                                     TABLED() {str << Config->BaseInfo.PDiskId;}
                                 }
                                 TABLER() {
+                                    TABLED() {str << "SlotSizeUnits";}
+                                    TABLED() {str << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(GInfo->SlotSizeUnits);}
+                                }
+                                TABLER() {
                                     TABLED() {str << "BlobStorage GroupId (decimal)";}
                                     TABLED() {str << GInfo->GroupID;}
                                 }
@@ -2421,6 +2425,20 @@ namespace NKikimr {
             // Save locally
             GInfo = msg->NewInfo;
             SelfVDiskId = msg->NewVDiskId;
+            
+            Cerr << (TStringBuilder() << "[ PD42 ] TSkeleton::TEvVGenerationChange "
+                << " new VDiskId# " << SelfVDiskId
+                << " new SlotSizeUnits# " << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(GInfo->SlotSizeUnits)
+                << " old SlotSizeUnits# " << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(Config->SlotSizeUnits)
+                << Endl);
+            if (Config->SlotSizeUnits != GInfo->SlotSizeUnits) {
+                Config->SlotSizeUnits = GInfo->SlotSizeUnits;
+                ctx.Send(PDiskCtx->PDiskId,
+                    new NPDisk::TEvYardResize(
+                        PDiskCtx->Dsk->Owner,
+                        0, // TODO PDiskCtx->Dsk->OwnerRound,
+                        Config->SlotSizeUnits));
+            }
 
             // clear VPatchCtx
             VPatchCtx = nullptr;

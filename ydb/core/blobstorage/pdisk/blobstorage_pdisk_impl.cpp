@@ -251,6 +251,7 @@ TString TPDisk::StartupOwnerInfo() {
         if (data.VDiskId != TVDiskID::InvalidId) {
             str << "{OwnerId: " << (ui32)owner;
             str << " VDiskId: " << data.VDiskId.ToStringWOGeneration();
+            str << " SlotSizeUnits: " << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(data.SlotSizeUnits);
             str << " ChunkWrites: " << data.InFlight->ChunkWrites.load();
             str << " ChunkReads: " << data.InFlight->ChunkReads.load();
             str << " LogWrites: " << data.InFlight->LogWrites.load();
@@ -573,6 +574,10 @@ ui32 TPDisk::GetUsedChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) c
         }
     }
     return ownedChunks;
+}
+
+ui32 TPDisk::GetNumActiveSlots() const {
+    return Keeper.GetNumActiveSlots();
 }
 
 NPDisk::TStatusFlags TPDisk::GetStatusFlags(TOwner ownerId, const EOwnerGroupType ownerGroupType, double *occupancy) const {
@@ -1573,7 +1578,8 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pdiskState.SetSystemSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerSystemLog) + Keeper.GetOwnerHardLimit(OwnerSystemReserve)));
         pdiskState.SetLogUsedSize(Format.ChunkSize * (Keeper.GetOwnerHardLimit(OwnerCommonStaticLog) - Keeper.GetOwnerFree(OwnerCommonStaticLog)));
         pdiskState.SetLogTotalSize(Format.ChunkSize * Keeper.GetOwnerHardLimit(OwnerCommonStaticLog));
-        pdiskState.SetNumActiveSlots(TotalOwners);
+        pdiskState.SetNumActiveSlots(GetNumActiveSlots());
+        pdiskState.SetSlotSizeUnits(Cfg->SlotSizeUnits);
         if (ExpectedSlotCount) {
             pdiskState.SetExpectedSlotCount(ExpectedSlotCount);
         }
@@ -1594,6 +1600,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
             auto& vdiskInfo = std::get<1>(reportResult->VDiskStateVect.back());
             vdiskInfo.SetAvailableSize(ownerFree);
             vdiskInfo.SetAllocatedSize(ownerAllocated);
+            vdiskInfo.SetSlotSizeUnits(data.SlotSizeUnits);
 
             NKikimrBlobStorage::TVDiskMetrics* vdiskMetrics = reportResult->DiskMetrics->Record.AddVDisksMetrics();
             VDiskIDFromVDiskID(vdiskId, vdiskMetrics->MutableVDiskId());
@@ -1897,13 +1904,16 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     ownerData.Status = TOwnerData::VDISK_STATUS_SENT_INIT;
     ownerData.LastShredGeneration = 0;
     ownerData.ShredState = TOwnerData::VDISK_SHRED_STATE_NOT_REQUESTED;
+    ownerData.SlotSizeUnits = evYardInit.SlotSizeUnits;
 
+    Keeper.SetOwnerWeight(owner, Cfg->GetOwnerWeight(evYardInit.SlotSizeUnits));
     AddCbsSet(owner);
 
     P_LOG(PRI_NOTICE, BPD30, "Registered known VDisk",
             (VDisk, vDiskId),
             (OwnerId, owner),
-            (OwnerRound, ownerRound));
+            (OwnerRound, ownerRound),
+            (SlotSizeUnits, NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(evYardInit.SlotSizeUnits)));
 
     PCtx->ActorSystem->Send(evYardInit.Sender, result.Release());
     Mon.YardInit.CountResponse();
@@ -1913,6 +1923,10 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
 }
 
 bool TPDisk::YardInitStart(TYardInit &evYardInit) {
+    Cerr << (TStringBuilder() << "[ PD03 ] YardInitStart"
+        << ", TYardInit# " << evYardInit.ToString()
+        << ", PDiskId# " << PCtx->PDiskId
+        << Endl);
     if (evYardInit.VDisk == TVDiskID::InvalidId) {
         ReplyErrorYardInitResult(evYardInit, "VDisk == InvalidId. Marker# BPD03");
         return false;
@@ -1976,10 +1990,15 @@ bool TPDisk::YardInitStart(TYardInit &evYardInit) {
     ADD_RECORD_WITH_TIMESTAMP_TO_OPERATION_LOG(ownerData.OperationLog, "YardInitStart, OwnerId# "
             << owner << ", new OwnerRound# " << evYardInit.OwnerRound);
     ownerData.OwnerRound = evYardInit.OwnerRound;
+    ownerData.SlotSizeUnits = evYardInit.SlotSizeUnits;
     return true;
 }
 
 void TPDisk::YardInitFinish(TYardInit &evYardInit) {
+    Cerr << (TStringBuilder() << "[ PD04 ] YardInitFinish"
+        << ", TYardInit# " << evYardInit.ToString()
+        << ", PDiskId# " << PCtx->PDiskId
+        << Endl);
     TOwner owner = evYardInit.Owner;
     TOwnerRound ownerRound = evYardInit.OwnerRound;
     {
@@ -1988,6 +2007,11 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
 
         auto it = VDiskOwners.find(vDiskId);
         if (it != VDiskOwners.end()) {
+            Cerr << (TStringBuilder() << "[ PD24 ] YardInitForKnownVDisk"
+                << ", TYardInit# " << evYardInit.ToString()
+                << ", owner# " << it->second
+                << ", PDiskId# " << PCtx->PDiskId
+                << Endl);
             YardInitForKnownVDisk(evYardInit, it->second);
             return;
         }
@@ -1997,10 +2021,8 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
             return;
         }
 
-        // Make sure owner round never decreases
         // Allocate quota for the owner
-        // TODO(cthulhu): don't allocate more owners than expected
-        Keeper.AddOwner(owner, vDiskId);
+        Keeper.AddOwner(owner, vDiskId, Cfg->GetOwnerWeight(evYardInit.SlotSizeUnits));
 
         TOwnerData& ownerData = OwnerData[owner];
         ownerData.Reset(false);
@@ -2016,6 +2038,7 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
         ownerData.VDiskSlotId = evYardInit.SlotId;
         ownerData.OwnerRound = evYardInit.OwnerRound;
         VDiskOwners[vDiskId] = owner;
+        ownerData.SlotSizeUnits = evYardInit.SlotSizeUnits;
         ownerData.Status = TOwnerData::VDISK_STATUS_SENT_INIT;
         SysLogRecord.OwnerVDisks[owner] = vDiskId;
         ownerRound = ownerData.OwnerRound;
@@ -2050,6 +2073,29 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
     if (ContinueShredsInFlight == 0) {
         ContinueShredsInFlight++;
         PCtx->ActorSystem->Send(new IEventHandle(PCtx->PDiskActor, PCtx->PDiskActor, new TEvContinueShred(), 0, 0));
+    }
+}
+
+void TPDisk::YardResize(TYardResize &ev) {
+    {
+        TGuard<TMutex> guard(StateMutex);
+        Cerr << (TStringBuilder() << "[ PD35 ] TPDisk::YardResize"
+            << " Owner# " << ev.Owner
+            << " OwnerRound# " << ev.OwnerRound
+            << " SlotSizeUnits# " << ev.SlotSizeUnits
+            << Endl);
+        OwnerData[ev.Owner].SlotSizeUnits = ev.SlotSizeUnits;
+        Keeper.SetOwnerWeight(ev.Owner, Cfg->GetOwnerWeight(ev.SlotSizeUnits));
+    }
+    
+    auto result = std::make_unique<NPDisk::TEvYardResizeResult>(
+        NKikimrProto::OK,
+        GetStatusFlags(ev.Owner, ev.OwnerGroupType));
+    if (Cfg->ReadOnly) {
+        PCtx->ActorSystem->Send(ev.Sender, result.release());
+    } else {
+        WriteSysLogRestorePoint(new TCompletionEventSender(this, ev.Sender, result.release()),
+            TReqId(TReqId::YardResize, 0), {});
     }
 }
 
@@ -2091,6 +2137,7 @@ void TPDisk::CheckSpace(TCheckSpace &evCheckSpace) {
                 GetTotalChunks(evCheckSpace.Owner, evCheckSpace.OwnerGroupType),
                 GetUsedChunks(evCheckSpace.Owner, evCheckSpace.OwnerGroupType),
                 AtomicGet(TotalOwners),
+                GetNumActiveSlots(),
                 TString(),
                 GetStatusFlags(OwnerSystem, evCheckSpace.OwnerGroupType));
     result->Occupancy = occupancy;
@@ -2686,6 +2733,9 @@ void TPDisk::ProcessFastOperationsQueue() {
             case ERequestType::RequestContinueShred:
                 ProcessContinueShred(static_cast<TContinueShred&>(*req));
                 break;
+            case ERequestType::RequestYardResize:
+                YardResize(static_cast<TYardResize&>(*req));
+                break;
             default:
                 Y_FAIL_S(PCtx->PDiskLogPrefix << "Unexpected request type# " << TypeName(*req));
                 break;
@@ -3218,7 +3268,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             if (errStatus != NKikimrProto::OK) {
                 P_LOG(PRI_ERROR, BPD01, err.Str());
                 THolder<NPDisk::TEvCheckSpaceResult> result(new NPDisk::TEvCheckSpaceResult(errStatus,
-                            GetStatusFlags(ev.Owner, ev.OwnerGroupType), 0, 0, 0, 0, err.Str()));
+                            GetStatusFlags(ev.Owner, ev.OwnerGroupType), 0, 0, 0, 0, 0, err.Str()));
                 PCtx->ActorSystem->Send(ev.Sender, result.Release());
                 Mon.CheckSpace.CountResponse();
                 delete request;
@@ -3314,6 +3364,9 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
         case ERequestType::RequestShredVDiskResult:
         case ERequestType::RequestChunkShredResult:
         case ERequestType::RequestContinueShred:
+            break;
+        case ERequestType::RequestYardResize:
+            Cerr << (TStringBuilder() << "[ PD44 ] TPDisk::PreprocessRequest TRequestYardResize#" << Endl);
             break;
         case ERequestType::RequestStopDevice:
             BlockDevice->Stop();
@@ -3998,6 +4051,7 @@ bool TPDisk::HandleReadOnlyIfWrite(TRequestBase *request) {
         case ERequestType::RequestShredVDiskResult:
         case ERequestType::RequestChunkShredResult:
         case ERequestType::RequestContinueShred:
+        case ERequestType::RequestYardResize:
             // These requests don't require response.
             return true;
     }

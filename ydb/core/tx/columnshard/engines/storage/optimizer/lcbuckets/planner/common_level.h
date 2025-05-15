@@ -12,12 +12,12 @@ private:
     const TLevelCounters LevelCounters;
     const double BytesLimitFraction = 1;
     const ui64 ExpectedPortionSize = (1 << 20);
+    const ui64 SizeLimitGuarantee = 0;
     const bool StrictOneLayer = true;
     std::shared_ptr<TSimplePortionsGroupInfo> SummaryPortionsInfo;
 
     ui64 GetLevelBlobBytesLimit() const {
-        const ui32 discrete = SummaryPortionsInfo->GetBlobBytes() / (150 << 20);
-        return (discrete + 1) * (150 << 20) * BytesLimitFraction;
+        return std::max<ui64>(SizeLimitGuarantee, SummaryPortionsInfo->GetBlobBytes() * BytesLimitFraction);
     }
 
     virtual NJson::TJsonValue DoSerializeToJson() const override {
@@ -26,6 +26,7 @@ private:
         result.InsertValue("bytes_limit", GetLevelBlobBytesLimit());
         result.InsertValue("total_bytes", SummaryPortionsInfo->GetBlobBytes());
         result.InsertValue("fraction", BytesLimitFraction);
+        result.InsertValue("size_limit_guarantee", SizeLimitGuarantee);
         return result;
     }
 
@@ -74,11 +75,12 @@ private:
 public:
     TOneLayerPortions(const ui64 levelId, const double bytesLimitFraction, const ui64 expectedPortionSize,
         const std::shared_ptr<IPortionsLevel>& nextLevel, const std::shared_ptr<TSimplePortionsGroupInfo>& summaryPortionsInfo,
-        const TLevelCounters& levelCounters, const bool strictOneLayer = true)
+        const TLevelCounters& levelCounters, const ui64 sizeLimitGuarantee, const bool strictOneLayer = true)
         : TBase(levelId, nextLevel)
         , LevelCounters(levelCounters)
         , BytesLimitFraction(bytesLimitFraction)
         , ExpectedPortionSize(expectedPortionSize)
+        , SizeLimitGuarantee(sizeLimitGuarantee)
         , StrictOneLayer(strictOneLayer)
         , SummaryPortionsInfo(summaryPortionsInfo)
     {

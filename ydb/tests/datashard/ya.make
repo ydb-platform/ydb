@@ -6,4 +6,5 @@ RECURSE(
     lib
     split_merge
     s3
+    vector_index
 )

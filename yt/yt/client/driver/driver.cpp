@@ -115,7 +115,6 @@ public:
     TDriver(
         TDriverConfigPtr config,
         IConnectionPtr connection,
-        ISignatureGeneratorPtr signatureGenerator,
         ISignatureValidatorPtr signatureValidator)
         : Config_(std::move(config))
         , Connection_(std::move(connection))
@@ -126,7 +125,6 @@ public:
         , ProxyDiscoveryCache_(CreateProxyDiscoveryCache(
             Config_->ProxyDiscoveryCache,
             RootClient_))
-        , SignatureGenerator_(std::move(signatureGenerator))
         , SignatureValidator_(std::move(signatureValidator))
         , StickyTransactionPool_(CreateStickyTransactionPool(Logger()))
     {
@@ -506,11 +504,6 @@ public:
         return Connection_;
     }
 
-    ISignatureGeneratorPtr GetSignatureGenerator() override
-    {
-        return SignatureGenerator_;
-    }
-
     ISignatureValidatorPtr GetSignatureValidator() override
     {
         return SignatureValidator_;
@@ -734,18 +727,15 @@ private:
 IDriverPtr CreateDriver(
     IConnectionPtr connection,
     TDriverConfigPtr config,
-    ISignatureGeneratorPtr signatureGenerator,
     ISignatureValidatorPtr signatureValidator)
 {
     YT_VERIFY(connection);
     YT_VERIFY(config);
-    YT_VERIFY(signatureGenerator);
     YT_VERIFY(signatureValidator);
 
     return New<TDriver>(
         std::move(config),
         std::move(connection),
-        std::move(signatureGenerator),
         std::move(signatureValidator));
 }
 

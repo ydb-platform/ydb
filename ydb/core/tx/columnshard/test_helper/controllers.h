@@ -3,7 +3,6 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/tiering/manager.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/address.h>
-#include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 
 namespace NKikimr::NOlap {
 
@@ -91,4 +90,5 @@ private:
     std::optional<NBlobOperations::NBlobStorage::TBlobAddress> FailingGroup = std::nullopt;
     size_t FailsCount = 0;
 };
+
 } // namespace NKikimr::NOlap

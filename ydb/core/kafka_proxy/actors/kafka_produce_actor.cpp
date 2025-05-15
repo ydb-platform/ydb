@@ -66,10 +66,13 @@ void TKafkaProduceActor::Handle(TEvKafka::TEvWakeup::TPtr /*request*/, const TAc
 void TKafkaProduceActor::PassAway() {
     KAFKA_LOG_D("Produce actor: PassAway");
 
-    for(const auto& [_, partitionWriters] : Writers) {
+    for(const auto& [_, partitionWriters] : NonTransactionalWriters) {
         for(const auto& [_, w] : partitionWriters) {
             Send(w.ActorId, new TEvents::TEvPoison());
         }
+    }
+    for(const auto& [_, writeInfo] : TransactionalWriters) {
+        Send(writeInfo.ActorId, new TEvents::TEvPoison());
     }
 
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove());
@@ -93,24 +96,29 @@ void TKafkaProduceActor::CleanTopics(const TActorContext& ctx) {
 
 void TKafkaProduceActor::CleanWriters(const TActorContext& ctx) {
     KAFKA_LOG_D("Produce actor: CleanWriters");
-    const auto expired = ctx.Now() - WRITER_EXPIRATION_INTERVAL;
+    const auto earliestAllowedTs = ctx.Now() - WRITER_EXPIRATION_INTERVAL;
 
-    for (auto& [topicPath, partitionWriters] : Writers) {
+    for (auto& [topicPath, partitionWriters] : NonTransactionalWriters) {
         std::unordered_map<ui32, TWriterInfo> newPartitionWriters;
         for (const auto& [partitionId, writerInfo] : partitionWriters) {
-            if (writerInfo.LastAccessed > expired) {
-                newPartitionWriters[partitionId] = writerInfo;
-            } else {
-                TStringBuilder sb;
-                sb << "Produce actor: Destroing inactive PartitionWriter. Topic='" << topicPath << "', Partition=" << partitionId;
-                KAFKA_LOG_D(sb);
-                Send(writerInfo.ActorId, new TEvents::TEvPoison());
-            }
+            CleanWriterIfExpired({topicPath, partitionId}, writerInfo, earliestAllowedTs);
         }
         partitionWriters = std::move(newPartitionWriters);
     }
+    for (auto& [topicParition, writerInfo] : TransactionalWriters) {
+        CleanWriterIfExpired(topicParition, writerInfo, earliestAllowedTs);
+    }
 
     KAFKA_LOG_T("Produce actor: CleanWriters was completed successfully");
+}
+
+void TKafkaProduceActor::CleanWriterIfExpired(const TTopicPartition& topicPartition, TWriterInfo& writerInfo, TInstant earliestAllowedTs) {
+    if (writerInfo.LastAccessed < earliestAllowedTs) {
+        TStringBuilder sb;
+        sb << "Produce actor: Destroing inactive PartitionWriter. Topic='" << topicPartition.TopicPath << "', Partition=" << topicPartition.PartitionId;
+        KAFKA_LOG_D(sb);
+        Send(writerInfo.ActorId, new TEvents::TEvPoison());
+    }
 }
 
 void TKafkaProduceActor::EnqueueRequest(TEvKafka::TEvProduceRequest::TPtr request, const TActorContext& /*ctx*/) {
@@ -165,12 +173,18 @@ void TKafkaProduceActor::Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TP
     auto& path = ev->Get()->Path;
     KAFKA_LOG_I("Produce actor: Topic '" << path << "' was deleted");
 
-    auto it = Writers.find(path);
-    if (it != Writers.end()) {
+    auto it = NonTransactionalWriters.find(path);
+    if (it != NonTransactionalWriters.end()) {
         for(auto& [_, writer] : it->second) {
             Send(writer.ActorId, new TEvents::TEvPoison());
         }
-        Writers.erase(it);
+        NonTransactionalWriters.erase(it);
+    }
+    for (auto& [topicPartition, writer] : TransactionalWriters) {
+        if (topicPartition.TopicPath == path) {
+            Send(writer.ActorId, new TEvents::TEvPoison());
+        }
+        TransactionalWriters.erase(topicPartition);
     }
 
     auto& topicInfo = Topics[path];
@@ -264,7 +278,7 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::
         NKikimrPQClient::TDataChunk proto;
         proto.set_codec(NPersQueueCommon::RAW);
         for(auto& h : record.Headers) {
-                auto res = proto.AddMessageMeta();
+            auto res = proto.AddMessageMeta();
             if (h.Key) {
                 res->set_key(static_cast<const char*>(h.Key->data()), h.Key->size());
             }
@@ -318,6 +332,7 @@ size_t PartsCount(const TMessagePtr<TProduceRequestData>& r) {
 
 void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, const TActorContext& ctx) {
     auto r = pendingRequest->Request->Get()->Request;
+    KAFKA_LOG_D("Processing request");
 
     pendingRequest->Results.resize(PartsCount(r));
     pendingRequest->StartTime = ctx.Now();
@@ -328,7 +343,12 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, co
         const TString& topicPath = NormalizePath(Context->DatabasePath, *topicData.Name);
         for(const auto& partitionData : topicData.PartitionData) {
             const auto partitionId = partitionData.Index;
-            auto writer = PartitionWriter(topicPath, partitionId, ctx);
+            TMaybe<TProducerInstanceId> txnProducerId;
+            if (r->TransactionalId) {
+                txnProducerId.ConstructInPlace(partitionData.Records->ProducerId, partitionData.Records->ProducerEpoch);
+            } 
+
+            auto writer = PartitionWriter(topicPath, partitionId, txnProducerId, ctx);
             if (OK == writer.first) {
                 auto ownCookie = ++Cookie;
                 auto& cookieInfo = Cookies[ownCookie];
@@ -352,6 +372,9 @@ void TKafkaProduceActor::ProcessRequest(TPendingRequest::TPtr pendingRequest, co
                         break;
                     case UNAUTHORIZED:
                         result.ErrorCode = EKafkaErrors::TOPIC_AUTHORIZATION_FAILED;
+                        break;
+                    case PRODUCER_FENCED:
+                        result.ErrorCode = EKafkaErrors::PRODUCER_FENCED;
                         break;
                     default:
                         result.ErrorCode = EKafkaErrors::UNKNOWN_SERVER_ERROR;
@@ -411,8 +434,8 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr reque
     cookieInfo.Request->WaitResultCookies.erase(cookie);
 
     if (!r->IsSuccess()) {
-        auto wit = Writers.find(cookieInfo.TopicPath);
-        if (wit != Writers.end()) {
+        auto wit = NonTransactionalWriters.find(cookieInfo.TopicPath);
+        if (wit != NonTransactionalWriters.end()) {
             auto& partitions = wit->second;
             auto pit = partitions.find(cookieInfo.PartitionId);
             if (pit != partitions.end()) {
@@ -562,7 +585,7 @@ void TKafkaProduceActor::ProcessInitializationRequests(const TActorContext& ctx)
     ctx.Send(MakeSchemeCacheID(), MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySet>(request.release()));
 }
 
-std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::PartitionWriter(const TString& topicPath, ui32 partitionId, const TActorContext& ctx) {
+std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::PartitionWriter(const TString& topicPath, ui32 partitionId, TMaybe<TProducerInstanceId> txnProducerInstanceId, const TActorContext& ctx) {
     auto it = Topics.find(topicPath);
     if (it == Topics.end()) {
         KAFKA_LOG_ERROR("Produce actor: Internal error: topic '" << topicPath << "' isn`t initialized");
@@ -574,7 +597,15 @@ std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::Partit
         return { topicInfo.Status, TActorId{} };
     }
 
-    auto& partitionWriters = Writers[topicPath];
+    if (txnProducerInstanceId) {
+        return GetOrCreateTransactionalWriter({topicPath, partitionId}, topicInfo, *txnProducerInstanceId, ctx);
+    } else {
+        return GetOrCreateNonTransactionalWriter(topicPath, partitionId, topicInfo, ctx);
+    }
+}
+
+std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::GetOrCreateNonTransactionalWriter(const TString& topicPath, ui32 partitionId, const TTopicInfo& topicInfo, const TActorContext& ctx) {
+    auto& partitionWriters = NonTransactionalWriters[topicPath];
     auto itp = partitionWriters.find(partitionId);
     if (itp != partitionWriters.end()) {
         auto& writerInfo = itp->second;
@@ -597,6 +628,48 @@ std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::Partit
     auto& writerInfo = partitionWriters[partitionId];
     writerInfo.ActorId = ctx.RegisterWithSameMailbox(writerActor);
     writerInfo.LastAccessed = ctx.Now();
+    return { OK, writerInfo.ActorId };
+}
+
+std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::GetOrCreateTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& txnProducerInstanceId, const TActorContext& ctx) {
+    auto it = TransactionalWriters.find(topicPartition);
+    if (it != TransactionalWriters.end()) {
+        auto& writerInfo = it->second;
+        if (writerInfo.ProducerInstanceId < txnProducerInstanceId) {
+            // send poison pill to an old writer
+            Send(it->second.ActorId, new TEvents::TEvPoison());
+            // register new writer for a new producer
+            return CreateTransactionalWriter(topicPartition, topicInfo, txnProducerInstanceId, ctx);
+        } else if (writerInfo.ProducerInstanceId > txnProducerInstanceId) { // we received zombie produce request
+            return { PRODUCER_FENCED, TActorId{} };
+        } else {
+            writerInfo.LastAccessed = ctx.Now();
+            return { OK, writerInfo.ActorId };
+        }
+    } else {
+        return CreateTransactionalWriter(topicPartition, topicInfo, txnProducerInstanceId, ctx);
+    }
+}
+
+std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::CreateTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& txnProducerInstanceId, const TActorContext& ctx) {
+    KAFKA_LOG_D("Created transactional actor for producerId=" << txnProducerInstanceId.Id << " and producerEpoch=" << txnProducerInstanceId.Epoch);
+    auto* partition = topicInfo.PartitionChooser->GetPartition(topicPartition.PartitionId);
+    if (!partition) {
+        return { NOT_FOUND, TActorId{} };
+    }
+
+    TPartitionWriterOpts opts;
+    opts.WithDeduplication(false)
+        .WithSourceId(SourceId)
+        .WithTopicPath(topicPartition.TopicPath)
+        .WithCheckRequestUnits(topicInfo.MeteringMode, Context->RlContext)
+        .WithKafkaTxnProducer(txnProducerInstanceId);
+    auto* writerActor = CreatePartitionWriter(SelfId(), partition->TabletId, topicPartition.PartitionId, opts);
+
+    auto& writerInfo = TransactionalWriters[topicPartition];
+    writerInfo.ActorId = ctx.RegisterWithSameMailbox(writerActor);
+    writerInfo.LastAccessed = ctx.Now();
+    writerInfo.ProducerInstanceId = txnProducerInstanceId;
     return { OK, writerInfo.ActorId };
 }
 

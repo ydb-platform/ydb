@@ -1,6 +1,7 @@
 #pragma once
 
 #include "kafka_init_producer_id_actor.h"
+#include <ydb/core/kafka_proxy/kafka_topic_partition.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -17,19 +18,6 @@ namespace NKafka {
         using TBase = NActors::TActor<TTransactionActor>;
         
         public:
-            struct TTopicPartition {
-                TString TopicPath;
-                ui32 PartitionId;
-
-                bool operator==(const TTopicPartition &other) const = default;
-            };
-
-            struct TopicPartitionHashFn {
-                size_t operator()(const TTopicPartition& partition) const {
-                    return std::hash<TString>()(partition.TopicPath) ^ std::hash<int64_t>()(partition.PartitionId);
-                }
-            };
-
             struct TPartitionCommit {
                 i32 Partition; 
                 i64 Offset;
@@ -120,8 +108,8 @@ namespace NKafka {
             TString GetAsStr(EKafkaTxnKqpRequests request);
 
             // data from fields below will be sent to KQP on END_TXN request
-            std::unordered_map<TTopicPartition, TPartitionCommit, TopicPartitionHashFn> OffsetsToCommit = {};
-            std::unordered_set<TTopicPartition, TopicPartitionHashFn> PartitionsInTxn = {};
+            std::unordered_map<TTopicPartition, TPartitionCommit, TTopicPartitionHashFn> OffsetsToCommit = {};
+            std::unordered_set<TTopicPartition, TTopicPartitionHashFn> PartitionsInTxn = {};
             const TString TransactionalId;
             const TProducerInstanceId ProducerInstanceId;
             // const i64 ProducerId;

@@ -1,3 +1,4 @@
+#include <fmt/format.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <ydb/core/tx/datashard/datashard_failpoints.h>
@@ -2637,6 +2638,43 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(ExecuteWriteQuery, UseSink) {
+        using namespace fmt::literals;
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(true)
+            .SetEnableTempTables(true);
+
+        TKikimrRunner kikimr(settings);
+        auto client = kikimr.GetQueryClient();
+
+        {   // Just generate table
+            const auto sql = fmt::format(R"(
+                CREATE TABLE test_table (
+                    PRIMARY KEY (id)
+                ) AS SELECT
+                    ROW_NUMBER() OVER w AS id, data
+                FROM
+                    AS_TABLE(ListReplicate(<|data: '{data}'|>, 500000))
+                WINDOW
+                    w AS (ORDER BY data))",
+                "data"_a = std::string(137, 'a')
+            );
+            const auto result = client.ExecuteQuery(sql, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        Cerr << TInstant::Now() << " --------------- Start update ---------------\n";
+
+        const auto hangingResult = client.ExecuteQuery(R"(
+            UPDATE test_table SET data = "a"
+        )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(hangingResult.GetStatus(), EStatus::SUCCESS, hangingResult.GetIssues().ToString());
+    }    
 }
 
 } // namespace NKqp

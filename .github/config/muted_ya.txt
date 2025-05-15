@@ -252,6 +252,9 @@ ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generate
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTimestampWithTimeZone]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTxOptions]
 ydb/tests/sql sole chunk chunk
+ydb/tests/olap/ttl_tiering ttl_unavailable_s3.py.TestUnavailableS3.test
+ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_delete_s3_tiering
+ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteTtl.test_ttl_delete
 ydb/tests/sql/large sole chunk chunk
 ydb/tests/sql/large test_bulkupserts_tpch.py.TestTpchBulkUpsertsOperations.test_bulk_upsert_lineitem_with_overlapping_keys
 ydb/tests/sql/large test_bulkupserts_tpch.py.TestTpchBulkUpsertsOperations.test_repeated_bulk_upsert_lineitem

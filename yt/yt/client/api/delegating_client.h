@@ -910,15 +910,15 @@ public:
         const TShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
         std::optional<std::pair<int, int>> writerIndexRange,
-        const NTableClient::TTableReaderConfigPtr& config),
-        (shuffleHandle, partitionIndex, writerIndexRange, config))
+        const TShuffleReaderOptions& options),
+        (shuffleHandle, partitionIndex, writerIndexRange, options))
 
     DELEGATE_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (
         const TShuffleHandlePtr& shuffleHandle,
         const std::string& partitionColumn,
         std::optional<int> writerIndex,
-        const NTableClient::TTableWriterConfigPtr& config),
-        (shuffleHandle, partitionColumn, writerIndex, config))
+        const TShuffleWriterOptions& options),
+        (shuffleHandle, partitionColumn, writerIndex, options))
 
     #undef DELEGATE_METHOD
 

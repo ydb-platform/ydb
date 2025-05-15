@@ -102,7 +102,7 @@ void TReadShuffleDataCommand::DoExecute(ICommandContextPtr context)
         New<TControlAttributesConfig>(),
         /*keyColumnCount*/ 0);
 
-    NTableClient::TRowBatchReadOptions options{
+    TRowBatchReadOptions options{
         .MaxRowsPerRead = context->GetConfig()->ReadBufferRowCount,
         .Columnar = (format.GetType() == EFormatType::Arrow),
     };
@@ -124,11 +124,21 @@ void TWriteShuffleDataCommand::Register(TRegistrar registrar)
     registrar.Parameter("writer_index", &TThis::WriterIndex)
         .Default()
         .GreaterThanOrEqual(0);
+    registrar.Parameter("overwrite_existing_writer_data", &TThis::OverwriteExistingWriterData)
+        .Default(false);
+
+    registrar.Postprocessor([] (TThis* config) {
+        if (config->OverwriteExistingWriterData && !config->WriterIndex.has_value()) {
+            THROW_ERROR_EXCEPTION("Writer index must be set when overwrite existing writer data option is enabled");
+        }
+    });
 }
 
 void TWriteShuffleDataCommand::DoExecute(ICommandContextPtr context)
 {
     auto client = context->GetClient();
+
+    Options.OverwriteExistingWriterData = OverwriteExistingWriterData;
 
     auto writer = WaitFor(context->GetClient()->CreateShuffleWriter(
         ShuffleHandle,

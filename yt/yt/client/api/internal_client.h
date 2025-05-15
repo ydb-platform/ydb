@@ -108,7 +108,9 @@ struct TGetOrderedTabletSafeTrimRowCountRequest
 
 struct TRegisterShuffleChunksOptions
     : public TTimeoutOptions
-{ };
+{
+    bool OverwriteExistingWriterData = false;
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -163,7 +163,6 @@
       - contrib/restricted/boost/config/include/boost/config/platform/solaris.hpp
       - contrib/restricted/boost/config/include/boost/config/platform/irix.hpp
       - contrib/restricted/boost/config/include/boost/config/platform/hpux.hpp
-      - contrib/restricted/boost/config/include/boost/config/platform/cygwin.hpp
       - contrib/restricted/boost/config/include/boost/config/platform/win32.hpp
       - contrib/restricted/boost/config/include/boost/config/platform/haiku.hpp
       - contrib/restricted/boost/config/include/boost/config/platform/beos.hpp

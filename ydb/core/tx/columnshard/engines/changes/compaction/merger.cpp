@@ -10,22 +10,69 @@
 
 #include <ydb/library/formats/arrow/simple_builder/array.h>
 #include <ydb/library/formats/arrow/simple_builder/filler.h>
+#include <ydb/library/formats/arrow/splitter/stats.h>
 
 namespace NKikimr::NOlap::NCompaction {
 
-class TResultBatchPage {
+class TColumnSplitInfo {
 private:
-    std::map<ui32, TColumnPortionResult> ColumnChunks;
-    std::optional<ui32> RecordsCount;
+    YDB_READONLY(ui32, ColumnId, 0);
+    YDB_READONLY(ui32, RecordsCount, 0);
+    YDB_READONLY_DEF(std::vector<i64>, ChunkRecordsCount);
+    YDB_READONLY_DEF(std::vector<std::shared_ptr<IPortionDataChunk>>, ResultChunks);
+    ui32 ChunksReady = 0;
 
 public:
-    void AddColumn(const ui32 columnId, const TColumnPortionResult& data) {
-        AFL_VERIFY(ColumnChunks.emplace(columnId, data).second);
-        if (!RecordsCount) {
-            RecordsCount = data.GetRecordsCount();
-        } else {
-            AFL_VERIFY(*RecordsCount == data.GetRecordsCount())("new", data.GetRecordsCount())("control", RecordsCount);
+    TColumnSplitInfo(const ui32 columnId)
+        : ColumnId(columnId) {
+    }
+
+    void SetChunks(std::vector<i64>&& recordsCount) {
+        AFL_VERIFY(RecordsCount == 0);
+        AFL_VERIFY(ChunkRecordsCount.empty());
+        for (auto&& i : recordsCount) {
+            RecordsCount += i;
         }
+        ChunkRecordsCount = std::move(recordsCount);
+        AFL_VERIFY(RecordsCount);
+    }
+
+    void AddColumnChunks(const std::vector<std::shared_ptr<IPortionDataChunk>>& chunks) {
+        ResultChunks.insert(ResultChunks.end(), chunks.begin(), chunks.end());
+        AFL_VERIFY(ChunksReady <= ChunkRecordsCount.size());
+        ui32 checkRecordsCount = 0;
+        for (auto&& i : chunks) {
+            checkRecordsCount += i->GetRecordsCountVerified();
+        }
+        AFL_VERIFY(checkRecordsCount == ChunkRecordsCount[ChunksReady])("check", checkRecordsCount)("split", ChunkRecordsCount[ChunksReady]);
+        ++ChunksReady;
+    }
+};
+
+class TPortionSplitInfo {
+private:
+    std::map<ui32, TColumnSplitInfo> Columns;
+    YDB_READONLY(ui32, RecordsCount, 0);
+    TMergingChunkContext MergingContext;
+
+public:
+    TMergingChunkContext& MutableMergingContext() {
+        return MergingContext;
+    }
+
+    const TMergingChunkContext& GetMergingContext() const {
+        return MergingContext;
+    }
+
+    const TColumnSplitInfo& GetColumnInfo(const ui32 columnId) const {
+        auto it = Columns.find(columnId);
+        AFL_VERIFY(it != Columns.end());
+        return it->second;
+    }
+
+    explicit TPortionSplitInfo(const ui32 recordsCount, const std::shared_ptr<arrow::RecordBatch>& remapper)
+        : RecordsCount(recordsCount)
+        , MergingContext(remapper) {
     }
 
     TGeneralSerializedSlice BuildSlice(const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered,
@@ -33,36 +80,112 @@ public:
         const std::shared_ptr<NColumnShard::TSplitterCounters>& counters) const {
         std::shared_ptr<TDefaultSchemaDetails> schemaDetails(new TDefaultSchemaDetails(resultFiltered, stats));
         THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> portionColumns;
-        for (auto&& [cId, cPage] : ColumnChunks) {
-            portionColumns.emplace(cId, cPage.GetChunks());
+        for (auto&& [cId, cPage] : Columns) {
+            portionColumns.emplace(cId, cPage.GetResultChunks());
         }
         return TGeneralSerializedSlice(portionColumns, schemaDetails, counters);
     }
+
+    void AddColumnChunks(const ui32 columnId, const std::vector<std::shared_ptr<IPortionDataChunk>>& chunks) {
+        auto it = Columns.find(columnId);
+        AFL_VERIFY(it != Columns.end());
+        it->second.AddColumnChunks(chunks);
+    }
+
+    void AddColumnSplitting(const ui32 columnId, std::vector<i64>&& chunks) {
+        auto it = Columns.emplace(columnId, columnId);
+        AFL_VERIFY(it.second);
+        it.first->second.SetChunks(std::move(chunks));
+        AFL_VERIFY(RecordsCount == it.first->second.GetRecordsCount())("new", it.first->second.GetRecordsCount())("control", RecordsCount);
+    }
 };
 
-class TResultBatchData {
+class TSplittedBatch {
 private:
-    std::vector<TResultBatchPage> Pages;
+    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Remapper);
+    YDB_READONLY_DEF(std::vector<TPortionSplitInfo>, Portions);
+    const std::shared_ptr<NArrow::NSplitter::TSerializationStats> Stats;
+    const std::shared_ptr<TFilteredSnapshotSchema> ResultFiltered;
 
 public:
-    std::vector<TGeneralSerializedSlice> BuildSlices(const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered,
-        const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats, const std::shared_ptr<NColumnShard::TSplitterCounters>& counters) {
+    ui32 GetRecordsCount() const {
+        return Remapper->num_rows();
+    }
+
+    std::vector<TPortionSplitInfo>& MutablePortions() {
+        return Portions;
+    }
+
+    std::vector<TGeneralSerializedSlice> BuildSlices(const std::shared_ptr<NColumnShard::TSplitterCounters>& counters) const {
         std::vector<TGeneralSerializedSlice> result;
-        for (auto&& i : Pages) {
-            result.emplace_back(i.BuildSlice(resultFiltered, stats, counters));
+        for (auto&& i : Portions) {
+            result.emplace_back(i.BuildSlice(ResultFiltered, Stats, counters));
         }
         return result;
     }
 
-    void AddColumnChunks(const ui32 columnId, const std::vector<TColumnPortionResult>& chunks) {
-        AFL_VERIFY(chunks.size());
-        if (Pages.size()) {
-            AFL_VERIFY(Pages.size() == chunks.size())("new", chunks.size())("control", Pages.size());
-        } else {
-            Pages.resize(chunks.size());
+    TSplittedBatch(std::shared_ptr<arrow::RecordBatch>&& remapper, const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats,
+        const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered, const NSplitter::TSplitSettings& settings)
+        : Remapper(std::move(remapper))
+        , Stats(stats)
+        , ResultFiltered(resultFiltered) {
+        AFL_VERIFY(Remapper);
+        const std::vector<i64> recordsCount = [&]() {
+            auto batchStatsOpt = stats->GetStatsForColumns(resultFiltered->GetColumnIds(), false);
+            if (batchStatsOpt) {
+                return batchStatsOpt->SplitRecordsForBlobSize(Remapper->num_rows(), settings.GetExpectedPortionSize());
+            } else {
+                return NArrow::NSplitter::TSimilarPacker::SplitWithExpected(Remapper->num_rows(), settings.GetExpectedPortionRecordsCount());
+            }
+        }();
+        ui32 recordsCountCursor = 0;
+        for (auto&& p : recordsCount) {
+            AFL_VERIFY(recordsCountCursor + p <= Remapper->num_rows())("cursor", recordsCountCursor)("size", p)("length", Remapper->num_rows());
+            Portions.emplace_back(p, Remapper->Slice(recordsCountCursor, p));
+            recordsCountCursor += p;
+            for (auto&& c : resultFiltered->GetColumnIds()) {
+                std::optional<NArrow::NSplitter::TSimpleSerializationStat> colStatsOpt = stats->GetColumnInfo(c);
+                std::vector<i64> chunks;
+                if (!colStatsOpt) {
+                    auto loader = resultFiltered->GetColumnLoaderOptional(c);
+                    if (loader) {
+                        colStatsOpt = loader->TryBuildColumnStat();
+                    }
+                }
+                if (!colStatsOpt) {
+                    chunks = NArrow::NSplitter::TSimilarPacker::SplitWithExpected(p, settings.GetExpectedRecordsCountOnPage());
+                } else {
+                    chunks = colStatsOpt->SplitRecords(
+                        p, settings.GetExpectedRecordsCountOnPage(), settings.GetExpectedBlobPage(), settings.GetMaxBlobSize() * 0.9);
+                }
+                Portions.back().AddColumnSplitting(c, std::move(chunks));
+            }
         }
-        for (ui32 i = 0; i < chunks.size(); ++i) {
-            Pages[i].AddColumn(columnId, chunks[i]);
+        AFL_VERIFY(recordsCountCursor == Remapper->num_rows())("cursor", recordsCountCursor)("length", Remapper->num_rows());
+    }
+};
+
+class TSplitTopology {
+private:
+    const std::shared_ptr<NArrow::NSplitter::TSerializationStats> Stats;
+    const std::shared_ptr<TFilteredSnapshotSchema> ResultFiltered;
+    YDB_READONLY_DEF(std::vector<TSplittedBatch>, SplittedBatches);
+
+public:
+    std::vector<TSplittedBatch>& MutableSplittedBatches() {
+        return SplittedBatches;
+    }
+
+    TSplitTopology(
+        const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats, const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered)
+        : Stats(stats)
+        , ResultFiltered(resultFiltered) {
+    }
+
+    void FillRemapping(std::vector<std::shared_ptr<arrow::RecordBatch>>&& remapping, const NSplitter::TSplitSettings& settings) {
+        AFL_VERIFY(SplittedBatches.empty());
+        for (auto&& i : remapping) {
+            SplittedBatches.emplace_back(std::move(i), Stats, ResultFiltered, settings);
         }
     }
 };
@@ -71,7 +194,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
     const NArrow::NMerger::TIntervalPositions& checkPoints, const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered,
     const TInternalPathId pathId, const std::optional<ui64> shardingActualVersion) {
     AFL_VERIFY(Batches.size() == Filters.size());
-    std::vector<std::shared_ptr<arrow::RecordBatch>> batchResults;
+    TSplitTopology splitInfo(stats, resultFiltered);
     {
         arrow::FieldVector indexFields;
         indexFields.emplace_back(IColumnMerger::PortionIdField);
@@ -101,11 +224,9 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             mergeStream.AddSource(batch, Filters[idx]);
             ++idx;
         }
-        batchResults = mergeStream.DrainAllParts(checkPoints, indexFields);
+        auto batchResults = mergeStream.DrainAllParts(checkPoints, indexFields);
+        splitInfo.FillRemapping(std::move(batchResults), NSplitter::TSplitSettings());
     }
-
-    std::vector<TResultBatchData> chunkGroups;
-    chunkGroups.resize(batchResults.size());
 
     using TColumnData = std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>;
     THashMap<ui32, TColumnData> columnsData;
@@ -128,7 +249,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
         }
     }
 
-    TMergingContext mergingContext(batchResults, Batches);
+    TMergingContext mergingContext(Batches);
 
     for (auto&& [columnId, columnData] : columnsData) {
         if (columnId == (ui32)IIndexInfo::ESpecialColumn::WRITE_ID &&
@@ -154,28 +275,25 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             "class_name", commonContext.GetLoader()->GetAccessorConstructor().GetClassName());
         merger->Start(columnData, mergingContext);
 
-        ui32 batchIdx = 0;
-        for (auto&& batchResult : batchResults) {
-            const ui32 portionRecordsCountLimit =
-                batchResult->num_rows() / (batchResult->num_rows() / NSplitter::TSplitSettings().GetExpectedRecordsCountOnPage() + 1) + 1;
-
-            TChunkMergeContext context(portionRecordsCountLimit, batchIdx, batchResult->num_rows(), Context.Counters);
-            chunkGroups[batchIdx].AddColumnChunks(columnId, merger->Execute(context, mergingContext));
-            ++batchIdx;
+        for (auto&& batchResult : splitInfo.MutableSplittedBatches()) {
+            for (auto&& portion : batchResult.MutablePortions()) {
+                ui32 cursor = 0;
+                for (auto&& c : portion.GetColumnInfo(columnId).GetChunkRecordsCount()) {
+                    TChunkMergeContext context(Context.Counters, portion.MutableMergingContext().Slice(cursor, c));
+                    cursor += c;
+                    portion.AddColumnChunks(columnId, merger->Execute(context, mergingContext).GetChunks());
+                }
+                AFL_VERIFY(cursor == portion.GetRecordsCount());
+            }
         }
     }
-    ui32 batchIdx = 0;
 
     const auto groups =
         resultFiltered->GetIndexInfo().GetEntityGroupsByStorageId(IStoragesManager::DefaultStorageId, *SaverContext.GetStoragesManager());
     std::vector<TWritePortionInfoWithBlobsResult> result;
-    for (auto&& columnChunks : chunkGroups) {
-        auto batchResult = batchResults[batchIdx];
-        ++batchIdx;
-        std::vector<TGeneralSerializedSlice> batchSlices = columnChunks.BuildSlices(resultFiltered, stats, Context.Counters.SplitterCounters);
-        NArrow::NSplitter::TSimilarPacker slicer(PortionExpectedSize);
-        auto packs = slicer.Split(batchSlices);
-
+    for (auto&& columnChunks : splitInfo.GetSplittedBatches()) {
+        auto batchResult = columnChunks.GetRemapper();
+        std::vector<TGeneralSerializedSlice> packs = columnChunks.BuildSlices(Context.Counters.SplitterCounters);
         std::shared_ptr<TDefaultSchemaDetails> schemaDetails(new TDefaultSchemaDetails(resultFiltered, stats));
         ui32 recordIdx = 0;
         for (auto&& i : packs) {

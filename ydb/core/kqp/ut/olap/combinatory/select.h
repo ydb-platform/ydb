@@ -16,6 +16,10 @@ private:
     std::optional<ui64> ExpectIndexApprove;
 
     virtual TConclusionStatus DoExecute(TKikimrRunner& kikimr) override;
+    virtual std::set<TString> DoGetCommandProperties() const override {
+        return { "EXPECTED", "IDX_ND_SKIP_APPROVE" };
+    }
+    virtual TConclusionStatus DoDeserializeProperties(const TPropertiesCollection& props) override;
 
 public:
     bool DeserializeFromString(const TString& info);

@@ -54,10 +54,13 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
             const TConclusion<bool> needDraftTransaction = writeController->GetBlobsAction().NeedDraftWritingTransaction();
             AFL_VERIFY(needDraftTransaction.IsSuccess())("error", needDraftTransaction.GetErrorMessage());
             if (*needDraftTransaction) {
+                ACFL_DEBUG("event", "TTxWriteDraft");
                 Execute(new TTxWriteDraft(this, writeController));
             } else if (needDiskLimiter) {
+                ACFL_DEBUG("event", "Limiter");
                 NLimiter::TCompDiskOperator::AskResource(std::make_shared<TDiskResourcesRequest>(writeController, TabletID()));
             } else {
+                ACFL_DEBUG("event", "WriteActor");
                 Register(CreateWriteActor(TabletID(), writeController, TInstant::Max()));
             }
         }

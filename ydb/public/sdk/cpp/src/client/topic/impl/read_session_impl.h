@@ -1431,7 +1431,6 @@ private:
     typename IProcessor::TPtr Processor;
     typename IARetryPolicy<UseMigrationProtocol>::IRetryState::TPtr RetryState; // Current retry state (if now we are (re)connecting).
     size_t ConnectionAttemptsDone = 0;
-    TString ServerSessionId;
 
     // Memory usage.
     i64 CompressedDataSize = 0;

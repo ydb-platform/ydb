@@ -1475,14 +1475,14 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     RetryState = nullptr;
+    ReadSessionId = msg.session_id();
 
-    ServerSessionId = msg.session_id();
-    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Got InitResponse. ServerSessionId: " << ServerSessionId);
+    LOG_LAZY(Log, TLOG_INFO, GetLogPrefix() << "Got InitResponse. ReadSessionId: " << ReadSessionId);
 
     if (IsDirectRead()) {
         Y_ABORT_UNLESS(!DirectReadSessionManager.Defined());
         DirectReadSessionManager.ConstructInPlace(
-            ServerSessionId,
+            ReadSessionId,
             Settings,
             std::make_shared<TDirectReadSessionControlCallbacks>(this->SelfContext),
             ClientContext->CreateContext(),

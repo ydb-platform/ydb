@@ -24,7 +24,7 @@ using TNodeId = i32;
 using TGeneration = i64;
 using TPartitionId = i64;
 using TPartitionSessionId = ui64;
-using TServerSessionId = TString;
+using TReadSessionId = std::string;
 using TDirectReadId = i64;
 
 using TDirectReadServerMessage = Ydb::Topic::StreamDirectReadMessage::FromServer;
@@ -105,7 +105,7 @@ public:
 
     TDirectReadSession(
         TNodeId,
-        TServerSessionId,
+        TReadSessionId,
         const NYdb::NTopic::TReadSessionSettings,
         IDirectReadSessionControlCallbacks::TPtr,
         NYdbGrpc::IQueueClientContextPtr,
@@ -195,7 +195,7 @@ private:
     size_t ConnectionGeneration = 0;
 
     const NYdb::NTopic::TReadSessionSettings ReadSessionSettings;
-    const TServerSessionId ServerSessionId;
+    const TReadSessionId ServerSessionId;
     const IDirectReadProcessorFactoryPtr ProcessorFactory;
     const TNodeId NodeId;
 
@@ -220,7 +220,7 @@ public:
     using TPtr = std::shared_ptr<TSelf>;
 
     TDirectReadSessionManager(
-        TServerSessionId,
+        TReadSessionId,
         const NYdb::NTopic::TReadSessionSettings,
         IDirectReadSessionControlCallbacks::TPtr,
         NYdbGrpc::IQueueClientContextPtr,
@@ -252,7 +252,7 @@ private:
 
 private:
     const NYdb::NTopic::TReadSessionSettings ReadSessionSettings;
-    const TServerSessionId ServerSessionId;
+    const TReadSessionId ServerSessionId;
     const NYdbGrpc::IQueueClientContextPtr ClientContext;
     const IDirectReadProcessorFactoryPtr ProcessorFactory;
 

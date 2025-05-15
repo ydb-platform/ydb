@@ -151,7 +151,7 @@ void TDirectReadSessionControlCallbacks::StopPartitionSession(TPartitionSessionI
 // TDirectReadSessionManager
 
 TDirectReadSessionManager::TDirectReadSessionManager(
-    TServerSessionId serverSessionId,
+    TReadSessionId serverSessionId,
     const NYdb::NTopic::TReadSessionSettings settings,
     IDirectReadSessionControlCallbacks::TPtr controlCallbacks,
     NYdbGrpc::IQueueClientContextPtr clientContext,
@@ -340,7 +340,7 @@ bool TDirectReadSessionManager::StopPartitionSessionGracefully(TPartitionSession
 
 TDirectReadSession::TDirectReadSession(
     TNodeId nodeId,
-    TString serverSessionId,
+    TReadSessionId serverSessionId,
     const NYdb::NTopic::TReadSessionSettings settings,
     IDirectReadSessionControlCallbacks::TPtr controlCallbacks,
     NYdbGrpc::IQueueClientContextPtr clientContext,

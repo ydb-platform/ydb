@@ -167,6 +167,61 @@ struct TKqpTableWriterStatistics {
     ui64 EraseBytes = 0;
 
     THashSet<ui64> AffectedPartitions;
+
+
+    void UpdateStats(const NKikimrQueryStats::TTxStats& txStats, const TTableId& tableId) {
+        for (const auto& tableAccessStats : txStats.GetTableAccessStats()) {
+            YQL_ENSURE(tableAccessStats.GetTableInfo().GetPathId() == tableId.PathId.LocalPathId);
+            ReadRows += tableAccessStats.GetSelectRow().GetRows();
+            ReadRows += tableAccessStats.GetSelectRange().GetRows();
+            ReadBytes += tableAccessStats.GetSelectRow().GetBytes();
+            ReadBytes += tableAccessStats.GetSelectRange().GetBytes();
+            WriteRows += tableAccessStats.GetUpdateRow().GetRows();
+            WriteBytes += tableAccessStats.GetUpdateRow().GetBytes();
+            EraseRows += tableAccessStats.GetEraseRow().GetRows();
+            EraseBytes += tableAccessStats.GetEraseRow().GetRows();
+        }
+
+        for (const auto& perShardStats : txStats.GetPerShardStats()) {
+            AffectedPartitions.insert(perShardStats.GetShardId());
+        }
+    }
+
+    void FillStats(NYql::NDqProto::TDqTaskStats* stats, const TString& tablePath) {
+        if (ReadRows + WriteRows + EraseRows == 0) {
+            // Avoid empty table_access stats
+            return;
+        }
+        NYql::NDqProto::TDqTableStats* tableStats = nullptr;
+        for (size_t i = 0; i < stats->TablesSize(); ++i) {
+            auto* table = stats->MutableTables(i);
+            if (table->GetTablePath() == tablePath) {
+                tableStats = table;
+            }
+        }
+        if (!tableStats) {
+            tableStats = stats->AddTables();
+            tableStats->SetTablePath(tablePath);
+        }
+
+        tableStats->SetReadRows(tableStats->GetReadRows() + ReadRows);
+        tableStats->SetReadBytes(tableStats->GetReadBytes() + ReadBytes);
+        tableStats->SetWriteRows(tableStats->GetWriteRows() + WriteRows);
+        tableStats->SetWriteBytes(tableStats->GetWriteBytes() + WriteBytes);
+        tableStats->SetEraseRows(tableStats->GetEraseRows() + EraseRows);
+        tableStats->SetEraseBytes(tableStats->GetEraseBytes() + EraseBytes);
+    
+        ReadRows = 0;
+        ReadBytes = 0;
+        WriteRows = 0;
+        WriteBytes = 0;
+        EraseRows = 0;
+        EraseBytes = 0;
+
+        tableStats->SetAffectedPartitions(
+            tableStats->GetAffectedPartitions() + AffectedPartitions.size());
+        AffectedPartitions.clear();
+    }
 };
 
 class TKqpTableWriteActor : public TActorBootstrapped<TKqpTableWriteActor> {
@@ -307,14 +362,16 @@ public:
 
     using TWriteToken = IShardedWriteController::TWriteToken;
 
-    TWriteToken Open(
+    void Open(
+        const TWriteToken token,
         NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumnsMetadata,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& columnsMetadata,
         std::vector<ui32>&& writeIndexes,
         i64 priority) {
         YQL_ENSURE(!Closed);
-        auto token = ShardedWriteController->Open(
+        ShardedWriteController->Open(
+            token,
             TableId,
             operationType,
             std::move(keyColumnsMetadata),
@@ -322,7 +379,6 @@ public:
             std::move(writeIndexes),
             priority);
         CA_LOG_D("Open: token=" << token);
-        return token;
     }
 
     void Write(TWriteToken token, IDataBatchPtr&& data) {
@@ -1214,57 +1270,11 @@ public:
     }
 
     void UpdateStats(const NKikimrQueryStats::TTxStats& txStats) {
-        for (const auto& tableAccessStats : txStats.GetTableAccessStats()) {
-            YQL_ENSURE(tableAccessStats.GetTableInfo().GetPathId() == TableId.PathId.LocalPathId);
-            Stats.ReadRows += tableAccessStats.GetSelectRow().GetRows();
-            Stats.ReadRows += tableAccessStats.GetSelectRange().GetRows();
-            Stats.ReadBytes += tableAccessStats.GetSelectRow().GetBytes();
-            Stats.ReadBytes += tableAccessStats.GetSelectRange().GetBytes();
-            Stats.WriteRows += tableAccessStats.GetUpdateRow().GetRows();
-            Stats.WriteBytes += tableAccessStats.GetUpdateRow().GetBytes();
-            Stats.EraseRows += tableAccessStats.GetEraseRow().GetRows();
-            Stats.EraseBytes += tableAccessStats.GetEraseRow().GetRows();
-        }
-
-        for (const auto& perShardStats : txStats.GetPerShardStats()) {
-            Stats.AffectedPartitions.insert(perShardStats.GetShardId());
-        }
+        Stats.UpdateStats(txStats, TableId);
     }
 
     void FillStats(NYql::NDqProto::TDqTaskStats* stats) {
-        if (Stats.ReadRows + Stats.WriteRows + Stats.EraseRows == 0) {
-            // Avoid empty table_access stats
-            return;
-        }
-        NYql::NDqProto::TDqTableStats* tableStats = nullptr;
-        for (size_t i = 0; i < stats->TablesSize(); ++i) {
-            auto* table = stats->MutableTables(i);
-            if (table->GetTablePath() == TablePath) {
-                tableStats = table;
-            }
-        }
-        if (!tableStats) {
-            tableStats = stats->AddTables();
-            tableStats->SetTablePath(TablePath);
-        }
-
-        tableStats->SetReadRows(tableStats->GetReadRows() + Stats.ReadRows);
-        tableStats->SetReadBytes(tableStats->GetReadBytes() + Stats.ReadBytes);
-        tableStats->SetWriteRows(tableStats->GetWriteRows() + Stats.WriteRows);
-        tableStats->SetWriteBytes(tableStats->GetWriteBytes() + Stats.WriteBytes);
-        tableStats->SetEraseRows(tableStats->GetEraseRows() + Stats.EraseRows);
-        tableStats->SetEraseBytes(tableStats->GetEraseBytes() + Stats.EraseBytes);
-    
-        Stats.ReadRows = 0;
-        Stats.ReadBytes = 0;
-        Stats.WriteRows = 0;
-        Stats.WriteBytes = 0;
-        Stats.EraseRows = 0;
-        Stats.EraseBytes = 0;
-
-        tableStats->SetAffectedPartitions(
-            tableStats->GetAffectedPartitions() + Stats.AffectedPartitions.size());
-        Stats.AffectedPartitions.clear();
+        Stats.FillStats(stats, TablePath);
     }
 
     NActors::TActorId PipeCacheId = NKikimr::MakePipePerNodeCacheID(false);
@@ -1386,7 +1396,8 @@ public:
                 Settings.GetWriteIndexes().begin(),
                 Settings.GetWriteIndexes().end());
             YQL_ENSURE(Settings.GetPriority() == 0);
-            WriteToken = WriteTableActor->Open(
+            WriteTableActor->Open(
+                WriteToken,
                 GetOperation(Settings.GetType()),
                 std::move(keyColumnsMetadata),
                 std::move(columnsMetadata),
@@ -1466,9 +1477,9 @@ private:
         try {
             Batcher->AddData(data);
             YQL_ENSURE(WriteTableActor);
-            WriteTableActor->Write(*WriteToken, Batcher->Build());
+            WriteTableActor->Write(WriteToken, Batcher->Build());
             if (Closed) {
-                WriteTableActor->Close(*WriteToken);
+                WriteTableActor->Close(WriteToken);
                 WriteTableActor->Close();
             }
         } catch (const TMemoryLimitExceededException&) {
@@ -1621,7 +1632,7 @@ private:
     TKqpTableWriteActor* WriteTableActor = nullptr;
     TActorId WriteTableActorId;
 
-    std::optional<TKqpTableWriteActor::TWriteToken> WriteToken;
+    TKqpTableWriteActor::TWriteToken WriteToken = 0;
 
     bool Closed = false;
 
@@ -1806,13 +1817,14 @@ public:
 
             EnableStreamWrite &= settings.EnableStreamWrite;
 
-            auto cookie = writeInfo.WriteTableActor->Open(
+            token = TWriteToken{settings.TableId, CurrentWriteToken++};
+            writeInfo.WriteTableActor->Open(
+                token.Cookie,
                 settings.OperationType,
                 std::move(settings.KeyColumns),
                 std::move(settings.Columns),
                 std::move(settings.WriteIndex),
                 settings.Priority);
-            token = TWriteToken{settings.TableId, cookie};
         } else {
             token = *ev->Get()->Token;
         }
@@ -1831,6 +1843,9 @@ public:
 
     bool Process() {
         ProcessRequestQueue();
+        if (!ProcessRead()) {
+            return false;
+        }
         if (!ProcessWrite()) {
             return false;
         }
@@ -1921,6 +1936,10 @@ public:
                 }
             }
         }
+        return true;
+    }
+
+    bool ProcessRead() {
         return true;
     }
 
@@ -2902,6 +2921,7 @@ private:
     };
 
     THashMap<TTableId, TWriteInfo> WriteInfos;
+    TKqpTableWriteActor::TWriteToken CurrentWriteToken = 0;
 
     EState State;
     bool HasError = false;

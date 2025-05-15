@@ -1318,15 +1318,15 @@ public:
         }
     }
 
-    TWriteToken Open(
+    void Open(
+        const TWriteToken token,
         const TTableId tableId,
         const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumns,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
         std::vector<ui32>&& writeIndex,
         const i64 priority) override {
-        auto token = CurrentWriteToken++;
-        auto iter = WriteInfos.emplace(
+        auto [iter, inserted] = WriteInfos.emplace(
             token,
             TWriteInfo {
                 .Metadata = TMetadata {
@@ -1339,7 +1339,9 @@ public:
                 },
                 .Serializer = nullptr,
                 .Closed = false,
-            }).first;
+            });
+        YQL_ENSURE(inserted);
+
         if (Partitioning) {
             iter->second.Serializer = CreateDataShardPayloadSerializer(
                 *Partitioning,
@@ -1354,7 +1356,6 @@ public:
                 iter->second.Metadata.WriteIndex,
                 Alloc);
         }
-        return token;
     }
 
     void Write(TWriteToken token, IDataBatchPtr&& data) override {
@@ -1645,7 +1646,6 @@ private:
     };
 
     std::map<TWriteToken, TWriteInfo> WriteInfos;
-    TWriteToken CurrentWriteToken = 0;
 
     TShardsInfo ShardsInfo;
 

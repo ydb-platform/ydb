@@ -898,14 +898,14 @@ public:
         const TShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
         std::optional<TRange> writerIndexRange,
-        const NTableClient::TTableReaderConfigPtr& config),
+        const TShuffleReaderOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (
         const TShuffleHandlePtr& shuffleHandle,
         const std::string& partitionColumn,
         std::optional<int> writerIndex,
-        const NTableClient::TTableWriterConfigPtr& config),
+        const TShuffleWriterOptions& options),
         (override));
 
 private:

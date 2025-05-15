@@ -3625,6 +3625,7 @@ message TReqWriteShuffleData
     optional bytes writer_config = 2; // YSON-serialized TTableWriterConfig
     required string partition_column = 3;
     optional int32 writer_index = 4;
+    optional bool overwrite_existing_writer_data = 5 [default = false];
 }
 
 message TRspWriteShuffleData

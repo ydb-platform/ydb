@@ -8,7 +8,7 @@ namespace NTabletFlatExecutor {
 namespace {
     constexpr ui64 GcErrorInitialBackoffMs = 20;
     constexpr ui64 GcErrorMaxBackoffMs = 10000;
-    constexpr ui64 GcMaxErrors = 20;  // ~3.33 min in total
+    constexpr ui64 GcMaxErrors = 20;  // ~1.33 min in total
 }
 
 TExecutorGCLogic::TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo> info, TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies)

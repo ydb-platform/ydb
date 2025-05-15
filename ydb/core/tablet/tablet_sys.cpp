@@ -35,9 +35,9 @@ namespace {
     static constexpr TDuration OfflineFollowerWaitFirst = TDuration::Seconds(4);
     static constexpr TDuration OfflineFollowerWaitRetry = TDuration::Seconds(15);
 
-    constexpr ui64 GcErrorInitialBackoffMs = 20;
+    constexpr ui64 GcErrorInitialBackoffMs = 1;
     constexpr ui64 GcErrorMaxBackoffMs = 10000;
-    constexpr ui64 GcMaxErrors = 20;  // ~3.33 min in total
+    constexpr ui64 GcMaxErrors = 25;  // ~1.13 min in total
 
 }
 
@@ -1327,6 +1327,16 @@ void TTablet::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
 
     TEvBlobStorage::TEvCollectGarbageResult *msg = ev->Get();
 
+    auto handleNextGcLogChannel = [&]() {
+        if (GcNextStep != 0) {
+            GcLogChannel(std::exchange(GcNextStep, 0));
+        } else if (GcFailCount > 0 && !GcPendingRetry && GcTryCounter < GcMaxErrors) {
+            ++GcTryCounter;
+            GcPendingRetry = true;
+            Schedule(TDuration::MilliSeconds(GcBackoffTimer.NextBackoffMs()), new TEvTabletBase::TEvLogGcRetry());
+        }
+    };
+
     switch (msg->Status) {
     case NKikimrProto::RACE:
     case NKikimrProto::BLOCKED:
@@ -1344,30 +1354,22 @@ void TTablet::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
                 GcConfirmedStep = GcInFlyStep;
                 GcTryCounter = 0;
                 GcBackoffTimer.Reset();
-            }
-            if (GcForStepAckRequest) {
-                const auto& req = *GcForStepAckRequest->Get();
-                const ui32 gen = StateStorageInfo.KnownGeneration;
-                if (std::tie(req.Generation, req.Step) <= std::tie(gen, GcConfirmedStep)) {
-                    Send(GcForStepAckRequest->Sender, new TEvTablet::TEvGcForStepAckResponse(gen, GcConfirmedStep));
-                    GcForStepAckRequest = nullptr;
+                if (GcForStepAckRequest) {
+                    const auto& req = *GcForStepAckRequest->Get();
+                    const ui32 gen = StateStorageInfo.KnownGeneration;
+                    if (std::tie(req.Generation, req.Step) <= std::tie(gen, GcConfirmedStep)) {
+                        Send(GcForStepAckRequest->Sender, new TEvTablet::TEvGcForStepAckResponse(gen, GcConfirmedStep));
+                        GcForStepAckRequest = nullptr;
+                    }
                 }
             }
-            if (GcNextStep != 0) {
-                GcLogChannel(std::exchange(GcNextStep, 0));
-            }
+            handleNextGcLogChannel();
         }
         return;
     default:
         ++GcFailCount;
         if (GcInFly == 0) {
-            if (GcNextStep != 0) {
-                GcLogChannel(std::exchange(GcNextStep, 0));
-            } else if (!GcPendingRetry && GcTryCounter < GcMaxErrors) {
-                ++GcTryCounter;
-                GcPendingRetry = true;
-                Schedule(TDuration::MilliSeconds(GcBackoffTimer.NextBackoffMs()), new TEvTabletBase::TEvLogGcRetry());
-            }
+            handleNextGcLogChannel();
         }
         return;
     }

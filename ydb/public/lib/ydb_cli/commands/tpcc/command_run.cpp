@@ -53,4 +53,4 @@ int TCommandTPCCRun::Run(TConfig& config) {
     return 0;
 }
 
-} // namesapce NYdb::NConsoleClient
+} // namespace NYdb::NConsoleClient

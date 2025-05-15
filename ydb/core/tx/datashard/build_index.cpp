@@ -141,7 +141,10 @@ struct TStatus {
     }
 
     bool IsRetriable() const {
-        return StatusCode == Ydb::StatusIds::UNAVAILABLE || StatusCode == Ydb::StatusIds::OVERLOADED;
+        return StatusCode == Ydb::StatusIds::UNAVAILABLE
+            || StatusCode == Ydb::StatusIds::OVERLOADED
+            || StatusCode == Ydb::StatusIds::TIMEOUT
+            ;
     }
 
     TString ToString() const {
@@ -160,7 +163,7 @@ struct TUploadLimits {
     ui32 BackoffCeiling = 3;
 
     TDuration GetTimeoutBackouff(ui32 retryNo) const {
-        return TDuration::Seconds(1u << Max(retryNo, BackoffCeiling));
+        return TDuration::Seconds(1u << Min(retryNo, BackoffCeiling));
     }
 };
 

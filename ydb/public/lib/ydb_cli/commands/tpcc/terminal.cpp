@@ -41,7 +41,7 @@ TTerminalTask TTerminal::Run() {
         try {
             auto result = co_await GetNewOrderTask(Context);
             (void) result;
-        } catch (std::exception ex) {
+        } catch (const std::exception& ex) {
             LOG_E("Terminal " << Context.TerminalID << " got exception while transaction execution: " << ex.what());
         }
 

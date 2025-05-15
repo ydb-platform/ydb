@@ -123,7 +123,8 @@ public:
         if (auto& current = Buckets[CurrentBucket]; CurrentCursor < current.Items.size()) {
             return current.Items[CurrentCursor].Deadline;
         }
-        return Buckets[CurrentBucket + 1].Items[0].Deadline;
+        auto nextBucketIndex = (CurrentBucket + 1) % Buckets.size();
+        return Buckets[nextBucketIndex].Items[0].Deadline;
     }
 
     TItem PopFront() {

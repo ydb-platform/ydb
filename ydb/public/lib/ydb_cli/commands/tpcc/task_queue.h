@@ -295,15 +295,9 @@ struct TSuspendWithFuture {
 
     void await_suspend(TTransactionTask::TCoroHandle handle) {
         // we use subscribe as async wait and don't handle result here: resumed task will
-        if constexpr (std::is_void_v<T>) {
-            Future.NoexceptSubscribe([this, handle](const NThreading::TFuture<T>&) {
-                TaskQueue.TaskReady(handle, TerminalId);
-            });
-        } else {
-            Future.NoexceptSubscribe([this, handle](const NThreading::TFuture<T>&) {
-                TaskQueue.TaskReady(handle, TerminalId);
-            });
-        }
+        Future.NoexceptSubscribe([this, handle](const NThreading::TFuture<T>&) {
+            TaskQueue.TaskReady(handle, TerminalId);
+        });
     }
 
     void await_resume() {}

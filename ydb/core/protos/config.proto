@@ -2324,6 +2324,7 @@ message TYdbVersion {
     optional uint32 Year = 1;
     optional uint32 Major = 2;
     optional uint32 Minor = 3;
+    optional uint32 Patch = 5;
     optional uint32 Hotfix = 4;
 }
 

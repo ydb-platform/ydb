@@ -7,12 +7,78 @@
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
 
-#include <library/cpp/testing/unittest/registar.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
+
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
+    Y_UNIT_TEST(MultiLayersOptimization) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings().SetMaxPortionSize(30000));
+
+        TLocalHelper(kikimr).CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            auto alterQuery =
+                TStringBuilder() <<
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
+                {"levels" : [{"class_name" : "Zero", "expected_blobs_size" : 20000, "portions_size_limit" : 100000, "portions_count_available" : 1},
+                             {"class_name" : "OneLayer", "expected_portion_size" : 40000, "size_limit_guarantee" : 100000, "bytes_limit_fraction" : 0},
+                             {"class_name" : "OneLayer", "expected_portion_size" : 80000, "size_limit_guarantee" : 200000, "bytes_limit_fraction" : 0},
+                             {"class_name" : "OneLayer", "expected_portion_size" : 160000, "size_limit_guarantee" : 300000, "bytes_limit_fraction" : 0},
+                             {"class_name" : "OneLayer", "expected_portion_size" : 320000, "size_limit_guarantee" : 600000, "bytes_limit_fraction" : 1}]}`);
+            )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        for (ui32 i = 0; i < 100; ++i) {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, i * 1000, 10000);
+            if (i % 10 == 0) {
+                csController->WaitCompactions(TDuration::MilliSeconds(10));
+            }
+        }
+        csController->WaitCompactions(TDuration::Seconds(10));
+
+        {
+            auto it = tableClient
+                          .StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT JSON_VALUE(CAST(Details AS JsonDocument), "$.level") AS LEVEL, JSON_VALUE(CAST(Details AS JsonDocument), "$.portions.blob_bytes") AS BYTES
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_optimizer_stats`
+                ORDER BY LEVEL
+            )")
+                          .GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            CompareYson(result, R"([[1u;]])");
+        }
+
+        {
+            auto it = tableClient
+                          .StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT COUNT(*)
+                FROM `/Root/olapStore/olapTable`
+            )")
+                          .GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            CompareYson(result, R"([[1u;]])");
+        }
+    }
     Y_UNIT_TEST(OptimizationByTime) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
@@ -30,7 +96,7 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             auto alterQuery =
                 TStringBuilder() <<
                 R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
-                {"levels" : [{"class_name" : "Zero", "portions_live_duration" : "20s", "expected_blobs_size" : 1073741824, "portions_count_available" : 2},
+                {"levels" : [{"class_name" : "Zero", "expected_blobs_size" : 1073741824, "portions_count_available" : 2},
                              {"class_name" : "Zero"}]}`);
             )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
@@ -43,7 +109,8 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
 
         csController->WaitCompactions(TDuration::Seconds(25));
         {
-            auto it = tableClient.StreamExecuteScanQuery(R"(
+            auto it = tableClient
+                          .StreamExecuteScanQuery(R"(
                 --!syntax_v1
                 SELECT
                     COUNT(*)

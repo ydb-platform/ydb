@@ -1,5 +1,5 @@
-#ifndef AWS_COMMON_PRIVATE_JSON_IMPL_H
-#define AWS_COMMON_PRIVATE_JSON_IMPL_H
+#ifndef AWS_COMMON_PRIVATE_EXTERNAL_MODULE_IMPL_H
+#define AWS_COMMON_PRIVATE_EXTERNAL_MODULE_IMPL_H
 
 /**
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
@@ -19,4 +19,8 @@ void aws_json_module_init(struct aws_allocator *allocator);
  */
 void aws_json_module_cleanup(void);
 
-#endif // AWS_COMMON_PRIVATE_JSON_IMPL_H
+void aws_cbor_module_init(struct aws_allocator *allocator);
+
+void aws_cbor_module_cleanup(void);
+
+#endif // AWS_COMMON_PRIVATE_EXTERNAL_MODULE_IMPL_H

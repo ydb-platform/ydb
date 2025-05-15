@@ -1,7 +1,7 @@
 
 PY3_PROGRAM(tz_gen)
 
-SRCDIR(yql/essentials/public/udf/tz)
+SRCDIR(library/cpp/type_info/tz)
 
 PY_SRCS(
     TOP_LEVEL

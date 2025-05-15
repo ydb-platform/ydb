@@ -27,6 +27,11 @@ tasks.compileKotlin.configure {
 tasks.compileTestKotlin.configure {
     dependsOn({{ taskvar }})
 }
+{%-         if with_kapt %}
+tasks.withType<KaptGenerateStubsTask>().configureEach {
+    mustRunAfter({{ taskvar }})
+}
+{%-         endif -%}
 {%      endif -%}
 {%- endmacro -%}
 
@@ -53,14 +58,4 @@ tasks.getByName("{{ parent_taskvar }}").dependsOn({{ taskvar }})
 {%-         set varprefix = "test" + loop.index0|tojson + "Codegen" -%}
 {%-         include "[generator]/codegen_current_target.jinja" -%}
 {%-     endfor -%}
-{%- endif -%}
-
-{%- if not proto_template %}
-
-tasks.getByName("sourcesJar").dependsOn(tasks.compileJava)
-tasks.getByName("sourcesJar").mustRunAfter(tasks.compileTestJava)
-{%-     if with_kotlin %}
-tasks.getByName("sourcesJar").dependsOn(tasks.compileKotlin)
-tasks.getByName("sourcesJar").mustRunAfter(tasks.compileTestKotlin)
-{%-     endif %}
 {%- endif -%}

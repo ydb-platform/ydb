@@ -93,11 +93,12 @@ AWS_COMMON_API bool aws_ring_buffer_buf_belongs_to_pool(
     const struct aws_ring_buffer *ring_buffer,
     const struct aws_byte_buf *buf);
 
+AWS_EXTERN_C_END
+
 #ifndef AWS_NO_STATIC_IMPL
 #    include <aws/common/ring_buffer.inl>
 #endif /* AWS_NO_STATIC_IMPL */
 
-AWS_EXTERN_C_END
 AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_RING_BUFFER_H */

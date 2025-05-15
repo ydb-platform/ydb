@@ -8,6 +8,13 @@ TConclusionStatus TOneLayerConstructor::DoDeserializeFromJson(const NJson::TJson
     if (!json.IsMap()) {
         return TConclusionStatus::Fail("incorrect level description");
     }
+    if (json.Has("size_limit_guarantee")) {
+        const auto& jsonValue = json["size_limit_guarantee"];
+        if (!jsonValue.IsUInteger()) {
+            return TConclusionStatus::Fail("incorrect size_limit_guarantee value (have to be unsigned integer)");
+        }
+        SizeLimitGuarantee = jsonValue.GetUInteger();
+    }
     if (json.Has("bytes_limit_fraction")) {
         const auto& jsonValue = json["bytes_limit_fraction"];
         if (!jsonValue.IsDouble()) {
@@ -38,6 +45,9 @@ bool TOneLayerConstructor::DoDeserializeFromProto(const NKikimrSchemeOp::TCompac
     if (proto.GetOneLayer().HasBytesLimitFraction()) {
         BytesLimitFraction = proto.GetOneLayer().GetBytesLimitFraction();
     }
+    if (proto.GetOneLayer().HasSizeLimitGuarantee()) {
+        SizeLimitGuarantee = proto.GetOneLayer().GetSizeLimitGuarantee();
+    }
     return true;
 }
 
@@ -48,13 +58,16 @@ void TOneLayerConstructor::DoSerializeToProto(NKikimrSchemeOp::TCompactionLevelC
     if (BytesLimitFraction) {
         proto.MutableOneLayer()->SetBytesLimitFraction(*BytesLimitFraction);
     }
+    if (SizeLimitGuarantee) {
+        proto.MutableOneLayer()->SetSizeLimitGuarantee(SizeLimitGuarantee);
+    }
 }
 
 std::shared_ptr<NStorageOptimizer::NLCBuckets::IPortionsLevel> TOneLayerConstructor::DoBuildLevel(
     const std::shared_ptr<IPortionsLevel>& nextLevel, const ui32 indexLevel, const std::shared_ptr<TSimplePortionsGroupInfo>& portionsInfo,
     const TLevelCounters& counters) const {
-    return std::make_shared<TOneLayerPortions>(
-        indexLevel, BytesLimitFraction.value_or(1), ExpectedPortionSize.value_or(2 << 20), nextLevel, portionsInfo, counters);
+    return std::make_shared<TOneLayerPortions>(indexLevel, BytesLimitFraction.value_or(1), ExpectedPortionSize.value_or(2 << 20), nextLevel,
+        portionsInfo, counters, SizeLimitGuarantee);
 }
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

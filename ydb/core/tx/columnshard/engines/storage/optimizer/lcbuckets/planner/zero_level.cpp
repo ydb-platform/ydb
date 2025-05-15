@@ -9,7 +9,7 @@ TCompactionTaskData TZeroLevelPortions::DoGetOptimizationTask() const {
         result.AddCurrentLevelPortion(
             i.GetPortion(), NextLevel->GetAffectedPortions(i.GetPortion()->IndexKeyStart(), i.GetPortion()->IndexKeyEnd()), true);
         if (!result.CanTakeMore()) {
-//            result.SetStopSeparation(i.GetPortion()->IndexKeyStart());
+            //            result.SetStopSeparation(i.GetPortion()->IndexKeyStart());
             break;
         }
     }
@@ -70,13 +70,14 @@ TInstant TZeroLevelPortions::DoGetWeightExpirationInstant() const {
 
 TZeroLevelPortions::TZeroLevelPortions(const ui32 levelIdx, const std::shared_ptr<IPortionsLevel>& nextLevel,
     const TLevelCounters& levelCounters, const TDuration durationToDrop, const ui64 expectedBlobsSize, const ui64 portionsCountAvailable,
-    const std::optional<ui64> portionsCountLimit)
+    const std::optional<ui64> portionsCountLimit, const std::optional<ui64> portionsSizeLimit)
     : TBase(levelIdx, nextLevel)
     , LevelCounters(levelCounters)
     , DurationToDrop(durationToDrop)
     , ExpectedBlobsSize(expectedBlobsSize)
     , PortionsCountAvailable(portionsCountAvailable)
-    , PortionsCountLimit(portionsCountLimit) {
+    , PortionsCountLimit(portionsCountLimit)
+    , PortionsSizeLimit(portionsSizeLimit) {
     if (DurationToDrop != TDuration::Max() && PredOptimization) {
         *PredOptimization -= TDuration::Seconds(RandomNumber<ui32>(DurationToDrop.Seconds()));
     }

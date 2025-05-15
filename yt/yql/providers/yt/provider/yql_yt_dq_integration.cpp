@@ -889,7 +889,7 @@ public:
             if (res.ExternalTransactionId) {
                 param("external_tx", *res.ExternalTransactionId);
             }
-        } else if (auto externalTx = State_->Configuration->ExternalTx.Get().GetOrElse(TGUID())) {
+        } else if (auto externalTx = State_->Configuration->ExternalTx.Get(cluster).GetOrElse(TGUID())) {
             param("external_tx", GetGuidAsString(externalTx));
         }
         TString tokenName;

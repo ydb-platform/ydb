@@ -250,6 +250,27 @@ private:
         return Batch.get();
     }
 
+    std::shared_ptr<arrow::RecordBatch> RowsToBatch(const TVector<std::pair<TSerializedCellVec, TString>>& rows,
+                                                    TString& errorMessage)
+    {
+        NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::UNCOMPRESSED, NotNullColumns);
+        batchBuilder.Reserve(rows.size()); // TODO: ReserveData()
+        const auto startStatus = batchBuilder.Start(YdbSchema);
+        if (!startStatus.ok()) {
+            errorMessage = "Cannot make Arrow batch from rows: " + startStatus.ToString();
+            return {};
+        }
+
+        for (const auto& kv : rows) {
+            const TSerializedCellVec& key = kv.first;
+            const TSerializedCellVec value(kv.second);
+
+            batchBuilder.AddRow(key.GetCells(), value.GetCells());
+        }
+
+        return batchBuilder.FlushBatch(false);
+    }
+
 private:
     std::unique_ptr<IRequestOpCtx> Request;
     TVector<std::pair<TSerializedCellVec, TString>> AllRows;
@@ -370,6 +391,23 @@ private:
         Y_ABORT_UNLESS(Batch);
         Rows = BatchToRows(Batch, errorMessage);
         return errorMessage.empty();
+    }
+
+    TVector<std::pair<TSerializedCellVec, TString>> BatchToRows(const std::shared_ptr<arrow::RecordBatch>& batch,
+                                                                TString& errorMessage) {
+        Y_ABORT_UNLESS(batch);
+        TVector<std::pair<TSerializedCellVec, TString>> out;
+        out.reserve(batch->num_rows());
+
+        ui32 keySize = KeyColumnPositions.size(); // YdbSchema contains keys first
+        TRowWriter writer(out, keySize);
+        NArrow::TArrowToYdbConverter batchConverter(YdbSchema, writer, IsInfinityInJsonAllowed());
+        if (!batchConverter.Process(*batch, errorMessage)) {
+            return {};
+        }
+
+        RuCost = writer.GetRuCost();
+        return out;
     }
 
     bool ExtractBatch(TString& errorMessage) override {

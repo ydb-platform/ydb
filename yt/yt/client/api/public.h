@@ -135,6 +135,8 @@ struct TTabletRangeOptions;
 struct TGetFileFromCacheResult;
 struct TPutFileToCacheResult;
 
+struct TGetCurrentUserOptions;
+
 DECLARE_REFCOUNTED_STRUCT(IConnection)
 DECLARE_REFCOUNTED_STRUCT(IClientBase)
 DECLARE_REFCOUNTED_STRUCT(IClient)
@@ -197,6 +199,8 @@ DECLARE_REFCOUNTED_STRUCT(TBackupManifest)
 DECLARE_REFCOUNTED_STRUCT(TListOperationsAccessFilter)
 
 DECLARE_REFCOUNTED_STRUCT(TShuffleHandle)
+
+DECLARE_REFCOUNTED_STRUCT(TGetCurrentUserResult);
 
 ////////////////////////////////////////////////////////////////////////////////
 

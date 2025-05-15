@@ -354,6 +354,12 @@ public:
     void Terminate() override
     { }
 
+    TFuture<TGetCurrentUserResultPtr> GetCurrentUser(const TGetCurrentUserOptions& options) override
+    {
+        auto [client, _] = GetActiveClient();
+        return client->GetCurrentUser(options);
+    }
+
     // IClientBase unsupported methods.
     UNIMPLEMENTED_METHOD(TFuture<void>, SetNode, (const NYPath::TYPath&, const NYson::TYsonString&, const TSetNodeOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, MultisetAttributesNode, (const NYPath::TYPath&, const NYTree::IMapNodePtr&, const TMultisetAttributesNodeOptions&));

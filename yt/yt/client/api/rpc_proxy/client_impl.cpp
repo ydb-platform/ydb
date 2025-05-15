@@ -967,6 +967,20 @@ TFuture<void> TClient::RemoveQueueProducerSession(
     return req->Invoke().AsVoid();
 }
 
+TFuture<TGetCurrentUserResultPtr> TClient::GetCurrentUser(const TGetCurrentUserOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.GetCurrentUser();
+    SetTimeoutOptions(*req, options);
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetCurrentUserPtr& rsp) {
+        auto response = New<TGetCurrentUserResult>();
+        response->User = rsp->user();
+        return response;
+    }));
+}
+
 TFuture<void> TClient::AddMember(
     const TString& group,
     const TString& member,

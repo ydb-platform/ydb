@@ -2828,6 +2828,15 @@ message TRspGetJobInput
 // ETC
 ////////////////////////////////////////////////////////////////////////////////
 
+message TReqGetCurrentUser
+{
+}
+
+message TRspGetCurrentUser
+{
+    required string user = 1;
+}
+
 message TReqAddMember
 {
     required string group = 1;

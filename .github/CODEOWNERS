@@ -72,8 +72,12 @@
 /ydb/tests/functional/tenants/test_dynamic_tenants.py @ydb-platform/schemeshard
 /ydb/core/tx/tx_proxy/schemereq.cpp @ydb-platform/schemeshard
 
-/ydb/core/formats/arrow @ydb-platform/cs
-/ydb/core/tx/columnshard @ydb-platform/cs
+/ydb/core/formats/arrow @dorooleg
+/ydb/core/tx/columnshard @dorooleg
+/ydb/core/tx/conveyor @dorooleg
+/ydb/core/tx/limiter @dorooleg
+/ydb/core/tx/priorities @dorooleg
+/ydb/library/signals @dorooleg
 
 /ydb/apps/ydb @ydb-platform/cli
 /ydb/public/lib/ydb_cli @ydb-platform/cli

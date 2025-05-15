@@ -1,6 +1,7 @@
 UNITTEST_FOR(ydb/public/lib/ydb_cli/commands/tpcc)
 
 SRCS(
+    task_ut.cpp
     timer_queue_ut.cpp
 )
 

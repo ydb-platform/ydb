@@ -87,8 +87,11 @@ struct TTask {
         }
     }
 
-    // TODO: maybe Release() with move?
     T& Get() {
+        if (Handle.promise().Exception) {
+            std::rethrow_exception(Handle.promise().Exception);
+        }
+
         return Handle.promise().Value;
     }
 
@@ -104,9 +107,6 @@ struct TTask {
     }
 
     T& await_resume() {
-        if (Handle.promise().Exception) {
-            std::rethrow_exception(Handle.promise().Exception);
-        }
         return Get();
     }
 
@@ -178,6 +178,12 @@ struct TTask<void> {
         }
     }
 
+    void Get() {
+        if (Handle.promise().Exception) {
+            std::rethrow_exception(Handle.promise().Exception);
+        }
+    }
+
     // avaitable task
 
     bool await_ready() const noexcept {
@@ -190,9 +196,7 @@ struct TTask<void> {
     }
 
     void await_resume() {
-        if (Handle.promise().Exception) {
-            std::rethrow_exception(Handle.promise().Exception);
-        }
+        Get();
     }
 
     TCoroHandle Handle;

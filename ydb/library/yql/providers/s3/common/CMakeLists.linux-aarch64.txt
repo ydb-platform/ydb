@@ -36,6 +36,8 @@ target_link_libraries(providers-s3-common PUBLIC
   yutil
   providers-common-http_gateway
   providers-s3-events
+  yql-essentials-core
+  essentials-minikql-dom
   essentials-public-issue
   public-issue-protos
   yql-essentials-ast

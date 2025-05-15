@@ -5,11 +5,11 @@ using namespace NYdb;
 template <bool encryptionEnabled>
 class TBackupEncryptionParamsValidationTestFixture : public TS3BackupTestFixture {
 public:
-    TBackupEncryptionParamsValidationTestFixture() {
-        Server.GetRuntime()->GetAppData().FeatureFlags.SetEnableEncryptedExport(encryptionEnabled);
-    }
+    TBackupEncryptionParamsValidationTestFixture() = default;
 
     void SetUp(NUnitTest::TTestContext& /* context */) override {
+        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableEncryptedExport(encryptionEnabled);
+
         auto res = YdbQueryClient().ExecuteQuery(R"sql(
             CREATE TABLE `/Root/ExportParamsValidation/dir1/Table1` (
                 Key Uint32 NOT NULL,

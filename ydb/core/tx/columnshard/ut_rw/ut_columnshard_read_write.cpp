@@ -2204,6 +2204,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         if (isStrPk0) {
             csDefaultControllerGuard->SetOverrideBlobSplitSettings(
                 NOlap::NSplitter::TSplitSettings().SetMaxBlobSize(1024 * 1000).SetMinBlobSize(256 * 10));
+        } else {
+            csDefaultControllerGuard->SetOverrideBlobSplitSettings(
+                NOlap::NSplitter::TSplitSettings().SetMaxBlobSize(1024 * 100).SetMinBlobSize(256 * 10));
         }
 
         // Write different keys: grow on compaction

@@ -176,7 +176,7 @@ private:
     }
 
     bool CheckAccess(TString& errorMessage) override {
-        return NTxProxy::CheckAccess(GetProtoRequest(Request.get())->table(), Request->GetSerializedToken(), GetResolveNameResult(), errorMessage);
+        return NTxProxy::CheckAccess(GetTable(), Request->GetSerializedToken(), GetResolveNameResult(), errorMessage);
     }
 
     TConclusion<TVector<std::pair<TString, Ydb::Type>>> GetRequestColumns() const override {
@@ -335,7 +335,7 @@ private:
     }
 
     bool CheckAccess(TString& errorMessage) override {
-        return NTxProxy::CheckAccess(GetProtoRequest(Request.get())->table(), Request->GetSerializedToken(), GetResolveNameResult(), errorMessage);
+        return NTxProxy::CheckAccess(GetTable(), Request->GetSerializedToken(), GetResolveNameResult(), errorMessage);
     }
 
     TConclusion<TVector<std::pair<TString, Ydb::Type>>> GetRequestColumns() const override {

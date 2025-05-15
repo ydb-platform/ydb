@@ -317,11 +317,11 @@
                                         "Name": "Iterator"
                                     }
                                 ],
-                                "PlanNodeId": 1,
-                                "Tables": [
-                                    "base_join_group_by_lookup_script_script/Temp"
-                                ]
+                                "PlanNodeId": 1
                             }
+                        ],
+                        "Tables": [
+                            "base_join_group_by_lookup_script_script/Temp"
                         ]
                     }
                 ],

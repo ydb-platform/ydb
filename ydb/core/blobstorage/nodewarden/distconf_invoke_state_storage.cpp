@@ -5,91 +5,117 @@ namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
 
-    void TInvokeRequestHandlerActor::ReconfigStateStorage(const TQuery::TReconfigStateStorage& cmd) {
+    void TInvokeRequestHandlerActor::GetStateStorageConfig() {
         if (!RunCommonChecks()) {
-            FinishWithError(TResult::ERROR, TStringBuilder() << "CommonChecks are not passed");
+            return;
+        }
+        NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
+        auto ev = PrepareResult(TResult::OK, std::nullopt);
+        auto* currentConfig = ev->Record.MutableStateStorageConfig();
+        currentConfig->MutableStateStorageConfig()->CopyFrom(config.GetStateStorageConfig());
+        currentConfig->MutableStateStorageBoardConfig()->CopyFrom(config.GetStateStorageBoardConfig());
+        currentConfig->MutableSchemeBoardConfig()->CopyFrom(config.GetSchemeBoardConfig());
+        Finish(Sender, SelfId(), ev.release(), 0, Cookie);
+    }
+
+    void TInvokeRequestHandlerActor::ReconfigStateStorage(const NKikimrBlobStorage::TStateStorageConfig& cmd) {
+        if (!RunCommonChecks()) {
             return;
         }
 
         NKikimrBlobStorage::TStorageConfig config = *Self->StorageConfig;
 
-        if (cmd.HasGetStateStorageConfig() && cmd.GetGetStateStorageConfig()) {
-            auto ev = PrepareResult(TResult::OK, std::nullopt);
-            ev->Record.MutableStateStorageConfig()->CopyFrom(config.GetStateStorageConfig());
-            Finish(Sender, SelfId(), ev.release(), 0, Cookie);
-            return;
-        }
-        if (!cmd.HasNewStateStorageConfig()) {
+        if (!cmd.HasStateStorageConfig() && !cmd.HasStateStorageBoardConfig() && !cmd.HasSchemeBoardConfig()) {
             FinishWithError(TResult::ERROR, TStringBuilder() << "New configuration is not defined");
             return;   
         }
-        const auto &newSSConfig = cmd.GetNewStateStorageConfig();
+        auto process = [&](const char *name, const char *prefix, auto hasFunc, auto func, auto configHasFunc, auto configMutableFunc) {
+            if (!(cmd.*hasFunc)()) {
+                return true;
+            } 
+            if (!(config.*configHasFunc)()) {
+                FinishWithError(TResult::ERROR, TStringBuilder() << name << " configuration is not filled in");
+                return false;
+            }
+            const auto &newSSConfig = (cmd.*func)();
 
-        if (newSSConfig.HasRing()) {
-            FinishWithError(TResult::ERROR, TStringBuilder() << "New configuration Ring option is not allowed use RingGroups");
-            return;
-        }
-        if (newSSConfig.RingGroupsSize() < 1) {
-            FinishWithError(TResult::ERROR, TStringBuilder() << "New configuration RingGroups is not filled in");
-            return;
-        }
-        if (newSSConfig.GetRingGroups(0).GetWriteOnly()) {
-            FinishWithError(TResult::ERROR, TStringBuilder() << "New configuration first RingGroup is writeOnly");
-            return;
-        }
-        if (!config.HasStateStorageConfig()) {
-            FinishWithError(TResult::ERROR, TStringBuilder() << "StateStorage configuration is not filled in");
-            return;
-        }
-        for (ui32 rgIndex : xrange(newSSConfig.RingGroupsSize())) {
-            auto &rg = newSSConfig.GetRingGroups(rgIndex);
-            const size_t numItems = Max(rg.RingSize(), rg.NodeSize());
-            if (numItems < 1 || rg.GetNToSelect() < 1 || rg.GetNToSelect() > numItems) {
-                FinishWithError(TResult::ERROR, TStringBuilder() << "StateStorage invalid ring group selection");
-                return;
+            if (newSSConfig.HasRing()) {
+                FinishWithError(TResult::ERROR, TStringBuilder() << "New " << name << " configuration Ring option is not allowed, use RingGroups");
+                return false;
             }
-            for (ui32 ringIndex : xrange(rg.RingSize())) {
-                auto &ring = rg.GetRing(ringIndex);
-                if (ring.RingSize() > 0) {
-                    FinishWithError(TResult::ERROR, TStringBuilder() << "StateStorage too deep nested ring declaration");
-                    return;  
+            if (newSSConfig.RingGroupsSize() < 1) {
+                FinishWithError(TResult::ERROR, TStringBuilder() << "New " << name << " configuration RingGroups is not filled in");
+                return false;
+            }
+            if (newSSConfig.GetRingGroups(0).GetWriteOnly()) {
+                FinishWithError(TResult::ERROR, TStringBuilder() << "New " << name << " configuration first RingGroup is writeOnly");
+                return false;
+            }
+            for (auto& rg : newSSConfig.GetRingGroups()) {
+                if (rg.RingSize() && rg.NodeSize()) {
+                    FinishWithError(TResult::ERROR, TStringBuilder() << name << " Ring and Node are defined, use the one of them");
+                    return false; 
                 }
-                if (ring.NodeSize() < 1) {
-                    FinishWithError(TResult::ERROR, TStringBuilder() << "StateStorage empty ring");
-                    return;
+                const size_t numItems = Max(rg.RingSize(), rg.NodeSize());
+                if (!rg.HasNToSelect() || numItems < 1 || rg.GetNToSelect() < 1 || rg.GetNToSelect() > numItems) {
+                    FinishWithError(TResult::ERROR, TStringBuilder() << name << " invalid ring group selection");
+                    return false;
+                }
+                for (auto &ring : rg.GetRing()) {
+                    if (ring.RingSize() > 0) {
+                        FinishWithError(TResult::ERROR, TStringBuilder() << name << " too deep nested ring declaration");
+                        return false;  
+                    }
+                    if (ring.NodeSize() < 1) {
+                        FinishWithError(TResult::ERROR, TStringBuilder() << name << " empty ring");
+                        return false;
+                    }
                 }
             }
-        }
-        try {
-            TIntrusivePtr<TStateStorageInfo> newSSInfo;
-            TIntrusivePtr<TStateStorageInfo> oldSSInfo;
-            newSSInfo = BuildStateStorageInfo("ssr", newSSConfig);
-            oldSSInfo = BuildStateStorageInfo("ssr", config.GetStateStorageConfig());
+            try {
+                TIntrusivePtr<TStateStorageInfo> newSSInfo;
+                TIntrusivePtr<TStateStorageInfo> oldSSInfo;
+                newSSInfo = BuildStateStorageInfo(prefix, newSSConfig);
+                oldSSInfo = BuildStateStorageInfo(prefix, *(config.*configMutableFunc)());
 
-            bool found = false;
-            auto& firstGroup = newSSInfo.Get()->RingGroups[0];
-            for (auto& rg : oldSSInfo.Get()->RingGroups) {
-                if (firstGroup == rg) {
-                    found = true;
-                    break;
+                bool found = false;
+                auto& firstGroup = newSSInfo->RingGroups[0];
+                for (auto& rg : oldSSInfo->RingGroups) {
+                    if (firstGroup == rg) {
+                        found = true;
+                        break;
+                    }
                 }
+                if (!found) {
+                    FinishWithError(TResult::ERROR, TStringBuilder() << 
+                        "New " << name << " configuration first ring group should be equal to old config old:" << oldSSInfo->ToString() <<" new: " << newSSInfo->ToString());
+                    return false;
+                }
+            } catch(std::exception &e) {
+                FinishWithError(TResult::ERROR, TStringBuilder() << "Can not build " << name << " info from config. " << e.what());
+                return false;
             }
-            if (!found) {
-                FinishWithError(TResult::ERROR, TStringBuilder() << 
-                    "New StateStorage configuration first ring group should be equal to old config old:" << oldSSInfo->ToString() <<" new: " << newSSInfo->ToString());
-                return;
+            auto* ssConfig = (config.*configMutableFunc)();
+            if (newSSConfig.RingGroupsSize() == 1) {
+                ssConfig->MutableRing()->CopyFrom(newSSConfig.GetRingGroups(0));
+                ssConfig->ClearRingGroups();
+            } else {
+                ssConfig->CopyFrom(newSSConfig);
             }
-        } catch(std::exception &/*e*/) {
-            FinishWithError(TResult::ERROR, TStringBuilder() << "Can not build StateStorage info from config");
-            return;
+            return true;
+        };
+        
+#define PROCESS(NAME, PREFIX) \
+        if (!process(#NAME, PREFIX, \
+                &NKikimrBlobStorage::TStateStorageConfig::Has##NAME##Config, \
+                &NKikimrBlobStorage::TStateStorageConfig::Get##NAME##Config, \
+                &NKikimrBlobStorage::TStorageConfig::Has##NAME##Config, \
+                &NKikimrBlobStorage::TStorageConfig::Mutable##NAME##Config)) { \
+            return; \
         }
-        auto* ssConfig = config.MutableStateStorageConfig();
-        if (newSSConfig.RingGroupsSize() == 1) {
-            ssConfig->MutableRing()->CopyFrom(newSSConfig.GetRingGroups(0));
-            ssConfig->ClearRingGroups();
-        } else {
-            ssConfig->CopyFrom(newSSConfig);
-        }
+        PROCESS(StateStorage, STATE_STORAGE_REPLICA_PREFIX)
+        PROCESS(StateStorageBoard, STATE_STORAGE_BOARD_REPLICA_PREFIX)
+        PROCESS(SchemeBoard, SCHEME_BOARD_REPLICA_PREFIX)
         config.SetGeneration(config.GetGeneration() + 1);
         StartProposition(&config);
     }

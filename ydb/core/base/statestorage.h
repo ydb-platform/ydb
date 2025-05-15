@@ -10,6 +10,10 @@
 
 namespace NKikimr {
 
+#define STATE_STORAGE_REPLICA_PREFIX "ssr"
+#define STATE_STORAGE_BOARD_REPLICA_PREFIX "ssb"
+#define SCHEME_BOARD_REPLICA_PREFIX "sbr"
+
 struct TEvStateStorage {
     enum EEv {
         // requests (local, to proxy)

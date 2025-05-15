@@ -341,14 +341,14 @@ TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(const char* namePrefix,
     memset(name + offset, 0, TActorId::MaxServiceIDLength - offset);
     for (size_t i = 0; i < config.RingGroupsSize(); i++) {
         auto& ringGroup = config.GetRingGroups(i);
-        info.Get()->RingGroups.push_back({ringGroup.GetWriteOnly(), ringGroup.GetNToSelect(), {}});
-        CopyStateStorageRingInfo(ringGroup, info.Get()->RingGroups.back(), name, offset);
+        info->RingGroups.push_back({ringGroup.GetWriteOnly(), ringGroup.GetNToSelect(), {}});
+        CopyStateStorageRingInfo(ringGroup, info->RingGroups.back(), name, offset);
         memset(name + offset, 0, TActorId::MaxServiceIDLength - offset);
     }
     if (config.HasRing()) {
         auto& ring = config.GetRing();
-        info.Get()->RingGroups.push_back({false, ring.GetNToSelect(), {}});
-        CopyStateStorageRingInfo(ring, info.Get()->RingGroups.back(), name, offset);
+        info->RingGroups.push_back({false, ring.GetNToSelect(), {}});
+        CopyStateStorageRingInfo(ring, info->RingGroups.back(), name, offset);
     }
     return info;
 }
@@ -358,9 +358,9 @@ void BuildStateStorageInfos(const NKikimrConfig::TDomainsConfig::TStateStorage& 
     TIntrusivePtr<TStateStorageInfo> &boardInfo,
     TIntrusivePtr<TStateStorageInfo> &schemeBoardInfo)
 {
-    stateStorageInfo = BuildStateStorageInfo("ssr", config);
-    boardInfo = BuildStateStorageInfo("ssb", config);
-    schemeBoardInfo = BuildStateStorageInfo("sbr", config);
+    stateStorageInfo = BuildStateStorageInfo(STATE_STORAGE_REPLICA_PREFIX, config);
+    boardInfo = BuildStateStorageInfo(STATE_STORAGE_BOARD_REPLICA_PREFIX, config);
+    schemeBoardInfo = BuildStateStorageInfo(SCHEME_BOARD_REPLICA_PREFIX, config);
 }
 
 }

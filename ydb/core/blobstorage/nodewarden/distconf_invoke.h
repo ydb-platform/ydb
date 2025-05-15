@@ -83,7 +83,8 @@ namespace NKikimr::NStorage {
         // State Storage operation
 
         void ReassignStateStorageNode(const TQuery::TReassignStateStorageNode& cmd);
-        void ReconfigStateStorage(const TQuery::TReconfigStateStorage& cmd);
+        void ReconfigStateStorage(const NKikimrBlobStorage::TStateStorageConfig& cmd);
+        void GetStateStorageConfig();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Storage configuration YAML manipulation

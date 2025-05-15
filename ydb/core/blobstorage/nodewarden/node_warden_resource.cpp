@@ -169,9 +169,9 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
     Y_ABORT_UNLESS(StorageConfig.Has##PROTO##Config()); \
     TIntrusivePtr<TStateStorageInfo> PART##Info = BuildStateStorageInfo(PREFIX, StorageConfig.Get##PROTO##Config());
 
-    FETCH_CONFIG(stateStorage, "ssr", StateStorage)
-    FETCH_CONFIG(board, "ssb", StateStorageBoard)
-    FETCH_CONFIG(schemeBoard, "sbr", SchemeBoard)
+    FETCH_CONFIG(stateStorage, STATE_STORAGE_REPLICA_PREFIX, StateStorage)
+    FETCH_CONFIG(board, STATE_STORAGE_BOARD_REPLICA_PREFIX, StateStorageBoard)
+    FETCH_CONFIG(schemeBoard, SCHEME_BOARD_REPLICA_PREFIX, SchemeBoard)
     
     STLOG(PRI_DEBUG, BS_NODE, NW52, "ApplyStateStorageConfig",
         (StateStorageConfig, StorageConfig.GetStateStorageConfig()),

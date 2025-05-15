@@ -152,8 +152,8 @@ size_t TPartition::GetBodyKeysCountLimit() const
 ui64 TPartition::GetCumulativeSizeLimit() const
 {
     // Settings will be made later.
-    //return MaxBlobSize;
-    return 6_MB;
+    return MaxBlobSize;
+    //return 6_MB;
 }
 
 void TPartition::TryRunCompaction()
@@ -169,28 +169,28 @@ void TPartition::TryRunCompaction()
     }
 
 #if 1
-    ui64 cumulativeSize = 0;
-    //for (size_t i = 0; i < CompactionBlobEncoder.HeadKeys.size(); ++i) {
-    //    const auto& k = CompactionBlobEncoder.HeadKeys[i];
+    const ui64 cumulativeSize = BlobEncoder.BodySize;
+    ////for (size_t i = 0; i < CompactionBlobEncoder.HeadKeys.size(); ++i) {
+    ////    const auto& k = CompactionBlobEncoder.HeadKeys[i];
+
+    ////    cumulativeSize += k.Size;
+    ////}
+    ////PQ_LOG_D("cumulativeSize=" << cumulativeSize);
+    ////Y_ABORT_UNLESS(cumulativeSize <= MaxBlobSize,
+    ////               "cumulativeSize=%" PRIu64,
+    ////               cumulativeSize);
+    //ui64 requestSize = 0;
+    //for (size_t i = 0; (i < BlobEncoder.DataKeysBody.size()) && (cumulativeSize < GetCumulativeSizeLimit()); ++i) {
+    //    const auto& k = BlobEncoder.DataKeysBody[i];
 
     //    cumulativeSize += k.Size;
+    //    if (cumulativeSize > GetCumulativeSizeLimit()) {
+    //        cumulativeSize -= k.Size;
+    //        break;
+    //    }
+    //    requestSize += k.Size;
     //}
-    //PQ_LOG_D("cumulativeSize=" << cumulativeSize);
-    //Y_ABORT_UNLESS(cumulativeSize <= MaxBlobSize,
-    //               "cumulativeSize=%" PRIu64,
-    //               cumulativeSize);
-    ui64 requestSize = 0;
-    for (size_t i = 0; (i < BlobEncoder.DataKeysBody.size()) && (cumulativeSize < GetCumulativeSizeLimit()); ++i) {
-        const auto& k = BlobEncoder.DataKeysBody[i];
-
-        cumulativeSize += k.Size;
-        if (cumulativeSize > GetCumulativeSizeLimit()) {
-            cumulativeSize -= k.Size;
-            break;
-        }
-        requestSize += k.Size;
-    }
-    PQ_LOG_D("cumulativeSize=" << cumulativeSize << ", requestSize=" << requestSize);
+    //PQ_LOG_D("cumulativeSize=" << cumulativeSize << ", requestSize=" << requestSize);
 #else
     ui64 cumulativeSize = BlobEncoder.DataKeysBody.back().CumulativeSize;
     cumulativeSize -= BlobEncoder.DataKeysBody.front().CumulativeSize;
@@ -204,16 +204,18 @@ void TPartition::TryRunCompaction()
     if ((cumulativeSize < GetCumulativeSizeLimit()) &&
         (BlobEncoder.DataKeysBody.size() < GetBodyKeysCountLimit())) {
         PQ_LOG_D("need more data for compaction. " <<
-                 "cumulativeSize=" << cumulativeSize << ", requestSize=" << requestSize <<
+                 //"cumulativeSize=" << cumulativeSize << ", requestSize=" << requestSize <<
+                 "cumulativeSize=" << cumulativeSize <<
                  ", count=" << BlobEncoder.DataKeysBody.size());
         return;
     }
 
-    PQ_LOG_D("need run compaction for " << requestSize << " bytes in " << BlobEncoder.DataKeysBody.size() << " blobs");
+    PQ_LOG_D("need run compaction for " << cumulativeSize << " bytes in " << BlobEncoder.DataKeysBody.size() << " blobs");
 
     CompactionInProgress = true;
 
-    Send(SelfId(), new TEvPQ::TEvRunCompaction(MaxBlobSize, requestSize));
+    //Send(SelfId(), new TEvPQ::TEvRunCompaction(MaxBlobSize, requestSize));
+    Send(SelfId(), new TEvPQ::TEvRunCompaction(MaxBlobSize, cumulativeSize));
 }
 
 void TPartition::Handle(TEvPQ::TEvRunCompaction::TPtr& ev)
@@ -538,6 +540,53 @@ void TPartition::AddNewCompactionWriteBlob(std::pair<TKey, ui32>& res, TEvKeyVal
         Y_ABORT_UNLESS(CompactionBlobEncoder.NewHeadKey.Size == 0);
         CompactionBlobEncoder.NewHeadKey = {key, res.second, CurrentTimestamp, 0, MakeBlobKeyToken(key.ToString())};
     }
+}
+
+bool TPartition::ThereIsUncompactedData() const
+{
+    if (CompactionInProgress) {
+        return true;
+    }
+
+    return
+        (BlobEncoder.DataKeysBody.size() >= GetBodyKeysCountLimit()) ||
+        (BlobEncoder.BodySize >= GetCumulativeSizeLimit());
+}
+
+void TPartition::UpdateCompactionCounters()
+{
+    if (!InitDone) {
+        return;
+    }
+
+    const auto& ctx = ActorContext();
+
+    if (ThereIsUncompactedData()) {
+        auto now = ctx.Now();
+        auto begin = GetFirstUncompactedBlobTimestamp();
+
+        CompactionTimeLag.Set((now - begin).MilliSeconds());
+
+    } else {
+        CompactionTimeLag.Set(0);
+    }
+
+    CompactionUnprocessedBytes.Set(BlobEncoder.BodySize);
+    CompactionUnprocessedCount.Set(BlobEncoder.DataKeysBody.size());
+}
+
+TInstant TPartition::GetFirstUncompactedBlobTimestamp() const
+{
+    const auto& ctx = ActorContext();
+
+    if (BlobEncoder.DataKeysBody.empty()) {
+        return ctx.Now();
+    }
+    if (BlobEncoder.DataKeysBody.size() < GetBodyKeysCountLimit()) {
+        return BlobEncoder.DataKeysBody.front().Timestamp;
+    }
+
+    return BlobEncoder.DataKeysBody[GetBodyKeysCountLimit()].Timestamp;
 }
 
 }

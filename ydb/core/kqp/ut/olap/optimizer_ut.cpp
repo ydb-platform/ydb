@@ -1,4 +1,5 @@
 #include "helpers/local.h"
+#include "helpers/query_executor.h"
 #include "helpers/writer.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
@@ -54,21 +55,6 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             auto it = tableClient
                           .StreamExecuteScanQuery(R"(
                 --!syntax_v1
-                SELECT JSON_VALUE(CAST(Details AS JsonDocument), "$.level") AS LEVEL, JSON_VALUE(CAST(Details AS JsonDocument), "$.portions.blob_bytes") AS BYTES
-                FROM `/Root/olapStore/olapTable/.sys/primary_index_optimizer_stats`
-                ORDER BY LEVEL
-            )")
-                          .GetValueSync();
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it);
-            Cout << result << Endl;
-            CompareYson(result, R"([[1u;]])");
-        }
-
-        {
-            auto it = tableClient
-                          .StreamExecuteScanQuery(R"(
-                --!syntax_v1
                 SELECT COUNT(*)
                 FROM `/Root/olapStore/olapTable`
             )")
@@ -76,7 +62,26 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             TString result = StreamResultToYson(it);
             Cout << result << Endl;
-            CompareYson(result, R"([[1u;]])");
+            CompareYson(result, R"([[109000u;]])");
+        }
+
+        {
+            auto it = tableClient
+                          .StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT JSON_VALUE(CAST(Details AS JsonDocument), "$.level") AS LEVEL, JSON_VALUE(CAST(Details AS JsonDocument), "$.portions.blob_bytes") AS BYTES
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_optimizer_stats`
+                ORDER BY LEVEL
+            )")
+                          .GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto rows = CollectRows(it);
+            ui32 levelIdx = 0;
+            const std::vector<ui32> maxVal = { 100000, 100000, 200000, 300000, 100000000 };
+            for (auto&& i : rows) {
+                AFL_VERIFY(levelIdx == GetUint64(i.at("LEVEL")));
+                AFL_VERIFY(GetUint64(i.at("BYTES")) < maxVal[levelIdx]);
+            }
         }
     }
     Y_UNIT_TEST(OptimizationByTime) {

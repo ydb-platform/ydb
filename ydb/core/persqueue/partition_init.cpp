@@ -1124,6 +1124,34 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
         NPersQueue::GetCountersForTopic(counters, IsServerless), {}, subgroups,
                     {"topic.write.uncompressed_bytes"}, true, "name"));
 
+    CompactionUnprocessedCount = TMultiCounter{
+        NPersQueue::GetCountersForTopic(counters, IsServerless),
+        {},
+        subgroups,
+        {"topic.compaction.unprocessed_count_max"},
+        false,
+        "name",
+        false
+    };
+    CompactionUnprocessedBytes = TMultiCounter{
+        NPersQueue::GetCountersForTopic(counters, IsServerless),
+        {},
+        subgroups,
+        {"topic.compaction.unprocessed_bytes_max"},
+        false,
+        "name",
+        false
+    };
+    CompactionTimeLag = TMultiCounter{
+        NPersQueue::GetCountersForTopic(counters, IsServerless),
+        {},
+        subgroups,
+        {"topic.compaction.lag_milliseconds_max"},
+        false, // not deriv
+        "name",
+        false // not expiring
+    };
+
     TVector<NPersQueue::TPQLabelsInfo> aggr = {{{{"Account", TopicConverter->GetAccount()}}, {"total"}}};
     ui32 border = AppData(ctx)->PQConfig.GetWriteLatencyBigMs();
     auto subGroup = GetServiceCounters(counters, "pqproxy|SLI");

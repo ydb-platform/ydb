@@ -376,23 +376,24 @@ public:
             uint32_t v1Nodes = 0;
             uint32_t v2Nodes = 0;
             uint32_t unknownNodes = 0;
-            std::vector<uint32_t> v1NodesList;
-            std::vector<uint32_t> v2NodesList;
-            std::vector<uint32_t> unknownNodesList;
-
+            std::vector<TGetConfigurationVersionResult::TNodeInfo> v1NodesList;
+            std::vector<TGetConfigurationVersionResult::TNodeInfo> v2NodesList;
+            std::vector<TGetConfigurationVersionResult::TNodeInfo> unknownNodesList;
+            auto convert = [] (const google::protobuf::RepeatedPtrField<Ydb::DynamicConfig::NodeInfo>& nodes) -> std::vector<TGetConfigurationVersionResult::TNodeInfo> {
+                std::vector<TGetConfigurationVersionResult::TNodeInfo> result;
+                for (auto& node : nodes) {
+                    const auto& endpoint = node.endpoint();
+                    result.emplace_back(node.node_id(), endpoint.hostname(), endpoint.port());
+                }
+                return result;
+            };
             if (Ydb::DynamicConfig::GetConfigurationVersionResult result; any && any->UnpackTo(&result)) {
                 v1Nodes = result.v1_nodes();
                 v2Nodes = result.v2_nodes();
                 unknownNodes = result.unknown_nodes();
-                for (auto& node : result.v1_nodes_list()) {
-                    v1NodesList.push_back(node);
-                }
-                for (auto& node : result.v2_nodes_list()) {
-                    v2NodesList.push_back(node);
-                }
-                for (auto& node : result.unknown_nodes_list()) {
-                    unknownNodesList.push_back(node);
-                }
+                v1NodesList = convert(result.v1_nodes_list());
+                v2NodesList = convert(result.v2_nodes_list());
+                unknownNodesList = convert(result.unknown_nodes_list());
             }
 
             TGetConfigurationVersionResult val(TStatus(std::move(status)), v1Nodes, std::move(v1NodesList), v2Nodes, std::move(v2NodesList), unknownNodes, std::move(unknownNodesList));

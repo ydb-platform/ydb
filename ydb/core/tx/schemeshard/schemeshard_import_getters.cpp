@@ -147,7 +147,20 @@ protected:
 
     template <typename TResult>
     bool IsNoSuchKeyError(const TResult& result) {
-        return !result.IsSuccess() && result.GetError().GetExceptionName() == "NoSuchKey";
+        if (result.IsSuccess()) {
+            return false;
+        }
+        const auto& err = result.GetError();
+        if (err.GetErrorType() == Aws::S3::S3Errors::NO_SUCH_KEY) {
+            return true;
+        }
+        if (err.GetErrorType() == Aws::S3::S3Errors::RESOURCE_NOT_FOUND) {
+            return true;
+        }
+        if (err.GetExceptionName() == "NoSuchKey") {
+            return true;
+        }
+        return false;
     }
 
     void ResetRetries() {
@@ -978,6 +991,40 @@ private:
 }; // TSchemaMappingGetter
 
 class TListObjectsInS3ExportGetter : public TGetterFromS3<TListObjectsInS3ExportGetter> {
+    class TPathFilter {
+    public:
+        void Build(const Ydb::Import::ListObjectsInS3ExportSettings& settings) {
+            for (const auto& item : settings.items()) {
+                TString path = NBackup::NormalizeItemPath(item.path());
+                if (path) {
+                    Paths.emplace(path);
+                    PathPrefixes.emplace_back(path + "/");
+                }
+            }
+        }
+
+        bool Match(const TString& path) const {
+            if (Paths.empty()) {
+                return true;
+            }
+
+            if (Paths.contains(path)) {
+                return true;
+            }
+
+            for (const TString& prefix : PathPrefixes) {
+                if (path.StartsWith(prefix)) { // So this path is contained in a directory that is specified by user in request
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+    private:
+        std::vector<TString> PathPrefixes;
+        THashSet<TString> Paths;
+    };
 public:
     TListObjectsInS3ExportGetter(TEvImport::TEvListObjectsInS3ExportRequest::TPtr&& ev)
         : TGetterFromS3<TListObjectsInS3ExportGetter>(TGetterSettings::FromRequest(ev))
@@ -1002,6 +1049,10 @@ public:
         LOG_D("HandleSchemaMapping TEvExternalStorage::TEvHeadObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
+
+        if (IsNoSuchKeyError(result)) {
+            return ListObjectsInS3Prefix();
+        }
 
         if (!CheckResult(result, "HeadObject")) {
             return;
@@ -1141,25 +1192,28 @@ public:
             return i1.ObjectPath < i2.ObjectPath;
         });
 
+        PathFilter.Build(Request->Get()->Record.GetSettings());
+
         size_t pos = 0;
         for (const auto& item : items) {
-            if (!MatchesFilter(item)) {
+            if (!PathFilter.Match(item.ObjectPath)) {
                 continue;
             }
 
-            if (PageSize && pos >= PageSize) { // Calc only items that suit filter
+            if (PageSize && pos >= StartPos + PageSize) { // Calc only items that suit filter
                 NextPos = pos;
                 break;
             }
 
-            auto* result = Result.add_items();
-            result->set_path(item.ObjectPath);
-            result->set_prefix(item.ExportPrefix);
+            if (pos >= StartPos) {
+                auto* result = Result.add_items();
+                result->set_path(item.ObjectPath);
+                result->set_prefix(item.ExportPrefix);
+            }
+
+            ++pos;
         }
         Reply();
-    }
-
-    bool MatchesFilter(const NBackup::TSchemaMapping::TItem& item) const {
     }
 
 private:
@@ -1168,6 +1222,7 @@ private:
     size_t StartPos = 0;
     size_t PageSize = 0;
     size_t NextPos = 0;
+    TPathFilter PathFilter;
 };
 
 IActor* CreateSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx, TMaybe<NBackup::TEncryptionIV> iv) {

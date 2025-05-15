@@ -17,11 +17,12 @@ private:
     ui32 V1Nodes = 0;
     ui32 V2Nodes = 0;
     ui32 UnknownNodes = 0;
-    TVector<ui32> V1NodesList;
-    TVector<ui32> V2NodesList;
-    TVector<ui32> UnknownNodesList;
+    std::vector<ui32> V1NodesList;
+    std::vector<ui32> V2NodesList;
+    std::vector<ui32> UnknownNodesList;
+    bool ListNodes = false;
 
-    THashSet<ui32> PendingNodes;
+    std::unordered_map<ui32, TEndpoint> PendingNodes;
     ui32 TotalNodes = 0;
 
     const TDuration Timeout = TDuration::Seconds(5);
@@ -34,6 +35,11 @@ private:
         static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
 
         struct TEvTimeout : public TEventLocal<TEvTimeout, EvTimeout> {};
+    };
+
+    struct TEndpoint {
+        TString Host;
+        ui16 Port;
     };
 
 public:

@@ -8,8 +8,9 @@
 
 namespace NKikimr::NConsole {
 
-TConfigurationInfoCollector::TConfigurationInfoCollector(TActorId replyToActorId)
+TConfigurationInfoCollector::TConfigurationInfoCollector(TActorId replyToActorId, bool listNodes)
     : ReplyToActorId(replyToActorId)
+    , ListNodes(listNodes)
 {
 }
 
@@ -34,7 +35,7 @@ void TConfigurationInfoCollector::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev
 
     TotalNodes = nodes.size();
     for (const auto& nodeInfo : nodes) {
-        PendingNodes.insert(nodeInfo.NodeId);
+        PendingNodes[nodeInfo.NodeId] = {nodeInfo.Host, nodeInfo.Port};
     }
 
     RequestNodeVersions();
@@ -78,7 +79,7 @@ void TConfigurationInfoCollector::Handle(TEvPrivate::TEvTimeout::TPtr &ev) {
     Y_UNUSED(ev);
     STLOG(PRI_WARN, CMS_CONFIGS, CIG5, "Collection timed out. Missing responses from " << PendingNodes.size() << " nodes.");
     UnknownNodes += PendingNodes.size();
-    for (ui32 nodeId : PendingNodes) {
+    for (const auto& [nodeId, _] : PendingNodes) {
         UnknownNodesList.push_back(nodeId);
     }
     PendingNodes.clear();
@@ -88,20 +89,29 @@ void TConfigurationInfoCollector::Handle(TEvPrivate::TEvTimeout::TPtr &ev) {
 void TConfigurationInfoCollector::ReplyAndDie() {
     STLOG(PRI_DEBUG, CMS_CONFIGS, CIG6, "Replying with collected info: V1=" << V1Nodes << ", V2=" << V2Nodes << ", Unknown=" << UnknownNodes << " (Total=" << TotalNodes << ")");
     auto response = MakeHolder<TEvConsole::TEvGetConfigurationVersionResponse>(); 
-    auto *result = response->Record.MutableResponse(); 
+    auto *result = response->Record.MutableResponse();
     result->set_v1_nodes(V1Nodes);
     result->set_v2_nodes(V2Nodes);
     result->set_unknown_nodes(UnknownNodes);
 
-    for (ui32 nodeId : V1NodesList) {
-        result->add_v1_nodes_list(nodeId);
-    }
-    for (ui32 nodeId : V2NodesList) {
-        result->add_v2_nodes_list(nodeId);
-    }
-    for (ui32 nodeId : UnknownNodesList) {
-        result->add_unknown_nodes_list(nodeId);
-    }
+    auto convertToNodesList = [](const std::vector<ui32>& nodeIds) {
+        std::vector<Ydb::DynamicConfig::NodeInfo> result;
+        for (const auto& nodeId : nodeIds) {
+            Ydb::DynamicConfig::NodeInfo nodeInfo;
+            nodeInfo.set_node_id(nodeId);
+            if (ListNodes) {
+                const auto& endpoint = nodeInfo.mutable_endpoint();
+                endpoint->set_host(PendingNodes[nodeId].Host);
+                endpoint->set_port(PendingNodes[nodeId].Port);
+            }
+            result.push_back(nodeInfo);
+        }
+        return result;
+    };
+
+    result->set_v1_nodes_list(convertToNodesList(V1NodesList));
+    result->set_v2_nodes_list(convertToNodesList(V2NodesList));
+    result->set_unknown_nodes_list(convertToNodesList(UnknownNodesList));
 
     Send(ReplyToActorId, response.Release());
     PassAway();
@@ -118,8 +128,8 @@ STFUNC(TConfigurationInfoCollector::StateWork) {
     }
 }
 
-IActor *CreateConfigurationInfoCollector(TActorId replyToActorId) {
-    return new TConfigurationInfoCollector(replyToActorId);
+IActor *CreateConfigurationInfoCollector(TActorId replyToActorId, bool listNodes) {
+    return new TConfigurationInfoCollector(replyToActorId, listNodes);
 }
 
 } // namespace NKikimr::NConsole

@@ -8,7 +8,7 @@
 * 18017:New kafka messages for DescribeConfigs
 Added supporting of Kafka Connect [#18017](https://github.com/ydb-platform/ydb/pull/18017) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 18001:Added new functionality for transferring data from topics to tables. The functionality is only available in the Enterprise version. [#18001](https://github.com/ydb-platform/ydb/pull/18001) ([Nikolay Shestakov](https://github.com/nshestakov))
-* 17734:Added automatic cleanup of temporary export tables and directories [#17734](https://github.com/ydb-platform/ydb/pull/17734) ([stanislav_shchetinin](https://github.com/stanislav-shchetinin))
+* 17734:Added automatic cleanup of temporary tables and directories during export to S3 [#17734](https://github.com/ydb-platform/ydb/pull/17734) ([stanislav_shchetinin](https://github.com/stanislav-shchetinin))
 
 ### Bug fixes
 

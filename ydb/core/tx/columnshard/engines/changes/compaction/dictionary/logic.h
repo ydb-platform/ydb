@@ -11,8 +11,17 @@ namespace NKikimr::NOlap::NCompaction::NDictionary {
 class TIterator: public IColumnMerger::TBaseIterator<NArrow::NAccessor::TDictionaryArray> {
 private:
     using TBase = IColumnMerger::TBaseIterator<NArrow::NAccessor::TDictionaryArray>;
+    std::optional<arrow::Type::type> CurrentRecordsType;
+    virtual void OnInitArray(const std::shared_ptr<NArrow::NAccessor::TDictionaryArray>& arr) override {
+        CurrentRecordsType = arr->GetRecords()->type()->id();
+    }
 
 public:
+    arrow::Type::type GetCurrentRecordsType() const {
+        AFL_VERIFY(!!CurrentRecordsType);
+        return *CurrentRecordsType;
+    }
+
     using TBase::TBase;
 };
 

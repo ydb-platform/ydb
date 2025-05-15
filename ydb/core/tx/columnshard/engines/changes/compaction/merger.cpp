@@ -273,7 +273,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             IColumnMerger::TFactory::MakeHolder(commonContext.GetLoader()->GetAccessorConstructor().GetClassName(), commonContext);
         AFL_VERIFY(!!merger)("problem", "cannot create merger")(
             "class_name", commonContext.GetLoader()->GetAccessorConstructor().GetClassName());
-        merger->Start(columnData, mergingContext);
+        merger->Start(std::move(columnData), mergingContext);
 
         for (auto&& batchResult : splitInfo.MutableSplittedBatches()) {
             for (auto&& portion : batchResult.MutablePortions()) {

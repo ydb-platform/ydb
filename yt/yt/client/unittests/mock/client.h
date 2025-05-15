@@ -545,6 +545,10 @@ public:
         const TPutFileToCacheOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<TGetCurrentUserResultPtr>, GetCurrentUser, (
+        const TGetCurrentUserOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<void>, AddMember, (
         const TString& group,
         const TString& member,

@@ -84,8 +84,71 @@ public:
         return false;
     }
 
-    EExecutionStatus OnTabletNotReadyException(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx) {
+    void FillOps(const NTable::TScheme& scheme, const TUserTable& userTable, const NTable::TScheme::TTableInfo& tableInfo, const TValidatedWriteTxOperation& validatedOperation, ui32 rowIdx, TSmallVec<NTable::TUpdateOp>& ops) {
+        const TSerializedCellMatrix& matrix = validatedOperation.GetMatrix();
+        const auto& columnIds = validatedOperation.GetColumnIds();
+
+        ops.clear();
+        Y_ENSURE(matrix.GetColCount() >= userTable.KeyColumnIds.size());
+        ops.reserve(matrix.GetColCount() - userTable.KeyColumnIds.size());
+
+        for (ui16 valueColIdx = userTable.KeyColumnIds.size(); valueColIdx < matrix.GetColCount(); ++valueColIdx) {
+            ui32 columnTag = columnIds[valueColIdx];
+            const TCell& cell = matrix.GetCell(rowIdx, valueColIdx);
+
+            const NScheme::TTypeId vtypeId = scheme.GetColumnInfo(&tableInfo, columnTag)->PType.GetTypeId();
+            ops.emplace_back(columnTag, NTable::ECellOp::Set, cell.IsNull() ? TRawTypeValue() : TRawTypeValue(cell.Data(), cell.Size(), vtypeId));
+        }
+    };
+
+    void FillKey(const NTable::TScheme& scheme, const TUserTable& userTable, const NTable::TScheme::TTableInfo& tableInfo, const TValidatedWriteTxOperation& validatedOperation, ui32 rowIdx, TSmallVec<TRawTypeValue>& key) {
+        const TSerializedCellMatrix& matrix = validatedOperation.GetMatrix();
+
+        key.clear();
+        key.reserve(userTable.KeyColumnIds.size());
+        for (ui16 keyColIdx = 0; keyColIdx < userTable.KeyColumnIds.size(); ++keyColIdx) {
+            const TCell& cell = matrix.GetCell(rowIdx, keyColIdx);
+            ui32 keyCol = tableInfo.KeyColumns[keyColIdx];
+            if (cell.IsNull()) {
+                key.emplace_back();
+            } else {
+                NScheme::TTypeId vtypeId = scheme.GetColumnInfo(&tableInfo, keyCol)->PType.GetTypeId();
+                key.emplace_back(cell.Data(), cell.Size(), vtypeId);
+            }
+        }
+    };    
+
+    EExecutionStatus OnTabletNotReadyException(TDataShardUserDb& userDb, TWriteOperation& writeOp, size_t operationIndexToPrecharge, TTransactionContext& txc, const TActorContext& ctx) {
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Tablet " << DataShard.TabletID() << " is not ready for " << writeOp << " execution");
+        
+        // Precharge
+        if (operationIndexToPrecharge != SIZE_MAX) {
+            const TValidatedWriteTx::TPtr& writeTx = writeOp.GetWriteTx();
+            for (size_t operationIndex = operationIndexToPrecharge; operationIndex < writeTx->GetOperations().size(); ++operationIndex) {
+                const TValidatedWriteTxOperation& validatedOperation = writeTx->GetOperations()[operationIndex];
+                const ui64 tableId = validatedOperation.GetTableId().PathId.LocalPathId;
+                const TTableId fullTableId(DataShard.GetPathOwnerId(), tableId);
+                const TUserTable& userTable = *DataShard.GetUserTables().at(tableId);
+
+                const NTable::TScheme& scheme = txc.DB.GetScheme();
+                const NTable::TScheme::TTableInfo& tableInfo = *scheme.GetTableInfo(userTable.LocalTid);
+
+                const TSerializedCellMatrix& matrix = validatedOperation.GetMatrix();
+                const auto operationType = validatedOperation.GetOperationType();
+
+                TSmallVec<TRawTypeValue> key;
+
+                if (operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT ||
+                    operationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE ||
+                    userDb.NeedToReadBeforeWrite(fullTableId))
+                {
+                    for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx) {
+                        FillKey(scheme, userTable, tableInfo, validatedOperation, rowIdx, key);
+                        userDb.PrechargeRow(fullTableId, key);
+                    }
+                }
+            }
+        }
 
         DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);
 
@@ -109,51 +172,28 @@ public:
         const TUserTable& userTable = *DataShard.GetUserTables().at(tableId);
 
         const NTable::TScheme& scheme = txc.DB.GetScheme();
-        const NTable::TScheme::TTableInfo* tableInfo = scheme.GetTableInfo(userTable.LocalTid);
-
-        TSmallVec<TRawTypeValue> key;
-        TSmallVec<NTable::TUpdateOp> ops;
+        const NTable::TScheme::TTableInfo& tableInfo = *scheme.GetTableInfo(userTable.LocalTid);
 
         const TSerializedCellMatrix& matrix = validatedOperation.GetMatrix();
         const auto operationType = validatedOperation.GetOperationType();
 
-        auto fillOps = [&](ui32 rowIdx) {
-            ops.clear();
-            Y_ABORT_UNLESS(matrix.GetColCount() >= userTable.KeyColumnIds.size());
-            ops.reserve(matrix.GetColCount() - userTable.KeyColumnIds.size());
+        TSmallVec<TRawTypeValue> key;
+        TSmallVec<NTable::TUpdateOp> ops;
 
-            for (ui16 valueColIdx = userTable.KeyColumnIds.size(); valueColIdx < matrix.GetColCount(); ++valueColIdx) {
-                ui32 columnTag = validatedOperation.GetColumnIds()[valueColIdx];
-                const TCell& cell = matrix.GetCell(rowIdx, valueColIdx);
-
-                const NScheme::TTypeId vtypeId = scheme.GetColumnInfo(tableInfo, columnTag)->PType.GetTypeId();
-                ops.emplace_back(columnTag, NTable::ECellOp::Set, cell.IsNull() ? TRawTypeValue() : TRawTypeValue(cell.Data(), cell.Size(), vtypeId));
-            }
-        };
+        // Main update cycle
 
         for (ui32 rowIdx = 0; rowIdx < matrix.GetRowCount(); ++rowIdx)
         {
-            key.clear();
-            key.reserve(userTable.KeyColumnIds.size());
-            for (ui16 keyColIdx = 0; keyColIdx < userTable.KeyColumnIds.size(); ++keyColIdx) {
-                const TCell& cell = matrix.GetCell(rowIdx, keyColIdx);
-                ui32 keyCol = tableInfo->KeyColumns[keyColIdx];
-                if (cell.IsNull()) {
-                    key.emplace_back();
-                } else {
-                    NScheme::TTypeId vtypeId = scheme.GetColumnInfo(tableInfo, keyCol)->PType.GetTypeId();
-                    key.emplace_back(cell.Data(), cell.Size(), vtypeId);
-                }
-            }
+            FillKey(scheme, userTable, tableInfo, validatedOperation, rowIdx, key);
 
             switch (operationType) {
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT: {
-                    fillOps(rowIdx);
+                    FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
                     userDb.UpsertRow(fullTableId, key, ops);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE: {
-                    fillOps(rowIdx);
+                    FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
                     userDb.ReplaceRow(fullTableId, key, ops);
                     break;
                 }
@@ -162,12 +202,12 @@ public:
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT: {
-                    fillOps(rowIdx);
+                    FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
                     userDb.InsertRow(fullTableId, key, ops);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE: {
-                    fillOps(rowIdx);
+                    FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
                     userDb.UpdateRow(fullTableId, key, ops);
                     break;
                 }
@@ -176,6 +216,8 @@ public:
                     Y_FAIL_S(operationType << " operation is not supported now");
             }
         }
+
+        // Counters
 
         switch (operationType) {
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT:
@@ -216,6 +258,7 @@ public:
         }
 
         const TValidatedWriteTx::TPtr& writeTx = writeOp->GetWriteTx();
+        size_t validatedOperationIndex = SIZE_MAX;
 
         DataShard.ReleaseCache(*writeOp);
 
@@ -360,12 +403,13 @@ public:
 
             KqpCommitLocks(tabletId, kqpLocks, sysLocks, writeVersion, userDb);
 
-            TValidatedWriteTx::TPtr& writeTx = writeOp->GetWriteTx();
             if (writeTx->HasOperations()) {
-                for (const auto& validatedOperation : writeTx->GetOperations()) {
+                for (validatedOperationIndex = 0; validatedOperationIndex < writeTx->GetOperations().size(); ++validatedOperationIndex) {
+                    const TValidatedWriteTxOperation& validatedOperation = writeTx->GetOperations()[validatedOperationIndex];
                     DoUpdateToUserDb(userDb, validatedOperation, txc);
                     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Executed write operation for " << *writeOp << " at " << DataShard.TabletID() << ", row count=" << validatedOperation.GetMatrix().GetRowCount());
                 }
+                validatedOperationIndex = SIZE_MAX;
             } else {
                 LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Skip empty write operation for " << *writeOp << " at " << DataShard.TabletID());
             }
@@ -451,7 +495,7 @@ public:
             }
             return EExecutionStatus::Continue;
         } catch (const TNotReadyTabletException&) {
-            return OnTabletNotReadyException(userDb, *writeOp, txc, ctx);
+            return OnTabletNotReadyException(userDb, *writeOp, validatedOperationIndex, txc, ctx);
         } catch (const TLockedWriteLimitException&) {
             userDb.ResetCollectedChanges();
 

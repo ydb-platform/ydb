@@ -1,3 +1,4 @@
+#include "helpers/get_value.h"
 #include "helpers/local.h"
 #include "helpers/query_executor.h"
 #include "helpers/writer.h"

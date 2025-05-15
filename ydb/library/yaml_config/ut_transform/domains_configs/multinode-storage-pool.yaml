@@ -5,6 +5,7 @@ hosts:
 - host: host2
   drive:
     - path: ydb.data
+erasure: mirror-3-dc
 storage_pool_types:
 - kind: ssd
   pool_config:

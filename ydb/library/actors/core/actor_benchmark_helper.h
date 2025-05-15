@@ -296,6 +296,18 @@ struct TActorBenchmark {
         if (activateEveryEvent) {
             basic.EventsPerMailbox = 1;
         }
+        const char* useRingQueueEnv = std::getenv("USE_RING_QUEUE");
+        if (useRingQueueEnv && std::string(useRingQueueEnv) == "1") {
+            basic.UseRingQueue = true;
+        }
+        const char* minLocalQueueSizeEnv = std::getenv("MIN_LOCAL_QUEUE_SIZE");
+        if (minLocalQueueSizeEnv) {
+            basic.MinLocalQueueSize = std::stoi(minLocalQueueSizeEnv);
+        }
+        const char* maxLocalQueueSizeEnv = std::getenv("MAX_LOCAL_QUEUE_SIZE");
+        if (maxLocalQueueSizeEnv) {
+            basic.MaxLocalQueueSize = std::stoi(maxLocalQueueSizeEnv);
+        }
         setup->CpuManager.Basic.emplace_back(std::move(basic));
     }
 
@@ -719,22 +731,126 @@ struct TActorBenchmark {
         }
     }
 
-    static void RunSendActivateReceiveCSV(const std::vector<ui32> &threadsList, const std::vector<ui32> &actorPairsList, const std::vector<ui32> &inFlights, TDuration subtestDuration) {
-        Cout << "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs" << Endl;
-        for (ui32 threads : threadsList) {
-            for (ui32 actorPairs : actorPairsList) {
-                for (ui32 inFlight : inFlights) {
-                    auto stats = CountStats([threads, actorPairs, inFlight, subtestDuration] {
-                        return BenchContentedThreads(threads, actorPairs, EPoolType::Basic, ESendingType::Common, subtestDuration, inFlight);
-                    }, 3);
-                    double elapsedSeconds = stats.ElapsedTime.Mean / 1e9;
-                    ui64 eventsPerSecond = stats.SentEvents.Mean / elapsedSeconds;
-                    Cout << threads << "," << actorPairs << "," << inFlight << "," << eventsPerSecond << "," << elapsedSeconds << "," << stats.MinPairSentEvents.Min << "," << stats.MaxPairSentEvents.Max << Endl;
+    enum class ELoadType {
+        RandomRead,
+        RandomWrite,
+        SequentialRead,
+        SequentialWrite,
+    };
+
+
+    struct TSendActivateReceiveCSVParams {
+        ui32 ThreadCount;
+        ui32 ActorPairCount;
+        ui32 InFlight;
+        TDuration SubtestDuration;
+        TCpuMask ExtraLoad;
+        ELoadType LoadType = ELoadType::RandomRead;
+    };
+
+    struct TBusyThread : public ISimpleThread {
+        static const ui64 CyclesInMicroSecond;
+        ELoadType LoadType = ELoadType::RandomRead;
+        ui64 Counter = 0;
+        ui64 Accumulator = 0;
+        alignas(64) std::atomic<bool> StopFlag = false;
+        std::unique_ptr<TAffinity> Affinity;
+
+        std::vector<ui64> Buffer;
+
+        void InitBuffer() {
+            for (ui64 i = 0; i < Buffer.size(); ++i) {
+                Buffer[i] = i;
+            }
+        }
+
+        void RandomReadWork() {
+            for (ui64 i = 0; i < 1000; ++i) {
+                Counter += Buffer[Counter % Buffer.size()];
+            }
+        }
+
+        void RandomWriteWork() {
+            for (ui64 i = 0; i < 1000; ++i) {
+                Counter += Buffer[Counter % Buffer.size()] + 1;
+                Buffer[Counter % Buffer.size()] = Counter;
+            }
+        }
+
+        void SequentialReadWork() {
+            for (ui64 i = 0; i < 1000; ++i) {
+                Accumulator += Buffer[Counter % Buffer.size()];
+                Counter++;
+            }
+        }
+
+        void SequentialWriteWork() {
+            for (ui64 i = 0; i < 1000; ++i) {
+                Buffer[Counter % Buffer.size()] = Counter;
+                Counter++;
+            }
+        }
+
+        void* ThreadProc() {
+            TAffinityGuard guard(Affinity.get());
+            InitBuffer();
+            while (!StopFlag.load()) {
+                switch (LoadType) {
+                    case ELoadType::RandomRead:
+                        RandomReadWork();
+                        break;
+                    case ELoadType::RandomWrite:
+                        RandomWriteWork();
+                        break;
+                    case ELoadType::SequentialRead:
+                        SequentialReadWork();
+                        break;
+                    case ELoadType::SequentialWrite:
+                        SequentialWriteWork();
+                        break;
                 }
+            }
+            return nullptr;
+        }
+    };
+
+    static void RunSendActivateReceiveCSV(const std::vector<TSendActivateReceiveCSVParams> &paramsList) {
+        Cout << "threads,actorPairs,in_flight,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs" << Endl;
+        for (const auto &params : paramsList) {
+            std::vector<std::unique_ptr<TBusyThread>> busyThreads;
+            if (!params.ExtraLoad.IsEmpty()) {
+                for (ui32 i = 0; i < params.ExtraLoad.Size(); ++i) {
+                    if (!params.ExtraLoad.IsSet(i)) {
+                        continue;
+                    }
+                    busyThreads.emplace_back(new TBusyThread());
+                    busyThreads.back()->LoadType = params.LoadType;
+                    busyThreads.back()->Buffer.resize(1024*1024);
+                    TCpuMask coreMask(i);
+                    busyThreads.back()->Affinity = std::make_unique<TAffinity>(coreMask);
+                }
+            }
+            
+            for (auto &thread : busyThreads) {
+                thread->Start();
+            }
+            NanoSleep(10'000);
+
+            auto stats = CountStats([&] {
+                return BenchContentedThreads(params.ThreadCount, params.ActorPairCount, EPoolType::Basic, ESendingType::Common, params.SubtestDuration, params.InFlight);
+            }, 3);
+            double elapsedSeconds = stats.ElapsedTime.Mean / 1e9;
+            ui64 eventsPerSecond = stats.SentEvents.Mean / elapsedSeconds;
+            Cout << params.ThreadCount << "," << params.ActorPairCount << "," << params.InFlight << "," << eventsPerSecond << "," << elapsedSeconds << "," << stats.MinPairSentEvents.Min << "," << stats.MaxPairSentEvents.Max << Endl;
+
+            for (auto &thread : busyThreads) {
+                thread->StopFlag.store(true);
+            }
+            for (auto &thread : busyThreads) {
+                thread->Join();
             }
         }
     }
-
 
     static void RunStarSendActivateReceiveCSV(const std::vector<ui32> &threadsList, const std::vector<ui32> &actorPairsList, const std::vector<ui32> &starsList) {
         Cout << "threads,actorPairs,star_multiply,msgs_per_sec,elapsed_seconds,min_pair_sent_msgs,max_pair_sent_msgs" << Endl;

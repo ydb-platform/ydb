@@ -813,6 +813,11 @@ private:
             delimitedBuilder->AppendFormat("TosLevel: %x", RequestHeader_->tos_level());
         }
 
+        if (RequestHeader_->HasExtension(NProto::TMultiproxyTargetExt::multiproxy_target_ext)) {
+            const auto& multiproxyTargetExt = RequestHeader_->GetExtension(NProto::TMultiproxyTargetExt::multiproxy_target_ext);
+            delimitedBuilder->AppendFormat("MultiproxyTargetCluster: %v", multiproxyTargetExt.cluster());
+        }
+
         delimitedBuilder->AppendFormat("Endpoint: %v", ReplyBus_->GetEndpointDescription());
 
         delimitedBuilder->AppendFormat("BodySize: %v, AttachmentsSize: %v/%v",

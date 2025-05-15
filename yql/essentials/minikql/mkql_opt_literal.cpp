@@ -351,7 +351,7 @@ TCallableVisitFuncProvider GetLiteralPropagationOptimizationFuncProvider() {
 
 TRuntimeNode LiteralPropagationOptimization(TRuntimeNode root, const TTypeEnvironment& env, bool inPlace) {
     TExploringNodeVisitor explorer;
-    explorer.Walk(root.GetNode(), env);
+    explorer.Walk(root.GetNode(), env.GetNodeStack());
     bool wereChanges = false;
     return SinglePassVisitCallables(root, explorer, GetLiteralPropagationOptimizationFuncProvider(), env, inPlace, wereChanges);
 }

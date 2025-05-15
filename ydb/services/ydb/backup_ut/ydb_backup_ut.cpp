@@ -1146,27 +1146,36 @@ void TestReplicationSettingsArePreserved(
         NQuery::TSession& session,
         TReplicationClient& client,
         TBackupFunction&& backup,
-        TRestoreFunction&& restore)
+        TRestoreFunction&& restore,
+        bool useSecret)
 {
-    ExecuteQuery(session, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
+    if (useSecret) {
+        ExecuteQuery(session, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
+    }
     ExecuteQuery(session, "CREATE TABLE `/Root/table` (k Uint32, v Utf8, PRIMARY KEY (k));", true);
     ExecuteQuery(session, Sprintf(R"(
-        CREATE ASYNC REPLICATION `/Root/replication` FOR
-            `/Root/table` AS `/Root/replica`
-        WITH (
-            CONNECTION_STRING = 'grpc://%s/?database=/Root',
-            TOKEN_SECRET_NAME = 'secret'
-        );)", endpoint.c_str()), true
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = 'grpc://%s/?database=/Root'
+                    %s
+                );
+            )",
+            endpoint.c_str(),
+            (useSecret ? ", TOKEN_SECRET_NAME = 'secret'" : "")
+        ), true
     );
 
-    auto checkDescription = [&client, &endpoint]() {
+    auto checkDescription = [&]() {
         auto result = client.DescribeReplication("/Root/replication").ExtractValueSync();
         const auto& desc = result.GetReplicationDescription();
 
         const auto& params = desc.GetConnectionParams();
         UNIT_ASSERT_VALUES_EQUAL(params.GetDiscoveryEndpoint(), endpoint);
         UNIT_ASSERT_VALUES_EQUAL(params.GetDatabase(), "/Root");
-        UNIT_ASSERT_VALUES_EQUAL(params.GetOAuthCredentials().TokenSecretName, "secret");
+        if (useSecret) {
+            UNIT_ASSERT_VALUES_EQUAL(params.GetOAuthCredentials().TokenSecretName, "secret");
+        }
 
         const auto& items = desc.GetItems();
         UNIT_ASSERT_VALUES_EQUAL(items.size(), 1);
@@ -1986,11 +1995,15 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
-    void TestReplicationBackupRestore() {
+    void TestReplicationBackupRestore(bool useSecret = true) {
         TKikimrWithGrpcAndRootSchema server;
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
-        auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetAuthToken("root@builtin"));
+        auto driverConfig = TDriverConfig().SetEndpoint(endpoint);
+        if (useSecret) {
+            driverConfig.SetAuthToken("root@builtin");
+        }
+        auto driver = TDriver(driverConfig);
 
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
@@ -2002,7 +2015,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TestReplicationSettingsArePreserved(
             endpoint, session, replicationClient,
             CreateBackupLambda(driver, pathToBackup),
-            CreateRestoreLambda(driver, pathToBackup)
+            CreateRestoreLambda(driver, pathToBackup),
+            useSecret
         );
     }
 
@@ -2224,6 +2238,10 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup)
         );
+    }
+
+    Y_UNIT_TEST(RestoreReplicationThatDoesNotUseSecret) {
+        TestReplicationBackupRestore(false);
     }
 }
 

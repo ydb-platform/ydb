@@ -61,6 +61,7 @@ target_link_libraries(yql-essentials-core PUBLIC
   library-cpp-random_provider
   cpp-threading-future
   library-cpp-time_provider
+  cpp-type_info-tz
   library-cpp-yson
   cpp-yson-node
   yql-essentials-ast
@@ -75,7 +76,6 @@ target_link_libraries(yql-essentials-core PUBLIC
   essentials-core-histogram
   yql-essentials-protos
   essentials-public-udf
-  public-udf-tz
   essentials-public-langver
   essentials-sql-settings
   yql-essentials-sql

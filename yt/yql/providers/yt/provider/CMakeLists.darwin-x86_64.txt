@@ -40,13 +40,13 @@ target_link_libraries(providers-yt-provider PUBLIC
   cpp-json-writer
   library-cpp-json
   library-cpp-disjoint_sets
+  cpp-type_info-tz
   cpp-mapreduce-common
   cpp-mapreduce-interface
   yql-essentials-ast
   essentials-core-extract_predicate
   essentials-public-langver
   essentials-public-udf
-  public-udf-tz
   yql-essentials-sql
   essentials-sql-v1
   v1-lexer-antlr4
@@ -194,13 +194,13 @@ target_link_libraries(providers-yt-provider.global PUBLIC
   cpp-json-writer
   library-cpp-json
   library-cpp-disjoint_sets
+  cpp-type_info-tz
   cpp-mapreduce-common
   cpp-mapreduce-interface
   yql-essentials-ast
   essentials-core-extract_predicate
   essentials-public-langver
   essentials-public-udf
-  public-udf-tz
   yql-essentials-sql
   essentials-sql-v1
   v1-lexer-antlr4

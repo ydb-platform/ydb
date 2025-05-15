@@ -13,7 +13,6 @@
 # changes in this file.
 
 add_subdirectory(arrow)
-add_subdirectory(tz)
 add_subdirectory(support)
 add_subdirectory(service)
 

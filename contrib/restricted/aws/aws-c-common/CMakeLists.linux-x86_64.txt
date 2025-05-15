@@ -32,6 +32,10 @@ target_include_directories(restricted-aws-aws-c-common PUBLIC
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/include
 )
 
+target_include_directories(restricted-aws-aws-c-common PRIVATE
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/external/libcbor
+)
+
 target_link_libraries(restricted-aws-aws-c-common PUBLIC
   contrib-libs-linux-headers
 )
@@ -43,6 +47,7 @@ target_sources(restricted-aws-aws-c-common PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/assert.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/byte_buf.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/cache.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/cbor.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/codegen.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/command_line_parser.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/common.c
@@ -52,6 +57,26 @@ target_sources(restricted-aws-aws-c-common PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/encoding.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/error.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/external/cJSON.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/external/libcbor/allocators.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/external/libcbor/cbor.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/external/libcbor/cbor/arrays.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/external/libcbor/cbor/bytestrings.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/external/libcbor/cbor/callbacks.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/external/libcbor/cbor/common.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/external/libcbor/cbor/encoding.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/external/libcbor/cbor/floats_ctrls.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/external/libcbor/cbor/internal/builder_callbacks.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/external/libcbor/cbor/internal/encoders.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/external/libcbor/cbor/internal/loaders.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/external/libcbor/cbor/internal/memory_utils.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/external/libcbor/cbor/internal/stack.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/external/libcbor/cbor/internal/unicode.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/external/libcbor/cbor/ints.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/external/libcbor/cbor/maps.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/external/libcbor/cbor/serialization.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/external/libcbor/cbor/streaming.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/external/libcbor/cbor/strings.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/external/libcbor/cbor/tags.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/fifo_cache.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/file.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/hash_table.c
@@ -69,7 +94,6 @@ target_sources(restricted-aws-aws-c-common PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/memtrace.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/priority_queue.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/process_common.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/promise.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/ref_count.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/ring_buffer.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/statistics.c

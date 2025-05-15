@@ -22,7 +22,6 @@ target_compile_options(restricted-aws-aws-c-mqtt PRIVATE
   -DAWS_HTTP_USE_IMPORT_EXPORT
   -DAWS_IO_USE_IMPORT_EXPORT
   -DAWS_MQTT_USE_IMPORT_EXPORT
-  -DAWS_MQTT_WITH_WEBSOCKETS
   -DAWS_USE_EPOLL
   -DHAVE_SYSCONF
   -DINTEL_NO_ITTNOTIFY_API
@@ -43,8 +42,11 @@ target_link_libraries(restricted-aws-aws-c-mqtt PUBLIC
 target_sources(restricted-aws-aws-c-mqtt PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/client.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/client_channel_handler.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/client_impl_shared.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/fixed_header.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/mqtt.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/mqtt311_decoder.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/mqtt_subscription_set.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/packets.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/shared_constants.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/topic_tree.c
@@ -54,6 +56,7 @@ target_sources(restricted-aws-aws-c-mqtt PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_encoder.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_listener.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_options_storage.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_to_mqtt3_adapter.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_topic_alias.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_types.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_utils.c

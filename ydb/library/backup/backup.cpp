@@ -745,7 +745,9 @@ TString BuildCreateReplicationQuery(
             opts.push_back(BuildOption("PASSWORD_SECRET_NAME", Quote(params.GetStaticCredentials().PasswordSecretName)));
             break;
         case NReplication::TConnectionParams::ECredentials::OAuth:
-            opts.push_back(BuildOption("TOKEN_SECRET_NAME", Quote(params.GetOAuthCredentials().TokenSecretName)));
+            if (const auto& secret = params.GetOAuthCredentials().TokenSecretName; !secret.empty()) {
+                opts.push_back(BuildOption("TOKEN_SECRET_NAME", Quote(secret)));
+            }
             break;
     }
 

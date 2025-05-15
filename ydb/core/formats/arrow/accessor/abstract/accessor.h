@@ -96,9 +96,13 @@ public:
             return Addresses.size();
         }
 
-        ui32 GetLocalIndex(const ui32 position) const {
-            AFL_VERIFY(Contains(position))("pos", position)("start", GlobalStartPosition);
-            return position - GlobalStartPosition;
+        ui32 GetLocalIndex(const ui32 global) const {
+            AFL_VERIFY(Contains(global))("pos", global)("start", GlobalStartPosition);
+            return global - GlobalStartPosition;
+        }
+
+        ui32 GetGlobalIndex(const ui32 local) const {
+            return local + GlobalStartPosition;
         }
 
         bool Contains(const ui32 position) const {

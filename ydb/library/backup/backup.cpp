@@ -694,15 +694,6 @@ void BackupCoordinationNode(TDriver driver, const TString& dbPath, const TFsPath
 
 namespace {
 
-NReplication::TReplicationDescription DescribeReplication(TDriver driver, const TString& path) {
-    NReplication::TReplicationClient client(driver);
-    auto status = NConsoleClient::RetryFunction([&]() {
-        return client.DescribeReplication(path).ExtractValueSync();
-    });
-    VerifyStatus(status, "describe async replication");
-    return status.GetReplicationDescription();
-}
-
 TString BuildConnectionString(const NReplication::TConnectionParams& params) {
     return TStringBuilder()
         << (params.GetEnableSsl() ? "grpcs://" : "grpc://")
@@ -784,28 +775,16 @@ void BackupReplication(
 
     LOG_I("Backup async replication " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
 
-    const auto desc = DescribeReplication(driver, dbPath);
-    const auto creationQuery = BuildCreateReplicationQuery(db, dbBackupRoot, fsBackupFolder.GetName(), desc);
+    NReplication::TReplicationClient replicationClient(driver);
+    TMaybe<NReplication::TReplicationDescription> desc;
+    VerifyStatus(NDump::DescribeReplication(replicationClient, dbPath, desc), "describe replication");
+    const auto creationQuery = BuildCreateReplicationQuery(db, dbBackupRoot, fsBackupFolder.GetName(), *desc);
 
     WriteCreationQueryToFile(creationQuery, fsBackupFolder, NDump::NFiles::CreateAsyncReplication());
     BackupPermissions(driver, dbPath, fsBackupFolder);
 }
 
 namespace {
-
-Ydb::Table::DescribeExternalDataSourceResult DescribeExternalDataSource(TDriver driver, const TString& path) {
-    NTable::TTableClient client(driver);
-    Ydb::Table::DescribeExternalDataSourceResult description;
-    auto status = client.RetryOperationSync([&](NTable::TSession session) {
-        auto result = session.DescribeExternalDataSource(path).ExtractValueSync();
-        if (result.IsSuccess()) {
-            description = TProtoAccessor::GetProto(result.GetExternalDataSourceDescription());
-        }
-        return result;
-    });
-    VerifyStatus(status, "describe external data source");
-    return description;
-}
 
 std::string ToString(std::string_view key, std::string_view value) {
     // indented to follow the default YQL formatting
@@ -844,7 +823,9 @@ void BackupExternalDataSource(TDriver driver, const TString& dbPath, const TFsPa
     Y_ENSURE(!dbPath.empty());
     LOG_I("Backup external data source " << dbPath.Quote() << " to " << fsBackupFolder.GetPath().Quote());
 
-    auto description = DescribeExternalDataSource(driver, dbPath);
+    Ydb::Table::DescribeExternalDataSourceResult description;
+    NTable::TTableClient client(driver);
+    VerifyStatus(NDump::DescribeExternalDataSource(client, dbPath, description), "describe external data source");
     CanonizeForBackup(description);
     const auto creationQuery = BuildCreateExternalDataSourceQuery(description);
 

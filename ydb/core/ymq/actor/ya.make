@@ -53,6 +53,7 @@ SRCS(
     untag_queue.cpp
     user_settings_names.cpp
     user_settings_reader.cpp
+    cloud_events.cpp
 )
 
 PEERDIR(
@@ -94,6 +95,8 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/types/credentials
     yql/essentials/minikql
     ydb/public/lib/deprecated/client
+    ydb/core/audit
+    ydb/public/api/client/yc_public/events
 )
 
 YQL_LAST_ABI_VERSION()

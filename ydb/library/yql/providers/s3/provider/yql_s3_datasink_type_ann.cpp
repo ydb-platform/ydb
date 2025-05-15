@@ -73,7 +73,8 @@ private:
         }
 
         const TTypeAnnotationNode* targetType = nullptr;
-        if (const TS3Target target(targetNode); const auto settings = target.Settings()) {
+        const TS3Target target(targetNode);
+        if (const auto settings = target.Settings()) {
             if (const auto userschema = GetSetting(settings.Cast().Ref(), "userschema")) {
                 targetType = userschema->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
             }
@@ -116,7 +117,7 @@ private:
             return TStatus::Error;
         }
 
-        if (!NS3Util::ValidateS3ReadWriteSchema(sourceType->Cast<TStructExprType>(), ctx)) {
+        if (!NS3Util::ValidateS3WriteSchema(source->Pos(), target.Format().Value(), sourceType->Cast<TStructExprType>(), ctx)) {
             return TStatus::Error;
         }
 

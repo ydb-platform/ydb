@@ -27,6 +27,7 @@ add_library(library-workload-benchmark_base)
 target_link_libraries(library-workload-benchmark_base PUBLIC
   contrib-libs-cxxsupp
   yutil
+  streams-factory-open_by_signature
   ydb-library-accessor
   library-workload-abstract
   ydb-library-yaml_json
@@ -35,6 +36,7 @@ target_link_libraries(library-workload-benchmark_base PUBLIC
 )
 
 target_sources(library-workload-benchmark_base PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/benchmark_base/data_generator.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/benchmark_base/workload.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/workload/benchmark_base/state.cpp
   ${PROJECT_BINARY_DIR}/ydb/library/workload/benchmark_base/workload.h_serialized.h

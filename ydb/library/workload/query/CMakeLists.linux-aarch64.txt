@@ -12,31 +12,36 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(abstract)
-add_subdirectory(clickbench)
-add_subdirectory(benchmark_base)
-add_subdirectory(kv)
-add_subdirectory(log)
-add_subdirectory(mixed)
-add_subdirectory(stock)
-add_subdirectory(tpcds)
-add_subdirectory(tpc_base)
-add_subdirectory(tpch)
-add_subdirectory(query)
-
-add_library(ydb-library-workload INTERFACE)
+add_library(library-workload-query)
 
 
-target_link_libraries(ydb-library-workload INTERFACE
+target_link_libraries(library-workload-query PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-workload-abstract
-  library-workload-clickbench
-  library-workload-kv
-  library-workload-log
-  library-workload-mixed
-  library-workload-stock
-  library-workload-tpcds
-  library-workload-tpch
+  library-workload-benchmark_base
+  library-cpp-json
+)
+
+target_sources(library-workload-query PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/query/data_generator.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/query/query.cpp
+)
+
+
+add_global_library_for(library-workload-query.global
+  library-workload-query)
+
+
+target_link_libraries(library-workload-query.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-workload-benchmark_base
+  library-cpp-json
+)
+
+target_sources(library-workload-query.global PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/query/registrar.cpp
 )
 

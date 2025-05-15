@@ -29,7 +29,6 @@ target_link_libraries(library-workload-clickbench PUBLIC
   ydb-library-accessor
   library-workload-benchmark_base
   cpp-http-io
-  streams-factory-open_by_signature
 )
 
 target_sources(library-workload-clickbench PRIVATE
@@ -49,7 +48,6 @@ target_link_libraries(library-workload-clickbench.global PUBLIC
   ydb-library-accessor
   library-workload-benchmark_base
   cpp-http-io
-  streams-factory-open_by_signature
 )
 
 target_sources(library-workload-clickbench.global PRIVATE

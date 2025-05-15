@@ -124,7 +124,7 @@ void TUsersInfoStorage::Parse(const TString& key, const TString& data, const TAc
             ctx, user, userData.GetReadRuleGeneration(), false, userData.GetSession(), userData.GetPartitionSessionId(),
             userData.GetGeneration(), userData.GetStep(), offset,
             userData.GetOffsetRewindSum(), TInstant::Zero(),  {}, userData.GetAnyCommits(),
-            userData.HasCommittedMetadata() ? userData.GetCommittedMetadata() : ""
+            userData.HasCommittedMetadata() ? static_cast<std::optional<TString>>(userData.GetCommittedMetadata()) : std::nullopt
         );
     } else {
         userInfo->Session = userData.GetSession();
@@ -151,7 +151,7 @@ TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorConte
     if (it == UsersInfo.end()) {
         return Create(
                 ctx, user, readRuleGeneration ? *readRuleGeneration : ++CurReadRuleGeneration, false, "", 0,
-                0, 0, 0, 0, TInstant::Zero(), {}, false, ""
+                0, 0, 0, 0, TInstant::Zero(), {}, false
         );
     }
     return it->second;
@@ -179,7 +179,7 @@ TUserInfo TUsersInfoStorage::CreateUserInfo(const TActorContext& ctx,
                                             ui64 partitionSessionId,
                                             ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum,
                                             TInstant readFromTimestamp, const TActorId& pipeClient, bool anyCommits,
-                                            const TString& committedMetadata) const
+                                            const std::optional<TString>& committedMetadata) const
 {
     TString defaultServiceType = AppData(ctx)->PQConfig.GetDefaultClientServiceType().GetName();
     TString userServiceType = "";
@@ -205,14 +205,14 @@ TUserInfoBase TUsersInfoStorage::CreateUserInfo(const TString& user,
                                             TMaybe<ui64> readRuleGeneration) const
 {
     return TUserInfoBase{user, readRuleGeneration ? *readRuleGeneration : ++CurReadRuleGeneration,
-                          "", 0, 0, 0, false, false, {}, 0, {}, ""};
+                          "", 0, 0, 0, false, false, {}, 0, {}};
 }
 
 TUserInfo& TUsersInfoStorage::Create(
         const TActorContext& ctx, const TString& user, const ui64 readRuleGeneration, bool important, const TString& session,
         ui64 partitionSessionId, ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum,
         TInstant readFromTimestamp, const TActorId& pipeClient, bool anyCommits,
-        const TString& committedMetadata
+        const std::optional<TString>& committedMetadata
 ) {
     auto userInfo = CreateUserInfo(ctx, user, readRuleGeneration, important, session, partitionSessionId,
                                               gen, step, offset, readOffsetRewindSum, readFromTimestamp, pipeClient,

@@ -37,12 +37,11 @@ struct TReadInfo {
     TString MemberId;
     i32 GenerationId;
 };
-
-struct TConsumerOffset {
-    ui64 PartitionIndex;
-    ui64 Offset;
-    TString Metadata;
-};
+// struct TConsumerOffset {
+//     ui64 PartitionIndex;
+//     ui64 Offset;
+//     TString Metadata;
+// };
 
 
 class TKafkaTestClient {

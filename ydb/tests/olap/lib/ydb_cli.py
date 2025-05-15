@@ -4,6 +4,7 @@ import yatest.common
 import json
 import os
 import re
+import subprocess
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import get_external_param
 from enum import StrEnum, Enum
@@ -15,6 +16,7 @@ class WorkloadType(StrEnum):
     Clickbench = 'clickbench'
     TPC_H = 'tpch'
     TPC_DS = 'tpcds'
+    EXTERNAL = 'query'
 
 
 class CheckCanonicalPolicy(Enum):
@@ -128,20 +130,21 @@ class YdbCliHelper:
         def __init__(self,
                      workload_type: WorkloadType,
                      db_path: str,
-                     query_num: int,
+                     query_name: str,
                      iterations: int,
                      timeout: float,
                      check_canonical: CheckCanonicalPolicy,
                      query_syntax: str,
                      scale: Optional[int],
-                     query_prefix: Optional[str]):
+                     query_prefix: Optional[str],
+                     external_path: str):
             def _get_output_path(ext: str) -> str:
-                return yatest.common.test_output_path(f'q{query_num}.{ext}')
+                return yatest.common.test_output_path(f'{query_name}.{ext}')
 
             self.result = YdbCliHelper.WorkloadRunResult()
             self.workload_type = workload_type
             self.db_path = db_path
-            self.query_num = query_num
+            self.query_name = query_name
             self.iterations = iterations
             self.timeout = timeout
             self.check_canonical = check_canonical
@@ -151,14 +154,15 @@ class YdbCliHelper:
             self._plan_path = _get_output_path('plan')
             self._query_output_path = _get_output_path('out')
             self._json_path = _get_output_path('json')
+            self.external_path = external_path
 
         def _init_iter(self, iter_num: int) -> None:
             if iter_num not in self.result.iterations:
                 self.result.iterations[iter_num] = YdbCliHelper.Iteration()
 
-        def _parse_stderr(self, stderr: str) -> None:
-            self.result.stderr = stderr
-            begin_str = f'{self.query_num}:'
+        def _parse_stderr(self, stderr: Optional[str]) -> None:
+            self.result.stderr = stderr if stderr else ''
+            begin_str = f'{self.query_name}:'
             end_str = 'Query text:'
             iter_str = 'iteration '
             begin_pos = self.result.stderr.find(begin_str)
@@ -187,7 +191,7 @@ class YdbCliHelper:
 
         def _load_plan(self, name: str) -> YdbCliHelper.QueryPlan:
             result = YdbCliHelper.QueryPlan()
-            pp = f'{self._plan_path}.{self.query_num}.{name}'
+            pp = f'{self._plan_path}.{self.query_name}.{name}'
             if (os.path.exists(f'{pp}.json')):
                 with open(f'{pp}.json') as f:
                     result.plan = json.load(f)
@@ -219,7 +223,7 @@ class YdbCliHelper:
                 json_data = r.read()
             for signal in json.loads(json_data):
                 self.result.add_stat(signal['labels']['query'], signal['sensor'], signal['value'])
-            if self.result.get_stats(f'Query{self.query_num:02d}').get("DiffsCount", 0) > 0:
+            if self.result.get_stats(f'{self.query_name}').get("DiffsCount", 0) > 0:
                 if self.check_canonical == CheckCanonicalPolicy.WARNING:
                     self.result.add_warning('There is diff in query results')
                 else:
@@ -230,8 +234,8 @@ class YdbCliHelper:
                 with open(self._query_output_path, 'r') as r:
                     self.result.query_out = r.read()
 
-        def _parse_stdout(self, stdout: str) -> None:
-            self.result.stdout = stdout
+        def _parse_stdout(self, stdout: Optional[str]) -> None:
+            self.result.stdout = stdout if stdout else ''
             for line in self.result.stdout.splitlines():
                 m = re.search(r'iteration ([0-9]*):\s*ok\s*([\.0-9]*)s', line)
                 if m is not None:
@@ -241,11 +245,17 @@ class YdbCliHelper:
 
         def _get_cmd(self) -> list[str]:
             cmd = YdbCliHelper.get_cli_command() + [
-                'workload', str(self.workload_type), '--path', self.db_path, 'run',
+                'workload', str(self.workload_type), '--path', self.db_path]
+            if self.external_path:
+                cmd += ['--data-path', self.external_path]
+            cmd += ['run']
+            if self.workload_type == WorkloadType.EXTERNAL:
+                cmd += ['olap']
+            cmd += [
                 '--json', self._json_path,
                 '--output', self._query_output_path,
                 '--executer', 'generic',
-                '--include', str(self.query_num),
+                '--include', str(self.query_name),
                 '--iterations', str(self.iterations),
                 '--plan', self._plan_path,
                 '--global-timeout', f'{self.timeout}s',
@@ -267,9 +277,16 @@ class YdbCliHelper:
                 if wait_error is not None:
                     self.result.error_message = wait_error
                 else:
-                    process = yatest.common.process.execute(self._get_cmd(), check_exit_code=False)
-                    self._parse_stderr(process.stderr.decode('utf-8', 'replace'))
-                    self._parse_stdout(process.stdout.decode('utf-8', 'replace'))
+                    if os.getenv('SECRET_REQUESTS', '') == '1':
+                        with open(f'{self.query_name}.stdout', "wt") as sout, open(f'{self.query_name}.stderr', "wt") as serr:
+                            process = subprocess.run(self._get_cmd(), check=False, text=True, stdout=sout, stderr=serr)
+                        with open(f'{self.query_name}.stdout', "rt") as sout, open(f'{self.query_name}.stderr', "rt") as serr:
+                            self._parse_stderr(serr.read())
+                            self._parse_stdout(sout.read())
+                    else:
+                        process = yatest.common.process.execute(self._get_cmd(), check_exit_code=False, text=True)
+                        self._parse_stderr(process.stderr)
+                        self._parse_stdout(process.stdout)
                     self._load_stats()
                     self._load_query_out()
                     self._load_plans()
@@ -280,17 +297,18 @@ class YdbCliHelper:
             return self.result
 
     @staticmethod
-    def workload_run(workload_type: WorkloadType, path: str, query_num: int, iterations: int = 5,
+    def workload_run(workload_type: WorkloadType, path: str, query_name: str, iterations: int = 5,
                      timeout: float = 100., check_canonical: CheckCanonicalPolicy = CheckCanonicalPolicy.NO, query_syntax: str = '',
-                     scale: Optional[int] = None, query_prefix=None) -> YdbCliHelper.WorkloadRunResult:
+                     scale: Optional[int] = None, query_prefix=None, external_path='') -> YdbCliHelper.WorkloadRunResult:
         return YdbCliHelper.WorkloadProcessor(
             workload_type,
             path,
-            query_num,
+            query_name,
             iterations,
             timeout,
             check_canonical,
             query_syntax,
             scale,
-            query_prefix=query_prefix
+            query_prefix=query_prefix,
+            external_path=external_path
         ).process()

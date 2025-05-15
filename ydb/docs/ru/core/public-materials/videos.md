@@ -8,6 +8,12 @@
 
 {% list tabs %}
 
+- 2025
+
+  {% include [Misc](./_includes/conferences/2025/Yandex_Infrastructure.md) %}
+
+  {% include [Misc](./_includes/conferences/2025/misc.md) %}
+
 - 2024
 
   {% include [SmartData](./_includes/conferences/2024/SmartData.md) %}

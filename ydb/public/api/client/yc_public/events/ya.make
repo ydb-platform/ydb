@@ -11,6 +11,7 @@ SRCS(
     options.proto
     common.proto
     yq.proto
+    ymq.proto
 )
 
 USE_COMMON_GOOGLE_APIS(
@@ -18,4 +19,3 @@ USE_COMMON_GOOGLE_APIS(
 )
 
 END()
-

@@ -176,36 +176,7 @@ private:
     }
 
     bool CheckAccess(TString& errorMessage) override {
-        if (Request->GetSerializedToken().empty())
-            return true;
-
-        NACLib::TUserToken userToken(Request->GetSerializedToken());
-        const ui32 access = NACLib::EAccessRights::UpdateRow;
-        auto resolveResult = GetResolveNameResult();
-        if (!resolveResult) {
-            TStringStream explanation;
-            explanation << "Access denied for " << userToken.GetUserSID()
-                        << " table '" << GetProtoRequest(Request.get())->table()
-                        << "' has not been resolved yet";
-
-            errorMessage = explanation.Str();
-            return false;
-        }
-        for (const NSchemeCache::TSchemeCacheNavigate::TEntry& entry : resolveResult->ResultSet) {
-            if (entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok
-                && entry.SecurityObject != nullptr
-                && !entry.SecurityObject->CheckAccess(access, userToken))
-            {
-                TStringStream explanation;
-                explanation << "Access denied for " << userToken.GetUserSID()
-                            << " with access " << NACLib::AccessRightsToString(access)
-                            << " to table '" << GetProtoRequest(Request.get())->table() << "'";
-
-                errorMessage = explanation.Str();
-                return false;
-            }
-        }
-        return true;
+        return NTxProxy::CheckAccess(GetProtoRequest(Request.get())->table(), Request->GetSerializedToken(), GetResolveNameResult(), errorMessage);
     }
 
     TConclusion<TVector<std::pair<TString, Ydb::Type>>> GetRequestColumns() const override {
@@ -364,36 +335,7 @@ private:
     }
 
     bool CheckAccess(TString& errorMessage) override {
-        if (Request->GetSerializedToken().empty())
-            return true;
-
-        NACLib::TUserToken userToken(Request->GetSerializedToken());
-        const ui32 access = NACLib::EAccessRights::UpdateRow;
-        auto resolveResult = GetResolveNameResult();
-        if (!resolveResult) {
-            TStringStream explanation;
-            explanation << "Access denied for " << userToken.GetUserSID()
-                        << " table '" << GetProtoRequest(Request.get())->table()
-                        << "' has not been resolved yet";
-
-            errorMessage = explanation.Str();
-            return false;
-        }
-        for (const NSchemeCache::TSchemeCacheNavigate::TEntry& entry : resolveResult->ResultSet) {
-            if (entry.Status == NSchemeCache::TSchemeCacheNavigate::EStatus::Ok
-                && entry.SecurityObject != nullptr
-                && !entry.SecurityObject->CheckAccess(access, userToken))
-            {
-                TStringStream explanation;
-                explanation << "Access denied for " << userToken.GetUserSID()
-                            << " with access " << NACLib::AccessRightsToString(access)
-                            << " to table '" << GetProtoRequest(Request.get())->table() << "'";
-
-                errorMessage = explanation.Str();
-                return false;
-            }
-        }
-        return true;
+        return NTxProxy::CheckAccess(GetProtoRequest(Request.get())->table(), Request->GetSerializedToken(), GetResolveNameResult(), errorMessage);
     }
 
     TConclusion<TVector<std::pair<TString, Ydb::Type>>> GetRequestColumns() const override {

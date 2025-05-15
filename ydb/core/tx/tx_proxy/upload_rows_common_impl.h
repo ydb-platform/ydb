@@ -108,6 +108,8 @@ TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& repl
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
     std::shared_ptr<NYql::TIssues> issues, const bool noTxWrite);
 
+bool CheckAccess(const TString& table, const TString& token, const NSchemeCache::TSchemeCacheNavigate* resolveResult, TString& errorMessage);
+
 template <NKikimrServices::TActivity::EType DerivedActivityType>
 class TUploadRowsBase : public TActorBootstrapped<TUploadRowsBase<DerivedActivityType>> {
     using TBase = TActorBootstrapped<TUploadRowsBase<DerivedActivityType>>;

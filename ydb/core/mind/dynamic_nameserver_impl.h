@@ -40,6 +40,9 @@ namespace NNodeBroker {
 struct TDynamicConfig;
 using TDynamicConfigPtr = TIntrusivePtr<TDynamicConfig>;
 
+class TDynamicNameserver;
+class TListNodesCache;
+
 class TCacheMiss {
 public:
     TCacheMiss(ui32 nodeId, TDynamicConfigPtr config, TAutoPtr<IEventHandle> origRequest,
@@ -47,6 +50,9 @@ public:
     virtual ~TCacheMiss() = default;
     virtual void OnSuccess(const TActorContext &);
     virtual void OnError(const TString &error, const TActorContext &);
+
+    virtual void ConvertToActor(TDynamicNameserver* owner, TIntrusivePtr<TListNodesCache> listNodesCache,
+                                const TActorContext &ctx) = 0;
 
     struct THeapIndexByDeadline {
         size_t& operator()(TCacheMiss& cacheMiss) const;
@@ -138,6 +144,12 @@ template<typename TCacheMiss>
 class TActorCacheMiss;
 class TCacheMissGet;
 class TCacheMissResolve;
+
+enum class EProtocolState {
+    Connecting,
+    UseEpochProtocol,
+    UseDeltaProtocol,
+};
 
 class TDynamicNameserver : public TActorBootstrapped<TDynamicNameserver> {
 public:
@@ -278,7 +290,7 @@ private:
     bool SubscribedToConsoleNSConfig = false;
 
     bool EnableDeltaProtocol = false;
-    bool UseDeltaProtocol = false;
+    EProtocolState ProtocolState = EProtocolState::Connecting;
     bool SyncInProgress = false;
     ui64 SyncCookie = 0;
     ui64 SeqNo = 0;

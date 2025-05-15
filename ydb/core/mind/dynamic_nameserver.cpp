@@ -60,13 +60,19 @@ public:
         TActorBase::PassAway();
     }
 
+    void ConvertToActor(TDynamicNameserver*, TIntrusivePtr<TListNodesCache>, const TActorContext &) override {}
+
 private:
     using TCacheMiss::Config;
     using TCacheMiss::NodeId;
 
     void Handle(TEvNodeBroker::TEvResolvedNode::TPtr &ev, const TActorContext &ctx) {
         LOG_D("Handle " << ev->Get()->ToString());
-        
+
+        if (Owner->ProtocolState != EProtocolState::UseEpochProtocol) {
+            return;
+        }
+
         Config->PendingCacheMisses.Remove(this);
 
         TDynamicConfig::TDynamicNodeInfo oldNode;
@@ -164,6 +170,18 @@ public:
         THolder<TEvInterconnect::TEvNodeInfo> reply(new TEvInterconnect::TEvNodeInfo(NodeId));
         ctx.Send(OrigRequest->Sender, reply.Release());
     }
+
+    void ConvertToActor(TDynamicNameserver* owner, TIntrusivePtr<TListNodesCache> listNodesCache,
+                        const TActorContext &ctx) override {
+        Config->PendingCacheMisses.Remove(this);
+
+        auto* actor = new TActorCacheMiss<TCacheMissGet>(owner, NodeId, Config, listNodesCache, OrigRequest, Deadline);
+        actor->NeedScheduleDeadline = NeedScheduleDeadline;
+        ctx.RegisterWithSameMailbox(actor);
+        actor->SendRequest();
+
+        Config->PendingCacheMisses.Add(actor);
+    }
 };
 
 class TCacheMissResolve : public TCacheMiss {
@@ -188,6 +206,18 @@ public:
         auto reply = new TEvLocalNodeInfo;
         reply->NodeId = NodeId;
         ctx.Send(OrigRequest->Sender, reply);
+    }
+
+    void ConvertToActor(TDynamicNameserver* owner, TIntrusivePtr<TListNodesCache> listNodesCache,
+                        const TActorContext &ctx) override {
+        Config->PendingCacheMisses.Remove(this);
+
+        auto* actor = new TActorCacheMiss<TCacheMissResolve>(owner, NodeId, Config, listNodesCache, OrigRequest, Deadline);
+        actor->NeedScheduleDeadline = NeedScheduleDeadline;
+        ctx.RegisterWithSameMailbox(actor);
+        actor->SendRequest();
+
+        Config->PendingCacheMisses.Add(actor);
     }
 };
 
@@ -270,12 +300,11 @@ void TDynamicNameserver::OpenPipe(ui32 domain)
 void TDynamicNameserver::OpenPipe(TActorId& pipe)
 {
     if (!pipe) {
-        UseDeltaProtocol = false;
         NTabletPipe::TClientConfig clientConfig;
         clientConfig.RetryPolicy = {
-            .RetryLimitCount = 4,
-            .MinRetryTime = TDuration::MilliSeconds(10),
-            .MaxRetryTime = TDuration::MilliSeconds(50),
+            .RetryLimitCount = 10,
+            .MinRetryTime = TDuration::MilliSeconds(100),
+            .MaxRetryTime = TDuration::Seconds(1),
             .DoFirstRetryInstantly = true
         };
         pipe = RegisterWithSameMailbox(NTabletPipe::CreateClient(SelfId(), MakeNodeBrokerID(), clientConfig));
@@ -336,7 +365,7 @@ void TDynamicNameserver::ResolveDynamicNode(ui32 nodeId,
         ctx.Send(ev->Sender, reply);
     } else {
         TCacheMiss* cacheMiss;
-        if (!UseDeltaProtocol) {
+        if (ProtocolState == EProtocolState::UseEpochProtocol) {
             auto* actor = new TActorCacheMiss<TCacheMissResolve>(this, nodeId, config, ListNodesCache, ev, deadline);
             cacheMiss = actor;
             RegisterWithSameMailbox(actor);
@@ -345,7 +374,10 @@ void TDynamicNameserver::ResolveDynamicNode(ui32 nodeId,
             auto holder = MakeHolder<TCacheMissResolve>(nodeId, config, ev, deadline, SyncCookie + 1);
             cacheMiss = holder.get();
             config->CacheMissHolders.emplace(cacheMiss, std::move(holder));
-            SendSyncRequest(config->NodeBrokerPipe, ctx);
+
+            if (ProtocolState == EProtocolState::UseDeltaProtocol) {
+                SendSyncRequest(config->NodeBrokerPipe, ctx);
+            }
         }
         RegisterNewCacheMiss(cacheMiss, config);
     }
@@ -464,13 +496,11 @@ void TDynamicNameserver::UpdateState(const NKikimrNodeBroker::TNodesInfo &rec,
 void TDynamicNameserver::OnPipeDestroyed(ui32 domain, const TActorContext &ctx)
 {
     DynamicConfigs[domain]->NodeBrokerPipe = TActorId();
+    ++SeqNo; // ignore everything that may come from old pipe
+    ProtocolState = EProtocolState::Connecting;
     PendingRequestAnswered(domain, ctx);
 
     if (EpochUpdates.contains(domain)) {
-        if (!UseDeltaProtocol) {
-            ctx.Schedule(TDuration::Seconds(1),
-                         new TEvPrivate::TEvUpdateEpoch(domain, EpochUpdates.at(domain)));
-        }
         EpochUpdates.erase(domain);
     }
 
@@ -514,11 +544,11 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvListNodes::TPtr &ev,
         auto dinfo = AppData(ctx)->DomainsInfo;
         if (const auto& d = dinfo->Domain) {
             ui32 domain = d->DomainUid;
-            if (!UseDeltaProtocol) {
+            if (ProtocolState == EProtocolState::UseEpochProtocol) {
                 TAutoPtr<TEvNodeBroker::TEvListNodes> request = new TEvNodeBroker::TEvListNodes;
                 request->Record.SetCachedVersion(DynamicConfigs[domain]->Epoch.Version);
                 NTabletPipe::SendData(ctx, DynamicConfigs[domain]->NodeBrokerPipe, request.Release());
-            } else {
+            } else if (ProtocolState == EProtocolState::UseDeltaProtocol) {
                 SendSyncRequest(DynamicConfigs[domain]->NodeBrokerPipe, ctx);
             }
             PendingRequests.Set(domain);
@@ -560,7 +590,7 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TAc
         } else {
             TCacheMiss* cacheMiss;
             const TMonotonic deadline = ev->Get()->Deadline;
-            if (!UseDeltaProtocol) {
+            if (ProtocolState == EProtocolState::UseEpochProtocol) {
                 auto* actor = new TActorCacheMiss<TCacheMissGet>(this, nodeId, config, ListNodesCache, ev.Release(), deadline);
                 cacheMiss = actor;
                 RegisterWithSameMailbox(actor);
@@ -569,7 +599,10 @@ void TDynamicNameserver::Handle(TEvInterconnect::TEvGetNode::TPtr &ev, const TAc
                 auto holder = MakeHolder<TCacheMissGet>(nodeId, config, ev.Release(), deadline, SyncCookie + 1);
                 cacheMiss = holder.get();
                 config->CacheMissHolders.emplace(cacheMiss, std::move(holder));
-                SendSyncRequest(config->NodeBrokerPipe, ctx);
+
+                if (ProtocolState == EProtocolState::UseDeltaProtocol) {
+                    SendSyncRequest(config->NodeBrokerPipe, ctx);
+                }
             }
             RegisterNewCacheMiss(cacheMiss, config);
         }
@@ -613,26 +646,45 @@ void TDynamicNameserver::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, con
     LOG_D("Handle " << ev->Get()->ToString());
 
     ui32 domain = AppData(ctx)->DomainsInfo->GetDomain()->DomainUid;
+    if (DynamicConfigs[domain]->NodeBrokerPipe != ev->Get()->ClientId) {
+        return;
+    }
+
     if (ev->Get()->Status != NKikimrProto::OK) {
-        if (DynamicConfigs[domain]->NodeBrokerPipe == ev->Get()->ClientId) {
-            NTabletPipe::CloseClient(ctx, DynamicConfigs[domain]->NodeBrokerPipe);
-            OnPipeDestroyed(domain, ctx);
-        }
+        NTabletPipe::CloseClient(ctx, DynamicConfigs[domain]->NodeBrokerPipe);
+        OnPipeDestroyed(domain, ctx);
     } else {
         NKikimrNodeBroker::TVersionInfo versionInfo;
         Y_PROTOBUF_SUPPRESS_NODISCARD versionInfo.ParseFromString(ev->Get()->VersionInfo);
 
-        UseDeltaProtocol = EnableDeltaProtocol && versionInfo.GetSupportDeltaProtocol();
-        if (UseDeltaProtocol) {
+        if (EnableDeltaProtocol && versionInfo.GetSupportDeltaProtocol()) {
+            ProtocolState = EProtocolState::UseDeltaProtocol;
+
             auto request = MakeHolder<TEvNodeBroker::TEvSubscribeNodesRequest>();
-            request->Record.SetSeqNo(++SeqNo);
+            request->Record.SetSeqNo(SeqNo);
             request->Record.SetCachedVersion(DynamicConfigs[domain]->Epoch.Version);
             NTabletPipe::SendData(ctx, DynamicConfigs[domain]->NodeBrokerPipe, request.Release());
-        } else {
-            ui64 epoch = DynamicConfigs[domain]->Epoch.Id + 1;
-            if (!EpochUpdates.contains(domain) || EpochUpdates.at(domain) < epoch) {
-                RequestEpochUpdate(domain, epoch, ctx);
+
+            if (!ListNodesQueue.empty() || !DynamicConfigs[domain]->PendingCacheMisses.Empty()) {
+                SendSyncRequest(DynamicConfigs[domain]->NodeBrokerPipe, ctx);
             }
+        } else {
+            ProtocolState = EProtocolState::UseEpochProtocol;
+
+            ui64 epoch = DynamicConfigs[domain]->Epoch.Id + 1;
+            RequestEpochUpdate(domain, epoch, ctx);
+
+            if (!ListNodesQueue.empty()) {
+                auto request = MakeHolder<TEvNodeBroker::TEvListNodes>();
+                request->Record.SetCachedVersion(DynamicConfigs[domain]->Epoch.Version);
+                NTabletPipe::SendData(ctx, DynamicConfigs[domain]->NodeBrokerPipe, request.Release());
+            }
+
+            for (const auto &[cacheMiss, _] : DynamicConfigs[domain]->CacheMissHolders) {
+                cacheMiss->ConvertToActor(this, ListNodesCache, ctx);
+            }
+            // cache misses are managed by actorsystem in epoch protocol
+            DynamicConfigs[domain]->CacheMissHolders.clear();
         }
     }
 }
@@ -642,6 +694,10 @@ void TDynamicNameserver::Handle(TEvNodeBroker::TEvNodesInfo::TPtr &ev, const TAc
     auto &rec = ev->Get()->GetRecord();
     Y_ABORT_UNLESS(rec.HasDomain());
     ui32 domain = rec.GetDomain();
+
+    if (ProtocolState != EProtocolState::UseEpochProtocol) {
+        return;
+    }
 
     if (rec.GetEpoch().GetVersion() != DynamicConfigs[domain]->Epoch.Version)
         UpdateState(rec, ctx);
@@ -661,7 +717,7 @@ void TDynamicNameserver::Handle(TEvNodeBroker::TEvUpdateNodes::TPtr &ev, const T
         return;
     }
 
-    if (!UseDeltaProtocol) {
+    if (ProtocolState != EProtocolState::UseDeltaProtocol) {
         return;
     }
 
@@ -726,7 +782,7 @@ void TDynamicNameserver::Handle(TEvNodeBroker::TEvSyncNodesResponse::TPtr &ev, c
         return;
     }
 
-    if (!UseDeltaProtocol) {
+    if (ProtocolState != EProtocolState::UseDeltaProtocol) {
         return;
     }
 
@@ -765,7 +821,7 @@ void TDynamicNameserver::Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev, const TAct
     ui32 domain = ev->Get()->Domain;
     ui64 epoch = ev->Get()->Epoch;
 
-    if (UseDeltaProtocol) {
+    if (ProtocolState != EProtocolState::UseEpochProtocol) {
         return;
     }
 

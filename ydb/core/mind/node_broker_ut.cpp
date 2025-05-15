@@ -208,8 +208,23 @@ void SetupServices(TTestActorRuntime &runtime,
 
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::SchemeShard, TTabletTypes::SchemeShard), &CreateFlatTxSchemeShard);
     BootFakeCoordinator(runtime, TTestTxConfig::Coordinator, MakeIntrusive<TFakeCoordinator::TState>());
+
+    ui32 connectedNameservers = 0;
+    auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvTabletPipe::EvClientConnected) {
+            auto* connectedEv = ev->Get<TEvTabletPipe::TEvClientConnected>();
+            if (connectedEv->TabletId == MakeNodeBrokerID() && connectedEv->Status == NKikimrProto::OK) {
+                ++connectedNameservers;
+            }
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    });
+
     auto aid = CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeNodeBrokerID(), TTabletTypes::NodeBroker), &CreateNodeBroker);
     runtime.EnableScheduleForActor(aid, true);
+
+    runtime.WaitFor("nameservers are connected", [&]{ return connectedNameservers >= runtime.GetNodeCount(); });
+    runtime.SetObserverFunc(prevObserver);
 }
 
 void AsyncSetConfig(TTestActorRuntime& runtime,
@@ -4756,7 +4771,7 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         // Stop blocking new cache miss requests
         resolveBlock.Stop();
         syncBlock.Stop();
-        deltaBlock.Unblock();
+        deltaBlock.Stop();
 
         // The following requests should be OK
         CheckResolveNode(runtime, sender, NODE1, "1.2.3.4");

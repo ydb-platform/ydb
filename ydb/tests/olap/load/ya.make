@@ -8,6 +8,7 @@ PY3TEST()
 
     TEST_SRCS (
         test_clickbench.py
+        test_external.py
         test_tpcds.py
         test_tpch.py
     )

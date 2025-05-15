@@ -113,13 +113,13 @@ public:
     TListObjectsInS3ExportResult(TStatus&& status, const ::Ydb::Import::ListObjectsInS3ExportResult& proto);
 
     const std::vector<TItem>& GetItems() const;
-    const TString& NextPageToken() const { return NextPageToken_; }
+    const std::string& NextPageToken() const { return NextPageToken_; }
 
     void Out(IOutputStream& out) const;
 
 private:
     std::vector<TItem> Items_;
-    TString NextPageToken_;
+    std::string NextPageToken_;
 };
 
 using TAsyncListObjectsInS3ExportResult = NThreading::TFuture<TListObjectsInS3ExportResult>;
@@ -148,7 +148,7 @@ public:
 
     TAsyncImportFromS3Response ImportFromS3(const TImportFromS3Settings& settings);
 
-    TAsyncListObjectsInS3ExportResult ListObjectsInS3Export(const TListObjectsInS3ExportSettings& settings, i64 pageSize = 0, const TString& pageToken = {});
+    TAsyncListObjectsInS3ExportResult ListObjectsInS3Export(const TListObjectsInS3ExportSettings& settings, std::int64_t pageSize = 0, const std::string& pageToken = {});
 
     // ydb dump format
     TAsyncImportDataResult ImportData(const std::string& table, std::string&& data, const TImportYdbDumpDataSettings& settings);

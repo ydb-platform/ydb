@@ -246,7 +246,7 @@ TAsyncImportFromS3Response TImportClient::ImportFromS3(const TImportFromS3Settin
     return Impl_->ImportFromS3(std::move(request), settings);
 }
 
-TAsyncListObjectsInS3ExportResult TImportClient::ListObjectsInS3Export(const TListObjectsInS3ExportSettings& settings, i64 pageSize, const TString& pageToken) {
+TAsyncListObjectsInS3ExportResult TImportClient::ListObjectsInS3Export(const TListObjectsInS3ExportSettings& settings, std::int64_t pageSize, const std::string& pageToken) {
     auto request = MakeOperationRequest<ListObjectsInS3ExportRequest>(settings);
     Ydb::Import::ListObjectsInS3ExportSettings& settingsProto = *request.mutable_settings();
     FillS3Settings(settingsProto, settings);

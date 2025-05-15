@@ -17,7 +17,7 @@ struct TTransactionContext {
 
 TTransactionTask GetNewOrderTask(TTransactionContext& context);
 
-} // namesapce NYdb::NTPCC
+} // namespace NYdb::NTPCC
 
 // TODO: can we elliminate this?
 namespace std {

@@ -25,8 +25,6 @@ namespace {
 
 //-----------------------------------------------------------------------------
 
-using Clock = std::chrono::steady_clock;
-
 constexpr auto SleepMsEveryIterationMainLoop = std::chrono::milliseconds(50);
 constexpr auto MaxPerTerminalTransactionsInflight = 1;
 
@@ -198,4 +196,4 @@ void RunSync(const TRunConfig& config) {
     runner.RunSync();
 }
 
-} // namesapce NYdb::NTPCC
+} // namespace NYdb::NTPCC

@@ -16,4 +16,4 @@ constexpr int ITEMS_COUNT = 100000;
 
 constexpr int INVALID_ITEM_ID = -12345;
 
-} // namesapce NYdb::NTPCC
+} // namespace NYdb::NTPCC

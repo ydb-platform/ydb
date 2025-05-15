@@ -66,4 +66,4 @@ TTransactionTask GetNewOrderTask(TTransactionContext& context)
     co_return TTransactionResult{};
 }
 
-} // namesapce NYdb::NTPCC
+} // namespace NYdb::NTPCC

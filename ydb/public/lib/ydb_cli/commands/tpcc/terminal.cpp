@@ -2,7 +2,7 @@
 
 #include "log.h"
 
-#include <thread> // XXX
+#include <thread>
 
 // TODO: can we elliminate this?
 namespace std {
@@ -45,7 +45,7 @@ TTerminalTask TTerminal::Run() {
             LOG_E("Terminal " << Context.TerminalID << " got exception while transaction execution: " << ex.what());
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(200)); // XXX
+        co_await TSuspend(TaskQueue, Context.TerminalID, std::chrono::milliseconds(50));
     }
 
     LOG_D("Terminal " << Context.TerminalID << " stopped");
@@ -61,4 +61,4 @@ bool TTerminal::IsDone() const {
     return Task.Handle.done();
 }
 
-} // namesapce NYdb::NTPCC
+} // namespace NYdb::NTPCC

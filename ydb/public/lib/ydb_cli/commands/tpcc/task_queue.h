@@ -15,6 +15,10 @@ namespace NYdb::NTPCC {
 
 //-----------------------------------------------------------------------------
 
+using Clock = std::chrono::steady_clock;
+
+//-----------------------------------------------------------------------------
+
 // We have two types of coroutines:
 // * Terminal task. It can sleep (co_awaiting) or wait for another task representing transaction.
 // * Transaction task. It performs async requests to YDB. When it is finished, it should continue terminal's task.
@@ -37,7 +41,7 @@ struct TTask {
             struct TFinalAwaiter {
                 bool await_ready() noexcept { return false; }
                 void await_suspend(TCoroHandle h) noexcept {
-                    if (h.promise().Continuation) {
+                    if (h.promise().Continuation && !h.promise().Continuation.done()) {
                         h.promise().Continuation.resume(); // resume outer task (terminal)
                     }
                 }
@@ -98,7 +102,7 @@ struct TTask {
         return Handle.promise().Value;
     }
 
-    // avaitable task
+    // awaitable task
 
     bool await_ready() const noexcept {
         return Handle.done();
@@ -132,7 +136,7 @@ struct TTask<void> {
             struct TFinalAwaiter {
                 bool await_ready() noexcept { return false; }
                 void await_suspend(TCoroHandle h) noexcept {
-                    if (h.promise().Continuation) {
+                    if (h.promise().Continuation && !h.promise().Continuation.done()) {
                         h.promise().Continuation.resume(); // resume outer task (terminal)
                     }
                 }
@@ -187,7 +191,7 @@ struct TTask<void> {
         }
     }
 
-    // avaitable task
+    // awaitable task
 
     bool await_ready() const noexcept {
         return Handle.done();
@@ -221,10 +225,8 @@ public:
     virtual ~ITaskQueue() = default;
 
     // non copyable / non moveable
-
     ITaskQueue(const ITaskQueue&) = delete;
     ITaskQueue& operator=(const ITaskQueue&) = delete;
-
     ITaskQueue(ITaskQueue&&) = delete;
     ITaskQueue& operator=(ITaskQueue&&) = delete;
 
@@ -233,6 +235,8 @@ public:
 
     virtual void TaskReady(TTerminalTask::TCoroHandle handle, size_t terminalId) = 0;
     virtual void TaskReady(TTransactionTask::TCoroHandle handle, size_t terminalId) = 0;
+
+    virtual void AsyncSleep(TTerminalTask::TCoroHandle handle, size_t terminalId, std::chrono::milliseconds delay) = 0;
 };
 
 std::unique_ptr<ITaskQueue> CreateTaskQueue(
@@ -240,6 +244,32 @@ std::unique_ptr<ITaskQueue> CreateTaskQueue(
     size_t maxReadyTerminals,
     size_t maxReadyTransactions,
     std::shared_ptr<TLog> log);
+
+//-----------------------------------------------------------------------------
+
+// used to implement AsyncSleep()
+struct TSuspend {
+    TSuspend(ITaskQueue& taskQueue, size_t terminalId, std::chrono::milliseconds delay)
+        : TaskQueue(taskQueue)
+        , TerminalId(terminalId)
+        , Delay(delay)
+    {
+    }
+
+    bool await_ready() {
+        return false;
+    }
+
+    void await_suspend(TTerminalTask::TCoroHandle handle) {
+        TaskQueue.AsyncSleep(handle, TerminalId, Delay);
+    }
+
+    void await_resume() {}
+
+    ITaskQueue& TaskQueue;
+    size_t TerminalId;
+    std::chrono::milliseconds Delay;
+};
 
 //-----------------------------------------------------------------------------
 
@@ -283,4 +313,4 @@ struct TSuspendWithFuture {
     size_t TerminalId;
 };
 
-} // namesapce NYdb::NTPCC
+} // namespace NYdb::NTPCC

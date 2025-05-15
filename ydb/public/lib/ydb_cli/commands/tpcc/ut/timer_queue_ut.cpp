@@ -26,11 +26,11 @@ Y_UNIT_TEST_SUITE(TBinnedTimerQueueTest) {
         queue.Add(std::chrono::milliseconds(3), 3);
         UNIT_ASSERT(queue.Validate());
 
-        auto a = queue.Pop().Value;
+        auto a = queue.PopFront().Value;
         UNIT_ASSERT(queue.Validate());
-        auto b = queue.Pop().Value;
+        auto b = queue.PopFront().Value;
         UNIT_ASSERT(queue.Validate());
-        auto c = queue.Pop().Value;
+        auto c = queue.PopFront().Value;
 
         UNIT_ASSERT_VALUES_EQUAL(a, 1);
         UNIT_ASSERT_VALUES_EQUAL(b, 2);
@@ -48,13 +48,13 @@ Y_UNIT_TEST_SUITE(TBinnedTimerQueueTest) {
         queue.Add(std::chrono::milliseconds(30), 3);
         UNIT_ASSERT(queue.Validate());
 
-        UNIT_ASSERT_VALUES_EQUAL(queue.Pop().Value, 1);
+        UNIT_ASSERT_VALUES_EQUAL(queue.PopFront().Value, 1);
         UNIT_ASSERT(queue.Validate());
 
-        UNIT_ASSERT_VALUES_EQUAL(queue.Pop().Value, 2);
+        UNIT_ASSERT_VALUES_EQUAL(queue.PopFront().Value, 2);
         UNIT_ASSERT(queue.Validate());
 
-        UNIT_ASSERT_VALUES_EQUAL(queue.Pop().Value, 3);
+        UNIT_ASSERT_VALUES_EQUAL(queue.PopFront().Value, 3);
         UNIT_ASSERT(queue.Validate());
     }
 
@@ -66,10 +66,10 @@ Y_UNIT_TEST_SUITE(TBinnedTimerQueueTest) {
         queue.Add(std::chrono::milliseconds(200), 22); // will go to later bucket
         UNIT_ASSERT(queue.Validate());
 
-        UNIT_ASSERT_VALUES_EQUAL(queue.Pop().Value, 11);
+        UNIT_ASSERT_VALUES_EQUAL(queue.PopFront().Value, 11);
         UNIT_ASSERT(queue.Validate());
 
-        UNIT_ASSERT_VALUES_EQUAL(queue.Pop().Value, 22); // triggers advance
+        UNIT_ASSERT_VALUES_EQUAL(queue.PopFront().Value, 22); // triggers advance
         UNIT_ASSERT(queue.Validate());
 
         UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 0UL);
@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(TBinnedTimerQueueTest) {
         TBinnedTimerQueue<int> queue(4, 100);
         UNIT_ASSERT(queue.Validate());
 
-        UNIT_ASSERT_EXCEPTION(queue.Pop(), std::runtime_error);
+        UNIT_ASSERT_EXCEPTION(queue.PopFront(), std::runtime_error);
     }
 
     Y_UNIT_TEST(ShouldRespectBucketSoftLimit) {
@@ -93,10 +93,10 @@ Y_UNIT_TEST_SUITE(TBinnedTimerQueueTest) {
         UNIT_ASSERT(queue.Validate());
 
         UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 2UL);
-        UNIT_ASSERT_VALUES_EQUAL(queue.Pop().Value, 1);
+        UNIT_ASSERT_VALUES_EQUAL(queue.PopFront().Value, 1);
         UNIT_ASSERT(queue.Validate());
 
-        UNIT_ASSERT_VALUES_EQUAL(queue.Pop().Value, 2);
+        UNIT_ASSERT_VALUES_EQUAL(queue.PopFront().Value, 2);
         UNIT_ASSERT(queue.Validate());
     }
 
@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(TBinnedTimerQueueTest) {
         }
 
         for (int i = 1; i <= 999; ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(queue.Pop().Value, i);
+            UNIT_ASSERT_VALUES_EQUAL(queue.PopFront().Value, i);
             UNIT_ASSERT(queue.Validate());
         }
     }
@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(TBinnedTimerQueueTest) {
         }
 
         for (int i = 0; i < 8; ++i) {
-            UNIT_ASSERT_VALUES_EQUAL(queue.Pop().Value, i);
+            UNIT_ASSERT_VALUES_EQUAL(queue.PopFront().Value, i);
             UNIT_ASSERT(queue.Validate());
         }
     }

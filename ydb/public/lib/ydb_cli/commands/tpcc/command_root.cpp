@@ -10,4 +10,4 @@ TCommandTPCC::TCommandTPCC()
     AddCommand(std::make_unique<TCommandTPCCRun>());
 }
 
-} // namesapce NYdb::NConsoleClient
+} // namespace NYdb::NConsoleClient

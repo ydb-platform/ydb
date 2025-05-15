@@ -2,4 +2,4 @@
 
 namespace NYdb::NTPCC {
 
-} // namesapce NYdb::NTPCC
+} // namespace NYdb::NTPCC

@@ -1,6 +1,7 @@
 #include "task_queue.h"
 
 #include "circular_queue.h"
+#include "timer_queue.h"
 #include "log.h"
 
 #include <chrono>
@@ -19,8 +20,12 @@ constexpr auto SleepUsecIfNoProgress = std::chrono::microseconds(100);
 struct alignas(64) TPerThreadContext {
     TPerThreadContext() = default;
 
-    TSpinLock Lock;
+    // thread-safe because accessed by this thread only
+    TBinnedTimerQueue<TTerminalTask::TCoroHandle> SleepingTerminals;
     TCircularQueue<TTerminalTask::TCoroHandle> ReadyTerminals;
+
+    // accessed by other threads to add ready coroutine
+    TSpinLock ReadyTransactionsLock;
     TCircularQueue<TTransactionTask::TCoroHandle> ReadyTransactions;
 };
 
@@ -45,8 +50,11 @@ public:
     void TaskReady(TTerminalTask::TCoroHandle handle, size_t terminalId) override;
     void TaskReady(TTransactionTask::TCoroHandle handle, size_t terminalId) override;
 
+    void AsyncSleep(TTerminalTask::TCoroHandle handle, size_t terminalId, std::chrono::milliseconds delay) override;
+
 private:
     void RunThread(size_t threadId);
+    void HandleQueueFull(const char* queueType);
 
 private:
     size_t ThreadCount;
@@ -69,14 +77,19 @@ TTaskQueue::TTaskQueue(size_t threadCount,
     , MaxReadyTransactions(maxReadyTransactions)
     , Log(std::move(log))
 {
-    // should never happen
     if (ThreadCount == 0) {
-        std::cerr << "zero task queue threads" << std::endl;
-        std::terminate();
+        LOG_E("Zero task queue threads");
+        throw std::invalid_argument("Thread count must be greater than zero");
     }
+
+    // usually almost all terminals sleep and we have a long timer queue
+    const size_t maxSleepingTerminals = MaxReadyTerminals;
+    constexpr size_t timerBucketSize = 100;
+    const size_t timerBucketCount = (maxSleepingTerminals + timerBucketSize - 1) / timerBucketSize;
 
     PerThreadContext.resize(ThreadCount);
     for (auto& context: PerThreadContext) {
+        context.SleepingTerminals.Resize(timerBucketCount, timerBucketSize);
         context.ReadyTerminals.Resize(MaxReadyTerminals);
         context.ReadyTransactions.Resize(MaxReadyTransactions);
     }
@@ -105,15 +118,17 @@ void TTaskQueue::Join() {
     }
 }
 
+void TTaskQueue::HandleQueueFull(const char* queueType) {
+    LOG_E("Failed to push ready " << queueType << ", queue is full");
+    throw std::runtime_error(std::string("Task queue is full: ") + queueType);
+}
+
 void TTaskQueue::TaskReady(TTerminalTask::TCoroHandle handle, size_t terminalId) {
     auto index = terminalId % PerThreadContext.size();
     auto& context = PerThreadContext[index];
 
-    TGuard guard(context.Lock);
     if (!context.ReadyTerminals.TryPush(std::move(handle))) {
-        // just a sanity check, should never happen
-        std::cerr << "Error: failed to push ready terminal" << std::endl;
-        std::terminate();
+        HandleQueueFull("terminal");
     }
 }
 
@@ -121,51 +136,54 @@ void TTaskQueue::TaskReady(TTransactionTask::TCoroHandle handle, size_t terminal
     auto index = terminalId % PerThreadContext.size();
     auto& context = PerThreadContext[index];
 
-    TGuard guard(context.Lock);
+    TGuard guard(context.ReadyTransactionsLock);
     if (!context.ReadyTransactions.TryPush(std::move(handle))) {
-        // just a sanity check, should never happen
-        std::cerr << "Error: failed to push ready query" << std::endl;
-        std::terminate();
+        HandleQueueFull("transaction");
     }
+}
+
+void TTaskQueue::AsyncSleep(TTerminalTask::TCoroHandle handle, size_t terminalId, std::chrono::milliseconds delay) {
+    auto index = terminalId % PerThreadContext.size();
+    auto& context = PerThreadContext[index];
+    context.SleepingTerminals.Add(delay, std::move(handle));
 }
 
 void TTaskQueue::RunThread(size_t threadId) {
     auto& context = PerThreadContext[threadId];
 
     while (!ThreadsStopSource.stop_requested()) {
+        auto now = Clock::now();
+
+        while (context.SleepingTerminals.GetNextDeadline() <= now) {
+            auto handle = context.SleepingTerminals.PopFront().Value;
+            if (!context.ReadyTerminals.TryPush(std::move(handle))) {
+                HandleQueueFull("awakened terminal");
+            }
+        }
+
         bool hasProgress = false;
         std::optional<TTransactionTask::TCoroHandle> queryHandle;
         {
-            TGuard guard(context.Lock);
+            TGuard guard(context.ReadyTransactionsLock);
             TTransactionTask::TCoroHandle h;
             if (context.ReadyTransactions.TryPop(h)) {
                 queryHandle = std::move(h);
             }
         }
 
-        if (queryHandle) {
+        if (queryHandle && *queryHandle && !queryHandle->done()) {
             hasProgress = true;
-            if (!queryHandle->done()) {
-                LOG_D("Thread " << threadId << " resumed query");
-                queryHandle->resume();
-            }
+            LOG_D("Thread " << threadId << " resumed transaction");
+            queryHandle->resume();
         }
 
         // TODO: limit max number of active terminals (or queries, which is the same)
-        std::optional<TTerminalTask::TCoroHandle> terminalHandle;
-        {
-            TGuard guard(context.Lock);
-            TTerminalTask::TCoroHandle h;
-            if (context.ReadyTerminals.TryPop(h)) {
-                terminalHandle = std::move(h);
-            }
-        }
-
-        if (terminalHandle) {
+        TTerminalTask::TCoroHandle terminalHandle;
+        if (context.ReadyTerminals.TryPop(terminalHandle)) {
             hasProgress = true;
-            if (!terminalHandle->done()) {
+            if (terminalHandle && !terminalHandle.done()) {
                 LOG_D("Thread " << threadId << " resumed terminal");
-                terminalHandle->resume();
+                terminalHandle.resume();
             }
         }
 
@@ -192,4 +210,4 @@ std::unique_ptr<ITaskQueue> CreateTaskQueue(
         std::move(log));
 }
 
-} // namesapce NYdb::NTPCC
+} // namespace NYdb::NTPCC

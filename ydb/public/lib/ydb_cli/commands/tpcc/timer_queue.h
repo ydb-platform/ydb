@@ -33,6 +33,11 @@ public:
     struct TBucket {
         template <typename U>
         void AddBack(U&& item) {
+            if (!Items.empty()) {
+                if (item.Deadline < Items.back().Deadline) {
+                    IsSorted = false;
+                }
+            }
             MinDeadline = std::min(MinDeadline, item.Deadline);
             MaxDeadline = std::max(MaxDeadline, item.Deadline);
             Items.emplace_back(std::forward<U>(item));
@@ -56,6 +61,7 @@ public:
             Items.clear();
             MinDeadline = TTimePoint::max();
             MaxDeadline = TTimePoint::min();
+            IsSorted = true;
         }
 
         size_t Size() const {
@@ -63,19 +69,34 @@ public:
         }
 
         void Sort() {
-            std::sort(Items.begin(), Items.end());
+            if (!IsSorted) {
+                std::sort(Items.begin(), Items.end());
+                IsSorted = true;
+            }
         }
 
         std::vector<TItem> Items;
         TTimePoint MinDeadline = TTimePoint::max();
         TTimePoint MaxDeadline = TTimePoint::min();
+        bool IsSorted = true;
     };
 
-    TBinnedTimerQueue(size_t bucketCount, size_t bucketSoftLimit)
-        : Buckets(std::max(2UL, bucketCount)), BucketSoftLimit(bucketSoftLimit), CurrentBucket(0), CurrentCursor(0)
+    TBinnedTimerQueue(size_t bucketCount = 2, size_t bucketSoftLimit = 100)
+        : CurrentBucket(0), CurrentCursor(0)
     {
+        Resize(bucketCount, bucketSoftLimit);
+    }
+
+    void Resize(size_t bucketCount, size_t bucketSoftLimit) {
+        if (Size() != 0) {
+            // just sanity check, shouldn't happen
+            throw std::runtime_error("Resizing non-empty timer queue");
+        }
+
+        Buckets.resize(std::max(size_t(2UL), bucketCount));
+        BucketSoftLimit = std::max(size_t(1UL), bucketSoftLimit);
         for (auto& vec: Buckets) {
-            vec.Items.reserve(BucketSoftLimit);
+            vec.Items.reserve(BucketSoftLimit * 2);
         }
     }
 
@@ -94,7 +115,18 @@ public:
         ++Size_;
     }
 
-    TItem Pop() {
+    TTimePoint GetNextDeadline() const {
+        if (Size_ == 0) {
+            return TTimePoint::max();
+        }
+
+        if (auto& current = Buckets[CurrentBucket]; CurrentCursor < current.Items.size()) {
+            return current.Items[CurrentCursor].Deadline;
+        }
+        return Buckets[CurrentBucket + 1].Items[0].Deadline;
+    }
+
+    TItem PopFront() {
         if (Size_ == 0) {
             throw std::runtime_error("popping timer from empty queue");
         }
@@ -220,4 +252,4 @@ private:
     size_t CurrentCursor = 0;
 };
 
-} // namesapce NYdb::NTPCC
+} // namespace NYdb::NTPCC

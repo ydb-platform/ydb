@@ -19,4 +19,4 @@ struct TRunConfig {
 
 void RunSync(const TRunConfig& config);
 
-} // namesapce NYdb::NTPCC
+} // namespace NYdb::NTPCC

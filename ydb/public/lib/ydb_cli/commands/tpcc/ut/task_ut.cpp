@@ -1,7 +1,6 @@
 #include <ydb/public/lib/ydb_cli/commands/tpcc/task_queue.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/testing/gmock_in_unittest/gmock.h>
 
 using namespace NYdb::NTPCC;
 

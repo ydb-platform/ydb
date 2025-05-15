@@ -10,6 +10,20 @@
 
 struct aws_mqtt_client_connection;
 
+/*
+ * Internal enum that indicates what type of struct the underlying impl pointer actually is.  We use this
+ * to safely interact with private APIs on the implementation or extract the adapted 5 client directly, as
+ * necessary.
+ */
+enum aws_mqtt311_impl_type {
+
+    /* 311 connection impl can be cast to `struct aws_mqtt_client_connection_311_impl` */
+    AWS_MQTT311_IT_311_CONNECTION,
+
+    /* 311 connection impl can be cast to `struct aws_mqtt_client_connection_5_impl`*/
+    AWS_MQTT311_IT_5_ADAPTER,
+};
+
 struct aws_mqtt_client_connection_vtable {
 
     struct aws_mqtt_client_connection *(*acquire_fn)(void *impl);
@@ -107,6 +121,10 @@ struct aws_mqtt_client_connection_vtable {
         void *userdata);
 
     int (*get_stats_fn)(void *impl, struct aws_mqtt_connection_operation_statistics *stats);
+
+    enum aws_mqtt311_impl_type (*get_impl_type)(const void *impl);
+
+    struct aws_event_loop *(*get_event_loop)(const void *impl);
 };
 
 struct aws_mqtt_client_connection {
@@ -114,10 +132,16 @@ struct aws_mqtt_client_connection {
     void *impl;
 };
 
+AWS_MQTT_API enum aws_mqtt311_impl_type aws_mqtt_client_connection_get_impl_type(
+    const struct aws_mqtt_client_connection *connection);
+
 AWS_MQTT_API uint64_t aws_mqtt_hash_uint16_t(const void *item);
 
 AWS_MQTT_API bool aws_mqtt_compare_uint16_t_eq(const void *a, const void *b);
 
 AWS_MQTT_API bool aws_mqtt_byte_cursor_hash_equality(const void *a, const void *b);
+
+AWS_MQTT_API struct aws_event_loop *aws_mqtt_client_connection_get_event_loop(
+    const struct aws_mqtt_client_connection *connection);
 
 #endif /* AWS_MQTT_PRIVATE_CLIENT_IMPL_SHARED_H */

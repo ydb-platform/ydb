@@ -263,6 +263,9 @@ static int s_packet_handler_connack(struct aws_byte_cursor message_cursor, void 
     MQTT_CLIENT_CALL_CALLBACK_ARGS(
         connection, on_connection_success, connack.connect_return_code, connack.session_present);
 
+    aws_mqtt311_callback_set_manager_on_connection_success(
+        &connection->callback_manager, connack.connect_return_code, connack.session_present);
+
     AWS_LOGF_TRACE(AWS_LS_MQTT_CLIENT, "id=%p: connection callback completed", (void *)connection);
 
     s_update_next_ping_time(connection);
@@ -290,6 +293,9 @@ static int s_packet_handler_publish(struct aws_byte_cursor message_cursor, void 
     bool retain = aws_mqtt_packet_publish_get_retain(&publish);
 
     MQTT_CLIENT_CALL_CALLBACK_ARGS(connection, on_any_publish, &publish.topic_name, &publish.payload, dup, qos, retain);
+
+    aws_mqtt311_callback_set_manager_on_publish_received(
+        &connection->callback_manager, &publish.topic_name, &publish.payload, dup, qos, retain);
 
     AWS_LOGF_TRACE(
         AWS_LS_MQTT_CLIENT,

@@ -3623,7 +3623,7 @@ void aws_mqtt5_client_options_storage_log(
             log_handle,
             level,
             AWS_LS_MQTT5_GENERAL,
-            "id=%p: mqtt5_client_options_storage disabling websockets",
+            "id=%p: aws_mqtt5_client_options_storage disabling websockets",
             (void *)options_storage);
     }
 
@@ -3669,7 +3669,7 @@ void aws_mqtt5_client_options_storage_log(
         log_handle,
         level,
         AWS_LS_MQTT5_GENERAL,
-        "id=%p: mqtt5_client_options_storage reconnect delay min set to %" PRIu64 " ms, max set to %" PRIu64 " ms",
+        "id=%p: aws_mqtt5_client_options_storage reconnect delay min set to %" PRIu64 " ms, max set to %" PRIu64 " ms",
         (void *)options_storage,
         options_storage->min_reconnect_delay_ms,
         options_storage->max_reconnect_delay_ms);

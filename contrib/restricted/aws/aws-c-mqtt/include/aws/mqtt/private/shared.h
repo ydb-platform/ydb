@@ -8,6 +8,8 @@
 
 #include <aws/mqtt/mqtt.h>
 
+#include <aws/mqtt/private/request-response/subscription_manager.h>
+
 AWS_EXTERN_C_BEGIN
 
 AWS_MQTT_API extern const struct aws_byte_cursor *g_websocket_handshake_default_path;

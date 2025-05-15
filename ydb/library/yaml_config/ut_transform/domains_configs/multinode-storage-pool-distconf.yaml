@@ -5,6 +5,7 @@ hosts:
 - host: host2
   drive:
     - path: ydb.data
+erasure: mirror-3-dc
 self_management_config:
   enabled: true
 storage_pool_types:

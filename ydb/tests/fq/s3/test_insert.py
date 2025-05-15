@@ -546,4 +546,38 @@ class TestS3(object):
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
         issues = str(client.describe_query(query_id).result.query.issue)
 
-        assert "Missing format - please use WITH FORMAT when writing into S3" in issues, "Incorrect Issues: " + issues
+        assert "No write format specified. Please use WITH FORMAT for writing into S3" in issues, "Incorrect Issues: " + issues
+
+    @yq_all
+    @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
+    def test_raw_format_validation(self, kikimr, s3, client, unique_prefix):
+        resource = boto3.resource(
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+        )
+
+        bucket = resource.Bucket("insert_bucket")
+        bucket.create(ACL='public-read-write')
+        bucket.objects.all().delete()
+
+        storage_connection_name = unique_prefix + "ibucket"
+        client.create_storage_connection(storage_connection_name, "insert_bucket")
+
+        sql = f'''
+            INSERT INTO `{storage_connection_name}`.`/test/`
+            WITH (FORMAT = 'raw')
+            SELECT * FROM AS_TABLE([<|foo:123, bar:"xxx"u|>,<|foo:456, bar:"yyy"u|>]);
+        '''
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        issues = str(client.describe_query(query_id).result.query.issue)
+        assert "Only one column in schema supported in raw format" in issues, "Incorrect Issues: " + issues
+
+        sql = f'''
+            INSERT INTO `{storage_connection_name}`.`/test/`
+            WITH (FORMAT = 'raw')
+            SELECT * FROM AS_TABLE([<|foo:<|bar:"xxx"u|>|>,<|foo:<|bar:"yyy"u|>|>]);
+        '''
+        query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        client.wait_query_status(query_id, fq.QueryMeta.FAILED)
+        issues = str(client.describe_query(query_id).result.query.issue)
+        assert "Expected data or optional of data" in issues, "Incorrect Issues: " + issues

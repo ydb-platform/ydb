@@ -24,9 +24,10 @@ const auto YsonSignature = TYsonString(
 TEST(TDummySignatureGeneratorTest, Generate)
 {
     auto generator = CreateDummySignatureGenerator();
-    auto signature = ConvertTo<TSignaturePtr>(YsonSignature);
-    generator->Resign(signature);
-    EXPECT_EQ(ConvertToYsonString(signature, EYsonFormat::Text).ToString(), YsonSignature.ToString());
+    auto signature = generator->Sign("payload");
+    EXPECT_EQ(
+        ConvertToYsonString(signature, EYsonFormat::Text).ToString(),
+        R"({"header"="";"payload"="payload";"signature"="";})");
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -44,7 +45,7 @@ TEST(TDummySignatureValidatorTest, GenerateValidate)
 TEST(TAlwaysThrowingSignatureGeneratorTest, Generate)
 {
     auto generator = CreateAlwaysThrowingSignatureGenerator();
-    EXPECT_THROW_WITH_SUBSTRING(generator->Resign(New<TSignature>()), "unsupported");
+    EXPECT_THROW_WITH_SUBSTRING(Y_UNUSED(generator->Sign("payload")), "unsupported");
 }
 
 ////////////////////////////////////////////////////////////////////////////////

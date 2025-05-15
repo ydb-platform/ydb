@@ -177,9 +177,19 @@ private:
 using TAsyncFetchStartupConfigResult = NThreading::TFuture<TFetchStartupConfigResult>;
 
 struct TGetConfigurationVersionResult : public TStatus {
-    TGetConfigurationVersionResult(TStatus&& status, uint32_t v1Nodes, std::vector<uint32_t>&& v1NodesList, 
-                                   uint32_t v2Nodes, std::vector<uint32_t>&& v2NodesList, 
-                                   uint32_t unknownNodes, std::vector<uint32_t>&& unknownNodesList)
+    struct TNodeInfo {
+        uint32_t NodeId;
+        std::string Hostname;
+        uint32_t Port;
+
+        bool operator<(const TNodeInfo& other) const {
+            return std::tie(NodeId) < std::tie(other.NodeId);
+        }
+    };
+
+    TGetConfigurationVersionResult(TStatus&& status, uint32_t v1Nodes, std::vector<TNodeInfo>&& v1NodesList, 
+                                   uint32_t v2Nodes, std::vector<TNodeInfo>&& v2NodesList, 
+                                   uint32_t unknownNodes, std::vector<TNodeInfo>&& unknownNodesList)
         : TStatus(std::move(status))
         , V1Nodes_(v1Nodes)
         , V1NodesList_(std::move(v1NodesList))
@@ -193,7 +203,7 @@ struct TGetConfigurationVersionResult : public TStatus {
         return V1Nodes_;
     }
 
-    const std::vector<uint32_t>& GetV1NodesList() const {
+    const std::vector<TNodeInfo>& GetV1NodesList() const {
         return V1NodesList_;
     }
 
@@ -201,7 +211,7 @@ struct TGetConfigurationVersionResult : public TStatus {
         return V2Nodes_;
     }
 
-    const std::vector<uint32_t>& GetV2NodesList() const {
+    const std::vector<TNodeInfo>& GetV2NodesList() const {
         return V2NodesList_;
     }
 
@@ -209,17 +219,17 @@ struct TGetConfigurationVersionResult : public TStatus {
         return UnknownNodes_;
     }
 
-    const std::vector<uint32_t>& GetUnknownNodesList() const {
+    const std::vector<TNodeInfo>& GetUnknownNodesList() const {
         return UnknownNodesList_;
     }
 
 private:
     uint32_t V1Nodes_;
-    std::vector<uint32_t> V1NodesList_;
+    std::vector<TNodeInfo> V1NodesList_;
     uint32_t V2Nodes_;
-    std::vector<uint32_t> V2NodesList_;
+    std::vector<TNodeInfo> V2NodesList_;
     uint32_t UnknownNodes_;
-    std::vector<uint32_t> UnknownNodesList_;
+    std::vector<TNodeInfo> UnknownNodesList_;
 };
 
 using TAsyncGetConfigurationVersionResult = NThreading::TFuture<TGetConfigurationVersionResult>;

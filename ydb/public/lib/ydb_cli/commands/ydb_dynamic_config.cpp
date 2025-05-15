@@ -886,7 +886,7 @@ int TCommandVersionDynamicConfig::Run(TConfig& config) {
     auto result = client.GetConfigurationVersion(ListNodes).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     auto sortNodes = [&](const auto& list) {
-        std::vector<ui32> sortedNodes(list.begin(), list.end());
+        std::vector<NYdb::NDynamicConfig::TGetConfigurationVersionResult::TNodeInfo> sortedNodes(list.begin(), list.end());
         std::sort(sortedNodes.begin(), sortedNodes.end());
         return sortedNodes;
     };
@@ -898,7 +898,11 @@ int TCommandVersionDynamicConfig::Run(TConfig& config) {
         auto serializeNodesInfo = [&](const TString& key, const auto& listGetter) {
             NJson::TJsonValue nodesArray(NJson::JSON_ARRAY);
             for (const auto& node : sortNodes(listGetter())) {
-                nodesArray.AppendValue(node);
+                NJson::TJsonValue nodeJson(NJson::JSON_MAP);
+                nodeJson.InsertValue("node_id", node.NodeId);
+                nodeJson.InsertValue("hostname", node.Hostname);
+                nodeJson.InsertValue("port", node.Port);
+                nodesArray.AppendValue(nodeJson);
             }
             jsonOutput.InsertValue(key, nodesArray);
         };
@@ -927,7 +931,7 @@ int TCommandVersionDynamicConfig::Run(TConfig& config) {
                 if (!first) {
                     row << " ";
                 }
-                row << node;
+                row << node.NodeId << "-" << node.Hostname << ":" << node.Port;
                 first = false;
             }
             row << "\"";
@@ -944,9 +948,9 @@ int TCommandVersionDynamicConfig::Run(TConfig& config) {
                 bool first = true;
                 for (const auto& node : nodesVector) {
                     if (!first) {
-                        Cout << ", ";
+                        Cout << "\n";
                     }
-                    Cout << node;
+                    Cout << node.NodeId << "-" << node.Hostname << ":" << node.Port;
                     first = false;
                 }
                 Cout << Endl;

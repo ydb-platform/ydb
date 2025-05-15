@@ -1,4 +1,4 @@
-#include "kqp_new_rbo_rules.h"
+#include "kqp_rbo_rules.h"
 
 #include <yql/essentials/utils/log/log.h>
 

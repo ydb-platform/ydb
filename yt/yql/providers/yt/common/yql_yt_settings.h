@@ -124,6 +124,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ERuntimeClusterSelectionMode, false> RuntimeClusterSelection;
     NCommon::TConfSetting<TString, false> DefaultRuntimeCluster;
     NCommon::TConfSetting<bool, false> _ForbidSensitiveDataInOperationSpec;
+    NCommon::TConfSetting<NSize::TSize, false> _LocalTableContentLimit;
 
     // Job runtime
     NCommon::TConfSetting<TString, true> Pool;

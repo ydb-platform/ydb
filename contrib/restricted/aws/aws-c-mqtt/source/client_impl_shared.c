@@ -204,6 +204,11 @@ int aws_mqtt_client_connection_get_stats(
     return (*connection->vtable->get_stats_fn)(connection->impl, stats);
 }
 
+enum aws_mqtt311_impl_type aws_mqtt_client_connection_get_impl_type(
+    const struct aws_mqtt_client_connection *connection) {
+    return (*connection->vtable->get_impl_type)(connection->impl);
+}
+
 uint64_t aws_mqtt_hash_uint16_t(const void *item) {
     return *(uint16_t *)item;
 }
@@ -217,4 +222,8 @@ bool aws_mqtt_byte_cursor_hash_equality(const void *a, const void *b) {
     const struct aws_byte_cursor *b_cursor = b;
 
     return aws_byte_cursor_eq(a_cursor, b_cursor);
+}
+
+struct aws_event_loop *aws_mqtt_client_connection_get_event_loop(const struct aws_mqtt_client_connection *connection) {
+    return (*connection->vtable->get_event_loop)(connection->impl);
 }

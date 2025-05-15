@@ -170,22 +170,12 @@ public:
 //
 class TYardResize : public TRequestBase {
     public:
-        TVDiskID VDiskId;
-        ui32 Weight;
-        // ui32 PDiskId;
-        // ui32 VSlotId;
+        NKikimrBlobStorage::TPDiskSlotSizeUnits::E SlotSizeUnits;
 
         TYardResize(const NPDisk::TEvYardResize &ev, const TActorId &sender, TAtomicBase reqIdx)
             : TRequestBase(sender, TReqId(TReqId::YardResize, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::Other)
-            , VDiskId(ev.VDisk)
-            , Weight(0)
+            , SlotSizeUnits(ev.SlotSizeUnits)
         {}
-
-        // TChangeOwnerWeight(TVDiskID vDiskId, const TOwner owner, const TOwnerRound ownerRound, ui32 weight, const TActorId &sender, TAtomicBase reqIdx)
-        //     : TRequestBase(sender, TReqId(TReqId::ChangeOwnerWeight, reqIdx), owner, ownerRound, NPriInternal::Other)
-        //     , VDiskId(vDiskId)
-        //     , Weight(weight)
-        // {}
 
         ERequestType GetType() const override {
             return ERequestType::RequestYardResize;

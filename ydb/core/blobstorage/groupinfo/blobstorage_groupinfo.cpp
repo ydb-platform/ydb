@@ -895,6 +895,7 @@ TString TBlobStorageGroupInfo::ToString() const {
     str << "{GroupID# " << GroupID;
     str << " GroupGeneration# " << GroupGeneration;
     str << " Type# " << Type.ToString();
+    str << " SlotSizeUnits# " << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(SlotSizeUnits);
     str << " FailRealms# {";
     for (ui32 realmIdx = 0; realmIdx < Topology->FailRealms.size(); ++realmIdx) {
         const TFailRealm& realm = Topology->FailRealms[realmIdx];

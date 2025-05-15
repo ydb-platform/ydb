@@ -2077,39 +2077,26 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
 }
 
 void TPDisk::YardResize(TYardResize &ev) {
-    Cerr << (TStringBuilder() << "[ PD35 ] TPDisk::ChangeOwnerWeight "
-        << " VDiskId# " << ev.VDiskId
-        << " Weight# " << ev.Weight
-        << Endl);
-
-    TGuard<TMutex> guard(StateMutex);
-    TVDiskID vDiskId = ev.VDiskId;
-    vDiskId.GroupGeneration = -1;
-    auto it = VDiskOwners.find(vDiskId);
-    if (it == VDiskOwners.end()) {
-        Cerr << (TStringBuilder() << "[ PD35 ] TPDisk::ChangeOwnerWeight no disk found"
+    {
+        TGuard<TMutex> guard(StateMutex);
+        Cerr << (TStringBuilder() << "[ PD35 ] TPDisk::YardResize"
+            << " Owner# " << ev.Owner
+            << " OwnerRound# " << ev.OwnerRound
+            << " SlotSizeUnits# " << ev.SlotSizeUnits
             << Endl);
-        return;
+        OwnerData[ev.Owner].SlotSizeUnits = ev.SlotSizeUnits;
+        Keeper.SetOwnerWeight(ev.Owner, Cfg->GetOwnerWeight(ev.SlotSizeUnits));
     }
-    ev.Owner = it->second;
-    ev.OwnerRound = OwnerData[ev.Owner].OwnerRound;
-    YardResize(ev.Owner, ev.OwnerRound, ev.Weight,
-        new TCompletionEventSender(this, ev.Sender,
-            new NPDisk::TEvYardResizeResult(NKikimrProto::OK,
-                GetStatusFlags(ev.Owner, ev.OwnerGroupType),
-                ev.VDiskId)));
-}
-
-void TPDisk::YardResize(TOwner owner, TOwnerRound changeOwnerRound, ui32 weight, TCompletionEventSender *completionAction) {
-    Cerr << (TStringBuilder() << "[ PD32 ] TPDisk::ChangeOwnerWeight"
-        << " Owner# " << owner
-        << " OwnerRound# " << changeOwnerRound
-        << " Weight# " << weight
-        << Endl);
-
-    Y_UNUSED(changeOwnerRound);
-    Keeper.SetOwnerWeight(owner, weight);
-    WriteSysLogRestorePoint(completionAction, TReqId(TReqId::YardResize, 0), {});
+    
+    auto result = std::make_unique<NPDisk::TEvYardResizeResult>(
+        NKikimrProto::OK,
+        GetStatusFlags(ev.Owner, ev.OwnerGroupType));
+    if (Cfg->ReadOnly) {
+        PCtx->ActorSystem->Send(ev.Sender, result.release());
+    } else {
+        WriteSysLogRestorePoint(new TCompletionEventSender(this, ev.Sender, result.release()),
+            TReqId(TReqId::YardResize, 0), {});
+    }
 }
 
 // Scheduler weight configuration
@@ -3374,7 +3361,9 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
         case ERequestType::RequestShredVDiskResult:
         case ERequestType::RequestChunkShredResult:
         case ERequestType::RequestContinueShred:
+            break;
         case ERequestType::RequestYardResize:
+            Cerr << (TStringBuilder() << "[ PD44 ] TPDisk::PreprocessRequest TRequestYardResize#" << Endl);
             break;
         case ERequestType::RequestStopDevice:
             BlockDevice->Stop();

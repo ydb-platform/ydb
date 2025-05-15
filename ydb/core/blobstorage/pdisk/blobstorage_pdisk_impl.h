@@ -367,7 +367,6 @@ public:
     void YardInitFinish(TYardInit &evYardInit);
     bool YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner);
     void YardResize(TYardResize &evYardResize);
-    void YardResize(TOwner owner, TOwnerRound changeOwnerRound, ui32 weight, TCompletionEventSender *completionAction);
 
     // Scheduler weight configuration
     void ConfigureCbs(ui32 ownerId, EGate gate, ui64 weight);

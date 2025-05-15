@@ -994,15 +994,10 @@ public:
 
     void Handle(NPDisk::TEvYardResize::TPtr &ev) {
         Cerr << (TStringBuilder() << "[ PD33.6 ] TPDiskActor::Handle"
-            << " TEvChangeSlotSizeUnits# " << ev->ToString()
+            << " TEvYardResize# " << ev->ToString()
             << Endl);
-        auto &evChangeSlotSizeUnits = *ev->Get();
-        // auto it = VDiskOwners.find(vDiskId);
-        // if (it != VDiskOwners.end()) {
-
-        // }
-        TYardResize* request = PDisk->ReqCreator.CreateFromEv<TYardResize>(evChangeSlotSizeUnits, ev->Sender);
-        request->Weight = PDisk->Cfg->GetOwnerWeight(evChangeSlotSizeUnits.SlotSizeUnits);
+        
+        TYardResize* request = PDisk->ReqCreator.CreateFromEv<TYardResize>(*ev->Get(), ev->Sender);
         PDisk->InputRequest(request);
     }
 

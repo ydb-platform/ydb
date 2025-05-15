@@ -255,13 +255,11 @@ struct TEvYardInitResult : TEventLocal<TEvYardInitResult, TEvBlobStorage::EvYard
 struct TEvYardResize : TEventLocal<TEvYardResize, TEvBlobStorage::EvYardResize> {
     TOwner Owner;
     TOwnerRound OwnerRound;
-    TVDiskID VDisk;
     NKikimrBlobStorage::TPDiskSlotSizeUnits::E SlotSizeUnits;
 
-    TEvYardResize(TOwner owner, TOwnerRound ownerRound, TVDiskID vdisk, NKikimrBlobStorage::TPDiskSlotSizeUnits::E slotSizeUnits)
+    TEvYardResize(TOwner owner, TOwnerRound ownerRound, NKikimrBlobStorage::TPDiskSlotSizeUnits::E slotSizeUnits)
         : Owner(owner)
         , OwnerRound(ownerRound)
-        , VDisk(vdisk)
         , SlotSizeUnits(slotSizeUnits)
     {}
 
@@ -273,7 +271,6 @@ struct TEvYardResize : TEventLocal<TEvYardResize, TEvBlobStorage::EvYardResize> 
         TStringStream str;
         str << "{EvYardResize Owner# " << record.Owner;
         str << " OwnerRound# " << record.OwnerRound;
-        str << " VDisk# " << record.VDisk.ToString();
         str << " SlotSizeUnits# " << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(record.SlotSizeUnits);
         str << "}";
         return str.Str();
@@ -283,22 +280,18 @@ struct TEvYardResize : TEventLocal<TEvYardResize, TEvBlobStorage::EvYardResize> 
 struct TEvYardResizeResult : TEventLocal<TEvYardResizeResult, TEvBlobStorage::EvYardResizeResult> {
     NKikimrProto::EReplyStatus Status;
     TStatusFlags StatusFlags;
-    TVDiskID VDiskId;
 
     TEvYardResizeResult(
             NKikimrProto::EReplyStatus status,
-            TStatusFlags statusFlags,
-            TVDiskID vDiskId)
+            TStatusFlags statusFlags)
         : Status(status)
         , StatusFlags(statusFlags)
-        , VDiskId(vDiskId)
     {}
 
     TString ToString() const {
         TStringStream str;
         str << "{TEvYardResizeResult Status# " << NKikimrProto::EReplyStatus_Name(Status).data();
         str << " StatusFlags# " << StatusFlagsToString(StatusFlags);
-        str << " VDiskId# " << VDiskId.ToString();
         str << "}";
         return str.Str();
     }

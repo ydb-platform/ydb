@@ -1722,6 +1722,11 @@ namespace NKikimr {
 
             // update GroupInfo-related fields
             GInfo = info;
+            Cerr << (TStringBuilder() << "[ PD41 ] TSkeletonFront::ChangeGeneration "
+                << " new VDiskId# " << vdiskId
+                << " new SlotSizeUnits# " << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(GInfo->SlotSizeUnits)
+                << " old SlotSizeUnits# " << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(Config->SlotSizeUnits)
+                << Endl);
             const auto& prevVDiskId = std::exchange(SelfVDiskId, vdiskId);
 
             // forward message to Skeleton
@@ -1735,6 +1740,7 @@ namespace NKikimr {
 
         void Handle(TEvVGenerationChange::TPtr &ev, const TActorContext &ctx) {
             auto *msg = ev->Get();
+            Cerr << (TStringBuilder() << "[ PD40 ] TEvVGenerationChange#  " << msg->ToString() << Endl);
             ChangeGeneration(msg->NewVDiskId, msg->NewInfo, ctx);
         }
 

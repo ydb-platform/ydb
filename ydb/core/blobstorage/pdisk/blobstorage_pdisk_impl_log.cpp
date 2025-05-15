@@ -770,13 +770,19 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
         Y_VERIFY_S(success, PCtx->PDiskLogPrefix);
     }
     ui32 compatibilityInfoSize = SerializedCompatibilityInfo->size();
-
     std::vector<std::pair<TOwner, ui8>> ownersSizeUnitsInt;
+    TStringStream str;
+
     for (ui32 owner = 0; owner < OwnerData.size(); ++owner) {
         if (OwnerData[owner].VDiskId != TVDiskID::InvalidId) {
+            str << (ownersSizeUnitsInt.empty() ? "" : ", ") << owner << ": " << int(OwnerData[owner].SlotSizeUnits);
             ownersSizeUnitsInt.push_back(std::make_pair(owner, OwnerData[owner].SlotSizeUnits));
         }
     }
+    Cerr << (TStringBuilder() << "[ PD45 ] TPDisk::WriteSysLogRestorePoint"
+        " Owners# {"<< str.Str() << "}"
+        << Endl);
+
     ui32 ownersSizeUnitsIntSize = sizeof(ownersSizeUnitsInt[0]) * ownersSizeUnitsInt.size();
     Y_ASSERT(sizeof(ownersSizeUnitsInt[0]) == 2);
 

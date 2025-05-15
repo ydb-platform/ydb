@@ -318,7 +318,7 @@ namespace NKikimr::NStorage {
         // 3. Processing GroupReconfigurationWipe command.
         // 4. Deleting VSlot during group reconfiguration or donor termination.
         // 5. Making VDisk a donor one.
-        // 6. Updating VDisk generation when modifying group (e.g. SlotSizeUnits).
+        // 6. Updating VDisk generation when modifying group.
         // 7. Putting VDisk into or out of read-only
         //
         // The main idea of this command is when VDisk is created, it does not change its configuration. It may be
@@ -346,13 +346,8 @@ namespace NKikimr::NStorage {
         }
 
         record.Config.CopyFrom(vdisk);
-        Cerr << (TStringBuilder() << "[ PD33.0 ] TNodeWarden::ApplyLocalVDiskInfo"
-            << " VDisk.SlotSizeUnits# " << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(vdisk.GetSlotSizeUnits().GetValue())
-            // << " Record.SlotSizeUnits# " << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(record.RuntimeData ? record.RuntimeData->SlotSizeUnits : 0)
-            << Endl);
 
         if (vdisk.GetDoDestroy() || vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
-            Cerr << (TStringBuilder() << "[ PD33.1 ] TNodeWarden::ApplyLocalVDiskInfo DestroyLocalVDisk" << Endl);
             if (record.UnderlyingPDiskDestroyed) {
                 PoisonLocalVDisk(record);
                 SendVDiskReport(vslotId, record.GetVDiskId(), NKikimrBlobStorage::TEvControllerNodeReport::DESTROYED);
@@ -364,25 +359,12 @@ namespace NKikimr::NStorage {
             LocalVDisks.erase(it);
             ApplyServiceSetPDisks(); // destroy unneeded PDisk actors
         } else if (vdisk.GetDoWipe()) {
-            Cerr << (TStringBuilder() << "[ PD33.2 ] TNodeWarden::ApplyLocalVDiskInfo Slay" << Endl);
             Slay(record);
         } else if (!record.RuntimeData) {
-            Cerr << (TStringBuilder() << "[ PD33.3 ] TNodeWarden::ApplyLocalVDiskInfo Start" << Endl);
             StartLocalVDiskActor(record);
         } else if (record.RuntimeData->DonorMode < record.Config.HasDonorMode() || record.RuntimeData->ReadOnly != record.Config.GetReadOnly()) {
-            Cerr << (TStringBuilder() << "[ PD33.4 ] TNodeWarden::ApplyLocalVDiskInfo Restart" << Endl);
             PoisonLocalVDisk(record);
             StartLocalVDiskActor(record);
-        // } else if (auto slotSizeUnits = vdisk.GetSlotSizeUnits().GetValue(); record.RuntimeData->SlotSizeUnits != slotSizeUnits) {
-        //     const TVSlotId vslotId = record.GetVSlotId();
-        //     const TActorId pdiskServiceId = MakeBlobStoragePDiskID(vslotId.NodeId, vslotId.PDiskId);
-        //     Cerr << (TStringBuilder() << "[ PD33.5 ] TNodeWarden::ApplyLocalVDiskInfo sending TEvChangeSlotSizeUnits"
-        //         << " VDiskId# " << record.GetVDiskId().ToString()
-        //         << " SlotSizeUnits# " << NKikimrBlobStorage::TPDiskSlotSizeUnits::E_Name(slotSizeUnits)
-        //         << Endl);
-        //     Send(pdiskServiceId, new NPDisk::TEvYardResize(record.GetVDiskId(), slotSizeUnits));
-        } else {
-            Cerr << (TStringBuilder() << "[ PD33.6 ] TNodeWarden::ApplyLocalVDiskInfo else" << Endl);
         }
     }
 

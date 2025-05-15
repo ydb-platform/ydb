@@ -5,6 +5,7 @@ RECURSE(
     copy_table
     lib
     split_merge
+    secondary_index
     s3
     vector_index
 )

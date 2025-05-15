@@ -274,35 +274,12 @@ class TRandomLogGenerator {
         return RandomNumber<ui32>(100) >= Params.NullPercent;
     }
 
-    void CheckParams() const {
-        const bool timestampDevPassed = Params.TimestampStandardDeviationMinutes;
-        const bool dateFromPassed = !!Params.TimestampDateFrom;
-        const bool dateToPassed = !!Params.TimestampDateTo;
-    
-        if (!timestampDevPassed && (!dateFromPassed || !dateToPassed)) {
-            throw yexception() << "One of parameter should be provided - timestamp_deviation or date-from and date-to";
-        }
-    
-        if (timestampDevPassed && (dateFromPassed || dateToPassed)) {
-            throw yexception() << "The `timestamp_deviation` and `date-from`, `date-to` are mutually exclusive and shouldn't be provided at once";
-        }
-    
-        if ((dateFromPassed && !dateToPassed) || (!dateFromPassed && dateToPassed)) {
-            throw yexception() << "The `date-from` and `date-to` parameters must be provided together to specify the interval for uniform PK generation";
-        }
-    
-        if (dateFromPassed && dateToPassed && *Params.TimestampDateFrom >= *Params.TimestampDateTo) {
-            throw yexception() << "Invalid interval [`date-from`, `date-to`)";
-        }
-    }
-
 public:
     explicit TRandomLogGenerator(const TLogWorkloadParams& params)
         : Params(params)
     {}
 
     TVector<TRow> GenerateRandomRows(ui64 count) const {
-        // CheckParams();
         TVector<TRow> result;
         result.reserve(count);
 
@@ -445,7 +422,7 @@ void TLogWorkloadParams::Validate() const {
     if (dateFromPassed && dateToPassed && *TimestampDateFrom >= *TimestampDateTo) {
         throw yexception() << "Invalid interval [`date-from`, `date-to`)";
     }
-
+    
     return;
 }
 
@@ -505,8 +482,6 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
 }
 
 THolder<IWorkloadQueryGenerator> TLogWorkloadParams::CreateGenerator() const {
-    Validate();
-
     return MakeHolder<TLogGenerator>(this);
 }
 

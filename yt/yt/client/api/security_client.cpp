@@ -86,7 +86,11 @@ TError TCheckPermissionByAclResult::ToError(const std::string& user, EPermission
     }
 }
 
+void TGetCurrentUserResult::Register(TRegistrar registrar)
+{
+    registrar.Parameter("user", &TThis::User);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-

@@ -7,7 +7,7 @@
 #include <aws/mqtt/private/client_impl.h>
 #include <aws/mqtt/private/mqtt_client_test_helper.h>
 #include <aws/mqtt/private/packets.h>
-#include <aws/mqtt/private/shared_constants.h>
+#include <aws/mqtt/private/shared.h>
 #include <aws/mqtt/private/topic_tree.h>
 
 #include <aws/http/proxy.h>
@@ -93,25 +93,6 @@ void mqtt_connection_set_state(
     connection->synced_data.state = state;
 }
 
-struct request_timeout_wrapper;
-
-/* used for timeout task */
-struct request_timeout_task_arg {
-    uint16_t packet_id;
-    struct aws_mqtt_client_connection_311_impl *connection;
-    struct request_timeout_wrapper *task_arg_wrapper;
-};
-
-/*
- * We want the timeout task to be able to destroy the forward reference from the operation's task arg structure
- * to the timeout task.  But the operation task arg structures don't have any data structure in common.  So to allow
- * the timeout to refer back to a zero-able forward pointer, we wrap a pointer to the timeout task and embed it
- * in every operation's task arg that needs to create a timeout.
- */
-struct request_timeout_wrapper {
-    struct request_timeout_task_arg *timeout_task_arg;
-};
-
 static void s_request_timeout(struct aws_channel_task *channel_task, void *arg, enum aws_task_status status) {
     (void)channel_task;
     struct request_timeout_task_arg *timeout_task_arg = arg;
@@ -139,8 +120,14 @@ static void s_request_timeout(struct aws_channel_task *channel_task, void *arg, 
 
 static struct request_timeout_task_arg *s_schedule_timeout_task(
     struct aws_mqtt_client_connection_311_impl *connection,
-    uint16_t packet_id) {
-    /* schedule a timeout task to run, in case server consider the publish is not received */
+    uint16_t packet_id,
+    uint64_t timeout_duration_in_ns) {
+
+    if (timeout_duration_in_ns == UINT64_MAX || timeout_duration_in_ns == 0 || packet_id == 0) {
+        return NULL;
+    }
+
+    /* schedule a timeout task to run, in case server never sends us an ack */
     struct aws_channel_task *request_timeout_task = NULL;
     struct request_timeout_task_arg *timeout_task_arg = NULL;
     if (!aws_mem_acquire_many(
@@ -161,7 +148,7 @@ static struct request_timeout_task_arg *s_schedule_timeout_task(
         aws_mem_release(connection->allocator, timeout_task_arg);
         return NULL;
     }
-    timestamp = aws_add_u64_saturating(timestamp, connection->operation_timeout_ns);
+    timestamp = aws_add_u64_saturating(timestamp, timeout_duration_in_ns);
     aws_channel_schedule_task_future(connection->slot->channel, request_timeout_task, timestamp);
     return timeout_task_arg;
 }
@@ -259,6 +246,7 @@ static void s_mqtt_client_shutdown(
     (void)channel;
 
     struct aws_mqtt_client_connection_311_impl *connection = user_data;
+    AWS_FATAL_ASSERT(aws_event_loop_thread_is_callers_thread(connection->loop));
 
     AWS_LOGF_TRACE(
         AWS_LS_MQTT_CLIENT, "id=%p: Channel has been shutdown with error code %d", (void *)connection, error_code);
@@ -404,6 +392,7 @@ static void s_mqtt_client_shutdown(
                 "id=%p: Connection interrupted, calling callback and attempting reconnect",
                 (void *)connection);
             MQTT_CLIENT_CALL_CALLBACK_ARGS(connection, on_interrupted, error_code);
+            aws_mqtt311_callback_set_manager_on_connection_interrupted(&connection->callback_manager, error_code);
 
             /* In case user called disconnect from the on_interrupted callback */
             bool stop_reconnect;
@@ -442,6 +431,7 @@ static void s_mqtt_client_shutdown(
                     (void *)connection);
                 MQTT_CLIENT_CALL_CALLBACK(connection, on_disconnect);
                 MQTT_CLIENT_CALL_CALLBACK_ARGS(connection, on_closed, NULL);
+                aws_mqtt311_callback_set_manager_on_disconnect(&connection->callback_manager);
                 break;
             case AWS_MQTT_CLIENT_STATE_DISCONNECTING:
                 AWS_LOGF_DEBUG(
@@ -450,6 +440,7 @@ static void s_mqtt_client_shutdown(
                     (void *)connection);
                 MQTT_CLIENT_CALL_CALLBACK(connection, on_disconnect);
                 MQTT_CLIENT_CALL_CALLBACK_ARGS(connection, on_closed, NULL);
+                aws_mqtt311_callback_set_manager_on_disconnect(&connection->callback_manager);
                 break;
             case AWS_MQTT_CLIENT_STATE_CONNECTING:
                 AWS_LOGF_TRACE(
@@ -800,6 +791,8 @@ static void s_mqtt_client_connection_destroy_final(struct aws_mqtt_client_connec
         termination_handler = connection->on_termination;
         termination_handler_user_data = connection->on_termination_ud;
     }
+
+    aws_mqtt311_callback_set_manager_clean_up(&connection->callback_manager);
 
     /* If the reconnect_task isn't freed, free it */
     if (connection->reconnect_task) {
@@ -1370,6 +1363,27 @@ error:
     return AWS_OP_ERR;
 }
 
+struct mqtt_on_websocket_setup_task_arg {
+    struct aws_allocator *allocator;
+    struct aws_task task;
+    struct aws_mqtt_client_connection_311_impl *connection;
+    int error_code;
+};
+
+static void s_on_websocket_setup_task_fn(struct aws_task *task, void *userdata, enum aws_task_status status) {
+    (void)task;
+    (void)status;
+
+    struct mqtt_on_websocket_setup_task_arg *on_websocket_setup_task_arg = userdata;
+    struct aws_mqtt_client_connection_311_impl *connection = on_websocket_setup_task_arg->connection;
+    int error_code = on_websocket_setup_task_arg->error_code;
+
+    aws_mem_release(on_websocket_setup_task_arg->allocator, on_websocket_setup_task_arg);
+
+    struct aws_websocket_on_connection_setup_data websocket_setup = {.error_code = error_code};
+    s_on_websocket_setup(&websocket_setup, connection);
+}
+
 static void s_websocket_handshake_transform_complete(
     struct aws_http_message *handshake_request,
     int error_code,
@@ -1424,9 +1438,21 @@ static void s_websocket_handshake_transform_complete(
     return;
 
 error:;
-    /* Proceed to next step, telling it that we failed. */
-    struct aws_websocket_on_connection_setup_data websocket_setup = {.error_code = error_code};
-    s_on_websocket_setup(&websocket_setup, connection);
+    /* Proceed to next step, telling it that we failed.
+     * s_on_websocket_setup will shutdown MQTT connection, and this MUST happen on the MQTT connection's event loop. */
+    struct mqtt_on_websocket_setup_task_arg *on_websocket_setup_task_arg =
+        aws_mem_calloc(connection->allocator, 1, sizeof(struct mqtt_on_websocket_setup_task_arg));
+    on_websocket_setup_task_arg->allocator = connection->allocator;
+    /* NOTE: No need in acquiring MQTT connection ref counter, as it is already acquired at the start of connection
+     * process. s_on_websocket_setup will release it. */
+    on_websocket_setup_task_arg->connection = connection;
+    on_websocket_setup_task_arg->error_code = error_code;
+    aws_task_init(
+        &on_websocket_setup_task_arg->task,
+        s_on_websocket_setup_task_fn,
+        (void *)on_websocket_setup_task_arg,
+        "on_websocket_setup_task");
+    aws_event_loop_schedule_task_now(connection->loop, &on_websocket_setup_task_arg->task);
 }
 
 /*******************************************************************************
@@ -1894,6 +1920,20 @@ static enum aws_mqtt_client_request_state s_subscribe_send(uint16_t packet_id, b
         aws_mem_release(message->allocator, message);
     }
 
+    /* TODO: timing should start from the message written into the socket, which is aws_io_message->on_completion
+     * invoked, but there are bugs in the websocket handler (and maybe also the h1 handler?) where we don't properly
+     * fire the on_completion callbacks. */
+    struct request_timeout_task_arg *timeout_task_arg =
+        s_schedule_timeout_task(task_arg->connection, packet_id, task_arg->timeout_duration_in_ns);
+    if (timeout_task_arg) {
+        /*
+         * Set up mutual references between the operation task args and the timeout task args.  Whoever runs first
+         * "wins", does its logic, and then breaks the connection between the two.
+         */
+        task_arg->timeout_wrapper.timeout_task_arg = timeout_task_arg;
+        timeout_task_arg->task_arg_wrapper = &task_arg->timeout_wrapper;
+    }
+
     if (!task_arg->tree_updated) {
         aws_mqtt_topic_tree_transaction_commit(&task_arg->connection->thread_data.subscriptions, &transaction);
         task_arg->tree_updated = true;
@@ -1959,6 +1999,17 @@ static void s_subscribe_complete(
             error_code,
             task_arg->on_suback_ud);
     }
+
+    /*
+     * If we have a forward pointer to a timeout task, then that means the timeout task has not run yet.  So we should
+     * follow it and zero out the back pointer to us, because we're going away now.  The timeout task will run later
+     * and be harmless (even vs. future operations with the same packet id) because it only cancels if it has a back
+     * pointer.
+     */
+    if (task_arg->timeout_wrapper.timeout_task_arg) {
+        task_arg->timeout_wrapper.timeout_task_arg->task_arg_wrapper = NULL;
+    }
+
     for (size_t i = 0; i < list_len; i++) {
         aws_array_list_get_at(&task_arg->topics, &topic, i);
         s_task_topic_release(topic);
@@ -1991,6 +2042,7 @@ static uint16_t s_aws_mqtt_client_connection_311_subscribe_multiple(
     task_arg->connection = connection;
     task_arg->on_suback.multi = on_suback;
     task_arg->on_suback_ud = on_suback_ud;
+    task_arg->timeout_duration_in_ns = connection->operation_timeout_ns;
 
     const size_t num_topics = aws_array_list_length(topic_filters);
 
@@ -2129,23 +2181,33 @@ static void s_subscribe_single_complete(
             error_code,
             task_arg->on_suback_ud);
     }
+
+    /*
+     * If we have a forward pointer to a timeout task, then that means the timeout task has not run yet.  So we should
+     * follow it and zero out the back pointer to us, because we're going away now.  The timeout task will run later
+     * and be harmless (even vs. future operations with the same packet id) because it only cancels if it has a back
+     * pointer.
+     */
+    if (task_arg->timeout_wrapper.timeout_task_arg) {
+        task_arg->timeout_wrapper.timeout_task_arg->task_arg_wrapper = NULL;
+    }
+
     s_task_topic_release(topic);
     aws_array_list_clean_up(&task_arg->topics);
     aws_mqtt_packet_subscribe_clean_up(&task_arg->subscribe);
     aws_mem_release(task_arg->connection->allocator, task_arg);
 }
 
-static uint16_t s_aws_mqtt_client_connection_311_subscribe(
-    void *impl,
+uint16_t aws_mqtt_client_connection_311_subscribe(
+    struct aws_mqtt_client_connection_311_impl *connection,
     const struct aws_byte_cursor *topic_filter,
     enum aws_mqtt_qos qos,
     aws_mqtt_client_publish_received_fn *on_publish,
     void *on_publish_ud,
     aws_mqtt_userdata_cleanup_fn *on_ud_cleanup,
     aws_mqtt_suback_fn *on_suback,
-    void *on_suback_ud) {
-
-    struct aws_mqtt_client_connection_311_impl *connection = impl;
+    void *on_suback_ud,
+    uint64_t timeout_ns) {
 
     AWS_PRECONDITION(connection);
 
@@ -2174,6 +2236,7 @@ static uint16_t s_aws_mqtt_client_connection_311_subscribe(
     task_arg->connection = connection;
     task_arg->on_suback.single = on_suback;
     task_arg->on_suback_ud = on_suback_ud;
+    task_arg->timeout_duration_in_ns = timeout_ns;
 
     /* It stores the pointer */
     aws_array_list_init_static(&task_arg->topics, task_topic_storage, 1, sizeof(void *));
@@ -2247,6 +2310,29 @@ handle_error:
     }
 
     return 0;
+}
+
+static uint16_t s_aws_mqtt_client_connection_311_subscribe(
+    void *impl,
+    const struct aws_byte_cursor *topic_filter,
+    enum aws_mqtt_qos qos,
+    aws_mqtt_client_publish_received_fn *on_publish,
+    void *on_publish_ud,
+    aws_mqtt_userdata_cleanup_fn *on_ud_cleanup,
+    aws_mqtt_suback_fn *on_suback,
+    void *on_suback_ud) {
+
+    struct aws_mqtt_client_connection_311_impl *connection = impl;
+    return aws_mqtt_client_connection_311_subscribe(
+        connection,
+        topic_filter,
+        qos,
+        on_publish,
+        on_publish_ud,
+        on_ud_cleanup,
+        on_suback,
+        on_suback_ud,
+        connection->operation_timeout_ns);
 }
 
 /*******************************************************************************
@@ -2353,6 +2439,20 @@ static enum aws_mqtt_client_request_state s_resubscribe_send(
         aws_mem_release(message->allocator, message);
     }
 
+    /* TODO: timing should start from the message written into the socket, which is aws_io_message->on_completion
+     * invoked, but there are bugs in the websocket handler (and maybe also the h1 handler?) where we don't properly
+     * fire the on_completion callbacks. */
+    struct request_timeout_task_arg *timeout_task_arg =
+        s_schedule_timeout_task(task_arg->connection, packet_id, task_arg->timeout_duration_in_ns);
+    if (timeout_task_arg) {
+        /*
+         * Set up mutual references between the operation task args and the timeout task args.  Whoever runs first
+         * "wins", does its logic, and then breaks the connection between the two.
+         */
+        task_arg->timeout_wrapper.timeout_task_arg = timeout_task_arg;
+        timeout_task_arg->task_arg_wrapper = &task_arg->timeout_wrapper;
+    }
+
     return AWS_MQTT_CLIENT_REQUEST_ONGOING;
 
 handle_error:
@@ -2416,6 +2516,16 @@ static void s_resubscribe_complete(
 
 clean_up:
 
+    /*
+     * If we have a forward pointer to a timeout task, then that means the timeout task has not run yet.  So we should
+     * follow it and zero out the back pointer to us, because we're going away now.  The timeout task will run later
+     * and be harmless (even vs. future operations with the same packet id) because it only cancels if it has a back
+     * pointer.
+     */
+    if (task_arg->timeout_wrapper.timeout_task_arg) {
+        task_arg->timeout_wrapper.timeout_task_arg->task_arg_wrapper = NULL;
+    }
+
     /* We need to cleanup the subscribe_task_topics, since they are not inserted into the topic tree by resubscribe. We
      * take the ownership to clean it up */
     for (size_t i = 0; i < list_len; i++) {
@@ -2445,6 +2555,7 @@ static uint16_t s_aws_mqtt_311_resubscribe_existing_topics(
     task_arg->connection = connection;
     task_arg->on_suback.multi = on_suback;
     task_arg->on_suback_ud = on_suback_ud;
+    task_arg->timeout_duration_in_ns = connection->operation_timeout_ns;
 
     /* Calculate the size of the packet.
      * The fixed header is 2 bytes and the packet ID is 2 bytes
@@ -2505,6 +2616,7 @@ struct unsubscribe_task_arg {
     void *on_unsuback_ud;
 
     struct request_timeout_wrapper timeout_wrapper;
+    uint64_t timeout_duration_in_ns;
 };
 
 static enum aws_mqtt_client_request_state s_unsubscribe_send(
@@ -2596,17 +2708,16 @@ static enum aws_mqtt_client_request_state s_unsubscribe_send(
     /* TODO: timing should start from the message written into the socket, which is aws_io_message->on_completion
      * invoked, but there are bugs in the websocket handler (and maybe also the h1 handler?) where we don't properly
      * fire the on_completion callbacks. */
-    struct request_timeout_task_arg *timeout_task_arg = s_schedule_timeout_task(task_arg->connection, packet_id);
-    if (!timeout_task_arg) {
-        return AWS_MQTT_CLIENT_REQUEST_ERROR;
+    struct request_timeout_task_arg *timeout_task_arg =
+        s_schedule_timeout_task(task_arg->connection, packet_id, task_arg->timeout_duration_in_ns);
+    if (timeout_task_arg) {
+        /*
+         * Set up mutual references between the operation task args and the timeout task args.  Whoever runs first
+         * "wins", does its logic, and then breaks the connection between the two.
+         */
+        task_arg->timeout_wrapper.timeout_task_arg = timeout_task_arg;
+        timeout_task_arg->task_arg_wrapper = &task_arg->timeout_wrapper;
     }
-
-    /*
-     * Set up mutual references between the operation task args and the timeout task args.  Whoever runs first
-     * "wins", does its logic, and then breaks the connection between the two.
-     */
-    task_arg->timeout_wrapper.timeout_task_arg = timeout_task_arg;
-    timeout_task_arg->task_arg_wrapper = &task_arg->timeout_wrapper;
 
     if (!task_arg->tree_updated) {
         aws_mqtt_topic_tree_transaction_commit(&task_arg->connection->thread_data.subscriptions, &transaction);
@@ -2650,7 +2761,6 @@ static void s_unsubscribe_complete(
      */
     if (task_arg->timeout_wrapper.timeout_task_arg) {
         task_arg->timeout_wrapper.timeout_task_arg->task_arg_wrapper = NULL;
-        task_arg->timeout_wrapper.timeout_task_arg = NULL;
     }
 
     if (task_arg->on_unsuback) {
@@ -2662,13 +2772,12 @@ static void s_unsubscribe_complete(
     aws_mem_release(task_arg->connection->allocator, task_arg);
 }
 
-static uint16_t s_aws_mqtt_client_connection_311_unsubscribe(
-    void *impl,
+uint16_t aws_mqtt_client_connection_311_unsubscribe(
+    struct aws_mqtt_client_connection_311_impl *connection,
     const struct aws_byte_cursor *topic_filter,
     aws_mqtt_op_complete_fn *on_unsuback,
-    void *on_unsuback_ud) {
-
-    struct aws_mqtt_client_connection_311_impl *connection = impl;
+    void *on_unsuback_ud,
+    uint64_t timeout_ns) {
 
     AWS_PRECONDITION(connection);
 
@@ -2688,6 +2797,7 @@ static uint16_t s_aws_mqtt_client_connection_311_unsubscribe(
     task_arg->filter = aws_byte_cursor_from_string(task_arg->filter_string);
     task_arg->on_unsuback = on_unsuback;
     task_arg->on_unsuback_ud = on_unsuback_ud;
+    task_arg->timeout_duration_in_ns = timeout_ns;
 
     /* Calculate the size of the unsubscribe packet.
      * The fixed header is always 2 bytes, the packet ID is always 2 bytes
@@ -2723,6 +2833,18 @@ handle_error:
     return 0;
 }
 
+static uint16_t s_aws_mqtt_client_connection_311_unsubscribe(
+    void *impl,
+    const struct aws_byte_cursor *topic_filter,
+    aws_mqtt_op_complete_fn *on_unsuback,
+    void *on_unsuback_ud) {
+
+    struct aws_mqtt_client_connection_311_impl *connection = impl;
+
+    return aws_mqtt_client_connection_311_unsubscribe(
+        connection, topic_filter, on_unsuback, on_unsuback_ud, connection->operation_timeout_ns);
+}
+
 /*******************************************************************************
  * Publish
  ******************************************************************************/
@@ -2742,6 +2864,7 @@ struct publish_task_arg {
     aws_mqtt_op_complete_fn *on_complete;
     void *userdata;
 
+    uint64_t timeout_duration_in_ns;
     struct request_timeout_wrapper timeout_wrapper;
 };
 
@@ -2876,15 +2999,13 @@ static enum aws_mqtt_client_request_state s_publish_send(uint16_t packet_id, boo
             goto write_payload_chunk;
         }
     }
-    if (!is_qos_0 && connection->operation_timeout_ns != UINT64_MAX) {
-        /* TODO: timing should start from the message written into the socket, which is aws_io_message->on_completion
-         * invoked, but there are bugs in the websocket handler (and maybe also the h1 handler?) where we don't properly
-         * fire fire the on_completion callbacks. */
-        struct request_timeout_task_arg *timeout_task_arg = s_schedule_timeout_task(connection, packet_id);
-        if (!timeout_task_arg) {
-            return AWS_MQTT_CLIENT_REQUEST_ERROR;
-        }
 
+    /* TODO: timing should start from the message written into the socket, which is aws_io_message->on_completion
+     * invoked, but there are bugs in the websocket handler (and maybe also the h1 handler?) where we don't properly
+     * fire fire the on_completion callbacks. */
+    struct request_timeout_task_arg *timeout_task_arg =
+        s_schedule_timeout_task(connection, packet_id, task_arg->timeout_duration_in_ns);
+    if (timeout_task_arg != NULL) {
         /*
          * Set up mutual references between the operation task args and the timeout task args.  Whoever runs first
          * "wins", does its logic, and then breaks the connection between the two.
@@ -2921,7 +3042,6 @@ static void s_publish_complete(
      */
     if (task_arg->timeout_wrapper.timeout_task_arg != NULL) {
         task_arg->timeout_wrapper.timeout_task_arg->task_arg_wrapper = NULL;
-        task_arg->timeout_wrapper.timeout_task_arg = NULL;
     }
 
     aws_byte_buf_clean_up(&task_arg->payload_buf);
@@ -2929,16 +3049,15 @@ static void s_publish_complete(
     aws_mem_release(connection->allocator, task_arg);
 }
 
-static uint16_t s_aws_mqtt_client_connection_311_publish(
-    void *impl,
+uint16_t aws_mqtt_client_connection_311_publish(
+    struct aws_mqtt_client_connection_311_impl *connection,
     const struct aws_byte_cursor *topic,
     enum aws_mqtt_qos qos,
     bool retain,
     const struct aws_byte_cursor *payload,
     aws_mqtt_op_complete_fn *on_complete,
-    void *userdata) {
-
-    struct aws_mqtt_client_connection_311_impl *connection = impl;
+    void *userdata,
+    uint64_t timeout_ns) {
 
     AWS_PRECONDITION(connection);
 
@@ -2962,6 +3081,7 @@ static uint16_t s_aws_mqtt_client_connection_311_publish(
     arg->topic = aws_byte_cursor_from_string(arg->topic_string);
     arg->qos = qos;
     arg->retain = retain;
+    arg->timeout_duration_in_ns = timeout_ns;
 
     struct aws_byte_cursor payload_cursor;
     AWS_ZERO_STRUCT(payload_cursor);
@@ -3017,6 +3137,21 @@ handle_error:
     aws_mem_release(connection->allocator, arg);
 
     return 0;
+}
+
+static uint16_t s_aws_mqtt_client_connection_311_publish(
+    void *impl,
+    const struct aws_byte_cursor *topic,
+    enum aws_mqtt_qos qos,
+    bool retain,
+    const struct aws_byte_cursor *payload,
+    aws_mqtt_op_complete_fn *on_complete,
+    void *userdata) {
+
+    struct aws_mqtt_client_connection_311_impl *connection = impl;
+
+    return aws_mqtt_client_connection_311_publish(
+        connection, topic, qos, retain, payload, on_complete, userdata, connection->operation_timeout_ns);
 }
 
 /*******************************************************************************
@@ -3220,6 +3355,18 @@ static void s_aws_mqtt_client_connection_311_release(void *impl) {
     aws_ref_count_release(&connection->ref_count);
 }
 
+static enum aws_mqtt311_impl_type s_aws_mqtt_client_connection_311_get_impl(const void *impl) {
+    (void)impl;
+
+    return AWS_MQTT311_IT_311_CONNECTION;
+}
+
+static struct aws_event_loop *s_aws_mqtt_client_connection_311_get_event_loop(const void *impl) {
+    const struct aws_mqtt_client_connection_311_impl *connection = impl;
+
+    return connection->loop;
+}
+
 static struct aws_mqtt_client_connection_vtable s_aws_mqtt_client_connection_311_vtable = {
     .acquire_fn = s_aws_mqtt_client_connection_311_acquire,
     .release_fn = s_aws_mqtt_client_connection_311_release,
@@ -3243,6 +3390,8 @@ static struct aws_mqtt_client_connection_vtable s_aws_mqtt_client_connection_311
     .unsubscribe_fn = s_aws_mqtt_client_connection_311_unsubscribe,
     .publish_fn = s_aws_mqtt_client_connection_311_publish,
     .get_stats_fn = s_aws_mqtt_client_connection_311_get_stats,
+    .get_impl_type = s_aws_mqtt_client_connection_311_get_impl,
+    .get_event_loop = s_aws_mqtt_client_connection_311_get_event_loop,
 };
 
 static struct aws_mqtt_client_connection_vtable *s_aws_mqtt_client_connection_311_vtable_ptr =
@@ -3343,6 +3492,8 @@ struct aws_mqtt_client_connection *aws_mqtt_client_connection_new(struct aws_mqt
     connection->handler.alloc = connection->allocator;
     connection->handler.vtable = aws_mqtt_get_client_channel_vtable();
     connection->handler.impl = connection;
+
+    aws_mqtt311_callback_set_manager_init(&connection->callback_manager, connection->allocator, &connection->base);
 
     return &connection->base;
 

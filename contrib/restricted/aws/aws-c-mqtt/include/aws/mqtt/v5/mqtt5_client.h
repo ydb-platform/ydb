@@ -341,6 +341,7 @@ struct aws_mqtt5_publish_completion_options {
     aws_mqtt5_publish_completion_fn *completion_callback;
     void *completion_user_data;
 
+    /** Overrides the client's ack timeout with this value, for this operation only */
     uint32_t ack_timeout_seconds_override;
 };
 
@@ -351,6 +352,7 @@ struct aws_mqtt5_subscribe_completion_options {
     aws_mqtt5_subscribe_completion_fn *completion_callback;
     void *completion_user_data;
 
+    /** Overrides the client's ack timeout with this value, for this operation only */
     uint32_t ack_timeout_seconds_override;
 };
 
@@ -361,6 +363,7 @@ struct aws_mqtt5_unsubscribe_completion_options {
     aws_mqtt5_unsubscribe_completion_fn *completion_callback;
     void *completion_user_data;
 
+    /** Overrides the client's ack timeout with this value, for this operation only */
     uint32_t ack_timeout_seconds_override;
 };
 

@@ -13,7 +13,7 @@
 #include <aws/io/channel_bootstrap.h>
 #include <aws/io/event_loop.h>
 #include <aws/mqtt/private/client_impl_shared.h>
-#include <aws/mqtt/private/shared_constants.h>
+#include <aws/mqtt/private/shared.h>
 #include <aws/mqtt/private/v5/mqtt5_client_impl.h>
 #include <aws/mqtt/private/v5/mqtt5_options_storage.h>
 #include <aws/mqtt/private/v5/mqtt5_utils.h>

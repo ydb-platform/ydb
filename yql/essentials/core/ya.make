@@ -16,6 +16,8 @@ SRCS(
     yql_expr_optimize.h
     yql_expr_type_annotation.cpp
     yql_expr_type_annotation.h
+    yql_func_stack.cpp
+    yql_func_stack.h
     yql_gc_transformer.cpp
     yql_gc_transformer.h
     yql_graph_transformer.cpp

@@ -11,6 +11,7 @@
 #include <aws/mqtt/private/client_impl_shared.h>
 #include <aws/mqtt/private/fixed_header.h>
 #include <aws/mqtt/private/mqtt311_decoder.h>
+#include <aws/mqtt/private/mqtt311_listener.h>
 #include <aws/mqtt/private/topic_tree.h>
 
 #include <aws/common/hash_table.h>
@@ -153,6 +154,25 @@ struct aws_mqtt_reconnect_task {
     struct aws_allocator *allocator;
 };
 
+struct request_timeout_wrapper;
+
+/* used for timeout task */
+struct request_timeout_task_arg {
+    uint16_t packet_id;
+    struct aws_mqtt_client_connection_311_impl *connection;
+    struct request_timeout_wrapper *task_arg_wrapper;
+};
+
+/*
+ * We want the timeout task to be able to destroy the forward reference from the operation's task arg structure
+ * to the timeout task.  But the operation task arg structures don't have any data structure in common.  So to allow
+ * the timeout to refer back to a zero-able forward pointer, we wrap a pointer to the timeout task and embed it
+ * in every operation's task arg that needs to create a timeout.
+ */
+struct request_timeout_wrapper {
+    struct request_timeout_task_arg *timeout_task_arg;
+};
+
 /* The lifetime of this struct is from subscribe -> suback */
 struct subscribe_task_arg {
 
@@ -172,6 +192,9 @@ struct subscribe_task_arg {
         aws_mqtt_suback_fn *single;
     } on_suback;
     void *on_suback_ud;
+
+    struct request_timeout_wrapper timeout_wrapper;
+    uint64_t timeout_duration_in_ns;
 };
 
 /* The lifetime of this struct is the same as the lifetime of the subscription */
@@ -254,6 +277,9 @@ struct aws_mqtt_client_connection_311_impl {
     void *on_termination_ud;
     aws_mqtt_on_operation_statistics_fn *on_any_operation_statistics;
     void *on_any_operation_statistics_ud;
+
+    /* listener callbacks */
+    struct aws_mqtt311_callback_set_manager callback_manager;
 
     /* Connection tasks. */
     struct aws_mqtt_reconnect_task *reconnect_task;
@@ -424,5 +450,33 @@ void aws_mqtt_connection_statistics_change_operation_statistic_state(
     enum aws_mqtt_operation_statistic_state_flags new_state_flags);
 
 AWS_MQTT_API const struct aws_mqtt_client_connection_packet_handlers *aws_mqtt311_get_default_packet_handlers(void);
+
+AWS_MQTT_API uint16_t aws_mqtt_client_connection_311_unsubscribe(
+    struct aws_mqtt_client_connection_311_impl *connection,
+    const struct aws_byte_cursor *topic_filter,
+    aws_mqtt_op_complete_fn *on_unsuback,
+    void *on_unsuback_ud,
+    uint64_t timeout_ns);
+
+AWS_MQTT_API uint16_t aws_mqtt_client_connection_311_subscribe(
+    struct aws_mqtt_client_connection_311_impl *connection,
+    const struct aws_byte_cursor *topic_filter,
+    enum aws_mqtt_qos qos,
+    aws_mqtt_client_publish_received_fn *on_publish,
+    void *on_publish_ud,
+    aws_mqtt_userdata_cleanup_fn *on_ud_cleanup,
+    aws_mqtt_suback_fn *on_suback,
+    void *on_suback_ud,
+    uint64_t timeout_ns);
+
+AWS_MQTT_API uint16_t aws_mqtt_client_connection_311_publish(
+    struct aws_mqtt_client_connection_311_impl *connection,
+    const struct aws_byte_cursor *topic,
+    enum aws_mqtt_qos qos,
+    bool retain,
+    const struct aws_byte_cursor *payload,
+    aws_mqtt_op_complete_fn *on_complete,
+    void *userdata,
+    uint64_t timeout_ns);
 
 #endif /* AWS_MQTT_PRIVATE_CLIENT_IMPL_H */

@@ -716,6 +716,51 @@ TESTCASES = [
         "MultiGet",
         "true",
     ),
+    # 14
+    (
+        R'''
+            $input = SELECT * FROM myyds.`{input_topic}`
+                    WITH (
+                        FORMAT=json_each_row,
+                        SCHEMA (
+                            lza List<Int32?>,
+                            lyb List<STRING>,
+                            sza Int32?,
+                            syb STRING,
+                            yc Int32,
+                        )
+                    )            ;
+
+            $listified = SELECT * FROM ydb_conn_{table_name}.db;
+
+            $enriched = select u.a as la, u.b as lb, u.c as lc, u2.a as sa, u2.b as sb, u2.c as sc, lza, lyb, sza, syb, yc
+                from
+                    $input as e
+                left join {streamlookup} $listified as u
+                on(e.lza = u.a AND e.lyb = u.b)
+                left join /*+streamlookup()*/ $listified as u2
+                on(e.sza = u2.a AND e.syb = u2.b)
+                -- MultiGet true
+            ;
+
+            insert into myyds.`{output_topic}`
+            select Unwrap(Yson::SerializeJson(Yson::From(TableRow()))) from $enriched;
+            ''',
+        ResequenceId(
+            [
+                (
+                    '{"id":1,"lza":[1,7],"lyb":["2","8"],"sza":7,"syb":"8","yc":100}',
+                    '{"la":[1,7],"lb":["2","8"],"lc":[3,9],"lza":[1,7],"lyb":["2","8"],"sa":7,"sb":"8","sc":9,"sza":7,"syb":"8","yc":100}',
+                ),
+                (
+                    '{"id":3,"lza":[2,null],"lyb":["1","1"],"sza":2,"syb":"1","yc":114}',
+                    '{"la":[null,null],"lb":[null,null],"lc":[null,null],"lza":[2,null],"lyb":["1","1"],"yc":114,"sza":2,"syb":"1","sa":null,"sb":null,"sc":null}',
+                ),
+            ]
+        ),
+        "MultiGet",
+        "true",
+    ),
 ]
 
 

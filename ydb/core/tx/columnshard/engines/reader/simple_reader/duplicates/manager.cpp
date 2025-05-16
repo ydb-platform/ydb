@@ -13,6 +13,13 @@ namespace NKikimr::NOlap::NReader::NSimple {
 #define LOCAL_LOG_TRACE \
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)
 
+TFilterConstructor::TFilterConstructor(const std::shared_ptr<IFilterSubscriber>& callback, const std::shared_ptr<IDataSource>& source)
+    : Callback(callback)
+    , RowsCount(source->GetRecordsCount()) {
+    AFL_VERIFY(!!Callback);
+    AFL_VERIFY(RowsCount);
+}
+
 TDuplicateFilterConstructor::TDuplicateFilterConstructor(const TSpecialReadContext& context)
     : TActor(&TDuplicateFilterConstructor::StateMain)
     , SourceCache([this]() {
@@ -30,7 +37,9 @@ TDuplicateFilterConstructor::TDuplicateFilterConstructor(const TSpecialReadConte
             intervals.insert({ portion->IndexKeyStart(), portion->IndexKeyEnd() }, TSourceInfo(i, portion));
         }
         return intervals;
-    }()) {
+    }())
+    , FiltersCache(100)   // FIXME configure
+{
 }
 
 void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
@@ -38,10 +47,15 @@ void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
     AFL_VERIFY(source);
 
     std::vector<std::shared_ptr<IDataSource>> sourcesToFetch;
+    THashMap<ui64, NArrow::TFirstLastSpecialKeys> borders;
     {
-        const auto collector = [&sourcesToFetch, context = ev->Get()->GetSource()->GetContextAsVerified<TSpecialReadContext>()](
+        const auto collector = [&sourcesToFetch, &borders, context = ev->Get()->GetSource()->GetContextAsVerified<TSpecialReadContext>()](
                                    const TInterval<NArrow::TSimpleRow>& /*interval*/, const TSourceInfo& info) {
-            sourcesToFetch.emplace_back(info.Construct(context));
+            auto source = info.Construct(context);
+            sourcesToFetch.emplace_back(source);
+            borders.emplace(
+                source->GetSourceId(), NArrow::TFirstLastSpecialKeys(source->GetPortionInfo().IndexKeyStart(),
+                                           source->GetPortionInfo().IndexKeyEnd(), source->GetPortionInfo().IndexKeyStart().GetSchema()));
             return true;
         };
         Intervals.find(
@@ -57,8 +71,108 @@ void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
         return;
     }
 
-    SourceCache->GetSourcesData(std::move(sourcesToFetch), ev->Get()->GetSource()->GetGroupGuard(),
-        std::make_unique<TSourceDataSubscriber>(SelfId(), source, ev->Get()->GetSubscriber()));
+    TColumnDataSplitter splitter(borders, NArrow::TFirstLastSpecialKeys(source->GetPortionInfo().IndexKeyStart(),
+                                              source->GetPortionInfo().IndexKeyEnd(), source->GetPortionInfo().IndexKeyStart().GetSchema()));
+
+    SourceCache->GetSourcesData(std::move((std::vector<std::shared_ptr<IDataSource>>)sourcesToFetch), ev->Get()->GetSource()->GetGroupGuard(),
+        std::make_unique<TSourceDataSubscriber>(
+            SelfId(), source, std::make_shared<TFilterConstructor>(ev->Get()->GetSubscriber(), source), std::move(splitter)));
+}
+
+void TDuplicateFilterConstructor::Handle(const TEvConstructFilters::TPtr& ev) {
+    const auto& mainSource = ev->Get()->GetSource();
+    const TColumnDataSplitter& splitter = ev->Get()->GetSplitter();
+    const TSnapshot maxVersion = mainSource->GetContext()->GetReadMetadata()->GetRequestSnapshot();
+
+    THashMap<ui64, std::vector<TColumnDataSplitter::TSourceSegment>> splitted;
+    for (const auto& [id, data] : ev->Get()->GetColumnData()) {
+        splitted[id] = splitter.SplitPortion(data, id, maxVersion);
+    }
+
+    THashSet<ui64> builtIntervals;
+    {
+        const auto& splittedMain = *TValidator::CheckNotNull(splitted.FindPtr(mainSource->GetSourceId()));
+        AFL_VERIFY(splittedMain.size() == splitter.NumIntervals());
+        for (ui64 i = 0; i < splitter.NumIntervals(); ++i) {
+            if (!splittedMain[i].GetInterval().GetRowsCount()) {
+                builtIntervals.insert(i);
+                continue;
+            }
+            if (auto* findBuilding = BuildingFilters.FindPtr(splittedMain[i].GetInterval())) {
+                findBuilding->emplace_back(ev->Get()->GetCallback());
+                builtIntervals.insert(i);
+                continue;
+            }
+            if (auto findCached = FiltersCache.Find(splittedMain[i].GetInterval()); findCached != FiltersCache.End()) {
+                ev->Get()->GetCallback()->AddFilter(findCached.Key(), findCached.Value());
+                builtIntervals.insert(i);
+                continue;
+            }
+            BuildingFilters[splittedMain[i].GetInterval()].emplace_back(ev->Get()->GetCallback());
+        }
+    }
+    if (ev->Get()->GetCallback()->IsDone()) {
+        return;
+    }
+
+    std::vector<THashMap<ui64, TColumnDataSplitter::TSourceSegment>> intervals(splitter.NumIntervals());
+    for (const auto& [id, data] : ev->Get()->GetColumnData()) {
+        auto portionIntervals = splitter.SplitPortion(data, id, maxVersion);
+        for (ui64 i = 0; i < portionIntervals.size(); ++i) {
+            if (portionIntervals[i].GetInterval().GetRowsCount()) {
+                intervals[i].emplace(id, std::move(portionIntervals[i]));
+            }
+        }
+    }
+
+    NArrow::NMerger::TCursor maxVersionBatch = [snapshot = mainSource->GetContext()->GetReadMetadata()->GetRequestSnapshot()]() {
+        NArrow::TGeneralContainer batch(1);
+        IIndexInfo::AddSnapshotColumns(batch, snapshot, std::numeric_limits<ui64>::max());
+        return NArrow::NMerger::TCursor(batch.BuildTableVerified(), 0, IIndexInfo::GetSnapshotColumnNames());
+    }();
+
+    for (ui64 i = 0; i < splitter.NumIntervals(); ++i) {
+        auto&& segments = intervals[i];
+        if (segments.empty() || builtIntervals.contains(i)) {
+            // Do nothing
+        } else if (segments.size() == 1) {
+            const auto mapInfo = segments.begin()->second.GetInterval();
+            NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
+            filter.Add(true, mapInfo.GetRowsCount());
+            AFL_VERIFY(BuildingFilters.contains(mapInfo));
+            Send(SelfId(), new TEvFiltersConstructed(THashMap<TDuplicateMapInfo, NArrow::TColumnFilter>({ { mapInfo, filter } })));
+        } else {
+            THashMap<ui64, TDuplicateMapInfo> mapInfos;
+            for (auto&& [source, segment] : segments) {
+                mapInfos.emplace(source, segment.GetInterval());
+            }
+            const std::shared_ptr<TBuildDuplicateFilters> task =
+                std::make_shared<TBuildDuplicateFilters>(mainSource->GetContext()->GetReadMetadata()->GetReplaceKey(),
+                    IIndexInfo::GetSnapshotColumnNames(), mainSource->GetContext()->GetCommonContext()->GetCounters(), maxVersionBatch,
+                    std::make_unique<TFilterResultSubscriber>(SelfId(), std::move(mapInfos)));
+            for (auto&& [source, segment] : segments) {
+                task->AddSource(std::make_shared<NArrow::TGeneralContainer>(segment.ExtractData()),
+                    std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter()), source);
+                Y_UNUSED(BuildingFilters.emplace(segment.GetInterval(), std::vector<std::shared_ptr<TFilterConstructor>>()).second);
+            }
+            NConveyor::TScanServiceOperator::SendTaskToExecute(task, mainSource->GetContext()->GetCommonContext()->GetConveyorProcessId());
+        }
+    }
+
+    // FIXME: mem guard lost
+}
+
+void TDuplicateFilterConstructor::Handle(const TEvFiltersConstructed::TPtr& ev) {
+    for (const auto& [key, filter] : ev->Get()->GetResult()) {
+        auto findWaiting = BuildingFilters.find(key);
+        AFL_VERIFY(findWaiting != BuildingFilters.end());
+        for (const auto& callback : findWaiting->second) {
+            callback->AddFilter(key, filter);
+        }
+        BuildingFilters.erase(findWaiting);
+
+        FiltersCache.Insert(key, filter);
+    }
 }
 
 std::shared_ptr<TPortionDataSource> TDuplicateFilterConstructor::TSourceInfo::Construct(
@@ -69,29 +183,15 @@ std::shared_ptr<TPortionDataSource> TDuplicateFilterConstructor::TSourceInfo::Co
 }
 
 void TDuplicateFilterConstructor::TSourceDataSubscriber::OnSourcesReady(TSourceCache::TSourcesData&& result) {
-    // FIXME: don't merge on exclusive intervals
-    // FIXME: strip sources
-    NArrow::NMerger::TCursor maxVersion = [snapshot = Source->GetContext()->GetReadMetadata()->GetRequestSnapshot()]() {
-        NArrow::TGeneralContainer batch(1);
-        IIndexInfo::AddSnapshotColumns(batch, snapshot, std::numeric_limits<ui64>::max());
-        return NArrow::NMerger::TCursor(batch.BuildTableVerified(), 0, IIndexInfo::GetSnapshotColumnNames());
-    }();
-
-    const std::shared_ptr<TBuildDuplicateFilters> task =
-        std::make_shared<TBuildDuplicateFilters>(Source->GetContext()->GetReadMetadata()->GetReplaceKey(), IIndexInfo::GetSnapshotColumnNames(),
-            Source->GetContext()->GetCommonContext()->GetCounters(), maxVersion,
-            std::make_unique<TFilterResultSubscriber>(Owner, Source, std::move(Callback)));
-    for (const auto& [sourceId, data] : result) {
-        task->AddSource(std::move(data), std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter()), sourceId);
-    }
-
-    NConveyor::TScanServiceOperator::SendTaskToExecute(task, Source->GetContext()->GetCommonContext()->GetConveyorProcessId());
+    TActorContext::AsActorContext().Send(Owner, new TEvConstructFilters(Source, Callback, std::move(result), std::move(Splitter)));
 }
 
 void TDuplicateFilterConstructor::TFilterResultSubscriber::OnResult(THashMap<ui64, NArrow::TColumnFilter>&& result) {
-    auto findFilter = result.FindPtr(Source->GetSourceId());
-    AFL_VERIFY(findFilter);
-    Callback->OnFilterReady(*findFilter);
+    THashMap<TDuplicateMapInfo, NArrow::TColumnFilter> filters;
+    for (const auto& [source, filter] : result) {
+        filters.emplace(*TValidator::CheckNotNull(InfoBySource.FindPtr(source)), filter);
+    }
+    TActorContext::AsActorContext().Send(Owner, new TEvFiltersConstructed(std::move(filters)));
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

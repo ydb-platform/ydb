@@ -1088,5 +1088,6 @@ message TActivity {
         TENANT_DATA_ERASURE = 659;
         BS_SYNC_BROKER = 660;
         BS_PROXY_CHECKINTEGRITY_ACTOR = 661;
+        CMS_CONFIG_INFO_COLLECTOR = 662;
     };
 };

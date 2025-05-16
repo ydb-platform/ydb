@@ -242,3 +242,42 @@ message FetchStartupConfigResult {
     // YAML document with generated dynamic config
     string config = 1;
 }
+
+message GetConfigurationVersionRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    // List nodes with different configuration versions
+    bool list_nodes = 2;
+}
+
+message GetConfigurationVersionResponse {
+    // Result of request will be inside operation.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message NodeInfo {
+    message Endpoint {
+        // Node's hostname
+        string hostname = 1;
+        // Node's port
+        uint32 port = 2;
+    }
+    // Node's id
+    uint32 node_id = 1;
+    // Node's endpoint
+    Endpoint endpoint = 2;
+}
+
+message GetConfigurationVersionResult {
+    // Count of nodes with V1 configuration version
+    uint32 v1_nodes = 1;
+    // List of nodes with V1 configuration version
+    repeated NodeInfo v1_nodes_list = 2;
+    // Count of nodes with V2 configuration version
+    uint32 v2_nodes = 3;
+    // List of nodes with V2 configuration version
+    repeated NodeInfo v2_nodes_list = 4;
+    // Count of nodes with unknown configuration version
+    uint32 unknown_nodes = 5;
+    // List of nodes with unknown configuration version
+    repeated NodeInfo unknown_nodes_list = 6;
+}

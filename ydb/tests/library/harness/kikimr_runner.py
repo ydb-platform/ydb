@@ -614,6 +614,13 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         for node in self.nodes.values():
             node.start()
 
+    def enable_config_dir(self, node_ids=None):
+        if node_ids is None:
+            node_ids = self.__configurator.all_node_ids()
+        self.__configurator.use_config_store = True
+        for node_id in node_ids:
+            self.nodes[node_id].enable_config_dir()
+
     @property
     def config_path(self):
         if self.__configurator.separate_node_configs:
@@ -639,11 +646,6 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
     def overwrite_configs(self, config):
         self.__configurator.full_config = config
         self.__write_configs()
-
-    def enable_config_dir(self):
-        self.__configurator.use_config_store = True
-        for node in self.nodes.values():
-            node.enable_config_dir()
 
     def __instantiate_udfs_dir(self):
         to_load = self.__configurator.get_yql_udfs_to_load()

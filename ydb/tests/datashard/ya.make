@@ -1,5 +1,6 @@
 RECURSE(
     async_replication
+    dml
     dump_restore
     copy_table
     lib

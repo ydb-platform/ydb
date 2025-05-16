@@ -12,6 +12,9 @@ class DMLOperations():
 
     def query(self, text):
         return self.query_object.query(text)
+    
+    def transactional(self, process):
+        return self.query_object.transactional(process)
 
     def create_table(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
         columns = {

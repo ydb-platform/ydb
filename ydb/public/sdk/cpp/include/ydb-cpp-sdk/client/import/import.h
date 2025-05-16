@@ -5,6 +5,10 @@
 
 #include <ydb-cpp-sdk/client/types/s3_settings.h>
 
+namespace Ydb::Import {
+class ListObjectsInS3ExportResult;
+}
+
 namespace NYdb::inline V3 {
 namespace NImport {
 
@@ -77,6 +81,49 @@ private:
     TMetadata Metadata_;
 };
 
+using TAsyncImportFromS3Response = NThreading::TFuture<TImportFromS3Response>;
+
+struct TListObjectsInS3ExportSettings : public TOperationRequestSettings<TListObjectsInS3ExportSettings>,
+                                        public TS3Settings<TListObjectsInS3ExportSettings> {
+    using TSelf = TListObjectsInS3ExportSettings;
+
+    struct TItem {
+        // Database object path.
+        std::string Path = {};
+    };
+
+    FLUENT_SETTING_VECTOR(TItem, Item);
+    FLUENT_SETTING_OPTIONAL(uint32_t, NumberOfRetries);
+    FLUENT_SETTING_OPTIONAL(std::string, Prefix);
+    FLUENT_SETTING_OPTIONAL(std::string, SymmetricKey);
+};
+
+class TListObjectsInS3ExportResult : public TStatus {
+public:
+    struct TItem {
+        // S3 object prefix
+        std::string Prefix;
+
+        // Database object path
+        std::string Path;
+
+        void Out(IOutputStream& out) const;
+    };
+
+    TListObjectsInS3ExportResult(TStatus&& status, const ::Ydb::Import::ListObjectsInS3ExportResult& proto);
+
+    const std::vector<TItem>& GetItems() const;
+    const std::string& NextPageToken() const { return NextPageToken_; }
+
+    void Out(IOutputStream& out) const;
+
+private:
+    std::vector<TItem> Items_;
+    std::string NextPageToken_;
+};
+
+using TAsyncListObjectsInS3ExportResult = NThreading::TFuture<TListObjectsInS3ExportResult>;
+
 /// Data
 struct TImportYdbDumpDataSettings : public TOperationRequestSettings<TImportYdbDumpDataSettings> {
     using TSelf = TImportYdbDumpDataSettings;
@@ -99,7 +146,9 @@ class TImportClient {
 public:
     TImportClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
 
-    NThreading::TFuture<TImportFromS3Response> ImportFromS3(const TImportFromS3Settings& settings);
+    TAsyncImportFromS3Response ImportFromS3(const TImportFromS3Settings& settings);
+
+    TAsyncListObjectsInS3ExportResult ListObjectsInS3Export(const TListObjectsInS3ExportSettings& settings, std::int64_t pageSize = 0, const std::string& pageToken = {});
 
     // ydb dump format
     TAsyncImportDataResult ImportData(const std::string& table, std::string&& data, const TImportYdbDumpDataSettings& settings);
@@ -111,8 +160,3 @@ private:
 
 } // namespace NImport
 } // namespace NYdb
-
-template<>
-inline void Out<NYdb::NImport::TImportFromS3Response>(IOutputStream& o, const NYdb::NImport::TImportFromS3Response& x) {
-    return x.Out(o);
-}

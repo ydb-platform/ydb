@@ -829,7 +829,7 @@ TStatus AnnotateDqCnMerge(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TStatus AnnotateDqCnHashShuffle(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureArgsCount(*input, 2, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 2, 3, ctx)) {
         return TStatus::Error;
     }
 

@@ -99,24 +99,26 @@ void TKafkaProduceActor::CleanWriters(const TActorContext& ctx) {
     const auto earliestAllowedTs = ctx.Now() - WRITER_EXPIRATION_INTERVAL;
 
     for (auto& [topicPath, partitionWriters] : NonTransactionalWriters) {
-        for (const auto& [partitionId, writerInfo] : partitionWriters) {
-            CleanWriterIfExpired({topicPath, partitionId}, writerInfo, earliestAllowedTs);
+        for (auto it = partitionWriters.begin(); it != partitionWriters.end(); ++it) {
+            if (it->second.LastAccessed < earliestAllowedTs) {
+                CleanWriter({topicPath, it->first}, it->second.ActorId);
+                partitionWriters.erase(it);
+            }
         }
     }
-    for (auto& [topicParition, writerInfo] : TransactionalWriters) {
-        CleanWriterIfExpired(topicParition, writerInfo, earliestAllowedTs);
+    for (auto it = TransactionalWriters.begin(); it != TransactionalWriters.end(); ++it) {
+        if (it->second.LastAccessed < earliestAllowedTs) {
+            CleanWriter(it->first, it->second.ActorId);
+            TransactionalWriters.erase(it);
+        }
     }
 
     KAFKA_LOG_T("Produce actor: CleanWriters was completed successfully");
 }
 
-void TKafkaProduceActor::CleanWriterIfExpired(const TTopicPartition& topicPartition, const TWriterInfo& writerInfo, TInstant earliestAllowedTs) {
-    if (writerInfo.LastAccessed < earliestAllowedTs) {
-        TStringBuilder sb;
-        sb << "Produce actor: Destroing inactive PartitionWriter. Topic='" << topicPartition.TopicPath << "', Partition=" << topicPartition.PartitionId;
-        KAFKA_LOG_D(sb);
-        Send(writerInfo.ActorId, new TEvents::TEvPoison());
-    }
+void TKafkaProduceActor::CleanWriter(const TTopicPartition& topicPartition, const TActorId& writerId) {
+    KAFKA_LOG_D("Produce actor: Destroing inactive PartitionWriter. Topic='" << topicPartition.TopicPath << "', Partition=" << topicPartition.PartitionId);
+    Send(writerId, new TEvents::TEvPoison());
 }
 
 void TKafkaProduceActor::EnqueueRequest(TEvKafka::TEvProduceRequest::TPtr request, const TActorContext& /*ctx*/) {

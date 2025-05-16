@@ -196,7 +196,7 @@ private:
     std::unordered_map<TString, std::unordered_map<ui32, TWriterInfo>> NonTransactionalWriters;
     std::unordered_map<TTopicPartition, TWriterInfo, TTopicPartitionHashFn> TransactionalWriters;
 
-    void CleanWriterIfExpired(const TTopicPartition& topicPartition, const TWriterInfo& writerInfo, TInstant earliestAllowedTs);
+    void CleanWriter(const TTopicPartition& topicPartition, const TActorId& writerId);
     std::pair<TKafkaProduceActor::ETopicStatus, TActorId> GetOrCreateNonTransactionalWriter(const TString& topicPath, ui32 partitionId, const TTopicInfo& topicInfo, const TActorContext& ctx);
     std::pair<TKafkaProduceActor::ETopicStatus, TActorId> GetOrCreateTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& txnProducerInstanceId, const TActorContext& ctx);
     std::pair<TKafkaProduceActor::ETopicStatus, TActorId> CreateTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& txnProducerInstanceId, const TActorContext& ctx);

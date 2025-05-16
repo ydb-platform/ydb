@@ -83,12 +83,22 @@ NYdb::NDataStreams::V1::TDataStreamsClient& TPqSession::GetDsClient(const TStrin
     return ClusterDsClients.emplace(cluster, NYdb::NDataStreams::V1::TDataStreamsClient(YdbDriver, GetDsClientOptions(database, cfg, credentialsProviderFactory))).first->second;
 }
 
-IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopic(const TString& cluster, const TString& database, const TString& path, const TString& token) {
+IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopic(const TString& cluster, const TString& requestedDatabase, const TString& requestedPath, const TString& token) {
     const auto* config = ClusterConfigs->FindPtr(cluster);
     if (!config) {
         ythrow yexception() << "Pq cluster `" << cluster << "` does not exist";
     }
 
+    TString database = requestedDatabase;
+    TString path = requestedPath;
+    if (config->GetClusterType() == TPqClusterConfig::CT_PERS_QUEUE && requestedDatabase == "/Root") {
+        // RTMR compatibility
+        // It uses cluster specified in gateways.conf with ClusterType unset (CT_PERS_QUEUE by default) and default Database and its own read/write code
+        auto pos = requestedPath.find('/');
+        Y_ENSURE(pos != TString::npos, "topic name is expected in format <account>/<path>");
+        database = "/logbroker-federation/" + requestedPath.substr(0, pos);
+        path = requestedPath.substr(pos + 1);
+    }
     YQL_ENSURE(config->GetEndpoint(), "Can't describe topic `" << cluster << "`.`" << path << "`: no endpoint");
 
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, token, config->GetAddBearerToToken());

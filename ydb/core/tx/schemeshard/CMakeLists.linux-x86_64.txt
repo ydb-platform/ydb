@@ -75,6 +75,8 @@ add_subdirectory(ut_split_merge_reboots)
 add_subdirectory(ut_stats)
 add_subdirectory(ut_subdomain)
 add_subdirectory(ut_subdomain_reboots)
+add_subdirectory(ut_sysview)
+add_subdirectory(ut_sysview_reboots)
 add_subdirectory(ut_topic_splitmerge)
 add_subdirectory(ut_transfer)
 add_subdirectory(ut_ttl)
@@ -233,6 +235,7 @@ target_sources(core-tx-schemeshard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_sequence.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_solomon.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_subdomain.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_sysview.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_table.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_create_view.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_db_changes.cpp
@@ -254,6 +257,7 @@ target_sources(core-tx-schemeshard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_sequence.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_solomon.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_subdomain.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_sysview.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_table.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_unsafe.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_view.cpp

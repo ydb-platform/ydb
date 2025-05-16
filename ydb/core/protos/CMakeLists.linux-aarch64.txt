@@ -210,6 +210,7 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/stream.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/subdomains.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/sys_view.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/protos/sys_view_types.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/table_service_config.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/table_stats.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/tablet.proto
@@ -599,6 +600,9 @@ target_sources(ydb-core-protos PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/core/protos/sys_view.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/sys_view.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/sys_view.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/sys_view_types.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/sys_view_types.deps.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/sys_view_types.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/table_service_config.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/table_service_config.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/table_service_config.grpc.pb.h

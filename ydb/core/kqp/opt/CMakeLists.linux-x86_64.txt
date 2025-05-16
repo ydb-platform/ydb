@@ -22,6 +22,7 @@ get_built_tool_path(
 add_subdirectory(logical)
 add_subdirectory(peephole)
 add_subdirectory(physical)
+add_subdirectory(rbo)
 
 add_library(core-kqp-opt)
 
@@ -38,6 +39,7 @@ target_link_libraries(core-kqp-opt PUBLIC
   kqp-opt-logical
   kqp-opt-peephole
   kqp-opt-physical
+  kqp-opt-rbo
   yql-dq-common
   yql-dq-opt
   yql-dq-type_ann
@@ -63,11 +65,6 @@ target_sources(core-kqp-opt PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_statistics_transformer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_column_statistics_requester.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_constant_folding_transformer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_new_rbo_transformer.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_operator.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_new_rbo.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_new_rbo_rules.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/opt/kqp_convert_to_physical.cpp
 )
 
 

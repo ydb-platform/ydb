@@ -248,3 +248,17 @@ jobs:
           pull_number: ${{ steps.create_or_update_pr.outputs.pr_number }}
           team_reviewers: ${{ env.REVIEWERS }}
           token: ${{ secrets.YDBOT_TOKEN }}
+      - name: Enable auto-merge
+        if: env.changes == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.YDBOT_TOKEN }}
+          script: |
+            const pr = ${{ steps.create_or_update_pr.outputs.pr_number }};
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr,
+              auto_merge: true
+            });
+

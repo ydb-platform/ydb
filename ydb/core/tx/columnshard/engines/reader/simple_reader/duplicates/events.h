@@ -10,8 +10,6 @@ namespace NKikimr::NOlap::NReader::NSimple {
 
 class IDataSource;
 
-using TIntervalId = ui64;   // SourceId
-
 class IFilterSubscriber {
 public:
     virtual void OnFilterReady(const NArrow::TColumnFilter&) = 0;
@@ -31,22 +29,29 @@ public:
     }
 };
 
+class TColumnsData {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Data);
+    std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> Memory;
+
+public:
+    TColumnsData(const std::shared_ptr<NArrow::TGeneralContainer>& data, const std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>& memory)
+        : Data(data)
+        , Memory(memory) {
+        AFL_VERIFY(Memory);
+    }
+};
+
 class TEvDuplicateFilterDataFetched
     : public NActors::TEventLocal<TEvDuplicateFilterDataFetched, NColumnShard::TEvPrivate::EvDuplicateFilterDataFetched> {
 private:
     YDB_READONLY_DEF(ui64, SourceId);
-    YDB_READONLY(TConclusion<std::shared_ptr<NArrow::TGeneralContainer>>, Result, TConclusionStatus::Success());
-    std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> MemoryGuard;
+    YDB_READONLY(TConclusion<TColumnsData>, Result, TConclusionStatus::Success());
 
 public:
-    TEvDuplicateFilterDataFetched(const ui64 sourceId, TConclusion<std::shared_ptr<NArrow::TGeneralContainer>>&& result,
-        std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& memoryGuard)
+    TEvDuplicateFilterDataFetched(const ui64 sourceId, TConclusion<TColumnsData>&& result)
         : SourceId(sourceId)
-        , Result(std::move(result))
-        , MemoryGuard(std::move(memoryGuard)) {
-        if (result.IsSuccess()) {
-            AFL_VERIFY(MemoryGuard)("source", sourceId);
-        }
+        , Result(std::move(result)) {
     }
 };
 

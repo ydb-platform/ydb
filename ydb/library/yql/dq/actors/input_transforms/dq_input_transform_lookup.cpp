@@ -981,7 +981,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
     );
     if (settings.GetIsMultiget()) {
         auto actor = isWide ?
-            (TInputTransformStreamLookupBase*)new TInputTransformStreamMultiLookupWide(
+            (TInputTransformStreamMultiLookupBase*)new TInputTransformStreamMultiLookupWide(
                 args.Alloc,
                 args.HolderFactory,
                 args.TypeEnv,
@@ -1002,7 +1002,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
                 settings.GetCacheLimit(),
                 std::chrono::seconds(settings.GetCacheTtlSeconds())
             ) :
-            (TInputTransformStreamLookupBase*)new TInputTransformStreamMultiLookupNarrow(
+            (TInputTransformStreamMultiLookupBase*)new TInputTransformStreamMultiLookupNarrow(
                 args.Alloc,
                 args.HolderFactory,
                 args.TypeEnv,

@@ -50,6 +50,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"DqEngineForce", &TContext::DqEngineForce},
     {"RegexUseRe2", &TContext::PragmaRegexUseRe2},
     {"OrderedColumns", &TContext::OrderedColumns},
+    {"DeriveColumnOrder", &TContext::DeriveColumnOrder},
     {"BogousStarInGroupByOverJoin", &TContext::BogousStarInGroupByOverJoin},
     {"CoalesceJoinKeysOnQualifiedAll", &TContext::CoalesceJoinKeysOnQualifiedAll},
     {"UnorderedSubqueries", &TContext::UnorderedSubqueries},
@@ -71,6 +72,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"DistinctOverKeys", &TContext::DistinctOverKeys},
     {"GroupByExprAfterWhere", &TContext::GroupByExprAfterWhere},
     {"FailOnGroupByExprOverride", &TContext::FailOnGroupByExprOverride},
+    {"OptimizeSimpleILIKE", &TContext::OptimizeSimpleIlike}
 };
 
 typedef TMaybe<bool> TContext::*TPragmaMaybeField;

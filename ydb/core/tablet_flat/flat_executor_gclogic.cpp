@@ -6,9 +6,9 @@ namespace NKikimr {
 namespace NTabletFlatExecutor {
 
 namespace {
-    constexpr ui64 GCErrorInitialBackoffMs = 20;
-    constexpr ui64 GCErrorMaxBackoffMs = 10000;
-    constexpr ui64 GCMaxErrors = 20;  // ~3.33 min in total
+    constexpr ui64 GcErrorInitialBackoffMs = 1;
+    constexpr ui64 GcErrorMaxBackoffMs = 10000;
+    constexpr ui64 GcMaxErrors = 25;  // ~1.13 min in total
 }
 
 TExecutorGCLogic::TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo> info, TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies)
@@ -218,8 +218,8 @@ TExecutorGCLogic::TChannelInfo::TChannelInfo()
     : GcCounter(1)
     , GcWaitFor(0)
     , TryCounter(0)
-    , BackoffTimer(GCErrorInitialBackoffMs, GCErrorMaxBackoffMs)
-    , RetryIsScheduled(false)
+    , BackoffTimer(GcErrorInitialBackoffMs, GcErrorMaxBackoffMs)
+    , PendingRetry(false)
     , FailCount(0)
 {
 }
@@ -380,7 +380,7 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
         return;
 
     MinUncollectedTime = uncommittedTime;
-    RetryIsScheduled = false;
+    PendingRetry = false;
     FailCount = 0;
 
     TVector<TLogoBlobID> keep;
@@ -494,9 +494,9 @@ void TExecutorGCLogic::TChannelInfo::OnCollectGarbageFailure() {
 
 TDuration TExecutorGCLogic::TChannelInfo::TryScheduleGcRequestRetries() {
     if (GcWaitFor == 0 && FailCount > 0) {
-        if (!RetryIsScheduled && TryCounter < GCMaxErrors) {
+        if (!PendingRetry && TryCounter < GcMaxErrors) {
             ++TryCounter;
-            RetryIsScheduled = true;
+            PendingRetry = true;
             return TDuration::MilliSeconds(BackoffTimer.NextBackoffMs());
         }
     }
@@ -504,7 +504,7 @@ TDuration TExecutorGCLogic::TChannelInfo::TryScheduleGcRequestRetries() {
 }
 
 void TExecutorGCLogic::TChannelInfo::RetryGcRequests(const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& ctx) {
-    if (RetryIsScheduled) {
+    if (PendingRetry) {
         SendCollectGarbage(MinUncollectedTime, tabletStorageInfo, channel, generation, ctx);
     }
 }

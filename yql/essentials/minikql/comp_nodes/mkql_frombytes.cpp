@@ -2,11 +2,12 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
-#include <yql/essentials/public/udf/tz/udf_tz.h>
 
 #include <yql/essentials/utils/swap_bytes.h>
 
 #include <yql/essentials/types/binary_json/read.h>
+
+#include <library/cpp/type_info/tz/tz.h>
 
 #include <util/system/unaligned_mem.h>
 
@@ -54,7 +55,7 @@ public:
 
             auto tzId = SwapBytes(ReadUnaligned<ui16>(ref.Data() + ref.Size() - sizeof(ui16)));
             auto value = SwapBytes(data.Get<ui16>());
-            if (value < NUdf::MAX_DATE && tzId < NUdf::GetTimezones().size()) {
+            if (value < NUdf::MAX_DATE && tzId < NTi::GetTimezones().size()) {
                 auto ret = NUdf::TUnboxedValuePod(value);
                 ret.SetTimezoneId(tzId);
                 return ret;
@@ -71,7 +72,7 @@ public:
 
             auto tzId = SwapBytes(ReadUnaligned<ui16>(ref.Data() + ref.Size() - sizeof(ui16)));
             auto value = SwapBytes(data.Get<ui32>());
-            if (value < NUdf::MAX_DATETIME && tzId < NUdf::GetTimezones().size()) {
+            if (value < NUdf::MAX_DATETIME && tzId < NTi::GetTimezones().size()) {
                 auto ret = NUdf::TUnboxedValuePod(value);
                 ret.SetTimezoneId(tzId);
                 return ret;
@@ -88,7 +89,7 @@ public:
 
             auto tzId = SwapBytes(ReadUnaligned<ui16>(ref.Data() + ref.Size() - sizeof(ui16)));
             auto value = SwapBytes(data.Get<ui64>());
-            if (value < NUdf::MAX_TIMESTAMP && tzId < NUdf::GetTimezones().size()) {
+            if (value < NUdf::MAX_TIMESTAMP && tzId < NTi::GetTimezones().size()) {
                 auto ret = NUdf::TUnboxedValuePod(value);
                 ret.SetTimezoneId(tzId);
                 return ret;
@@ -105,7 +106,7 @@ public:
 
             auto tzId = SwapBytes(ReadUnaligned<ui16>(ref.Data() + ref.Size() - sizeof(ui16)));
             auto value = SwapBytes(data.Get<i32>());
-            if (value >= NUdf::MIN_DATE32 && value <= NUdf::MAX_DATE32 && tzId < NUdf::GetTimezones().size()) {
+            if (value >= NUdf::MIN_DATE32 && value <= NUdf::MAX_DATE32 && tzId < NTi::GetTimezones().size()) {
                 auto ret = NUdf::TUnboxedValuePod(value);
                 ret.SetTimezoneId(tzId);
                 return ret;
@@ -122,7 +123,7 @@ public:
 
             auto tzId = SwapBytes(ReadUnaligned<ui16>(ref.Data() + ref.Size() - sizeof(ui16)));
             auto value = SwapBytes(data.Get<i64>());
-            if (value >= NUdf::MIN_DATETIME64 && value <= NUdf::MAX_DATETIME64 && tzId < NUdf::GetTimezones().size()) {
+            if (value >= NUdf::MIN_DATETIME64 && value <= NUdf::MAX_DATETIME64 && tzId < NTi::GetTimezones().size()) {
                 auto ret = NUdf::TUnboxedValuePod(value);
                 ret.SetTimezoneId(tzId);
                 return ret;
@@ -139,7 +140,7 @@ public:
 
             auto tzId = SwapBytes(ReadUnaligned<ui16>(ref.Data() + ref.Size() - sizeof(ui16)));
             auto value = SwapBytes(data.Get<i64>());
-            if (value >= NUdf::MIN_TIMESTAMP64 && value <= NUdf::MAX_TIMESTAMP64 && tzId < NUdf::GetTimezones().size()) {
+            if (value >= NUdf::MIN_TIMESTAMP64 && value <= NUdf::MAX_TIMESTAMP64 && tzId < NTi::GetTimezones().size()) {
                 auto ret = NUdf::TUnboxedValuePod(value);
                 ret.SetTimezoneId(tzId);
                 return ret;

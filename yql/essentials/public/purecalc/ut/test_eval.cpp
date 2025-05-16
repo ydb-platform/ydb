@@ -27,4 +27,30 @@ Y_UNIT_TEST_SUITE(TestEval) {
         UNIT_ASSERT_EQUAL(message->GetX(), "foobar");
         UNIT_ASSERT(!stream->Fetch());
     }
+
+    Y_UNIT_TEST(TestSelfType) {
+        using namespace NYql::NPureCalc;
+
+        auto options = TProgramFactoryOptions();
+        auto factory = MakeProgramFactory(options);
+
+        try {
+            auto program = factory->MakePullListProgram(
+                TProtobufInputSpec<NPureCalcProto::TStringMessage>(),
+                TProtobufOutputSpec<NPureCalcProto::TStringMessage>(),
+                "$input = PROCESS Input;select unwrap(cast(FormatType(EvaluateType(TypeHandle(TypeOf($input)))) AS Utf8)) AS X",
+                ETranslationMode::SQL
+            );
+
+            auto stream = program->Apply(EmptyStream<NPureCalcProto::TStringMessage*>());
+
+            NPureCalcProto::TStringMessage* message;
+
+            UNIT_ASSERT(message = stream->Fetch());
+            UNIT_ASSERT_VALUES_EQUAL(message->GetX(), "List<Struct<'X':Utf8>>");
+            UNIT_ASSERT(!stream->Fetch());
+        } catch (const TCompileError& e) {
+            UNIT_FAIL(e.GetIssues());
+        }
+    }
 }

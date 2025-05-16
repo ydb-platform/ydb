@@ -1029,6 +1029,7 @@ private:
             auto tableMeta = TablesData->ExistingTable(Cluster, settings.Table().Cast().Path()).Metadata;
             YQL_ENSURE(tableMeta);
 
+            readProto.SetIsTableImmutable(TablesData->IsTableImmutable(Cluster, settings.Table().Cast().Path()));
             {
 
                 THashMap<TString, const TExprNode*> columnsMap;
@@ -1420,16 +1421,6 @@ private:
             return;
         }
 
-        if (connection.Maybe<TKqpCnMapShard>()) {
-            connectionProto.MutableMapShard();
-            return;
-        }
-
-        if (connection.Maybe<TKqpCnShuffleShard>()) {
-            connectionProto.MutableShuffleShard();
-            return;
-        }
-
         if (auto maybeMerge = connection.Maybe<TDqCnMerge>()) {
             auto& mergeProto = *connectionProto.MutableMerge();
             for (const auto& sortColumn : maybeMerge.Cast().SortColumns()) {
@@ -1482,6 +1473,8 @@ private:
             auto streamLookup = maybeStreamLookup.Cast();
             auto tableMeta = TablesData->ExistingTable(Cluster, streamLookup.Table().Path()).Metadata;
             YQL_ENSURE(tableMeta);
+
+            streamLookupProto.SetIsTableImmutable(TablesData->IsTableImmutable(Cluster, streamLookup.Table().Path()));
 
             FillTablesMap(streamLookup.Table(), streamLookup.Columns(), tablesMap);
             FillTableId(streamLookup.Table(), *streamLookupProto.MutableTable());

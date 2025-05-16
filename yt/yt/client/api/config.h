@@ -210,6 +210,7 @@ struct TJournalWriterConfig
     TDuration PrerequisiteTransactionProbePeriod;
 
     bool EnableChecksums;
+    bool ValidateErasureCoding;
 
     // For testing purposes only.
     bool DontClose;

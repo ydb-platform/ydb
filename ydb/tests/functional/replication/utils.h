@@ -163,7 +163,16 @@ struct TConfig {
 
 struct MainTestCase {
 
-    MainTestCase()
+    static auto CreateDriverConfig(std::string connectionString, std::optional<std::string> user) {
+        auto config = TDriverConfig(connectionString);
+        if (user) {
+            config.SetAuthToken(TStringBuilder() << user.value() << "@builtin");
+        }
+        // config.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_INFO).Release()))
+        return config;
+    }
+
+    MainTestCase(std::optional<std::string> user = std::nullopt)
         : Id(RandomNumber<size_t>())
         , ConnectionString(GetEnv("YDB_ENDPOINT") + "/?database=" + GetEnv("YDB_DATABASE"))
         , TopicName(TStringBuilder() << "Topic_" << Id)
@@ -172,7 +181,7 @@ struct MainTestCase {
         , TableName(TStringBuilder() << "Table_" << Id)
         , ReplicationName(TStringBuilder() << "Replication_" << Id)
         , TransferName(TStringBuilder() << "Transfer_" << Id)
-        , Driver(TDriverConfig(ConnectionString)/*.SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_INFO).Release()))*/)
+        , Driver(CreateDriverConfig(ConnectionString, user))
         , TableClient(Driver)
         , Session(TableClient.GetSession().GetValueSync().GetSession())
         , TopicClient(Driver)
@@ -183,15 +192,15 @@ struct MainTestCase {
         Driver.Stop(true);
     }
 
-    void ExecuteDDL(const std::string& ddl, bool checkResult = true, const std::string& expectedMessage = "") {
+    void ExecuteDDL(const std::string& ddl, bool checkResult = true, const std::optional<std::string> expectedMessage = std::nullopt) {
         Cerr << "DDL: " << ddl << Endl << Flush;
         auto res = Session.ExecuteQuery(ddl, TTxControl::NoTx()).GetValueSync();
         if (checkResult) {
-            if (!expectedMessage.empty()) {
+            if (expectedMessage) {
                 UNIT_ASSERT(!res.IsSuccess());
                 Cerr << ">>>>> ACTUAL: " << res.GetIssues().ToOneLineString() << Endl << Flush;
                 Cerr << ">>>>> EXPECTED: " << expectedMessage << Endl << Flush;
-                UNIT_ASSERT(res.GetIssues().ToOneLineString().contains(expectedMessage));
+                UNIT_ASSERT(res.GetIssues().ToOneLineString().contains(expectedMessage.value()));
             } else {
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
             }
@@ -222,6 +231,28 @@ struct MainTestCase {
 
     auto ExecuteSourceTableQuery(const std::string& query) {
         return ExecuteQuery(Sprintf(query.data(), SourceTableName.data()));
+    }
+
+    void Grant(const std::string& object, const std::string& username, const std::vector<std::string>& permissions) {
+        TStringBuilder sql;
+        sql << "GRANT ";
+        for (size_t i = 0; i < permissions.size(); ++i) {
+            if (i) {
+                sql << ", ";
+            }
+            if ("ALL" == permissions[i]) {
+                sql << "ALL";
+            } else {
+                sql << "'" << permissions[i] << "'";
+            }
+        }
+        sql << " ON `/local";
+        if (!object.empty()) {
+            sql << "/" << object;
+        }
+        sql << "` TO `" << username << "@builtin`";
+
+        ExecuteDDL(sql);
     }
 
     void CreateTable(const std::string& tableDDL) {
@@ -278,10 +309,12 @@ struct MainTestCase {
     }
 
     struct CreateTransferSettings {
-        std::optional<TString> TopicName = std::nullopt;
-        std::optional<TString> ConsumerName = std::nullopt;
+        std::optional<std::string> TopicName;
+        std::optional<std::string> ConsumerName;
         std::optional<TDuration> FlushInterval = TDuration::Seconds(1);
         std::optional<ui64> BatchSizeBytes = 8_MB;
+        std::optional<std::string> ExpectedError;
+        std::optional<std::string> Username;
 
         CreateTransferSettings() {};
 
@@ -304,7 +337,19 @@ struct MainTestCase {
             result.BatchSizeBytes = batchSize;
             return result;
         }
-    };
+
+        static CreateTransferSettings WithExpectedError(const std::string& expected) {
+            CreateTransferSettings result;
+            result.ExpectedError = expected;
+            return result;
+        }
+
+        static CreateTransferSettings WithUsername(const TString& username) {
+            CreateTransferSettings result;
+            result.Username = username;
+            return result;
+        }
+};
 
     void CreateTransfer(const std::string& lambda, const CreateTransferSettings& settings = CreateTransferSettings()) {
         TStringBuilder sb;
@@ -316,6 +361,9 @@ struct MainTestCase {
         }
         if (settings.BatchSizeBytes) {
             sb << ", BATCH_SIZE_BYTES = " << *settings.BatchSizeBytes << Endl;
+        }
+        if (settings.Username) {
+            sb << ", TOKEN = '" << *settings.Username << "@builtin'" << Endl;
         }
 
         TString topicName = settings.TopicName.value_or(TopicName);
@@ -331,7 +379,7 @@ struct MainTestCase {
             );
         )", lambda.data(), TransferName.data(), topicName.data(), TableName.data(), ConnectionString.data(), sb.data());
 
-        ExecuteDDL(ddl);
+        ExecuteDDL(ddl, true, settings.ExpectedError);
     }
 
     struct AlterTransferSettings {
@@ -580,8 +628,12 @@ struct MainTestCase {
                 return result;
             }
     
-            UNIT_ASSERT_C(i, "Unable to wait transfer state. Expected: " << expected << ", actual: " << result.GetState());
-            Sleep(TDuration::Seconds(1));
+            std::string issues;
+            if (result.GetState() == TReplicationDescription::EState::Error) {
+                issues = result.GetErrorState().GetIssues().ToOneLineString();
+            }
+    
+            UNIT_ASSERT_C(i, "Unable to wait transfer state. Expected: " << expected << ", actual: " << result.GetState() << ", " << issues);            Sleep(TDuration::Seconds(1));
         }
 
         Y_UNREACHABLE();

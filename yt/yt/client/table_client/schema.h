@@ -157,7 +157,7 @@ public:
     TColumnSchema& SetSimpleLogicalType(ESimpleLogicalValueType type);
     TColumnSchema& SetSortOrder(std::optional<ESortOrder> value);
     TColumnSchema& SetLock(const std::optional<std::string>& value);
-    TColumnSchema& SetExpression(const std::optional<TString>& value);
+    TColumnSchema& SetExpression(const std::optional<std::string>& value);
     TColumnSchema& SetMaterialized(std::optional<bool> value);
     TColumnSchema& SetAggregate(const std::optional<std::string>& value);
     TColumnSchema& SetGroup(const std::optional<std::string>& value);
@@ -191,7 +191,7 @@ private:
 class TDeletedColumn
 {
 public:
-    TDeletedColumn();
+    TDeletedColumn() = default;
     explicit TDeletedColumn(TColumnStableName stableName);
 
     DEFINE_BYREF_RO_PROPERTY(TColumnStableName, StableName);

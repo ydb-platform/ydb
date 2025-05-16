@@ -8,11 +8,11 @@
 
 ### Точный метод {#exact-method}
 
-{% include [vector_search_exact.md](../../../../concepts/_includes/vector_search_exact.md) %}
+{% include [vector_search_exact.md](../../_includes/vector_search_exact.md) %}
 
 ### Приближенные методы  {#approximate-methods}
 
-{% include [vector_search_approximate.md](../../../../concepts/_includes/vector_search_approximate.md) %}
+{% include [vector_search_approximate.md](../../_includes/vector_search_approximate.md) %}
 
 {% note info %}
 
@@ -37,7 +37,19 @@
 
 {% if backend_name == "YDB" %}
 Бинарное представление вектора можно сохранить в {{ ydb-short-name }} колонку.
+
+{% note info %}
+
 В настоящий момент {{ ydb-short-name }} не поддерживает хранение `Tagged` типов и поэтому перед сохранением бинарного представления векторов нужно извлечь `String` с помощью функции [Untag](../../builtins/basic#as-tagged).
+
+{% endnote %}
+
+{% note info %}
+
+В настоящий момент {{ ydb-short-name }} не поддерживает построение векторных индексов для бинарных векторов `BitVector`.
+
+{% endnote %}
+
 {% endif %}
 
 #### Сигнатуры функций {#functions-convert-signature}

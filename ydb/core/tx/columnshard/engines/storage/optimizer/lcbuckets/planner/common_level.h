@@ -4,20 +4,20 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
-class TLevelPortions: public IPortionsLevel {
+class TOneLayerPortions: public IPortionsLevel {
 private:
     using TBase = IPortionsLevel;
 
-    std::set<TOrderedPortion> Portions;
+    std::set<TOrderedPortion, std::less<>> Portions;
     const TLevelCounters LevelCounters;
     const double BytesLimitFraction = 1;
     const ui64 ExpectedPortionSize = (1 << 20);
+    const ui64 SizeLimitGuarantee = 0;
     const bool StrictOneLayer = true;
     std::shared_ptr<TSimplePortionsGroupInfo> SummaryPortionsInfo;
 
     ui64 GetLevelBlobBytesLimit() const {
-        const ui32 discrete = SummaryPortionsInfo->GetBlobBytes() / (150 << 20);
-        return (discrete + 1) * (150 << 20) * BytesLimitFraction;
+        return std::max<ui64>(SizeLimitGuarantee, SummaryPortionsInfo->GetBlobBytes() * BytesLimitFraction);
     }
 
     virtual NJson::TJsonValue DoSerializeToJson() const override {
@@ -26,10 +26,11 @@ private:
         result.InsertValue("bytes_limit", GetLevelBlobBytesLimit());
         result.InsertValue("total_bytes", SummaryPortionsInfo->GetBlobBytes());
         result.InsertValue("fraction", BytesLimitFraction);
+        result.InsertValue("size_limit_guarantee", SizeLimitGuarantee);
         return result;
     }
 
-    virtual std::optional<TPortionsChain> DoGetAffectedPortions(const NArrow::TReplaceKey& from, const NArrow::TReplaceKey& to) const override {
+    virtual std::optional<TPortionsChain> DoGetAffectedPortions(const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to) const override {
         if (Portions.empty()) {
             return std::nullopt;
         }
@@ -72,13 +73,14 @@ private:
     }
 
 public:
-    TLevelPortions(const ui64 levelId, const double bytesLimitFraction, const ui64 expectedPortionSize,
+    TOneLayerPortions(const ui64 levelId, const double bytesLimitFraction, const ui64 expectedPortionSize,
         const std::shared_ptr<IPortionsLevel>& nextLevel, const std::shared_ptr<TSimplePortionsGroupInfo>& summaryPortionsInfo,
-        const TLevelCounters& levelCounters, const bool strictOneLayer = true)
+        const TLevelCounters& levelCounters, const ui64 sizeLimitGuarantee, const bool strictOneLayer = true)
         : TBase(levelId, nextLevel)
         , LevelCounters(levelCounters)
         , BytesLimitFraction(bytesLimitFraction)
         , ExpectedPortionSize(expectedPortionSize)
+        , SizeLimitGuarantee(sizeLimitGuarantee)
         , StrictOneLayer(strictOneLayer)
         , SummaryPortionsInfo(summaryPortionsInfo)
     {
@@ -97,10 +99,12 @@ public:
         return false;
     }
 
-    virtual ui64 DoGetAffectedPortionBytes(const NArrow::TReplaceKey& from, const NArrow::TReplaceKey& to) const override {
+    virtual ui64 DoGetAffectedPortionBytes(const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to) const override {
         if (Portions.empty()) {
             return 0;
         }
+        AFL_VERIFY(from <= to);
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("from", from.DebugString())("to", to.DebugString());
         ui64 result = 0;
         auto itFrom = Portions.upper_bound(from);
         auto itTo = Portions.upper_bound(to);
@@ -111,6 +115,7 @@ public:
                 result += it->GetPortion()->GetTotalRawBytes();
             }
         }
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("itFrom", itFrom == Portions.end())("itTo", itTo == Portions.end());
         for (auto it = itFrom; it != itTo; ++it) {
             result += it->GetPortion()->GetTotalRawBytes();
         }
@@ -121,11 +126,10 @@ public:
 
     virtual TCompactionTaskData DoGetOptimizationTask() const override;
 
-    virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& pkSchema) const override {
+    virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& /*pkSchema*/) const override {
         NArrow::NMerger::TIntervalPositions result;
-        const auto& sortingColumns = pkSchema->field_names();
         for (auto&& i : Portions) {
-            result.AddPosition(i.GetStartPosition(), false);
+            result.AddPosition(i.GetStartPosition().BuildSortablePosition(), false);
         }
         return result;
     }

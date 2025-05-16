@@ -103,7 +103,7 @@ public:
         BrokenWithCommitted->Inc();
     }
 
-    NArrow::NMerger::TSortableBatchPosition BuildSortedPosition(const NArrow::TReplaceKey& key) const;
+    NArrow::NMerger::TSortableBatchPosition BuildSortedPosition(const NArrow::TSimpleRow& key) const;
     virtual std::shared_ptr<IDataReader> BuildReader(const std::shared_ptr<TReadContext>& context) const = 0;
 
     bool HasProcessingColumnIds() const {

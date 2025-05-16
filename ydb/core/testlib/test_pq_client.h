@@ -1455,6 +1455,7 @@ public:
     struct CreateTopicNoLegacyParams {
         TString Name;
         ui32 PartsCount;
+        TDuration RetentionPeriod = TDuration::Hours(18);
         bool DoWait = true;
         bool CanWrite = true;
         std::optional<TString> Dc = std::nullopt;
@@ -1477,6 +1478,7 @@ public:
         auto settings = NYdb::NPersQueue::TCreateTopicSettings().PartitionsCount(params.PartsCount).ClientWriteDisabled(!params.CanWrite);
         settings.FederationAccount(params.Account);
         settings.SupportedCodecs(params.Codecs);
+        settings.RetentionPeriod(params.RetentionPeriod);
         //settings.MaxPartitionWriteSpeed(50_MB);
         //settings.MaxPartitionWriteBurst(50_MB);
         TVector<NYdb::NPersQueue::TReadRuleSettings> rrSettings;

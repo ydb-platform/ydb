@@ -312,8 +312,13 @@ void TDistributedTransaction::OnReadSetAck(const NKikimrTx::TEvReadSetAck& event
     Y_ABORT_UNLESS(event.HasStep() && (Step == event.GetStep()));
     Y_ABORT_UNLESS(event.HasTxId() && (TxId == event.GetTxId()));
 
-    if (PredicateRecipients.contains(event.GetTabletConsumer())) {
-        PredicateRecipients[event.GetTabletConsumer()] = true;
+    OnReadSetAck(event.GetTabletConsumer());
+}
+
+void TDistributedTransaction::OnReadSetAck(ui64 tabletId)
+{
+    if (PredicateRecipients.contains(tabletId)) {
+        PredicateRecipients[tabletId] = true;
         ++PredicateAcksCount;
 
         PQ_LOG_D("Predicate acks " << PredicateAcksCount << "/" << PredicateRecipients.size());
@@ -449,14 +454,9 @@ TString TDistributedTransaction::GetKey() const
     return GetTxKey(TxId);
 }
 
-void TDistributedTransaction::BindMsgToPipe(ui64 tabletId, const IEventBase& event)
+void TDistributedTransaction::BindMsgToPipe(ui64 tabletId, const TEvTxProcessing::TEvReadSet& event)
 {
-    Y_ABORT_UNLESS(event.IsSerializable());
-
-    TAllocChunkSerializer serializer;
-    Y_ABORT_UNLESS(event.SerializeToArcadiaStream(&serializer));
-    auto data = serializer.Release(event.CreateSerializationInfo());
-    OutputMsgs[tabletId].emplace_back(event.Type(), std::move(data));
+    OutputMsgs[tabletId].push_back(event.Record);
 }
 
 void TDistributedTransaction::UnbindMsgsFromPipe(ui64 tabletId)
@@ -464,13 +464,13 @@ void TDistributedTransaction::UnbindMsgsFromPipe(ui64 tabletId)
     OutputMsgs.erase(tabletId);
 }
 
-auto TDistributedTransaction::GetBindedMsgs(ui64 tabletId) -> const TVector<TSerializedMessage>&
+const TVector<NKikimrTx::TEvReadSet>& TDistributedTransaction::GetBindedMsgs(ui64 tabletId)
 {
     if (auto p = OutputMsgs.find(tabletId); p != OutputMsgs.end()) {
         return p->second;
     }
 
-    static TVector<TSerializedMessage> empty;
+    static TVector<NKikimrTx::TEvReadSet> empty;
 
     return empty;
 }

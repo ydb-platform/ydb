@@ -117,14 +117,14 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             port_lines = [line for line in output.split('\n') if str(port) in line]
             if port_lines:
                 for line in port_lines:
-                    logger.info(f"Port {port} status: {line.strip()}")
+                    logger.info("Port %s status: %s" % (str(port), line.strip()))
                 is_listening = True
             else:
-                logger.info(f"Port {port} is not found in netstat output")
+                logger.info("Port %s is not found in netstat output" % str(port))
                 is_listening = False
             return is_listening
         except Exception as e:
-            logger.error(f"Error checking port {port}: {e}")
+            logger.error("Error checking port %s: %s" % (str(port), str(e)))
             return False
 
     def check_ports(self):
@@ -238,6 +238,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "--data-center=%s" % self.data_center
             )
 
+        if self.__configurator.breakpad_minidumps_path:
+            command.extend(["--breakpad-minidumps-path", self.__configurator.breakpad_minidumps_path])
+        if self.__configurator.breakpad_minidumps_script:
+            command.extend(["--breakpad-minidumps-script", self.__configurator.breakpad_minidumps_script])
+
         logger.info('CFG_DIR_PATH="%s"', self.__config_path)
         logger.info("Final command: %s", ' '.join(command).replace(self.__config_path, '$CFG_DIR_PATH'))
         return command
@@ -284,6 +289,19 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def get_config_version(self):
         config = self.read_node_config()
         return config.get('metadata', {}).get('version', 0)
+
+    def enable_config_dir(self):
+        self.__configurator.use_config_store = True
+        self.update_command(self.__make_run_command())
+
+    def make_config_dir(self, source_config_yaml_path, target_config_dir_path):
+        if not os.path.exists(source_config_yaml_path):
+            raise RuntimeError("Source config file not found: %s" % source_config_yaml_path)
+
+        try:
+            os.makedirs(target_config_dir_path, exist_ok=True)
+        except Exception as e:
+            raise RuntimeError("Unexpected error initializing config for node %s: %s" % (str(self.node_id), str(e)))
 
 
 class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
@@ -358,7 +376,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             ))
             raise
 
-    def __call_ydb_cli(self, cmd, token=None):
+    def __call_ydb_cli(self, cmd, token=None, check_exit_code=True):
         endpoint = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
         full_command = [self.__configurator.get_ydb_cli_path(), '--endpoint', endpoint, '-y'] + cmd
 
@@ -370,7 +388,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
         logger.debug("Executing command = {}".format(full_command))
         try:
-            return yatest.common.execute(full_command)
+            return yatest.common.execute(full_command, env=env, check_exit_code=check_exit_code)
         except yatest.common.ExecutionError as e:
             logger.exception("KiKiMR command '{cmd}' failed with error: {e}\n\tstdout: {out}\n\tstderr: {err}".format(
                 cmd=" ".join(str(x) for x in full_command),
@@ -568,25 +586,25 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         try:
             new_node_object = self.__register_node(configurator)
             self.__write_node_config(new_node_object.node_id, configurator)
-            logger.info(f"Successfully registered new node object with ID: {new_node_object.node_id}")
+            logger.info("Successfully registered new node object with ID: %s" % str(new_node_object.node_id))
             return new_node_object
         except Exception as e:
-            logger.error(f"Failed to register new node: {e}", exc_info=True)
-            raise RuntimeError(f"Failed to register new node: {e}")
+            logger.error("Failed to register new node: %s" % str(e), exc_info=True)
+            raise RuntimeError("Failed to register new node: %s" % str(e))
 
     def start_node(self, node_id):
         if node_id not in self._nodes:
-            logger.error(f"Cannot start node: Node ID {node_id} not found in registered nodes.")
-            raise KeyError(f"Node ID {node_id} not found.")
+            logger.error("Cannot start node: Node ID %s not found in registered nodes." % str(node_id))
+            raise KeyError("Node ID %s not found." % str(node_id))
 
-        logger.info(f"Starting registered node {node_id}.")
+        logger.info("Starting registered node %s." % str(node_id))
         try:
             self._KiKiMR__run_node(node_id)
-            logger.info(f"Successfully started node {node_id}.")
+            logger.info("Successfully started node %s." % str(node_id))
         except Exception as e:
-            raise RuntimeError(f"Failed to start node {node_id}: {e}")
+            raise RuntimeError("Failed to start node %s: %s" % (str(node_id), str(e)))
 
-    def update_nodes_configurator(self, configurator):
+    def update_configurator_and_restart(self, configurator):
         for node in self.nodes.values():
             node.stop()
         self.__configurator = configurator
@@ -607,8 +625,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         node_config_path = ensure_path_exists(
             os.path.join(self.__config_base_path, "node_{}".format(node_id))
         )
-        logger.info(f"Writing node config to {node_config_path}")
-        logger.info(f"Config: {configurator.yaml_config}")
+        logger.info("Writing node config to %s" % node_config_path)
+        logger.info("Config: %s" % configurator.yaml_config)
         configurator.write_proto_configs(node_config_path)
 
     def __write_configs(self):
@@ -617,6 +635,15 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 self.__write_node_config(node_id)
         else:
             self.__configurator.write_proto_configs(self.__config_path)
+
+    def overwrite_configs(self, config):
+        self.__configurator.full_config = config
+        self.__write_configs()
+
+    def enable_config_dir(self):
+        self.__configurator.use_config_store = True
+        for node in self.nodes.values():
+            node.enable_config_dir()
 
     def __instantiate_udfs_dir(self):
         to_load = self.__configurator.get_yql_udfs_to_load()
@@ -721,8 +748,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         assert bs_controller_started
 
     def __cluster_bootstrap(self):
-        timeout = 240
-        sleep = 5
+        timeout = 10
+        sleep = 2
         retries, success = timeout / sleep, False
         while retries > 0 and not success:
             try:
@@ -743,6 +770,59 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
                 if retries == 0:
                     raise
+
+    def replace_config(self, config):
+        timeout = 10
+        sleep = 2
+        retries, success = timeout / sleep, False
+        while retries > 0 and not success:
+            try:
+                self.__call_ydb_cli(
+                    [
+                        "admin",
+                        "cluster",
+                        "config",
+                        "replace",
+                        "-f", config
+                    ]
+                )
+                success = True
+            except Exception as e:
+                logger.error("Failed to execute, %s", str(e))
+                retries -= 1
+                time.sleep(sleep)
+        if not success:
+            logger.error("Failed to replace config")
+            raise RuntimeError("Failed to replace config")
+
+    def fetch_config(self):
+        try:
+            result = self.__call_ydb_cli(
+                [
+                    "admin",
+                    "cluster",
+                    "config",
+                    "fetch"
+                ],
+                check_exit_code=False
+            )
+            if result.exit_code != 0:
+                return None
+            return result.std_out.decode('utf-8')
+        except Exception as e:
+            logger.error("Error fetching config: %s", str(e), exc_info=True)
+            return None
+
+    def generate_config(self):
+        result = self.__call_ydb_cli(
+            [
+                "admin",
+                "cluster",
+                "config",
+                "generate"
+            ]
+        )
+        return result.std_out.decode('utf-8')
 
 
 class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeInterface):

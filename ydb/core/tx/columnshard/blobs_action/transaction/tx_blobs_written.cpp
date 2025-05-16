@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/insert_table/user_data.h>
+#include <ydb/core/tx/columnshard/engines/portions/constructor_portion.h>
 #include <ydb/core/tx/columnshard/transactions/locks/write.h>
 
 namespace NKikimr::NColumnShard {
@@ -30,19 +31,23 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
     }
     AFL_VERIFY(!!PackBehaviour);
     auto& granule = index.MutableGranuleVerified(Pack.GetPathId());
+    const ui64 firstPKColumnId = Self->TablesManager.GetIndexInfo(*CommitSnapshot).GetPKFirstColumnId();
     for (auto&& portion : Pack.MutablePortions()) {
+        AFL_VERIFY(portion.GetPortionInfoConstructor()->GetPortionConstructor().GetType() == NOlap::EPortionType::Written);
+        auto* constructor =
+            static_cast<NOlap::TWrittenPortionInfoConstructor*>(&portion.GetPortionInfoConstructor()->MutablePortionConstructor());
         if (PackBehaviour == EOperationBehaviour::NoTxWrite) {
             static TAtomicCounter Counter = 0;
-            portion.GetPortionInfoConstructor()->MutablePortionConstructor().SetInsertWriteId((TInsertWriteId)Counter.Inc());
+            constructor->SetInsertWriteId((TInsertWriteId)Counter.Inc());
         } else {
-            portion.GetPortionInfoConstructor()->MutablePortionConstructor().SetInsertWriteId(Self->InsertTable->BuildNextWriteId(txc));
+            constructor->SetInsertWriteId(Self->InsertTable->BuildNextWriteId(txc));
         }
-        InsertWriteIds.emplace_back(portion.GetPortionInfoConstructor()->GetPortionConstructor().GetInsertWriteIdVerified());
+        InsertWriteIds.emplace_back(constructor->GetInsertWriteIdVerified());
         portion.Finalize(Self, txc);
         if (PackBehaviour == EOperationBehaviour::NoTxWrite) {
-            granule.CommitImmediateOnExecute(txc, *CommitSnapshot, portion.GetPortionInfo());
+            granule.CommitImmediateOnExecute(txc, *CommitSnapshot, portion.GetPortionInfo(), firstPKColumnId);
         } else {
-            granule.InsertPortionOnExecute(txc, portion.GetPortionInfo());
+            granule.InsertPortionOnExecute(txc, portion.GetPortionInfo(), firstPKColumnId);
         }
     }
 

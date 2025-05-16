@@ -315,7 +315,7 @@ void LogStructuredEvent(
 #define YT_LOG_ERROR_IF(condition, ...)        if (condition)    YT_LOG_ERROR(__VA_ARGS__)
 #define YT_LOG_ERROR_UNLESS(condition, ...)    if (!(condition)) YT_LOG_ERROR(__VA_ARGS__)
 
-#define YT_LOG_ALERT(...)                      YT_LOG_EVENT(Logger, ::NYT::NLogging::ELogLevel::Alert, __VA_ARGS__);
+#define YT_LOG_ALERT(...)                      YT_LOG_EVENT(Logger, ::NYT::NLogging::ELogLevel::Alert, __VA_ARGS__)
 #define YT_LOG_ALERT_IF(condition, ...)        if (condition)    YT_LOG_ALERT(__VA_ARGS__)
 #define YT_LOG_ALERT_UNLESS(condition, ...)    if (!(condition)) YT_LOG_ALERT(__VA_ARGS__)
 
@@ -341,9 +341,19 @@ void LogStructuredEvent(
     YT_LOG_EVENT(Logger, ::NYT::NLogging::ELogLevel::Alert, __VA_ARGS__); \
     THROW_ERROR_EXCEPTION( \
         ::NYT::EErrorCode::Fatal, \
-        "Malformed request or incorrect state detected");
-#define YT_LOG_ALERT_AND_THROW_IF(condition, ...)     if (condition)    YT_LOG_ALERT_AND_THROW(__VA_ARGS__)
-#define YT_LOG_ALERT_AND_THROW_UNLESS(condition, ...) if (!(condition)) YT_LOG_ALERT_AND_THROW(__VA_ARGS__)
+        "Malformed request or incorrect state detected")
+
+#define YT_LOG_ALERT_AND_THROW_IF(condition, ...) \
+    if (Y_UNLIKELY(condition)) { \
+        YT_LOG_ALERT_AND_THROW(__VA_ARGS__); \
+    } \
+    static_assert(true)
+
+#define YT_LOG_ALERT_AND_THROW_UNLESS(condition, ...) \
+    if (!Y_UNLIKELY(condition)) { \
+        YT_LOG_ALERT_AND_THROW(__VA_ARGS__); \
+    } \
+    static_assert(true)
 
 #define YT_LOG_EVENT(logger, level, ...) \
     do { \

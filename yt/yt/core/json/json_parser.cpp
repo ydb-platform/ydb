@@ -6,7 +6,7 @@
 
 #include <array>
 
-#include <contrib/libs/yajl/api/yajl_parse.h>
+#include <contrib/libs/yajl/src/api/yajl_parse.h>
 
 namespace NYT::NJson {
 

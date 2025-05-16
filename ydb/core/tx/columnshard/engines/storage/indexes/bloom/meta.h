@@ -26,7 +26,8 @@ private:
 
 protected:
     virtual TConclusionStatus DoCheckModificationCompatibility(const IIndexMeta& newMeta) const override;
-    virtual TString DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const override;
+    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoBuildIndexImpl(
+        TChunkedBatchReader& reader, const ui32 recordsCount) const override;
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const override;

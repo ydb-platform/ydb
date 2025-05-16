@@ -70,7 +70,7 @@ _make_fcontext:
     addl  $finish-2b, %ecx
     /* save address of finish as return-address for context-function */
     /* will be entered after context-function returns */
-    movl  %ecx, 0x14(%eax) 
+    movl  %ecx, 0x14(%eax)
 
     ret /* return pointer to context-data */
 

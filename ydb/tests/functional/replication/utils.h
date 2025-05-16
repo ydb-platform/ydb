@@ -227,7 +227,7 @@ struct MainTestCase {
     }
 
     auto ExecuteTableQuery(const std::string& query) {
-        return ExecuteQuery(Sprintf(query.data(), TableName.data(), TableType.data()));
+        return ExecuteQuery(Sprintf(query.data(), TableName.data()));
     }
 
     auto ExecuteSourceTableQuery(const std::string& query) {
@@ -257,7 +257,7 @@ struct MainTestCase {
     }
 
     void CreateTable(const std::string& tableDDL) {
-        ExecuteDDL(Sprintf(tableDDL.data(), TableName.data()));
+        ExecuteDDL(Sprintf(tableDDL.data(), TableName.data(), TableType.data()));
     }
 
     void DropTable() {

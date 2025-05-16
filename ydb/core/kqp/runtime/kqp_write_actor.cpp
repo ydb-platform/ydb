@@ -1673,6 +1673,17 @@ struct TWriteSettings {
     i64 Priority;
     bool EnableStreamWrite;
     bool IsOlap;
+
+    struct TIndex {
+        TTableId TableId;
+        TString TablePath; // TODO:
+        TVector<NKikimrKqp::TKqpColumnMetadataProto> KeyColumns;
+        TVector<NKikimrKqp::TKqpColumnMetadataProto> Columns;
+        std::vector<ui32> WriteIndex;
+        bool IsUniq;
+    };
+
+    std::vector<TIndex> Indexes;
 };
 
 struct TBufferWriteMessage {
@@ -1788,31 +1799,39 @@ public:
 
             auto& writeInfo = WriteInfos[settings.TableId];
             if (!writeInfo.Actor.Ptr) {
-                TVector<NScheme::TTypeInfo> keyColumnTypes;
-                keyColumnTypes.reserve(settings.KeyColumns.size());
-                for (const auto& column : settings.KeyColumns) {
-                    auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
-                        column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
-                    keyColumnTypes.push_back(typeInfoMod.TypeInfo);
-                }
-                writeInfo.Actor.Ptr = new TKqpTableWriteActor(
-                    this,
-                    settings.TableId,
-                    settings.TablePath,
-                    LockTxId,
-                    LockNodeId,
-                    InconsistentTx,
-                    settings.IsOlap,
-                    std::move(keyColumnTypes),
-                    Alloc,
-                    settings.TransactionSettings.MvccSnapshot,
-                    settings.TransactionSettings.LockMode,
-                    TxManager,
-                    SessionActorId,
-                    Counters);
-                writeInfo.Actor.Ptr->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
-                writeInfo.Actor.Id = RegisterWithSameMailbox(writeInfo.Actor.Ptr);
-                CA_LOG_D("Create new TableWriteActor for table `" << settings.TablePath << "` (" << settings.TableId << "). lockId=" << LockTxId << " " << writeInfo.Actor.Id);
+                auto createWriteActor = [&](const TTableId tableId, const TString& tablePath, const TVector<NKikimrKqp::TKqpColumnMetadataProto>& keyColumns) -> std::pair<TKqpTableWriteActor*, TActorId> {
+                    TVector<NScheme::TTypeInfo> keyColumnTypes;
+                    keyColumnTypes.reserve(keyColumns.size());
+                    for (const auto& column : keyColumns) {
+                        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetTypeId(),
+                            column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
+                        keyColumnTypes.push_back(typeInfoMod.TypeInfo);
+                    }
+                    TKqpTableWriteActor* ptr = new TKqpTableWriteActor(
+                        this,
+                        tableId,
+                        tablePath,
+                        LockTxId,
+                        LockNodeId,
+                        InconsistentTx,
+                        settings.IsOlap,
+                        std::move(keyColumnTypes),
+                        Alloc,
+                        settings.TransactionSettings.MvccSnapshot,
+                        settings.TransactionSettings.LockMode,
+                        TxManager,
+                        SessionActorId,
+                        Counters);
+                    ptr->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
+                    TActorId id = RegisterWithSameMailbox(ptr);
+                    CA_LOG_D("Create new TableWriteActor for table `" << tablePath << "` (" << tableId << "). lockId=" << LockTxId << ". ActorId=" << id);
+
+                    return {ptr, id};
+                };
+
+                const auto [ptr, id] = createWriteActor(settings.TableId, settings.TablePath, settings.KeyColumns);
+                writeInfo.Actor.Ptr = ptr;
+                writeInfo.Actor.Id = id;
             }
 
             EnableStreamWrite &= settings.EnableStreamWrite;
@@ -2922,7 +2941,7 @@ private:
         };
 
         TActorInfo Actor;
-        THashMap<TTableId, TActorInfo> Indexes;
+        std::vector<TActorInfo> Indexes;
     };
 
     THashMap<TTableId, TWriteInfo> WriteInfos;
@@ -3079,6 +3098,8 @@ private:
                 .EnableStreamWrite = Settings.GetEnableStreamWrite(),
                 .IsOlap = Settings.GetIsOlap(),
             };
+
+
         }
 
         ev->SendTime = TInstant::Now();

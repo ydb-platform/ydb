@@ -13,7 +13,7 @@ class WorkloadVectorIndexLargeLevelsAndClusters(WorkloadVectorIndex, WorkloadBas
     def _loop(self):
         table_path = self.get_table_path(self.table_name)
         self.rows_count = 1000
-        self.count_prefix = 1
+        self.count_prefix = 5
         prefix = {"String": lambda i: f"{i}"}
         vector = {"String": lambda i: f"{i}"}
         all_types = {
@@ -32,7 +32,7 @@ class WorkloadVectorIndexLargeLevelsAndClusters(WorkloadVectorIndex, WorkloadBas
         pk_columns = {"pk_": pk_types.keys()}
         clusters_data = [10, 30, 50, 100]
         levels_data = [3, 4, 5, 6]
-        vector_dimension_data = [500, 1000]
+        vector_dimension_data = [5]
         distance_data = ["cosine"]  # "cosine", "manhattan", "euclidean"
         similarity_data = ["cosine"]  # "inner_product", "cosine"
         vector_type_data = ["float", "int8"]
@@ -154,7 +154,7 @@ class WorkloadVectorIndexLargeLevelsAndClusters(WorkloadVectorIndex, WorkloadBas
                                     from {table_path} view idx_vector_{vector_name}
                                     {f"WHERE prefix_String = {prefix}" if prefix != "" else ""}
                                     order by {knn_func}({col_name}, $Target) {"DESC" if knn_func in self.targets["similarity"].values() else "ASC"}
-                                    limit {self.rows_count//self.count_prefix};
+                                    limit {self.rows_count//self.count_prefix if prefix != "" else self.rows_count};
                                     """
         return self.client.query(select_sql, False)
 

@@ -287,7 +287,7 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
         for row in rows:
             cur = row[0]
             for val in row.values():
-                assert cur != val, f"""incorrect data after the selection: cur {cur}, received {val}"""
+                assert cur == val, f"""incorrect data after the selection: cur {cur}, received {val}"""
 
     def _drop_index(self, table_path):
         drop_index_sql = f"""

@@ -138,8 +138,18 @@ class RollingUpdateFixture:
         self.cluster.stop()
 
     def roll(self):
+        # from old to new
         for node_id, node in self.cluster.nodes.items():
             node.stop()
             node.binary_path = current_binary_path
             node.start()
             yield
+
+        # from new to old
+        for node_id, node in self.cluster.nodes.items():
+            node.stop()
+            node.binary_path = last_stable_binary_path
+            node.start()
+            yield
+
+        yield

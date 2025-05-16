@@ -106,7 +106,7 @@ class TestRolling(RollingUpdateFixture):
         )
         yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)
         run = yatest.common.execute(run_command, wait=False, stdout=self.output_f, stderr=self.output_f)
-        
+
         for _ in self.roll():
             time.sleep(5)
 

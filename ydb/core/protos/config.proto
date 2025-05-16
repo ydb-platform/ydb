@@ -326,6 +326,8 @@ message TBlobStorageConfig {
     reserved 7;  // TCostMetricsSettings, moved to ICB
     optional TVDiskPerformanceSettings VDiskPerformanceSettings = 8;
     optional TVDiskBalancingConfig VDiskBalancingConfig = 9;
+
+    optional NKikimrBlobStorage.TUpdateSettings BscSettings = 12;
  }
 
 message TBlobStorageFormatConfig {

@@ -181,6 +181,8 @@ void TBlobStorageController::ApplyStorageConfig() {
     }
     const auto& bsConfig = StorageConfig.GetBlobStorageConfig();
 
+    ApplyBscSettings(bsConfig);
+
     if (!bsConfig.HasAutoconfigSettings()) {
         return;
     }

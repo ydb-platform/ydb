@@ -1771,6 +1771,7 @@ private:
 
     void Handle(TEvNodeWardenStorageConfig::TPtr ev);
     void Handle(TEvents::TEvUndelivered::TPtr ev);
+    void ApplyBscSettings(const NKikimrConfig::TBlobStorageConfig& bsConfig);
     void ApplyStorageConfig();
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev);
 

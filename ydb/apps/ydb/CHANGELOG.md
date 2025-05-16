@@ -1,3 +1,4 @@
+* Fixed a bug where ydb cli was trying to read parameters from stdin even if it had no data.
 * Fix `ydb operation get` not working for running operations.
 * Improved `ydb import file` commands to support files with BOM (Byte Order Mark).
 * Brackets are now inserted in pairs in YDB CLI interactive mode

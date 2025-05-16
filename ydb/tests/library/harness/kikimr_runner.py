@@ -652,11 +652,6 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self.__configurator.full_config = config
         self.__write_configs()
 
-    def enable_config_dir(self):
-        self.__configurator.use_config_store = True
-        for node in self.nodes.values():
-            node.enable_config_dir()
-
     def __instantiate_udfs_dir(self):
         to_load = self.__configurator.get_yql_udfs_to_load()
         if len(to_load) == 0:

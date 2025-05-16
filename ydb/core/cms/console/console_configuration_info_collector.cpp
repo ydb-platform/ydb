@@ -35,14 +35,16 @@ void TConfigurationInfoCollector::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev
 
     TotalNodes = nodes.size();
     for (const auto& nodeInfo : nodes) {
-        PendingNodes[nodeInfo.NodeId] = {nodeInfo.Host, nodeInfo.Port};
+        PendingNodes.insert(nodeInfo.NodeId);
+        NodesInfo[nodeInfo.NodeId] = {nodeInfo.Host, nodeInfo.Port};
+        Cerr << "Adding node " << nodeInfo.NodeId << " to pending nodes with endpoint " << nodeInfo.Host << ":" << nodeInfo.Port << Endl;
     }
 
     RequestNodeVersions();
 }
 
 void TConfigurationInfoCollector::RequestNodeVersions() {
-    for (ui32 nodeId : PendingNodes) {
+    for (const auto& nodeId : PendingNodes) {
         Send(MakeConfigsDispatcherID(nodeId),
              new TEvConsole::TEvGetNodeConfigurationVersionRequest());
     }
@@ -79,7 +81,7 @@ void TConfigurationInfoCollector::Handle(TEvPrivate::TEvTimeout::TPtr &ev) {
     Y_UNUSED(ev);
     STLOG(PRI_WARN, CMS_CONFIGS, CIG5, "Collection timed out. Missing responses from " << PendingNodes.size() << " nodes.");
     UnknownNodes += PendingNodes.size();
-    for (const auto& [nodeId, _] : PendingNodes) {
+    for (const auto& nodeId : PendingNodes) {
         UnknownNodesList.push_back(nodeId);
     }
     PendingNodes.clear();
@@ -94,24 +96,21 @@ void TConfigurationInfoCollector::ReplyAndDie() {
     result->set_v2_nodes(V2Nodes);
     result->set_unknown_nodes(UnknownNodes);
 
-    auto convertToNodesList = [](const std::vector<ui32>& nodeIds) {
-        std::vector<Ydb::DynamicConfig::NodeInfo> result;
-        for (const auto& nodeId : nodeIds) {
-            Ydb::DynamicConfig::NodeInfo nodeInfo;
-            nodeInfo.set_node_id(nodeId);
-            if (ListNodes) {
-                const auto& endpoint = nodeInfo.mutable_endpoint();
-                endpoint->set_host(PendingNodes[nodeId].Host);
-                endpoint->set_port(PendingNodes[nodeId].Port);
-            }
-            result.push_back(nodeInfo);
-        }
-        return result;
-    };
+#define SET_NODES_LIST(version, upperVersion) \
+    for (const auto& nodeId : upperVersion##NodesList) { \
+        auto& nodeInfo = *result->add_##version##_nodes_list(); \
+        nodeInfo.set_node_id(nodeId); \
+        if (ListNodes) { \
+            const auto& endpoint = nodeInfo.mutable_endpoint(); \
+            Cerr << "Setting endpoint for node " << nodeId << " to " << NodesInfo[nodeId].Host << ":" << NodesInfo[nodeId].Port << Endl; \
+            endpoint->set_hostname(NodesInfo[nodeId].Host); \
+            endpoint->set_port(NodesInfo[nodeId].Port); \
+        } \
+    }
 
-    result->set_v1_nodes_list(convertToNodesList(V1NodesList));
-    result->set_v2_nodes_list(convertToNodesList(V2NodesList));
-    result->set_unknown_nodes_list(convertToNodesList(UnknownNodesList));
+    SET_NODES_LIST(v1, V1)
+    SET_NODES_LIST(v2, V2)
+    SET_NODES_LIST(unknown, Unknown)
 
     Send(ReplyToActorId, response.Release());
     PassAway();

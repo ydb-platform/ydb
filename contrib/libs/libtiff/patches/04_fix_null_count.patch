@@ -1,0 +1,11 @@
+--- contrib/libs/libtiff/tif_dir.c	(index)
++++ contrib/libs/libtiff/tif_dir.c	(working tree)
+@@ -807,7 +807,7 @@ static int _TIFFVSetField(TIFF *tif, uint32_t tag, va_list ap)
+                 if (tv->count == 0)
+                 {
+                     status = 0;
+-                    TIFFErrorExtR(tif, module,
++                    TIFFWarningExtR(tif, module,
+                                   "%s: Null count for \"%s\" (type "
+                                   "%d, writecount %d, passcount %d)",
+                                   tif->tif_name, fip->field_name,

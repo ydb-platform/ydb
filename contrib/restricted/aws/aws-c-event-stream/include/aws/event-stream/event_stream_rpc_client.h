@@ -7,6 +7,8 @@
 
 #include <aws/event-stream/event_stream_rpc.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_channel;
 struct aws_event_stream_rpc_client_connection;
 struct aws_event_stream_rpc_client_continuation_token;
@@ -82,7 +84,7 @@ struct aws_event_stream_rpc_client_connection_options {
     /** host name to use for the connection. This depends on your socket type. */
     const char *host_name;
     /** port to use for your connection, assuming for the appropriate socket type. */
-    uint16_t port;
+    uint32_t port;
     /** socket options for establishing the connection to the RPC server. */
     const struct aws_socket_options *socket_options;
     /** optional: tls options for using when establishing your connection. */
@@ -194,5 +196,6 @@ AWS_EVENT_STREAM_API int aws_event_stream_rpc_client_continuation_send_message(
     void *user_data);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_EVENT_STREAM_RPC_CLIENT_H */

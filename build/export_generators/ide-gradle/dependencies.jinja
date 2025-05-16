@@ -13,6 +13,14 @@
 {%-     endif -%}
 {%- endmacro -%}
 
+{%- macro Kapts(funcName, kapts) -%}
+{%-     if kapts|length -%}
+{%-         for kapt in kapts %}
+    {{ funcName }}(files("$arcadia_root/{{ kapt }}"))
+{%-         endfor -%}
+{%-     endif -%}
+{%- endmacro -%}
+
 {%- macro AddFileJars(file_jars) -%}
 {%-     for file_jar in file_jars %}
         "$arcadia_root/{{ file_jar }}"{%- if not loop.last -%},{%- endif -%}
@@ -82,6 +90,12 @@ dependencies {
 {%- for extra_target in extra_targets -%}
 {{ AnnotationProcessors("testAnnotationProcessor", extra_target.use_annotation_processor) }}
 {%- endfor -%}
+{%- if with_kapt -%}
+{{ Kapts("kapt", target.kapt.classpaths) }}
+{%-     for extra_target in extra_targets -%}
+{{ Kapts("testKapt", extra_target.kapt.classpaths) }}
+{%-     endfor -%}
+{%- endif -%}
 {#- glue -#}
 {{ AddNonFileDeps(target, file_classpaths, "implementation", "api") }}
 {%- for extra_target in extra_targets -%}

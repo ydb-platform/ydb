@@ -15,6 +15,20 @@
                                 ]
                             ];
                             [
+                                "iccontains";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
+                                "icempty";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ];
+                            [
                                 "icstarts";
                                 [
                                     "DataType";
@@ -27,6 +41,13 @@
                                     "DataType";
                                     "Bool"
                                 ]
+                            ];
+                            [
+                                "icequals";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
                             ]
                         ]
                     ]
@@ -35,30 +56,48 @@
                     [
                         "fdsa";
                         %false;
-                        %false
+                        %true;
+                        %false;
+                        %false;
+                        %true
                     ];
                     [
                         "aswedfg";
                         %true;
+                        %true;
+                        %true;
+                        %false;
                         %false
                     ];
                     [
                         "asdadsaasd";
                         %true;
+                        %true;
+                        %true;
+                        %false;
                         %false
                     ];
                     [
                         "gdsfsassas";
+                        %true;
+                        %true;
                         %false;
-                        %true
+                        %true;
+                        %false
                     ];
                     [
                         "";
+                        %false;
+                        %true;
+                        %false;
                         %false;
                         %false
                     ];
                     [
                         "`\xD0\x9F\xD1\x80\xD0\xB8\xD0\xB2\xD0\xB5\xD1\x82, \xD0\xBC\xD0\xB8\xD1\x80!`";
+                        %false;
+                        %true;
+                        %false;
                         %false;
                         %false
                     ]

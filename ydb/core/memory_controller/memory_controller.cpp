@@ -136,13 +136,11 @@ public:
         auto processMemoryInfo = ProcessMemoryInfoProvider->Get();
         bool hasMemTotalHardLimit = false;
         ui64 hardLimitBytes = GetHardLimitBytes(Config, processMemoryInfo, hasMemTotalHardLimit);
+        ui64 softLimitBytes = GetSoftLimitBytes(Config, hardLimitBytes);
 
-        tcmalloc::MallocExtension::MemoryLimit limit;
-        limit.hard = false;
-        limit.limit = GetSoftLimitBytes(Config, hardLimitBytes);
-        tcmalloc::MallocExtension::SetMemoryLimit(limit);
+        tcmalloc::MallocExtension::SetMemoryLimit(softLimitBytes, tcmalloc::MallocExtension::LimitKind::kSoft);
 
-        LOG_NOTICE_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Set tcmalloc soft limit " << limit.limit);
+        LOG_NOTICE_S(ctx, NKikimrServices::MEMORY_CONTROLLER, "Set tcmalloc soft limit " << softLimitBytes);
 #endif
 
         HandleWakeup(ctx);

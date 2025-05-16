@@ -773,6 +773,7 @@ void TAsyncSlruCacheBase<TKey, TValue, THash>::EndInsert(const TInsertCookie& in
 {
     YT_VERIFY(value);
     const auto& key = value->GetKey();
+    YT_ASSERT(insertCookie.GetKey() == key);
 
     auto* shard = GetShardByKey(key);
 

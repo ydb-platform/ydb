@@ -1,22 +1,20 @@
+{%- set all_targets = [] -%}
 {%- if target is defined -%}
-{%-     set publish = target.publish -%}
-{%-     set with_kotlin = target.with_kotlin -%}
-{%-     if with_kotlin -%}
-{%-         set kotlin_version = target.kotlin_version -%}
-{%-         set with_kotlinc_plugin_allopen = target.with_kotlinc_plugin_allopen -%}
-{%-         set with_kotlinc_plugin_noarg = target.with_kotlinc_plugin_noarg -%}
-{%-     endif -%}
-{%-     set has_errorprone = target.use_errorprone and not disable_errorprone and target.consumer|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|length -%}
-{%- else -%}
-{#-     No target, only extra_targets, get main features from extra_targets  -#}
-{%-     set publish = extra_targets|selectattr('publish', 'eq', true)|length -%}
-{%-     set with_kotlin = extra_targets|selectattr('with_kotlin', 'eq', true)|length -%}
-{%-     if with_kotlin -%}
-{%-         set kotlin_version = extra_targets|selectattr('kotlin_version')|map(attribute='kotlin_version')|first -%}
-{%-         set with_kotlinc_plugin_allopen = extra_targets|selectattr('with_kotlinc_plugin_allopen')|map(attribute='with_kotlinc_plugin_allopen')|sum -%}
-{%-         set with_kotlinc_plugin_noarg = extra_targets|selectattr('with_kotlinc_plugin_noarg')|map(attribute='with_kotlinc_plugin_noarg')|sum -%}
-{%-     endif -%}
-{%-     set has_errorprone = extra_targets|selectattr('use_errorprone', 'eq', true)|length and not disable_errorprone and extra_targets|selectattr('consumer')|map(attribute='consumer')|sum|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|length -%}
+{%-     set all_targets = all_targets + [target] -%}
 {%- endif -%}
+{%- if extra_targets|length -%}
+{%-     set all_targets = all_targets + extra_targets -%}
+{%- endif -%}
+{%- set publish = all_targets|selectattr('publish', 'eq', true)|length -%}
+{%- set with_kotlin = all_targets|selectattr('with_kotlin', 'eq', true)|length -%}
+{%- if with_kotlin -%}
+{%-     set kotlin_version = all_targets|selectattr('kotlin_version')|map(attribute='kotlin_version')|first -%}
+{%-     set with_kotlinc_plugin_allopen = all_targets|selectattr('with_kotlinc_plugin_allopen')|map(attribute='with_kotlinc_plugin_allopen')|sum -%}
+{%-     set with_kotlinc_plugin_noarg = all_targets|selectattr('with_kotlinc_plugin_noarg')|map(attribute='with_kotlinc_plugin_noarg')|sum -%}
+{%-     set with_kapt = all_targets|selectattr('with_kapt', 'eq', true)|map(attribute='with_kapt')|length -%}
+{#-     WAIT ya-bin release -#}
+{%-     set with_kapt = false -%}
+{%- endif -%}
+{%- set has_errorprone = all_targets|selectattr('use_errorprone', 'eq', true)|length and not disable_errorprone and extra_targets|selectattr('consumer')|map(attribute='consumer')|sum|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations')|length -%}
 
 {%- include "[generator]/jdk.jinja" -%}

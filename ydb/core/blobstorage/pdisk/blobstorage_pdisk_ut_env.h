@@ -12,6 +12,7 @@
 
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
+#include <ydb/library/actors/wilson/test_util/fake_wilson_uploader.h>
 
 #include <util/system/hp_timer.h>
 
@@ -46,6 +47,8 @@ public:
     NPDisk::TMainKey MainKey{ .Keys = { NPDisk::YdbDefaultPDiskSequence }, .IsInitialized = true };
     TTestContext TestCtx;
     TSettings Settings;
+    // this pointer doesn't own the object (only Runtime does)
+    NWilson::TFakeWilsonUploader *WilsonUploader = new NWilson::TFakeWilsonUploader;
 
     void DoFormatPDisk(ui64 guid) {
         FormatPDiskForTest(TestCtx.Path, guid, Settings.ChunkSize, Settings.DiskSize,
@@ -109,6 +112,9 @@ public:
         Runtime->SetLogPriority(NKikimrServices::BS_PDISK_SHRED, NLog::PRI_DEBUG);
         Sender = Runtime->AllocateEdgeActor();
 
+        TActorId uploaderId = Runtime->Register(WilsonUploader);
+        Runtime->RegisterService(NWilson::MakeWilsonUploaderId(), uploaderId);
+
         auto cfg = DefaultPDiskConfig(Settings.IsBad);
         UpdateConfigRecreatePDisk(cfg);
     }
@@ -150,7 +156,10 @@ public:
     }
 
     void Send(IEventBase* ev) {
-        Runtime->Send(new IEventHandle(*PDiskActor, Sender, ev));
+        auto evh = new IEventHandle(*PDiskActor, Sender, ev);
+        // trace all events to check there is no VERIFY could happen
+        evh->TraceId = NWilson::TTraceId::NewTraceId(NWilson::TTraceId::MAX_VERBOSITY, 4095);
+        Runtime->Send(evh);
     }
 
     NPDisk::TPDisk *GetPDisk() {

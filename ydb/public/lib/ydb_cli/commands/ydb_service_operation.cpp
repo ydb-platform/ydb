@@ -18,15 +18,14 @@ namespace {
     template <typename T>
     int GetOperation(NOperation::TOperationClient& client, const TOperationId& id, EDataFormat format) {
         T operation = client.Get<T>(id).GetValueSync();
+        PrintOperation(operation, format);
+        if (!operation.Ready()) {
+            return EXIT_SUCCESS;
+        }
         switch (operation.Status().GetStatus()) {
         case EStatus::SUCCESS:
-            PrintOperation(operation, format);
             return EXIT_SUCCESS;
-        case EStatus::CANCELLED:
-            PrintOperation(operation, format);
-            return EXIT_FAILURE;
         default:
-            ThrowOnError(operation);
             return EXIT_FAILURE;
         }
     }

@@ -29,13 +29,6 @@ namespace {
         }
     }
 
-    NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec) {
-        NProtoBuf::Timestamp timestamp;
-        timestamp.set_seconds((i64)(sec));
-        timestamp.set_nanos(0);
-        return timestamp;
-    }
-
     void FillItemProgress(TSchemeShard* ss, const TExportInfo::TPtr exportInfo, ui32 itemIdx,
             Ydb::Export::ExportItemProgress& itemProgress) {
 

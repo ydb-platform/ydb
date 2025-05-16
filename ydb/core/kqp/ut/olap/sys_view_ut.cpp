@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
         }
         helper.GetVolumes(rawBytes3, bytes3, count3, false, { "field" });
         AFL_VERIFY(bytes2 * 10 < bytes1);
-        AFL_VERIFY(bytes3 * 2 < bytes1);
+        AFL_VERIFY(bytes3 * 90 < bytes1);
         AFL_VERIFY(rawBytes3 * 10 < rawBytes1);
         Cerr << rawBytes1 << "/" << bytes1 << "/" << count1 << Endl;
         Cerr << rawBytes2 << "/" << bytes2 << "/" << count2 << Endl;

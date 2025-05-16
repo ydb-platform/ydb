@@ -130,11 +130,11 @@ static int s_sign_message(
     struct aws_byte_cursor integer_cur = aws_byte_cursor_from_array(temp_signature_buf.buffer, coordinate_len);
     /* trim off the leading zero padding for DER encoding */
     integer_cur = aws_byte_cursor_left_trim_pred(&integer_cur, s_trim_zeros_predicate);
-    aws_der_encoder_write_integer(encoder, integer_cur);
+    aws_der_encoder_write_unsigned_integer(encoder, integer_cur);
     integer_cur = aws_byte_cursor_from_array(temp_signature_buf.buffer + coordinate_len, coordinate_len);
     /* trim off the leading zero padding for DER encoding */
     integer_cur = aws_byte_cursor_left_trim_pred(&integer_cur, s_trim_zeros_predicate);
-    aws_der_encoder_write_integer(encoder, integer_cur);
+    aws_der_encoder_write_unsigned_integer(encoder, integer_cur);
     aws_der_encoder_end_sequence(encoder);
 
     struct aws_byte_cursor signature_out_cur;
@@ -178,8 +178,7 @@ static int s_append_coordinate(
         size_t leading_zero_count = coordinate_size - coordinate->len;
         AWS_FATAL_ASSERT(leading_zero_count + buffer->len <= buffer->capacity);
 
-        memset(buffer->buffer + buffer->len, 0, leading_zero_count);
-        buffer->len += leading_zero_count;
+        aws_byte_buf_write_u8_n(buffer, 0x0, leading_zero_count);
     }
 
     return aws_byte_buf_append(buffer, coordinate);
@@ -216,7 +215,7 @@ static int s_verify_signature(
     /* there will be two coordinates. They need to be concatenated together. */
     struct aws_byte_cursor coordinate;
     AWS_ZERO_STRUCT(coordinate);
-    if (aws_der_decoder_tlv_integer(decoder, &coordinate)) {
+    if (aws_der_decoder_tlv_unsigned_integer(decoder, &coordinate)) {
         aws_raise_error(AWS_ERROR_CAL_MALFORMED_ASN1_ENCOUNTERED);
         goto error;
     }
@@ -230,7 +229,7 @@ static int s_verify_signature(
         goto error;
     }
     AWS_ZERO_STRUCT(coordinate);
-    if (aws_der_decoder_tlv_integer(decoder, &coordinate)) {
+    if (aws_der_decoder_tlv_unsigned_integer(decoder, &coordinate)) {
         aws_raise_error(AWS_ERROR_CAL_MALFORMED_ASN1_ENCOUNTERED);
         goto error;
     }

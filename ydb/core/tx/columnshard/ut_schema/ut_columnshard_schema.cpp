@@ -102,7 +102,7 @@ bool TriggerMetadata(
 }
 
 
-std::vector<TString> MakeData(const std::vector<ui64>& ts, ui32 portionSize, ui32 overlapSize, const TString& ttlColumnName,
+std::vector<TString> MakeData(const std::vector<ui64>& ts, ui32 portionSize, ui32 overlapSize, const std::optional<TString>& columnToUpdate,
                               const std::vector<NArrow::NTest::TTestColumn>& ydbSchema = testYdbSchema) {
     UNIT_ASSERT(ts.size() > 0);
 
@@ -115,7 +115,9 @@ std::vector<TString> MakeData(const std::vector<ui64>& ts, ui32 portionSize, ui3
     data.reserve(ts.size());
     for (size_t i = 0; i < ts.size(); ++i) {
         auto batch = testBatch->Slice((portionSize - overlapSize) * i, portionSize);
-        batch = UpdateColumn(batch, ttlColumnName, ts[i]);
+        if (columnToUpdate) {
+           batch = UpdateColumn(batch, *columnToUpdate, ts[i]);
+        }
         data.emplace_back(NArrow::SerializeBatchNoCompression(batch));
     }
 
@@ -769,11 +771,10 @@ std::vector<std::pair<ui32, ui64>> TestTiersAndTtl(const TTestSchema::TTableSpec
     return rowsBytes;
 }
 
-std::vector<std::pair<ui32, ui64>> TestOneTierExport(const TTestSchema::TTableSpecials& spec,
-                                                    const std::vector<TTestSchema::TTableSpecials>& alters,
+std::vector<std::pair<ui32, ui64>> TestOneTierExport(const std::optional<TString>& columnToUpdateWithTs, const std::vector<TTestSchema::TTableSpecials>& alters,
                                                     const std::vector<ui64>& ts, bool reboots, std::optional<ui32> loss, const bool buildTTL = true) {
     ui32 overlapSize = 0;
-    std::vector<TString> blobs = MakeData(ts, PORTION_ROWS, overlapSize, spec.TtlColumn);
+    std::vector<TString> blobs = MakeData(ts, PORTION_ROWS, overlapSize, columnToUpdateWithTs);
 
     auto rowsBytes = TestTiers(reboots, blobs, alters, loss, buildTTL);
     for (auto&& i : rowsBytes) {
@@ -859,7 +860,7 @@ void TestExport(bool reboot, TExportTestOpts&& opts = TExportTestOpts{}) {
         alters[alterNo].Tiers.clear();
     }
 
-    auto rowsBytes = TestOneTierExport(spec, alters, ts, reboot, opts.Loss, !opts.Misconfig);
+    auto rowsBytes = TestOneTierExport(opts.Misconfig == 2 ? std::optional<TString>{} : spec.GetTtlColumn(), alters, ts, reboot, opts.Loss, !opts.Misconfig);
     if (!opts.Misconfig) {
         changes.Assert(spec, rowsBytes, 1);
     }

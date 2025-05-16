@@ -67,10 +67,8 @@ struct aws_mqtt5_negotiated_settings;
 #define AWS_MQTT5_SUBSCRIBE_FLAGS_QOS_BIT_MASK 0x03
 
 /* Static AWS IoT Core Limit/Quota Values */
-#define AWS_IOT_CORE_MAXIMUM_CLIENT_ID_LENGTH 128
 #define AWS_IOT_CORE_MAXIMUM_TOPIC_LENGTH 256
 #define AWS_IOT_CORE_MAXIMUM_TOPIC_SEGMENTS 8
-#define AWS_IOT_CORE_MAXIMUM_SUSBCRIPTIONS_PER_SUBSCRIBE 8
 
 /* Dynamic IoT Core Limits */
 #define AWS_IOT_CORE_PUBLISH_PER_SECOND_LIMIT 100
@@ -95,14 +93,6 @@ AWS_EXTERN_C_BEGIN
  * {0x00, 0x04, "MQTT", 0x05}
  */
 AWS_MQTT_API extern struct aws_byte_cursor g_aws_mqtt5_connect_protocol_cursor;
-
-/**
- * Validate utf-8 string under mqtt5 specs
- *
- * @param text
- * @return AWS_OP_SUCCESS if the text is validate, otherwise AWS_OP_ERR
- */
-AWS_MQTT_API int aws_mqtt5_validate_utf8_text(struct aws_byte_cursor text);
 
 /**
  * Simple helper function to compute the first byte of an MQTT packet encoding as a function of 4 bit flags
@@ -221,6 +211,15 @@ AWS_MQTT_API const char *aws_mqtt5_outbound_topic_alias_behavior_type_to_c_strin
     enum aws_mqtt5_client_outbound_topic_alias_behavior_type outbound_aliasing_behavior);
 
 /**
+ * Checks an outbound aliasing behavior type value for validity
+ *
+ * @param outbound_aliasing_behavior value to check
+ * @return true if this is a valid value, false otherwise
+ */
+AWS_MQTT_API bool aws_mqtt5_outbound_topic_alias_behavior_type_validate(
+    enum aws_mqtt5_client_outbound_topic_alias_behavior_type outbound_aliasing_behavior);
+
+/**
  * Converts an outbound topic aliasing behavior type value to a final non-default value.
  *
  * @param outbound_aliasing_behavior type of outbound topic aliasing behavior
@@ -237,6 +236,15 @@ AWS_MQTT_API enum aws_mqtt5_client_outbound_topic_alias_behavior_type
  * @return short string describing the inbound topic aliasing behavior
  */
 AWS_MQTT_API const char *aws_mqtt5_inbound_topic_alias_behavior_type_to_c_string(
+    enum aws_mqtt5_client_inbound_topic_alias_behavior_type inbound_aliasing_behavior);
+
+/**
+ * Checks an inbound aliasing behavior type value for validity
+ *
+ * @param inbound_aliasing_behavior value to check
+ * @return true if this is a valid value, false otherwise
+ */
+AWS_MQTT_API bool aws_mqtt5_inbound_topic_alias_behavior_type_validate(
     enum aws_mqtt5_client_inbound_topic_alias_behavior_type inbound_aliasing_behavior);
 
 /**
@@ -328,7 +336,8 @@ AWS_MQTT_API uint64_t aws_mqtt5_client_random_in_range(uint64_t from, uint64_t t
  * @param topic_cursor topic to get the non-rules suffix for
  * @return remaining part of the topic after the leading AWS IoT Rules prefix has been skipped, if present
  */
-AWS_MQTT_API struct aws_byte_cursor aws_mqtt5_topic_skip_aws_iot_rules_prefix(struct aws_byte_cursor topic_cursor);
+AWS_MQTT_API struct aws_byte_cursor aws_mqtt5_topic_skip_aws_iot_core_uncounted_prefix(
+    struct aws_byte_cursor topic_cursor);
 
 /**
  * Computes the number of topic segments in a topic or topic filter

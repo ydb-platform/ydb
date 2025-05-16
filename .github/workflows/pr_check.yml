@@ -219,16 +219,6 @@ jobs:
             timeout: 240
             build_target: "ydb/"
             test_size: small,medium
-          - build_preset: release-msan
-            threads_count: 20
-            timeout: 480
-            build_target: "ydb/"
-            test_size: small,medium
-          - build_preset: release-tsan
-            threads_count: 20
-            timeout: 600
-            build_target: "ydb/"
-            test_size: small,medium
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}" ]
     name: Build and test ${{ matrix.build_preset }}
     steps:

@@ -30,8 +30,8 @@
 
 #include <limits.h>
 
-#error #include <libssh2.h>
-#error #include <libssh2_sftp.h>
+#include <libssh2.h>
+#include <libssh2_sftp.h>
 
 #ifdef HAVE_FCNTL_H
 #include <fcntl.h>
@@ -75,7 +75,7 @@
 #include "multiif.h"
 #include "select.h"
 #include "warnless.h"
-#error #include "curl_path.h"
+#include "curl_path.h"
 
 #include <curl_base64.h> /* for base64 encoding/decoding */
 #include <curl_sha256.h>

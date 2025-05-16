@@ -257,6 +257,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                     return this->Reply(StatusIds::INTERNAL_ERROR, TIssuesIds::UNEXPECTED, TStringBuilder() << "Item \""
                         << path << "\" not found in export items list");
                 }
+                it->second.Resolved = true;
                 const NSchemeCache::TSchemeCacheNavigate::EKind kind = entry.Kind;
                 if (IsLikeDirectory(kind)) {
                     DirectoryItems[path] = it->second;
@@ -269,7 +270,6 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                             << path << "\" is not supported in export");
                     }
                 }
-                it->second.Resolved = true;
             }
         } else if (Stage == EStage::ExpandDirectories) {
             const TString canonizedDatabasePath = CanonizePath(this->GetDatabaseName());

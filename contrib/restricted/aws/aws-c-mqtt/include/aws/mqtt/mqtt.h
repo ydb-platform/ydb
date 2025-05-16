@@ -11,6 +11,8 @@
 
 #include <aws/mqtt/exports.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 #define AWS_C_MQTT_PACKAGE_ID 5
 
 /* Quality of Service associated with a publish action or subscription [MQTT-4.3]. */
@@ -76,6 +78,10 @@ enum aws_mqtt_error {
     AWS_ERROR_MQTT5_INVALID_INBOUND_TOPIC_ALIAS,
     AWS_ERROR_MQTT5_INVALID_OUTBOUND_TOPIC_ALIAS,
     AWS_ERROR_MQTT5_INVALID_UTF8_STRING,
+    AWS_ERROR_MQTT_CONNECTION_RESET_FOR_ADAPTER_CONNECT,
+    AWS_ERROR_MQTT_CONNECTION_RESUBSCRIBE_NO_TOPICS,
+    AWS_ERROR_MQTT_CONNECTION_SUBSCRIBE_FAILURE,
+    AWS_ERROR_MQTT_ACK_REASON_CODE_FAILURE,
 
     AWS_ERROR_END_MQTT_RANGE = AWS_ERROR_ENUM_END_RANGE(AWS_C_MQTT_PACKAGE_ID),
 };
@@ -87,6 +93,7 @@ enum aws_mqtt_log_subject {
     AWS_LS_MQTT5_GENERAL,
     AWS_LS_MQTT5_CLIENT,
     AWS_LS_MQTT5_CANARY,
+    AWS_LS_MQTT5_TO_MQTT3_ADAPTER,
 };
 
 /** Function called on cleanup of a userdata. */
@@ -96,8 +103,17 @@ AWS_EXTERN_C_BEGIN
 
 AWS_MQTT_API
 bool aws_mqtt_is_valid_topic(const struct aws_byte_cursor *topic);
+
 AWS_MQTT_API
 bool aws_mqtt_is_valid_topic_filter(const struct aws_byte_cursor *topic_filter);
+
+/**
+ * Validate utf-8 string under mqtt specs
+ *
+ * @param text
+ * @return AWS_OP_SUCCESS if the text is validate, otherwise AWS_OP_ERR
+ */
+AWS_MQTT_API int aws_mqtt_validate_utf8_text(struct aws_byte_cursor text);
 
 /**
  * Initializes internal datastructures used by aws-c-mqtt.
@@ -116,5 +132,6 @@ AWS_MQTT_API
 void aws_mqtt_fatal_assert_library_initialized(void);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_MQTT_MQTT_H */

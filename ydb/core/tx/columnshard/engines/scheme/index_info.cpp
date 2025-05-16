@@ -440,20 +440,23 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
     if (indexChunkConclusion.IsFail()) {
         return indexChunkConclusion;
     }
-    if (!*indexChunkConclusion) {
+    if (indexChunkConclusion->empty()) {
         return TConclusionStatus::Success();
     }
-    auto chunk = indexChunkConclusion.DetachResult();
+    auto chunks = indexChunkConclusion.DetachResult();
     auto opStorage = operators->GetOperatorVerified(index->GetStorageId());
-    if ((i64)chunk->GetPackedSize() > opStorage->GetBlobSplitSettings().GetMaxBlobSize()) {
-        return TConclusionStatus::Fail("blob size for secondary data (" + ::ToString(indexId) + ":" + ::ToString(chunk->GetPackedSize()) + ":" +
-                                       ::ToString(recordsCount) + ") bigger than limit (" +
-                                       ::ToString(opStorage->GetBlobSplitSettings().GetMaxBlobSize()) + ")");
+    for (auto&& chunk : chunks) {
+        if ((i64)chunk->GetPackedSize() > opStorage->GetBlobSplitSettings().GetMaxBlobSize()) {
+            return TConclusionStatus::Fail("blob size for secondary data (" + ::ToString(indexId) + ":" + ::ToString(chunk->GetPackedSize()) +
+                                           ":" + ::ToString(recordsCount) + ") bigger than limit (" +
+                                           ::ToString(opStorage->GetBlobSplitSettings().GetMaxBlobSize()) + ")");
+        }
     }
     if (index->GetStorageId() == IStoragesManager::LocalMetadataStorageId) {
-        AFL_VERIFY(result.MutableSecondaryInplaceData().emplace(indexId, chunk).second);
+        AFL_VERIFY(chunks.size() == 1);
+        AFL_VERIFY(result.MutableSecondaryInplaceData().emplace(indexId, chunks.front()).second);
     } else {
-        AFL_VERIFY(result.MutableExternalData().emplace(indexId, std::vector<std::shared_ptr<IPortionDataChunk>>({chunk})).second);
+        AFL_VERIFY(result.MutableExternalData().emplace(indexId, std::move(chunks)).second);
     }
     return TConclusionStatus::Success();
 }

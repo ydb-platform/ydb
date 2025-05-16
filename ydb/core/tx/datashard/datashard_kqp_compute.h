@@ -53,32 +53,6 @@ public:
 
     bool IsTabletNotReady() const { return TabletNotReady; }
 
-    bool ReadRow(const TTableId& tableId, TArrayRef<const TCell> key, const TSmallVec<NTable::TTag>& columnTags,
-        const TSmallVec<NTable::TTag>& systemColumnTags, const THolderFactory& holderFactory,
-        NUdf::TUnboxedValue& result, TKqpTableStats& stats);
-
-    TAutoPtr<NTable::TTableIter> CreateIterator(const TTableId& tableId, const TTableRange& range,
-        const TSmallVec<NTable::TTag>& columnTags);
-
-    TAutoPtr<NTable::TTableReverseIter> CreateReverseIterator(const TTableId& tableId, const TTableRange& range,
-        const TSmallVec<NTable::TTag>& columnTags);
-
-    bool ReadRow(const TTableId& tableId, NTable::TTableIter& iterator,
-        const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys,
-        const THolderFactory& holderFactory, NUdf::TUnboxedValue& result, TKqpTableStats& stats);
-
-    bool ReadRow(const TTableId& tableId, NTable::TTableReverseIter& iterator,
-        const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys,
-        const THolderFactory& holderFactory, NUdf::TUnboxedValue& result, TKqpTableStats& stats);
-
-    bool ReadRowWide(const TTableId& tableId, NTable::TTableIter& iterator,
-        const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys,
-        NUdf::TUnboxedValue* const* result, TKqpTableStats& stats);
-
-    bool ReadRowWide(const TTableId& tableId, NTable::TTableReverseIter& iterator,
-        const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys,
-        NUdf::TUnboxedValue* const* result, TKqpTableStats& stats);
-
     bool HadInconsistentReads() const { return InconsistentReads; }
     void SetInconsistentReads() { InconsistentReads = true; }
 
@@ -87,16 +61,6 @@ public:
 private:
     void TouchTableRange(const TTableId& tableId, const TTableRange& range) const;
     void TouchTablePoint(const TTableId& tableId, const TArrayRef<const TCell>& key) const;
-
-    template <typename TReadTableIterator>
-    bool ReadRowImpl(const TTableId& tableId, TReadTableIterator& iterator,
-        const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys,
-        const THolderFactory& holderFactory, NUdf::TUnboxedValue& result, TKqpTableStats& stats);
-
-    template <typename TReadTableIterator>
-    bool ReadRowWideImpl(const TTableId& tableId, TReadTableIterator& iterator,
-        const TSmallVec<NTable::TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys,
-        NUdf::TUnboxedValue* const* result, TKqpTableStats& stats);
 
     void SetTabletNotReady() { TabletNotReady = true; }
 
@@ -122,21 +86,14 @@ public:
     TTypeEnvironment* Env = nullptr;
 };
 
-IComputationNode* WrapKqpWideReadTableRanges(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx);
-IComputationNode* WrapKqpLookupTable(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx);
 IComputationNode* WrapKqpUpsertRows(TCallable& callable, const TComputationNodeFactoryContext& ctx,
     TKqpDatashardComputeContext& computeCtx);
 IComputationNode* WrapKqpDeleteRows(TCallable& callable, const TComputationNodeFactoryContext& ctx,
     TKqpDatashardComputeContext& computeCtx);
 IComputationNode* WrapKqpEffects(TCallable& callable, const TComputationNodeFactoryContext& ctx,
     TKqpDatashardComputeContext& computeCtx);
-IComputationNode* WrapKqpWideReadTable(TCallable& callable, const TComputationNodeFactoryContext& ctx,
-    TKqpDatashardComputeContext& computeCtx);
 
 TComputationNodeFactory GetKqpDatashardComputeFactory(TKqpDatashardComputeContext* computeCtx);
-TComputationNodeFactory GetKqpScanComputeFactory(TKqpScanComputeContext* computeCtx);
 
 } // namespace NMiniKQL
 } // namespace NKikimr

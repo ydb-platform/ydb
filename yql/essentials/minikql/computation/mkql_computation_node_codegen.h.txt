@@ -1148,11 +1148,11 @@ Value* StaticCast(Value* value, LLVMContext &context, BasicBlock* block) {
 
     if (std::is_integral<TSrc>() == std::is_integral<TDst>()) {
         if (std::is_integral<TSrc>()) {
+            if (std::is_same_v<TDst, bool> && !std::is_same_v<TSrc, bool>) {
+                return CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, value, ConstantInt::get(value->getType(), 0), "test", block);
+            }
             if (sizeof(TSrc) > sizeof(TDst)) {
-                if (std::is_same<TDst, bool>())
-                    return CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_NE, value, ConstantInt::get(value->getType(), 0), "test", block);
-                else
-                    return CastInst::Create(Instruction::Trunc, value, GetTypeFor<TDst>(context), "trunc", block);
+                return CastInst::Create(Instruction::Trunc, value, GetTypeFor<TDst>(context), "trunc", block);
             } else if ((sizeof(TSrc) < sizeof(TDst))) {
                 return CastInst::Create(std::is_signed<TSrc>() ? Instruction::SExt : Instruction::ZExt, value, GetTypeFor<TDst>(context), "ext", block);
             } else {

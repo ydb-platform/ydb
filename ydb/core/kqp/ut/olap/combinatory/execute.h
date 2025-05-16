@@ -9,7 +9,7 @@ namespace NKikimr::NKqp {
 
 class TSchemaCommand: public ICommand {
 private:
-    const TString Command;
+    TString Command;
     virtual TConclusionStatus DoExecute(TKikimrRunner& kikimr) override {
         Cerr << "EXECUTE: " << Command << Endl;
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
@@ -18,15 +18,21 @@ private:
         return TConclusionStatus::Success();
     }
 
-public:
-    TSchemaCommand(const TString& command)
-        : Command(command) {
+    virtual TConclusionStatus DoDeserializeProperties(const TPropertiesCollection& props) override {
+        if (props.GetFreeArgumentsCount() == 0) {
+            return TConclusionStatus::Fail("no free arguments count for SCHEMA command");
+        }
+        Command = props.JoinFreeArguments("\n");
+        return TConclusionStatus::Success();
     }
+
+public:
+    TSchemaCommand() = default;
 };
 
 class TDataCommand: public ICommand {
 private:
-    const TString Command;
+    TString Command;
     virtual TConclusionStatus DoExecute(TKikimrRunner& kikimr) override {
         Cerr << "EXECUTE: " << Command << Endl;
         auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
@@ -36,10 +42,16 @@ private:
         return TConclusionStatus::Success();
     }
 
-public:
-    TDataCommand(const TString& command)
-        : Command(command) {
+    virtual TConclusionStatus DoDeserializeProperties(const TPropertiesCollection& props) override {
+        if (props.GetFreeArgumentsCount() == 0) {
+            return TConclusionStatus::Fail("no free arguments count for SCHEMA command");
+        }
+        Command = props.JoinFreeArguments("\n");
+        return TConclusionStatus::Success();
     }
+
+public:
+    TDataCommand() = default;
 };
 
 }   // namespace NKikimr::NKqp

@@ -595,6 +595,10 @@ bool aws_mqtt_packet_publish_get_dup(const struct aws_mqtt_packet_publish *packe
     return packet->fixed_header.flags & (1 << 3); /* bit 3 */
 }
 
+void aws_mqtt_packet_publish_set_dup(struct aws_mqtt_packet_publish *packet) {
+    packet->fixed_header.flags |= 0x08;
+}
+
 enum aws_mqtt_qos aws_mqtt_packet_publish_get_qos(const struct aws_mqtt_packet_publish *packet) {
     return (packet->fixed_header.flags >> 1) & 0x3; /* bits 2,1 */
 }

@@ -22,9 +22,10 @@ using namespace Tests;
 
 void TTester::Setup(TTestActorRuntime& runtime) {
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
-    runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_INFO);
+//    runtime.SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_INFO);
     runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
-    runtime.SetLogPriority(NKikimrServices::S3_WRAPPER, NLog::PRI_DEBUG);
+    runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD_WRITE, NActors::NLog::PRI_DEBUG);
+    //    runtime.SetLogPriority(NKikimrServices::S3_WRAPPER, NLog::PRI_DEBUG);
 
     NOlap::TSchemaCachesManager::DropCaches();
 
@@ -135,7 +136,9 @@ bool WriteDataImpl(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shar
     const TString dedupId = ToString(writeId);
 
     auto write = std::make_unique<NEvents::TDataEvents::TEvWrite>(writeId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
-    write->SetLockId(lockId, 1);
+    if (lockId) {
+        write->SetLockId(lockId, 1);
+    }
     auto& operation = write->AddOperation(TEnumOperator<NEvWrite::EModificationType>::SerializeToWriteProto(mType), TTableId(0, tableId, 1), {},
         0, NKikimrDataEvents::FORMAT_ARROW);
     *operation.MutablePayloadSchema() = NArrow::SerializeSchema(*schema);

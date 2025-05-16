@@ -172,15 +172,28 @@ public:
     TRestoreResult RestoreDelayed();
 
     template <typename... Args>
-    void Add(NScheme::ESchemeEntryType type, Args&&... args) {
-        Calls.emplace_back(type, std::forward<Args>(args)...);
+    void Add(Args&&... args) {
+        Calls.emplace_back(std::forward<Args>(args)...);
+    }
+};
+
+struct TFsBackupEntry {
+    TFsPath FsPath;
+    TString DbPath;
+    NScheme::ESchemeEntryType Type;
+
+    TFsBackupEntry(const TFsPath& fsPath, TString&& dbPath, NScheme::ESchemeEntryType type)
+        : FsPath(fsPath)
+        , DbPath(std::move(dbPath))
+        , Type(type)
+    {
     }
 };
 
 } // NPrivate
 
 class TRestoreClient {
-    TRestoreResult RestoreFolder(const TFsPath& fsPath, const TString& dbRestoreRoot, const TString& dbPathRelativeToRestoreRoot, const TRestoreSettings& settings, const THashSet<TString>& oldEntries);
+    TRestoreResult RestoreFolder(const TFsPath& fsBackupRoot, const TString& dbRestoreRoot, const TRestoreSettings& settings, const THashMap<TString, NScheme::ESchemeEntryType>& oldEntries);
     TRestoreResult RestoreEmptyDir(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
     TRestoreResult RestoreTable(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
     TRestoreResult RestoreView(const TFsPath& fsPath, const TString& dbRestoreRoot, const TString& dbPathRelativeToRestoreRoot, const TRestoreSettings& settings, bool isAlreadyExisting);
@@ -220,6 +233,7 @@ class TRestoreClient {
         ui32 dataFilesCount);
 
     TRestoreResult CheckSecretExistence(const TString& secretName);
+    TRestoreResult Restore(NScheme::ESchemeEntryType type, const TFsPath& fsPath, const TString& dbRestoreRoot, const TString& dbPathRelativeToRestoreRoot, const TRestoreSettings& settings, bool isAlreadyExisting, bool delay);
 
 public:
     explicit TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog>& log);

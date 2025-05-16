@@ -35,6 +35,7 @@ SET(ORIG_SOURCES
     mkql_blocks_ut.cpp
     mkql_combine_ut.cpp
     mkql_condense_ut.cpp
+    mkql_convert_ut.cpp
     mkql_decimal_ut.cpp
     mkql_chain_map_ut.cpp
     mkql_chopper_ut.cpp

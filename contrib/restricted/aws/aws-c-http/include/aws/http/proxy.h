@@ -11,6 +11,8 @@
 #include <aws/http/request_response.h>
 #include <aws/http/status_code.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_http_client_connection_options;
 struct aws_http_connection_manager_options;
 
@@ -112,7 +114,7 @@ struct aws_http_proxy_options {
     /**
      * Port to make the proxy connection to
      */
-    uint16_t port;
+    uint32_t port;
 
     /**
      * Optional.
@@ -566,5 +568,6 @@ AWS_HTTP_API int aws_http_proxy_new_socket_channel(
     const struct aws_http_proxy_options *proxy_options);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_PROXY_STRATEGY_H */

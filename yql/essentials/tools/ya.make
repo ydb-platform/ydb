@@ -15,5 +15,6 @@ RECURSE(
     udf_resolver
     yql_complete
     yql_facade_run
+    yql_highlight
     yql_linter
 )

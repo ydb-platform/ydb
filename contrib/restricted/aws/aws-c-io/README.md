@@ -208,7 +208,7 @@ Sockets interact directly with the underlying io and are invoked directly by the
 
 Platform | Implementation
 --- | ---
-Linux | Signal-to-noise (s2n) see github.com/awslabs/s2n
+Linux | Signal-to-noise (s2n) see: https://github.com/aws/s2n-tls
 BSD Variants | s2n
 Apple Devices | Security Framework/ Secure Transport. See https://developer.apple.com/documentation/security/secure_transport
 Windows | Secure Channel. See https://msdn.microsoft.com/en-us/library/windows/desktop/aa380123(v=vs.85).aspx

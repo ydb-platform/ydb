@@ -867,6 +867,11 @@ int aws_http_message_get_header(
     return aws_http_headers_get_index(message->headers, index, out_header);
 }
 
+AWS_FUTURE_T_POINTER_WITH_RELEASE_IMPLEMENTATION(
+    aws_future_http_message,
+    struct aws_http_message,
+    aws_http_message_release)
+
 struct aws_http_stream *aws_http_connection_make_request(
     struct aws_http_connection *client_connection,
     const struct aws_http_make_request_options *options) {
@@ -952,8 +957,8 @@ struct aws_http_message *aws_http2_message_new_from_http1(
             scheme_cursor.ptr);
 
         /**
-         * An intermediary that forwards a request over HTTP/2 MUST construct an ":authority" pseudo-header field using
-         * the authority information from the control data of the original request. (RFC=9113 8.3.1)
+         * An intermediary that forwards a request over HTTP/2 MUST construct an ":authority" pseudo-header field
+         * using the authority information from the control data of the original request. (RFC=9113 8.3.1)
          */
         struct aws_byte_cursor host_value;
         AWS_ZERO_STRUCT(host_value);
@@ -970,7 +975,8 @@ struct aws_http_message *aws_http2_message_new_from_http1(
                 (int)host_value.len,
                 host_value.ptr);
         }
-        /* TODO: If the host headers is missing, the target URI could be the other source of the authority information
+        /* TODO: If the host headers is missing, the target URI could be the other source of the authority
+         * information
          */
 
         struct aws_byte_cursor path_cursor;
@@ -1107,6 +1113,15 @@ int aws_http_stream_send_response(struct aws_http_stream *stream, struct aws_htt
     return stream->owning_connection->vtable->stream_send_response(stream, response);
 }
 
+struct aws_http_stream *aws_http_stream_acquire(struct aws_http_stream *stream) {
+    AWS_PRECONDITION(stream);
+
+    size_t prev_refcount = aws_atomic_fetch_add(&stream->refcount, 1);
+    AWS_LOGF_TRACE(
+        AWS_LS_HTTP_STREAM, "id=%p: Stream refcount acquired, %zu remaining.", (void *)stream, prev_refcount + 1);
+    return stream;
+}
+
 void aws_http_stream_release(struct aws_http_stream *stream) {
     if (!stream) {
         return;
@@ -1184,6 +1199,10 @@ void aws_http_stream_update_window(struct aws_http_stream *stream, size_t increm
 
 uint32_t aws_http_stream_get_id(const struct aws_http_stream *stream) {
     return stream->id;
+}
+
+void aws_http_stream_cancel(struct aws_http_stream *stream, int error_code) {
+    stream->vtable->cancel(stream, error_code);
 }
 
 int aws_http2_stream_reset(struct aws_http_stream *http2_stream, uint32_t http2_error) {

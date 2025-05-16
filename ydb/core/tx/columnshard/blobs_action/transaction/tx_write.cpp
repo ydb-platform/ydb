@@ -151,12 +151,12 @@ void TTxWrite::DoComplete(const TActorContext& ctx) {
                 Self->OperationsManager->AddTemporaryTxLink(op->GetLockId());
                 AFL_VERIFY(CommitSnapshot);
                 Self->OperationsManager->CommitTransactionOnComplete(*Self, op->GetLockId(), *CommitSnapshot);
+                Self->Counters.GetTabletCounters()->IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
             }
         }
         Self->Counters.GetCSCounters().OnWriteTxComplete(now - writeMeta.GetWriteStartInstant());
         Self->Counters.GetCSCounters().OnSuccessWriteResponse();
     }
-    Self->Counters.GetTabletCounters()->IncCounter(COUNTER_IMMEDIATE_TX_COMPLETED);
     Self->SetupIndexation();
 }
 

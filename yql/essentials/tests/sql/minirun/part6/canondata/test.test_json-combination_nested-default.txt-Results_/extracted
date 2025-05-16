@@ -1,6 +1,6 @@
 <tmp_path>/program.sql:<main>: Warning: Type annotation
 
-    <tmp_path>/program.sql:<main>:15:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    <tmp_path>/program.sql:<main>:15:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
     	SELECT
 	^
         <tmp_path>/program.sql:<main>:16:4: Warning: At function: JsonValue
@@ -30,7 +30,7 @@
                     <tmp_path>/program.sql:<main>:17:8: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
                     	        JSON_QUERY(
 	       ^
-    <tmp_path>/program.sql:<main>:30:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    <tmp_path>/program.sql:<main>:30:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
     	SELECT
 	^
         <tmp_path>/program.sql:<main>:31:4: Warning: At function: JsonExists
@@ -60,7 +60,7 @@
                     <tmp_path>/program.sql:<main>:32:8: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
                     	        JSON_QUERY(
 	       ^
-    <tmp_path>/program.sql:<main>:45:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    <tmp_path>/program.sql:<main>:45:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
     	SELECT
 	^
         <tmp_path>/program.sql:<main>:46:4: Warning: At function: JsonQuery

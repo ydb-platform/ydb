@@ -26,9 +26,10 @@ enum : ui32  {
 
 class TTxInitSchema : public ITransaction {
 public:
-    TTxInitSchema(const TVector<ui32>& tableIds, bool addColumnsInFamily = false)
+    TTxInitSchema(const TVector<ui32>& tableIds, bool addColumnsInFamily = false, bool allowLogBatching = false)
         : TableIds(tableIds)
         , AddColumnsInFamily(addColumnsInFamily)
+        , AllowLogBatching(allowLogBatching)
     { }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
@@ -45,7 +46,8 @@ public:
                 .AddColumn(tableId, "key", KeyColumnId, NScheme::TInt64::TypeId, false)
                 .AddColumn(tableId, "value", ValueColumnId, NScheme::TString::TypeId, false)
                 .AddColumnToKey(tableId, KeyColumnId)
-                .SetCompactionPolicy(tableId, policy);
+                .SetCompactionPolicy(tableId, policy)
+                .SetExecutorAllowLogBatching(AllowLogBatching);
 
             if (AddColumnsInFamily) {
                 txc.DB.Alter()
@@ -74,6 +76,7 @@ public:
 private:
     const TVector<ui32> TableIds;
     const bool AddColumnsInFamily;
+    const bool AllowLogBatching;
 };
 
 class TTxWriteRow : public ITransaction {
@@ -694,12 +697,53 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         }
         gcResults.Stop().Unblock();
         retriedGcResults.Wait();
+        retriedGcResults.Stop();
 
         auto ev2 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
         UNIT_ASSERT_VALUES_EQUAL(ev2->Get()->DataCleanupGeneration, 235);
 
         UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value42), 0);
         UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value43), 0);
+    }
+
+    Y_UNIT_TEST(CleanupDataWithSysTabletGCErrors) {
+        TString value42 = "Some_value";
+
+        TMyEnvBase env;
+        env.FireDummyTablet(TestTabletFlags);
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema({ 101 }, false, true) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(101, 42, value42) });
+
+        int readRows = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(101, readRows) }, true);
+        UNIT_ASSERT_EQUAL(readRows, 1);
+
+        UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCount(env, value42, 0), 1);
+
+        // make all log GC responses failed
+        auto obs = env->AddObserver<TEvBlobStorage::TEvCollectGarbageResult>([](auto& ev) {
+            if (ev->Get()->Channel == 0) {
+                ev->Get()->Status = NKikimrProto::ERROR;
+            }
+        });
+
+        env.SendSync(new NFake::TEvExecute{ new TTxDeleteRow(101, 42) });
+
+        env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
+            executor->CleanupData(235);
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        } });
+
+        // should not be cleaned without successful log GC
+        UNIT_ASSERT(!env.GrabEdgeEvent<NFake::TEvDataCleaned>(TDuration::Seconds(10)));
+
+        // make all subsequent log GC responses OK
+        obs.Remove();
+
+        auto ev2 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev2->Get()->DataCleanupGeneration, 235);
+
+        UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value42), 0);
     }
 }
 } // namespace NKikimr::NTable

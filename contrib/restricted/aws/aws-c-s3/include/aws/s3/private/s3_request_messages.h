@@ -37,13 +37,6 @@ struct aws_http_message *aws_s3_message_util_copy_http_message_no_body_filter_he
     size_t excluded_headers_size,
     bool exclude_x_amz_meta);
 
-/* Copy message and retain all headers, but replace body with one that reads directly from a filepath. */
-AWS_S3_API
-struct aws_http_message *aws_s3_message_util_copy_http_message_filepath_body_all_headers(
-    struct aws_allocator *allocator,
-    struct aws_http_message *message,
-    struct aws_byte_cursor filepath);
-
 /* Copy headers from one message to the other and exclude specific headers.
  * exclude_x_amz_meta controls whether S3 user metadata headers (prefixed with "x-amz-meta) are excluded.*/
 AWS_S3_API
@@ -118,7 +111,7 @@ struct aws_http_message *aws_s3_upload_part_copy_message_new(
     bool should_compute_content_md5);
 
 /* Create an HTTP request for an S3 Complete-Multipart-Upload request. Creates the necessary XML payload using the
- * passed in array list of ETags.  (Each ETag is assumed to be an aws_string*)  Buffer passed in will be used to store
+ * passed in array list of `struct aws_s3_mpu_part_info *`. Buffer passed in will be used to store
  * said XML payload, which will be used as the body. */
 AWS_S3_API
 struct aws_http_message *aws_s3_complete_multipart_message_new(
@@ -126,8 +119,7 @@ struct aws_http_message *aws_s3_complete_multipart_message_new(
     struct aws_http_message *base_message,
     struct aws_byte_buf *body_buffer,
     const struct aws_string *upload_id,
-    const struct aws_array_list *etags,
-    struct aws_byte_buf *checksums,
+    const struct aws_array_list *parts,
     enum aws_s3_checksum_algorithm algorithm);
 
 AWS_S3_API

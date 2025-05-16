@@ -33,6 +33,19 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
+KEEP     Apache-2.0           1a2162d65587b1c6b4482cab8e65b94f
+BELONGS ya.make
+    License text:
+        \## License
+        This library is licensed under the Apache 2.0 License.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        README.md [18:20]
+
 KEEP     Apache-2.0           314e21a036e4ea071f111cb5deff83c1
 BELONGS ya.make
 FILE_INCLUDE NOTICE found in files: LICENSE at line 107, LICENSE at line 110, LICENSE at line 112, LICENSE at line 117, LICENSE at line 120, LICENSE at line 142
@@ -57,19 +70,6 @@ BELONGS ya.make
     Files with this license:
         CONTRIBUTING.md [61:61]
 
-KEEP     Apache-2.0           6c901454b872854c0dea3ec06b67701a
-BELONGS ya.make
-    License text:
-        \## License
-        This library is licensed under the Apache 2.0 License.
-    Scancode info:
-        Original SPDX id: Apache-2.0
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
-    Files with this license:
-        README.md [5:7]
-
 KEEP     Apache-2.0           d591512e466bb957030b8857f753349e
 BELONGS ya.make
     License text:
@@ -83,6 +83,7 @@ BELONGS ya.make
         include/aws/s3/exports.h [6:6]
         include/aws/s3/private/s3_auto_ranged_get.h [6:6]
         include/aws/s3/private/s3_auto_ranged_put.h [6:6]
+        include/aws/s3/private/s3_buffer_pool.h [6:6]
         include/aws/s3/private/s3_checksums.h [5:5]
         include/aws/s3/private/s3_client_impl.h [6:6]
         include/aws/s3/private/s3_copy_object.h [6:6]
@@ -91,14 +92,18 @@ BELONGS ya.make
         include/aws/s3/private/s3_list_parts.h [6:6]
         include/aws/s3/private/s3_meta_request_impl.h [6:6]
         include/aws/s3/private/s3_paginator.h [6:6]
+        include/aws/s3/private/s3_parallel_input_stream.h [3:3]
+        include/aws/s3/private/s3_platform_info.h [5:5]
         include/aws/s3/private/s3_request.h [6:6]
         include/aws/s3/private/s3_request_messages.h [6:6]
         include/aws/s3/private/s3_util.h [6:6]
         include/aws/s3/s3.h [6:6]
         include/aws/s3/s3_client.h [6:6]
+        include/aws/s3/s3express_credentials_provider.h [6:6]
         source/s3.c [3:3]
         source/s3_auto_ranged_get.c [3:3]
         source/s3_auto_ranged_put.c [3:3]
+        source/s3_buffer_pool.c [3:3]
         source/s3_checksum_stream.c [3:3]
         source/s3_chunk_stream.c [3:3]
         source/s3_client.c [3:3]
@@ -108,8 +113,12 @@ BELONGS ya.make
         source/s3_list_parts.c [3:3]
         source/s3_meta_request.c [3:3]
         source/s3_paginator.c [3:3]
+        source/s3_parallel_input_stream.c [3:3]
+        source/s3_platform_info.c [3:3]
+        source/s3_request.c [3:3]
         source/s3_request_messages.c [3:3]
         source/s3_util.c [3:3]
+        source/s3express_credentials_provider.c [3:3]
 
 SKIP     LicenseRef-scancode-generic-cla ee24fdc60600747c7d12c32055b0011d
 BELONGS ya.make

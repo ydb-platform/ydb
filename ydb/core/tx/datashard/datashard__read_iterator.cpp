@@ -1889,6 +1889,11 @@ public:
             // We remember acquired lock for faster checking
             state.Lock = guardLocks.Lock;
 
+            // We may need to wait until previous lock changes are committed
+            if (state.Lock && state.Lock->IsPersisting()) {
+                hadWrites = true;
+            }
+
             if (!state.Lock) {
                 // We may fail to acquire an existing write lock
                 // This means our read result is potentially inconsistent

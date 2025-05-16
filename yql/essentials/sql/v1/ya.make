@@ -58,6 +58,7 @@ END()
 RECURSE(
     complete
     format
+    highlight
     lexer
     perf
     proto_parser

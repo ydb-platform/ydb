@@ -8388,8 +8388,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )", kikimr.GetEndpoint().c_str());
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "The transfer destination path '/Root/table_not_exists' not found");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Path does not exist");
         }
 
         // positive
@@ -8662,8 +8662,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )", kikimr.GetEndpoint().c_str());
 
             const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "The transfer destination path '/Root/table_not_exists' not found");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Path does not exist");
         }
 
         // positive
@@ -8769,7 +8769,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Check failed: path: '/Root/transfer', error: path hasn't been resolved, nearest resolved path: '/Root'");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "path hasn't been resolved");
         }
 
         {
@@ -9127,7 +9127,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Check failed: path: '/Root/transfer', error: path hasn't been resolved, nearest resolved path: '/Root'");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "path hasn't been resolved");
         }
 
         {

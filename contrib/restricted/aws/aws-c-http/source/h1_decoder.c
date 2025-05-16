@@ -301,7 +301,7 @@ static int s_linestate_chunk_size(struct aws_h1_decoder *decoder, struct aws_byt
             decoder->logging_id,
             AWS_BYTE_CURSOR_PRI(input));
 
-        return AWS_OP_ERR;
+        return aws_raise_error(AWS_ERROR_HTTP_PROTOCOL_ERROR);
     }
 
     int err = aws_byte_cursor_utf8_parse_u64_hex(size, &decoder->chunk_size);

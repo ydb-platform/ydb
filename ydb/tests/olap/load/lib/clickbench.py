@@ -23,15 +23,16 @@ class TestClickbench(LoadSuiteBase):
         for query_num in range(0, 43):
             try:
                 with allure.step(f'request {query_num}'):
+                    query_name = f'Query{query_num:02d}'
                     result = YdbCliHelper.workload_run(
                         path=cls.path,
-                        query_num=query_num,
+                        query_name=query_name,
                         iterations=1,
                         workload_type=cls.workload_type,
                         timeout=cls._get_query_settings(query_num).timeout,
                         check_canonical=CheckCanonicalPolicy.ERROR
                     )
-                    cls.process_query_result(result=result, query_num=query_num, iterations=1, upload=False)
+                    cls.process_query_result(result=result, query_name=query_name, upload=False)
             except BaseException:
                 fail_count += 1
 

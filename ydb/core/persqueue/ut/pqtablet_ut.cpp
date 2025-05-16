@@ -2107,6 +2107,47 @@ Y_UNIT_TEST_F(TEvReadSet_For_A_Non_Existent_Tablet, TPQTabletFixture)
     WaitForTheTransactionToBeDeleted(txId);
 }
 
+Y_UNIT_TEST_F(Limit_On_The_Number_Of_Transactons, TPQTabletFixture)
+{
+    const ui64 mockTabletId = MakeTabletID(false, 22222);
+    const ui64 txId = 67890;
+
+    PQTabletPrepare({.partitions=1}, {}, *Ctx);
+
+    for (ui64 i = 0; i < 1002; ++i) {
+        SendProposeTransactionRequest({.TxId=txId + i,
+                                      .Senders={mockTabletId}, .Receivers={mockTabletId},
+                                      .TxOps={
+                                      {.Partition=0, .Consumer="user", .Begin=0, .End=0, .Path="/topic"},
+                                      }});
+    }
+
+    size_t preparedCount = 0;
+    size_t overloadedCount = 0;
+
+    for (ui64 i = 0; i < 1002; ++i) {
+        auto event = Ctx->Runtime->GrabEdgeEvent<TEvPersQueue::TEvProposeTransactionResult>();
+        UNIT_ASSERT(event != nullptr);
+
+        UNIT_ASSERT(event->Record.HasStatus());
+
+        const auto status = event->Record.GetStatus();
+        switch (status) {
+        case NKikimrPQ::TEvProposeTransactionResult::PREPARED:
+            ++preparedCount;
+            break;
+        case NKikimrPQ::TEvProposeTransactionResult::OVERLOADED:
+            ++overloadedCount;
+            break;
+        default:
+            UNIT_FAIL("unexpected transaction status " << NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(status));
+        }
+    }
+
+    UNIT_ASSERT_EQUAL(preparedCount, 1000);
+    UNIT_ASSERT_EQUAL(overloadedCount, 2);
+}
+
 }
 
 }

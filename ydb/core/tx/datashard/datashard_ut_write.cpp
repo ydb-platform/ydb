@@ -1927,5 +1927,100 @@ Y_UNIT_TEST_SUITE(DataShardWrite) {
         Cerr << readResult.DebugString();
     }
 
+    Y_UNIT_TEST(WriteCommitVersion) {
+        TPortManager pm;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        auto [runtime, server, sender] = TestCreateServer(serverSettings);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSchemeExec(runtime, R"(
+                CREATE TABLE `/Root/table` (key int, value int, PRIMARY KEY (key))
+                WITH (PARTITION_AT_KEYS = (10, 20));;
+            )"),
+            "SUCCESS"
+        );
+
+        ExecSQL(server, sender, R"(
+            UPSERT INTO `/Root/table` (key, value) VALUES
+                (1, 1001),
+                (11, 1002),
+                (21, 1003);
+        )");
+
+        std::deque<std::optional<TRowVersion>> commitVersions;
+        auto commitVersionObserver = runtime.AddObserver<NKikimr::NEvents::TDataEvents::TEvWriteResult>([&](auto& ev) {
+            auto* msg = ev->Get();
+            if (msg->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED) {
+                if (msg->Record.HasCommitVersion()) {
+                    commitVersions.emplace_back(TRowVersion::FromProto(msg->Record.GetCommitVersion()));
+                } else {
+                    commitVersions.emplace_back();
+                }
+            }
+        });
+
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleBegin(runtime, sessionId, txId, R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES (2, 2001);
+                SELECT key, value FROM `/Root/table` WHERE key < 10 ORDER BY key;
+            )"),
+            "{ items { int32_value: 1 } items { int32_value: 1001 } }, "
+            "{ items { int32_value: 2 } items { int32_value: 2001 } }"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(commitVersions.size(), 1u);
+        UNIT_ASSERT_C(!commitVersions.front(), "Unexpected commit version: " << commitVersions.front().value());
+        commitVersions.clear();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleCommit(runtime, sessionId, txId, R"(SELECT 1)"),
+            "{ items { int32_value: 1 } }"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(commitVersions.size(), 1u);
+        UNIT_ASSERT_C(commitVersions.front(), "Missing commit version");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                SELECT key, value FROM `/Root/table` WHERE key < 20 ORDER BY key;
+            )"),
+            "{ items { int32_value: 1 } items { int32_value: 1001 } }, "
+            "{ items { int32_value: 2 } items { int32_value: 2001 } }, "
+            "{ items { int32_value: 11 } items { int32_value: 1002 } }"
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES (12, 3001);
+            )"),
+            "<empty>"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(commitVersions.size(), 2u);
+        UNIT_ASSERT_C(commitVersions[0] < commitVersions[1],
+            "Unexpected commit version: " << commitVersions[0].value() << " then " << commitVersions[1].value()
+        );
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            KqpSimpleExec(runtime, R"(
+                UPSERT INTO `/Root/table` (key, value) VALUES
+                    (13, 4001),
+                    (22, 4002);
+            )"),
+            "<empty>"
+        );
+        UNIT_ASSERT_VALUES_EQUAL(commitVersions.size(), 4u);
+        UNIT_ASSERT_C(commitVersions[1] < commitVersions[2] && commitVersions[2] == commitVersions[3],
+            "Unexpected commit version: " << commitVersions[1].value() << " then "
+            << commitVersions[2].value() << " and " << commitVersions[3].value()
+        );
+    }
+
 } // Y_UNIT_TEST_SUITE(DataShardWrite)
 } // namespace NKikimr

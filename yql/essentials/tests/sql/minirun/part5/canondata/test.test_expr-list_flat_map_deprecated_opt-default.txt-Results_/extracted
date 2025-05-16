@@ -1,6 +1,6 @@
 <tmp_path>/program.sql:<main>: Warning: Type annotation
 
-    <tmp_path>/program.sql:<main>:3:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    <tmp_path>/program.sql:<main>:3:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
     	select ListFlatMap([1,2,null],($x)->(10 + $x));
 	^
         <tmp_path>/program.sql:<main>:3:8: Warning: At function: OrderedFlatMapWarn

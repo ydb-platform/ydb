@@ -1,6 +1,6 @@
 <tmp_path>/program.sql:<main>: Error: Type annotation
 
-    <tmp_path>/program.sql:<main>:6:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    <tmp_path>/program.sql:<main>:6:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
     	select Knn::CosineDistance($vector1, $vector2);
 	^
         <tmp_path>/program.sql:<main>:6:13: Error: At function: Apply, At function: Udf, At Knn.CosineDistance

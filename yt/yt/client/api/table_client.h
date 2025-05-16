@@ -466,7 +466,7 @@ struct ITableClient
         const TGetTabletErrorsOptions& options = {}) = 0;
 
     virtual TFuture<std::vector<NTabletClient::TTabletActionId>> BalanceTabletCells(
-        const TString& tabletCellBundle,
+        const std::string& tabletCellBundle,
         const std::vector<NYPath::TYPath>& movableTables,
         const TBalanceTabletCellsOptions& options = {}) = 0;
 

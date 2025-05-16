@@ -244,8 +244,8 @@ public:
                 planNode.TypeName = "Effect";
                 Visit(TExprBase(stage), planNode);
             } else if (stageBase.Outputs()) { // Sink
+                AFL_ENSURE(stageBase.Outputs().Cast().Size() == 1);
                 auto& planNode = AddPlanNode(phaseNode);
-                planNode.TypeName = "Sink";
                 Visit(TExprBase(stage), planNode);
             }
         }
@@ -960,7 +960,8 @@ private:
             if (auto outputs = expr.Cast<TDqStageBase>().Outputs()) {
                 for (auto output : outputs.Cast()) {
                     if (auto sink = output.Maybe<TDqSink>()) {
-                        Visit(sink.Cast(), expr.Cast<TDqStageBase>(), stagePlanNode);
+                        AFL_ENSURE(outputs.Cast().Size() == 1);
+                        Visit(sink.Cast(), expr.Cast<TDqStageBase>(), planNode);
                     }
                 }
             }

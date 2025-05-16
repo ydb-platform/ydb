@@ -23,7 +23,7 @@ private:
 public:
     using TValuePtr = TIntrusivePtr<T>;
 
-    explicit TConcurrentCache(size_t maxElementCount, IMemoryUsageTrackerPtr tracker = nullptr);
+    TConcurrentCache(size_t maxElementCount, IMemoryUsageTrackerPtr tracker);
 
     ~TConcurrentCache();
 

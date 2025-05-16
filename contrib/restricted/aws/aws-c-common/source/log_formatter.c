@@ -20,15 +20,17 @@
 #    pragma warning(disable : 4204) /* non-constant aggregate initializer */
 #endif
 
-/* (max) strlen of "[<LogLevel>]" */
-#define LOG_LEVEL_PREFIX_PADDING 7
+enum {
+    /* (max) strlen of "[<LogLevel>]" */
+    LOG_LEVEL_PREFIX_PADDING = 7,
 
-/* (max) strlen of "[<ThreadId>]" */
-#define THREAD_ID_PREFIX_PADDING 22
+    /* (max) strlen of "[<ThreadId>]" */
+    THREAD_ID_PREFIX_PADDING = 22,
 
-/* strlen of (user-content separator) " - " + "\n" + spaces between prefix fields + brackets around timestamp + 1 +
-   subject_name padding */
-#define MISC_PADDING 15
+    /* strlen of (user-content separator) " - " + "\n" + spaces between prefix fields + brackets around timestamp + 1 +
+       subject_name padding */
+    MISC_PADDING = 15,
+};
 
 #define MAX_LOG_LINE_PREFIX_SIZE                                                                                       \
     (LOG_LEVEL_PREFIX_PADDING + THREAD_ID_PREFIX_PADDING + MISC_PADDING + AWS_DATE_TIME_STR_MAX_LEN)
@@ -203,7 +205,7 @@ static int s_default_aws_log_formatter_format(
     struct aws_default_log_formatter_impl *impl = formatter->impl;
 
     if (formatted_output == NULL) {
-        return AWS_OP_ERR;
+        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
     }
 
     /*

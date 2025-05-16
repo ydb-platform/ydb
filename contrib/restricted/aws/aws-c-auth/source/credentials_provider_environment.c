@@ -30,7 +30,7 @@ static int s_credentials_provider_environment_get_credentials_async(
     aws_get_environment_value(allocator, s_secret_access_key_env_var, &secret_access_key);
     aws_get_environment_value(allocator, s_session_token_env_var, &session_token);
 
-    if (access_key_id != NULL && secret_access_key != NULL) {
+    if (access_key_id != NULL && access_key_id->len > 0 && secret_access_key != NULL && secret_access_key->len > 0) {
         credentials =
             aws_credentials_new_from_string(allocator, access_key_id, secret_access_key, session_token, UINT64_MAX);
         if (credentials == NULL) {
@@ -38,6 +38,17 @@ static int s_credentials_provider_environment_get_credentials_async(
         }
     } else {
         error_code = AWS_AUTH_CREDENTIALS_PROVIDER_INVALID_ENVIRONMENT;
+    }
+
+    if (error_code == AWS_ERROR_SUCCESS) {
+        AWS_LOGF_INFO(
+            AWS_LS_AUTH_CREDENTIALS_PROVIDER, "id=%p: Loaded credentials from environment variables", (void *)provider);
+    } else {
+        AWS_LOGF_INFO(
+            AWS_LS_AUTH_CREDENTIALS_PROVIDER,
+            "id=%p: Failed to load credentials from environment variables: %s",
+            (void *)provider,
+            aws_error_str(error_code));
     }
 
     callback(credentials, error_code, user_data);

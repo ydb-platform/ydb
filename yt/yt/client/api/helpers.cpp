@@ -8,7 +8,7 @@ namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void ValidateMaintenanceComment(const TString& comment)
+void ValidateMaintenanceComment(TStringBuf comment)
 {
     constexpr int MaxMaintenanceCommentLength = 512;
 

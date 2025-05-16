@@ -854,7 +854,7 @@ void TViewerPipeClient::RequestStateStorageEndpointsLookup(const TString& path) 
 }
 
 TViewerPipeClient::TRequestResponse<TEvStateStorage::TEvBoardInfo> TViewerPipeClient::MakeRequestStateStorageEndpointsLookup(const TString& path, ui64 cookie) {
-    TRequestResponse<TEvStateStorage::TEvBoardInfo> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, "BoardLookupActor"));
+    TRequestResponse<TEvStateStorage::TEvBoardInfo> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, "BoardLookupActor-Endpoints"));
     RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(path),
                                                    SelfId(),
                                                    EBoardLookupMode::Second, {}, cookie));
@@ -865,14 +865,16 @@ TViewerPipeClient::TRequestResponse<TEvStateStorage::TEvBoardInfo> TViewerPipeCl
     return response;
 }
 
-void TViewerPipeClient::RequestStateStorageMetadataCacheEndpointsLookup(const TString& path) {
-    if (!AppData()->DomainsInfo->Domain) {
-        return;
-    }
+TViewerPipeClient::TRequestResponse<TEvStateStorage::TEvBoardInfo> TViewerPipeClient::MakeRequestStateStorageMetadataCacheEndpointsLookup(const TString& path, ui64 cookie) {
+    TRequestResponse<TEvStateStorage::TEvBoardInfo> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, "BoardLookupActor-MetadataCache"));
     RegisterWithSameMailbox(CreateBoardLookupActor(MakeDatabaseMetadataCacheBoardPath(path),
                                                    SelfId(),
-                                                   EBoardLookupMode::Second));
+                                                   EBoardLookupMode::Second, {}, cookie));
+    if (response.Span) {
+        response.Span.Attribute("path", path);
+    }
     ++DataRequests;
+    return response;
 }
 
 std::vector<TNodeId> TViewerPipeClient::GetNodesFromBoardReply(const TEvStateStorage::TEvBoardInfo& ev) {

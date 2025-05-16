@@ -32,7 +32,11 @@ Functions for ASCII strings:
 
 * `String::CollapseText(String{Flags:AutoMap}, Uint64) -> String`
 
+* `String::AsciiEqualsIgnoreCase(String?, String) -> Bool` Added in the version [2025.02](../../changelog/2025.02.md#string-module)
+
 * `String::Contains(String?, String) -> Bool`
+
+* `String::AsciiContainsIgnoreCase(String?, String) -> Bool` Added in the version [2025.02](../../changelog/2025.02.md#string-module)
 
 * `String::Find(String{Flags:AutoMap}, String, [Uint64?]) -> Int64`: Returns the first position found or -1. The optional argument is the offset from the beginning of the string.
 
@@ -94,6 +98,12 @@ Functions for ASCII strings:
 
 * `String::RemoveLast(String{Flags:AutoMap}, String) -> String`: An unordered set of characters in the second argument, only the last encountered character from the set is deleted
 
+* `String::ReverseBytes(String{Flags:AutoMap}) -> String` - Added in the version [2025.02](../../changelog/2025.02.md#string-module)
+  Reverses a string, treating it as a byte sequence.
+
+* `String::ReverseBits(String{Flags:AutoMap}) -> String` - Added in the version [2025.02](../../changelog/2025.02.md#string-module)
+  Reverses a string, treating it as a bit sequence.
+
 * `String::IsAscii(String{Flags:AutoMap}) -> Bool`
 
 * `String::IsAsciiSpace(String{Flags:AutoMap}) -> Bool`
@@ -149,4 +159,3 @@ SELECT String::Base64Encode("YQL"); -- "WVFM"
 SELECT String::Strip("YQL ");       -- "YQL"
 SELECT String::SplitToList("1,2,3,4,5,6,7", ",", 3 as Limit); -- ["1", "2", "3", "4,5,6,7"]
 ```
-

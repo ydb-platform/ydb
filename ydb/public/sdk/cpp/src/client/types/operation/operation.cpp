@@ -23,6 +23,7 @@ public:
         , Ready_(operation.ready())
         , CreateTime_(ProtoTimestampToInstant(operation.create_time()))
         , EndTime_(ProtoTimestampToInstant(operation.end_time()))
+        , CreatedBy_(operation.created_by())
         , Operation_(std::move(operation))
     {
     }

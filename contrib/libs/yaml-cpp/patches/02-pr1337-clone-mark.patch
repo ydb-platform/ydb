@@ -1,0 +1,111 @@
+https://github.com/jbeder/yaml-cpp/pull/1337
+
+--- contrib/libs/yaml-cpp/include/yaml-cpp/node/node.h
++++ contrib/libs/yaml-cpp/include/yaml-cpp/node/node.h
+@@ -139,7 +139,7 @@ class YAML_CPP_API Node {
+
+ YAML_CPP_API bool operator==(const Node& lhs, const Node& rhs);
+
+-YAML_CPP_API Node Clone(const Node& node);
++YAML_CPP_API Node Clone(const Node& node, bool preserveMarks = false);
+
+ template <typename T>
+ struct convert;
+--- contrib/libs/yaml-cpp/src/node.cpp
++++ contrib/libs/yaml-cpp/src/node.cpp
+@@ -3,10 +3,10 @@
+ #include "nodeevents.h"
+
+ namespace YAML {
+-Node Clone(const Node& node) {
++Node Clone(const Node& node, bool preserveMarks) {
+   NodeEvents events(node);
+   NodeBuilder builder;
+-  events.Emit(builder);
++  events.Emit(builder, preserveMarks);
+   return builder.Root();
+ }
+ }  // namespace YAML
+--- contrib/libs/yaml-cpp/src/nodeevents.cpp
++++ contrib/libs/yaml-cpp/src/nodeevents.cpp
+@@ -42,17 +42,17 @@ void NodeEvents::Setup(const detail::node& node) {
+   }
+ }
+
+-void NodeEvents::Emit(EventHandler& handler) {
++void NodeEvents::Emit(EventHandler& handler, bool preserveMarks) {
+   AliasManager am;
+
+   handler.OnDocumentStart(Mark());
+   if (m_root)
+-    Emit(*m_root, handler, am);
++    Emit(*m_root, handler, am, preserveMarks);
+   handler.OnDocumentEnd();
+ }
+
+ void NodeEvents::Emit(const detail::node& node, EventHandler& handler,
+-                      AliasManager& am) const {
++                      AliasManager& am, bool preserveMarks) const {
+   anchor_t anchor = NullAnchor;
+   if (IsAliased(node)) {
+     anchor = am.LookupAnchor(node);
+@@ -65,26 +65,30 @@ void NodeEvents::Emit(const detail::node& node, EventHandler& handler,
+     anchor = am.LookupAnchor(node);
+   }
+
++  auto getMark = [preserveMarks, &node]() {
++    return preserveMarks ? node.mark() : Mark();
++  };
++
+   switch (node.type()) {
+     case NodeType::Undefined:
+       break;
+     case NodeType::Null:
+-      handler.OnNull(Mark(), anchor);
++      handler.OnNull(getMark(), anchor);
+       break;
+     case NodeType::Scalar:
+-      handler.OnScalar(Mark(), node.tag(), anchor, node.scalar());
++      handler.OnScalar(getMark(), node.tag(), anchor, node.scalar());
+       break;
+     case NodeType::Sequence:
+-      handler.OnSequenceStart(Mark(), node.tag(), anchor, node.style());
++      handler.OnSequenceStart(getMark(), node.tag(), anchor, node.style());
+       for (auto element : node)
+-        Emit(*element, handler, am);
++        Emit(*element, handler, am, preserveMarks);
+       handler.OnSequenceEnd();
+       break;
+     case NodeType::Map:
+-      handler.OnMapStart(Mark(), node.tag(), anchor, node.style());
++      handler.OnMapStart(getMark(), node.tag(), anchor, node.style());
+       for (auto element : node) {
+-        Emit(*element.first, handler, am);
+-        Emit(*element.second, handler, am);
++        Emit(*element.first, handler, am, preserveMarks);
++        Emit(*element.second, handler, am, preserveMarks);
+       }
+       handler.OnMapEnd();
+       break;
+--- contrib/libs/yaml-cpp/src/nodeevents.h
++++ contrib/libs/yaml-cpp/src/nodeevents.h
+@@ -31,7 +31,7 @@ class NodeEvents {
+   NodeEvents& operator=(const NodeEvents&) = delete;
+   NodeEvents& operator=(NodeEvents&&) = delete;
+
+-  void Emit(EventHandler& handler);
++  void Emit(EventHandler& handler, bool preserveMarks = false);
+
+  private:
+   class AliasManager {
+@@ -52,8 +52,8 @@ class NodeEvents {
+   };
+
+   void Setup(const detail::node& node);
+-  void Emit(const detail::node& node, EventHandler& handler,
+-            AliasManager& am) const;
++  void Emit(const detail::node& node, EventHandler& handler, AliasManager& am,
++            bool preserveMarks) const;
+   bool IsAliased(const detail::node& node) const;
+
+  private:

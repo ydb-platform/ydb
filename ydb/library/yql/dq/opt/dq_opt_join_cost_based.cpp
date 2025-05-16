@@ -544,7 +544,10 @@ TExprBase DqOptimizeEquiJoinWithCosts(
         YQL_CLOG(TRACE, CoreDq) << str.str();
     }
 
-    joinTree = opt.JoinSearch(joinTree, hints);
+    {
+        YQL_PROFILE_SCOPE(TRACE, "CBO");
+        joinTree = opt.JoinSearch(joinTree, hints);
+    }
 
     if (NYql::NLog::YqlLogger().NeedToLog(NYql::NLog::EComponent::CoreDq, NYql::NLog::ELevel::TRACE)) {
         std::stringstream str;

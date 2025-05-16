@@ -31,11 +31,12 @@ TOptimizerPlanner::TOptimizerPlanner(const TInternalPathId pathId, const std::sh
         }
     } else {
         Levels.emplace_back(std::make_shared<TZeroLevelPortions>(
-            2, nullptr, Counters->GetLevelCounters(2), TDuration::Max(), 1 << 20, 10, std::nullopt));
+            2, nullptr, Counters->GetLevelCounters(2), TDuration::Max(), 1 << 20, 10, std::nullopt, std::nullopt));
+        Levels.emplace_back(
+            std::make_shared<TZeroLevelPortions>(
+            1, Levels.back(), Counters->GetLevelCounters(1), TDuration::Max(), 1 << 20, 10, std::nullopt, std::nullopt));
         Levels.emplace_back(std::make_shared<TZeroLevelPortions>(
-            1, Levels.back(), Counters->GetLevelCounters(1), TDuration::Max(), 1 << 20, 10, std::nullopt));
-        Levels.emplace_back(std::make_shared<TZeroLevelPortions>(
-            0, Levels.back(), Counters->GetLevelCounters(0), TDuration::Seconds(180), 1 << 20, 10, std::nullopt));
+            0, Levels.back(), Counters->GetLevelCounters(0), TDuration::Seconds(180), 1 << 20, 10, std::nullopt, std::nullopt));
     }
     std::reverse(Levels.begin(), Levels.end());
     RefreshWeights();

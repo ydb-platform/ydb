@@ -33,7 +33,7 @@ const char *aws_task_status_to_c_str(enum aws_task_status status) {
 
 void aws_task_run(struct aws_task *task, enum aws_task_status status) {
     AWS_ASSERT(task->fn);
-    AWS_LOGF_DEBUG(
+    AWS_LOGF_TRACE(
         AWS_LS_COMMON_TASK_SCHEDULER,
         "id=%p: Running %s task with %s status",
         (void *)task,
@@ -129,13 +129,13 @@ void aws_task_scheduler_schedule_now(struct aws_task_scheduler *scheduler, struc
     AWS_ASSERT(task);
     AWS_ASSERT(task->fn);
 
-    AWS_LOGF_DEBUG(
+    AWS_LOGF_TRACE(
         AWS_LS_COMMON_TASK_SCHEDULER,
         "id=%p: Scheduling %s task for immediate execution",
         (void *)task,
         task->type_tag);
 
-    task->priority_queue_node.current_index = SIZE_MAX;
+    aws_priority_queue_node_init(&task->priority_queue_node);
     aws_linked_list_node_reset(&task->node);
     task->timestamp = 0;
 
@@ -152,7 +152,7 @@ void aws_task_scheduler_schedule_future(
     AWS_ASSERT(task);
     AWS_ASSERT(task->fn);
 
-    AWS_LOGF_DEBUG(
+    AWS_LOGF_TRACE(
         AWS_LS_COMMON_TASK_SCHEDULER,
         "id=%p: Scheduling %s task for future execution at time %" PRIu64,
         (void *)task,
@@ -161,7 +161,7 @@ void aws_task_scheduler_schedule_future(
 
     task->timestamp = time_to_run;
 
-    task->priority_queue_node.current_index = SIZE_MAX;
+    aws_priority_queue_node_init(&task->priority_queue_node);
     aws_linked_list_node_reset(&task->node);
     int err = aws_priority_queue_push_ref(&scheduler->timed_queue, &task, &task->priority_queue_node);
     if (AWS_UNLIKELY(err)) {

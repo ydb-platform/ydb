@@ -32,7 +32,7 @@ static int s_aws_signable_http_request_get_property(
     } else if (aws_string_eq(name, g_aws_http_method_property_name)) {
         aws_http_message_get_request_method(impl->request, out_value);
     } else {
-        return AWS_OP_ERR;
+        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
     }
 
     return AWS_OP_SUCCESS;
@@ -50,7 +50,7 @@ static int s_aws_signable_http_request_get_property_list(
     if (aws_string_eq(name, g_aws_http_headers_property_list_name)) {
         *out_list = &impl->headers;
     } else {
-        return AWS_OP_ERR;
+        return aws_raise_error(AWS_ERROR_UNSUPPORTED_OPERATION);
     }
 
     return AWS_OP_SUCCESS;
@@ -76,6 +76,7 @@ static void s_aws_signable_http_request_destroy(struct aws_signable *signable) {
         return;
     }
 
+    aws_http_message_release(impl->request);
     aws_array_list_clean_up(&impl->headers);
     aws_mem_release(signable->allocator, signable);
 }
@@ -118,7 +119,7 @@ struct aws_signable *aws_signable_new_http_request(struct aws_allocator *allocat
         aws_array_list_push_back(&impl->headers, &property);
     }
 
-    impl->request = request;
+    impl->request = aws_http_message_acquire(request);
 
     return signable;
 

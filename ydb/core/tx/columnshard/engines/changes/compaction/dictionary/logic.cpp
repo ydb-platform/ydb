@@ -10,7 +10,7 @@ namespace NKikimr::NOlap::NCompaction::NDictionary {
 
 void TMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& /*mergingContext*/) {
     for (auto&& i : input) {
-        Iterators.emplace_back(TIterator(i));
+        Iterators.emplace_back(TIterator(i, Context.GetLoader()));
     }
     RemapIndexes.resize(input.size());
     AFL_VERIFY(NArrow::SwitchType(Context.GetResultField()->type()->id(), [&](const auto type) {
@@ -59,26 +59,23 @@ void TMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChun
     }
 }
 
-std::vector<TColumnPortionResult> TMerger::DoExecute(const TChunkMergeContext& chunkContext, TMergingContext& mergeContext) {
-    std::vector<TColumnPortionResult> result;
-    auto& mergeChunkContext = mergeContext.GetChunk(chunkContext.GetBatchIdx());
-    AFL_VERIFY(mergeChunkContext.GetIdxArray().length() == chunkContext.GetRecordsCount());
+TColumnPortionResult TMerger::DoExecute(const TChunkMergeContext& chunkContext, TMergingContext& /*mergeContext*/) {
     std::vector<bool> mask(ArrayVariantsFull->length(), false);
     ui32 maskSize = 0;
     std::vector<i32> records;
-    for (ui32 resultRecordIdx = 0; resultRecordIdx < chunkContext.GetRecordsCount(); ++resultRecordIdx) {
-        const ui32 inputIdx = mergeChunkContext.GetIdxArray().Value(resultRecordIdx);
-        const ui32 inputRecordIdx = mergeChunkContext.GetRecordIdxArray().Value(resultRecordIdx);
+    for (ui32 resultRecordIdx = 0; resultRecordIdx < chunkContext.GetRemapper().GetRecordsCount(); ++resultRecordIdx) {
+        const ui32 inputIdx = chunkContext.GetRemapper().GetIdxArray().Value(resultRecordIdx);
+        const ui32 inputRecordIdx = chunkContext.GetRemapper().GetRecordIdxArray().Value(resultRecordIdx);
         if (!Iterators[inputIdx].IsEmpty()) {
             Iterators[inputIdx].MoveToPosition(inputRecordIdx);
             AFL_VERIFY(Iterators[inputIdx].IsValid());
             AFL_VERIFY(NArrow::SwitchType(Iterators[inputIdx].GetCurrentDataChunk().GetRecords()->type()->id(), [&](const auto type) {
                 const auto* arr = type.CastArray(Iterators[inputIdx].GetCurrentDataChunk().GetRecords().get());
                 if constexpr (type.IsIndexType()) {
-                    if (arr->IsNull(Iterators[inputIdx].GetChunkPosition())) {
+                    if (arr->IsNull(Iterators[inputIdx].GetLocalPosition())) {
                         records.emplace_back(-1);
                     } else {
-                        const ui32 dictIdx = type.GetValue(*arr, Iterators[inputIdx].GetChunkPosition());
+                        const ui32 dictIdx = type.GetValue(*arr, Iterators[inputIdx].GetLocalPosition());
                         AFL_VERIFY(inputIdx < RemapIndexes.size());
                         AFL_VERIFY(dictIdx < RemapIndexes[inputIdx].size())("size", RemapIndexes[inputIdx].size())("idx", dictIdx);
                         const ui32 finalValueIndex = RemapIndexes[inputIdx][dictIdx];
@@ -96,68 +93,62 @@ std::vector<TColumnPortionResult> TMerger::DoExecute(const TChunkMergeContext& c
         } else {
             records.emplace_back(-1);
         }
-        if (records.size() == chunkContext.GetPortionRowsCountLimit() || resultRecordIdx + 1 == chunkContext.GetRecordsCount()) {
-            std::shared_ptr<NArrow::NAccessor::TDictionaryArray> dictArr;
-            auto rBuilder = NArrow::MakeBuilder(NArrow::NAccessor::NDictionary::TConstructor::GetTypeByVariantsCount(maskSize));
-            if (maskSize == ArrayVariantsFull->length()) {
-                AFL_VERIFY(NArrow::SwitchType(rBuilder->type()->id(), [&](const auto type) {
-                    if constexpr (type.IsIndexType()) {
-                        auto* builderImpl = type.CastBuilder(rBuilder.get());
-                        for (auto&& r : records) {
-                            if (r >= 0) {
-                                NArrow::TStatusValidator::Validate(builderImpl->Append(r));
-                            } else {
-                                NArrow::TStatusValidator::Validate(builderImpl->AppendNull());
-                            }
-                        }
-                        return true;
-                    }
-                    return false;
-            }));
-                dictArr = std::make_shared<NArrow::NAccessor::TDictionaryArray>(ArrayVariantsFull, NArrow::FinishBuilder(std::move(rBuilder)));
-            } else {
-                std::vector<i32> remap;
-                remap.resize(mask.size(), -1);
-                ui32 approveIdx = 0;
-                for (ui32 i = 0; i < mask.size(); ++i) {
-                    if (mask[i]) {
-                        remap[i] = approveIdx++;
+    }
+    std::shared_ptr<NArrow::NAccessor::TDictionaryArray> dictArr;
+    auto rBuilder = NArrow::MakeBuilder(NArrow::NAccessor::NDictionary::TConstructor::GetTypeByVariantsCount(maskSize));
+    if (maskSize == ArrayVariantsFull->length()) {
+        AFL_VERIFY(NArrow::SwitchType(rBuilder->type()->id(), [&](const auto type) {
+            if constexpr (type.IsIndexType()) {
+                auto* builderImpl = type.CastBuilder(rBuilder.get());
+                for (auto&& r : records) {
+                    if (r >= 0) {
+                        NArrow::TStatusValidator::Validate(builderImpl->Append(r));
+                    } else {
+                        NArrow::TStatusValidator::Validate(builderImpl->AppendNull());
                     }
                 }
-                auto rBuilder = NArrow::MakeBuilder(NArrow::NAccessor::NDictionary::TConstructor::GetTypeByVariantsCount(maskSize));
-                AFL_VERIFY(NArrow::SwitchType(rBuilder->type()->id(), [&](const auto type) {
-                    if constexpr (type.IsIndexType()) {
-                        auto* builderImpl = type.CastBuilder(rBuilder.get());
-                        for (auto&& r : records) {
-                            if (r < 0) {
-                                NArrow::TStatusValidator::Validate(builderImpl->AppendNull());
-                            } else {
-                                AFL_VERIFY((ui32)r < remap.size());
-                                AFL_VERIFY(remap[r] >= 0);
-                                NArrow::TStatusValidator::Validate(builderImpl->Append(remap[r]));
-                            }
-                        }
-                        return true;
+                return true;
+            }
+            return false;
+            }));
+        dictArr = std::make_shared<NArrow::NAccessor::TDictionaryArray>(ArrayVariantsFull, NArrow::FinishBuilder(std::move(rBuilder)));
+    } else {
+        std::vector<i32> remap;
+        remap.resize(mask.size(), -1);
+        ui32 approveIdx = 0;
+        for (ui32 i = 0; i < mask.size(); ++i) {
+            if (mask[i]) {
+                remap[i] = approveIdx++;
+            }
+        }
+        auto rBuilder = NArrow::MakeBuilder(NArrow::NAccessor::NDictionary::TConstructor::GetTypeByVariantsCount(maskSize));
+        AFL_VERIFY(NArrow::SwitchType(rBuilder->type()->id(), [&](const auto type) {
+            if constexpr (type.IsIndexType()) {
+                auto* builderImpl = type.CastBuilder(rBuilder.get());
+                for (auto&& r : records) {
+                    if (r < 0) {
+                        NArrow::TStatusValidator::Validate(builderImpl->AppendNull());
+                    } else {
+                        AFL_VERIFY((ui32)r < remap.size());
+                        AFL_VERIFY(remap[r] >= 0);
+                        NArrow::TStatusValidator::Validate(builderImpl->Append(remap[r]));
                     }
-                    return false;
+                }
+                return true;
+            }
+            return false;
             }));
 
-                auto arr = NArrow::TColumnFilter(std::move(mask))
-                               .Apply(std::make_shared<NArrow::NAccessor::TTrivialArray>(ArrayVariantsFull))
-                               ->GetChunkedArray();
-                AFL_VERIFY(arr && arr->num_chunks() == 1);
-                dictArr = std::make_shared<NArrow::NAccessor::TDictionaryArray>(arr->chunk(0), NArrow::FinishBuilder(std::move(rBuilder)));
-            }
-            IColumnMerger::TPortionColumnChunkWriter<NArrow::NAccessor::TDictionaryArray, NArrow::NAccessor::NDictionary::TConstructor> col(
-                NArrow::NAccessor::NDictionary::TConstructor(), Context.GetColumnId());
-            col.AddChunk(dictArr, Context);
-            result.emplace_back(col);
-            mask = std::vector<bool>(ArrayVariantsFull->length(), false);
-            maskSize = 0;
-            records.clear();
-        }
+        auto arr = NArrow::TColumnFilter(std::move(mask))
+                       .Apply(std::make_shared<NArrow::NAccessor::TTrivialArray>(ArrayVariantsFull))
+                       ->GetChunkedArray();
+        AFL_VERIFY(arr && arr->num_chunks() == 1);
+        dictArr = std::make_shared<NArrow::NAccessor::TDictionaryArray>(arr->chunk(0), NArrow::FinishBuilder(std::move(rBuilder)));
     }
-    return result;
+    IColumnMerger::TPortionColumnChunkWriter<NArrow::NAccessor::TDictionaryArray, NArrow::NAccessor::NDictionary::TConstructor> col(
+        NArrow::NAccessor::NDictionary::TConstructor(), Context.GetColumnId());
+    col.AddChunk(dictArr, Context);
+    return col;
 }
 
 }   // namespace NKikimr::NOlap::NCompaction::NDictionary

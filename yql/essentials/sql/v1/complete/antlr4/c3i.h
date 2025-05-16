@@ -38,7 +38,7 @@ namespace NSQLComplete {
             std::unordered_set<TRuleId> PreferredRules;
         };
 
-        virtual TC3Candidates Complete(TCompletionInput input) = 0;
+        virtual TC3Candidates Complete(TStringBuf text, size_t caretTokenIndex) = 0;
         virtual ~IC3Engine() = default;
     };
 

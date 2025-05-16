@@ -1342,6 +1342,12 @@ reexecute:
               } else if (parser->index == sizeof(TRANSFER_ENCODING)-2) {
                 parser->header_state = h_transfer_encoding;
                 parser->extra_flags |= F_TRANSFER_ENCODING >> 8;
+                /* Multiple `Transfer-Encoding` headers should be treated as
+                 * one, but with values separate by a comma.
+                 *
+                 * See: https://tools.ietf.org/html/rfc7230#section-3.2.2
+                 */
+                parser->flags &= ~F_CHUNKED;
               }
               break;
 

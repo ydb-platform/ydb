@@ -64,6 +64,8 @@ private:
     bool AllowEmptyDatabase = false;
     bool DedicatedStorageSection = false;
     bool DedicatedClusterSection = false;
+    bool FetchInternalState = false;
+    bool FetchExplicitSections = false;
 };
 
 class TCommandConfigResolve : public TYdbReadOnlyCommand {

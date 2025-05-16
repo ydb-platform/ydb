@@ -59,7 +59,7 @@ struct aws_s3_endpoint_options {
     uint32_t max_connections;
 
     /* HTTP port override. If zero, determine port based on TLS context */
-    uint16_t port;
+    uint32_t port;
 
     /**
      * Optional.
@@ -162,11 +162,41 @@ struct aws_s3_client_vtable {
     void (*endpoint_shutdown_callback)(struct aws_s3_client *client);
 
     void (*finish_destroy)(struct aws_s3_client *client);
+
+    struct aws_parallel_input_stream *(
+        *parallel_input_stream_new_from_file)(struct aws_allocator *allocator, struct aws_byte_cursor file_name);
+};
+
+struct aws_s3_upload_part_timeout_stats {
+    bool stop_timeout;
+
+    /* Total number of successful upload requests */
+    uint64_t num_successful_upload_requests;
+
+    /* Stats for the request time of first 10 succeed requests */
+    struct {
+        uint64_t sum_ns;
+        uint64_t num_samples;
+    } initial_request_time;
+
+    /* Track the timeout rate. */
+    struct {
+        uint64_t num_completed;
+        uint64_t num_failed;
+    } timeout_rate_tracking;
+
+    /* Stats for the response to first byte time of tracked succeed requests */
+    struct {
+        uint64_t sum_ns;
+        uint64_t num_samples;
+    } response_to_first_byte_time;
 };
 
 /* Represents the state of the S3 client. */
 struct aws_s3_client {
     struct aws_allocator *allocator;
+
+    struct aws_s3_buffer_pool *buffer_pool;
 
     struct aws_s3_client_vtable *vtable;
 
@@ -190,7 +220,13 @@ struct aws_s3_client {
 
     /* Size of parts for files when doing gets or puts.  This exists on the client as configurable option that is passed
      * to meta requests for use. */
-    const size_t max_part_size;
+    const uint64_t max_part_size;
+
+    /* The size threshold in bytes for when to use multipart uploads for a AWS_S3_META_REQUEST_TYPE_PUT_OBJECT meta
+     * request. Uploads over this size will automatically use a multipart upload strategy, while uploads smaller or
+     * equal to this threshold will use a single request to upload the whole object. If not set, `part_size` will be
+     * used as threshold. */
+    const uint64_t multipart_upload_threshold;
 
     /* TLS Options to be used for each connection. */
     struct aws_tls_connection_options *tls_connection_options;
@@ -198,11 +234,16 @@ struct aws_s3_client {
     /* Cached signing config. Can be NULL if no signing config was specified. */
     struct aws_cached_signing_config_aws *cached_signing_config;
 
+    /* The auth provider for S3 Express. */
+    aws_s3express_provider_factory_fn *s3express_provider_factory;
+    void *factory_user_data;
+    struct aws_s3express_credentials_provider *s3express_provider;
+
     /* Throughput target in Gbps that we are trying to reach. */
     const double throughput_target_gbps;
 
-    /* The calculated ideal number of VIP's based on throughput target and throughput per vip. */
-    const uint32_t ideal_vip_count;
+    /* The calculated ideal number of HTTP connections, based on throughput target and throughput per connection. */
+    const uint32_t ideal_connection_count;
 
     /**
      * For multi-part upload, content-md5 will be calculated if the AWS_MR_CONTENT_MD5_ENABLED is specified
@@ -267,6 +308,11 @@ struct aws_s3_client {
      * Ignored unless `enable_read_backpressure` is true. */
     const size_t initial_read_window;
 
+    /**
+     * Timeout in ms for upload request for request after sending to the response first byte received.
+     */
+    struct aws_atomic_var upload_timeout_ms;
+
     struct {
         /* Number of overall requests currently being processed by the client. */
         struct aws_atomic_var num_requests_in_flight;
@@ -277,8 +323,8 @@ struct aws_s3_client {
         /* Number of requests sitting in their meta request priority queue, waiting to be streamed. */
         struct aws_atomic_var num_requests_stream_queued_waiting;
 
-        /* Number of requests currently scheduled to be streamed or are actively being streamed. */
-        struct aws_atomic_var num_requests_streaming;
+        /* Number of requests currently scheduled to be streamed the response body or are actively being streamed. */
+        struct aws_atomic_var num_requests_streaming_response;
     } stats;
 
     struct {
@@ -301,6 +347,12 @@ struct aws_s3_client {
         /* Task for processing requests from meta requests on connections. */
         struct aws_task process_work_task;
 
+        /* Task for trimming buffer bool. */
+        struct aws_task trim_buffer_pool_task;
+
+        /* Task to cleanup endpoints */
+        struct aws_task endpoints_cleanup_task;
+
         /* Number of endpoints currently allocated. Used during clean up to know how many endpoints are still in
          * memory.*/
         uint32_t num_endpoints_allocated;
@@ -321,9 +373,16 @@ struct aws_s3_client {
          * shutdown callback has not yet been called.*/
         uint32_t body_streaming_elg_allocated : 1;
 
+        /* Whether or not a S3 Express provider is active with the client.*/
+        uint32_t s3express_provider_active : 1;
+
         /* True if client has been flagged to finish destroying itself. Used to catch double-destroy bugs.*/
         uint32_t finish_destroy : 1;
 
+        /* Whether or not endpoints cleanup task is currently scheduled. */
+        uint32_t endpoints_cleanup_task_scheduled : 1;
+
+        struct aws_s3_upload_part_timeout_stats upload_part_stats;
     } synced_data;
 
     struct {
@@ -339,6 +398,8 @@ struct aws_s3_client {
         /* Number of requests currently being prepared. */
         uint32_t num_requests_being_prepared;
 
+        /* Whether or not work processing is currently scheduled. */
+        uint32_t trim_buffer_pool_task_scheduled : 1;
     } threaded_data;
 };
 
@@ -428,11 +489,23 @@ struct aws_s3_endpoint *aws_s3_endpoint_acquire(struct aws_s3_endpoint *endpoint
  * from the client's hashtable) */
 void aws_s3_endpoint_release(struct aws_s3_endpoint *endpoint);
 
-AWS_S3_API
-extern const uint32_t g_max_num_connections_per_vip;
+/*
+ * Destroys the endpoint. Before calling this function, the endpoint must be removed from the Client's hash table, and
+ * its ref count must be zero. You MUST NOT call this while the client's lock is held.
+ */
+void aws_s3_endpoint_destroy(struct aws_s3_endpoint *endpoint);
 
 AWS_S3_API
-extern const uint32_t g_num_conns_per_vip_meta_request_look_up[];
+extern const uint32_t g_min_num_connections;
+
+AWS_S3_API
+extern const size_t g_expect_timeout_offset_ms;
+
+AWS_S3_API
+void aws_s3_client_update_upload_part_timeout(
+    struct aws_s3_client *client,
+    struct aws_s3_request *finished_upload_part_request,
+    int finished_error_code);
 
 AWS_EXTERN_C_END
 

@@ -7,6 +7,8 @@
 
 #include <aws/event-stream/event_stream.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_event_stream_channel_handler;
 struct aws_channel_handler;
 
@@ -78,5 +80,6 @@ AWS_EVENT_STREAM_API void aws_event_stream_channel_handler_increment_read_window
 AWS_EVENT_STREAM_API void *aws_event_stream_channel_handler_get_user_data(struct aws_channel_handler *handler);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_EVENT_STREAM_CHANNEL_HANDLER_H */

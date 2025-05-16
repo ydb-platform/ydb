@@ -31,6 +31,20 @@ void TryVerifyThreadIsOnly()
 #endif // _linux_
 }
 
+void BlockSignalAtProcessStart(int signal)
+{
+    try {
+        ::NYT::NSignals::NDetail::TryVerifyThreadIsOnly();
+        ::NYT::NSignals::BlockSignal(signal);
+    } catch (const std::exception& ex) {
+        Cerr << "Failed to block signal " << signal << ": " << ex.what() << Endl;
+        ::exit(static_cast<int>(::NYT::NSignals::EErrorCode::SetBlockedSignalError));
+    } catch (...) {
+        Cerr << "Failed to block signal " << signal << ": unknown exception" << Endl;
+        ::exit(static_cast<int>(::NYT::NSignals::EErrorCode::SetBlockedSignalError));
+    }
+}
+
 } // namespace NDetail
 
 void BlockSignal(int signal)

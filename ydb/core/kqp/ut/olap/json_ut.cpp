@@ -242,7 +242,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             BULK_UPSERT:
                 /Root/ColumnTable
                 %s
-                BAD_REQUEST
+                EXPECT_STATUS:BAD_REQUEST
         )",
             arrowString.data());
         TScriptVariator(script).Execute();

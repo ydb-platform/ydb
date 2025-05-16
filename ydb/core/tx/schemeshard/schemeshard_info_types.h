@@ -3098,6 +3098,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     TIndexBuildId Id;
     TString Uid;
+    TMaybe<TString> UserSID;
 
     TPathId DomainPathId;
     TPathId TablePathId;
@@ -3321,6 +3322,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     EState State = EState::Invalid;
     TString Issue;
+    TInstant StartTime = TInstant::Zero();
+    TInstant EndTime = TInstant::Zero();
 
     TSet<TActorId> Subscribers;
 
@@ -3594,6 +3597,11 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             row.template GetValueOrDefault<Schema::IndexBuild::Issue>();
         indexInfo->CancelRequested =
             row.template GetValueOrDefault<Schema::IndexBuild::CancelRequest>(false);
+        if (row.template HaveValue<Schema::IndexBuild::UserSID>()) {
+            indexInfo->UserSID = row.template GetValue<Schema::IndexBuild::UserSID>();
+        }
+        indexInfo->StartTime = TInstant::Seconds(row.template GetValueOrDefault<Schema::IndexBuild::StartTime>());
+        indexInfo->EndTime = TInstant::Seconds(row.template GetValueOrDefault<Schema::IndexBuild::EndTime>());
 
         indexInfo->LockTxId =
             row.template GetValueOrDefault<Schema::IndexBuild::LockTxId>(
@@ -3871,6 +3879,8 @@ TConclusion<TDuration> GetExpireAfter(const NKikimrSchemeOp::TTTLSettings::TEnab
 
 std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceName, const TString& dataType,
     const NKikimr::NScheme::TTypeRegistry& typeRegistry, bool pgTypesEnabled, TString& errStr);
+
+NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec);
 
 }
 

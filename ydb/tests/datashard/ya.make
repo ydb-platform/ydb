@@ -4,7 +4,10 @@ RECURSE(
     dump_restore
     copy_table
     lib
-    select
+    partitioning
     split_merge
+    secondary_index
+    select
     s3
+    vector_index
 )

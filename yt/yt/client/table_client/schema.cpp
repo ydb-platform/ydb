@@ -216,7 +216,7 @@ TColumnSchema& TColumnSchema::SetGroup(const std::optional<std::string>& value)
     return *this;
 }
 
-TColumnSchema& TColumnSchema::SetExpression(const std::optional<TString>& value)
+TColumnSchema& TColumnSchema::SetExpression(const std::optional<std::string>& value)
 {
     Expression_ = value;
     return *this;

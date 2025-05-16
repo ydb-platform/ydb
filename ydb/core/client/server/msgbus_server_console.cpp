@@ -78,6 +78,7 @@ public:
             auto request = MakeHolder<TEvConsole::TEvCreateTenantRequest>();
             request->Record.CopyFrom(Request.GetCreateTenantRequest());
             request->Record.SetUserToken(TBase::GetSerializedToken());
+            request->Record.SetPeerName(TBase::GetPeerName());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasGetConfigRequest()) {
             auto request = MakeHolder<TEvConsole::TEvGetConfigRequest>();

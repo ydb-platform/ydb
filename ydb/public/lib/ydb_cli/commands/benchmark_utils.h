@@ -91,8 +91,8 @@ TQueryBenchmarkResult Execute(const TString & query, NTable::TTableClient & clie
 TQueryBenchmarkResult Execute(const TString & query, NQuery::TQueryClient & client, const TQueryBenchmarkSettings& settings);
 TQueryBenchmarkResult Explain(const TString & query, NTable::TTableClient & client, const TQueryBenchmarkSettings& settings);
 TQueryBenchmarkResult Explain(const TString & query, NQuery::TQueryClient & client, const TQueryBenchmarkSettings& settings);
-NJson::TJsonValue GetQueryLabels(ui32 queryId);
-NJson::TJsonValue GetSensorValue(TStringBuf sensor, TDuration& value, ui32 queryId);
-NJson::TJsonValue GetSensorValue(TStringBuf sensor, double value, ui32 queryId);
+NJson::TJsonValue GetQueryLabels(TStringBuf queryId);
+NJson::TJsonValue GetSensorValue(TStringBuf sensor, TDuration& value, TStringBuf queryId);
+NJson::TJsonValue GetSensorValue(TStringBuf sensor, double value, TStringBuf queryId);
 
 } // NYdb::NConsoleClient::BenchmarkUtils

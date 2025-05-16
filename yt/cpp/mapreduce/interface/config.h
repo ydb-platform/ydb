@@ -112,7 +112,7 @@ struct TConfig
     /// This is temporary option. In future it would be true by default, and then removed.
     ///
     /// https://st.yandex-team.ru/YT-23645
-    bool LogUseCore = false;
+    bool LogUseCore = true;
 
     // Compression for data that is sent to YT cluster.
     EEncoding ContentEncoding;

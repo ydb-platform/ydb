@@ -377,6 +377,59 @@ TEST_P(TYsonStructParseTest, UnrecognizedSimple)
     EXPECT_TRUE(AreNodesEqual(ConvertToNode(config), ConvertToNode(deserializedConfig)));
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
+class TSimpleStructKeepUnrecognized
+    : public TYsonStruct
+{
+public:
+    int Value;
+
+    REGISTER_YSON_STRUCT(TSimpleStructKeepUnrecognized);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.UnrecognizedStrategy(EUnrecognizedStrategy::KeepRecursive);
+
+        registrar.Parameter("value", &TSimpleStructKeepUnrecognized::Value)
+            .Default(1);
+    }
+};
+
+TEST_P(TYsonStructParseTest, UnrecognizedSorted)
+{
+    auto configNode = BuildYsonNodeFluently()
+        .BeginMap()
+            .Item("value_unrecognized").Value(42)
+            .Item("unrecognized").Value("TestString")
+            .Item("value").Value(1337)
+            .Item("a_unrecognized").Value("TestString")
+        .EndMap();
+
+    auto config = Load<TSimpleStructKeepUnrecognized>(configNode->AsMap());
+
+    auto unrecognizedNode = config->GetLocalUnrecognized();
+    auto unrecognizedRecursivelyNode = config->GetRecursiveUnrecognized();
+    EXPECT_TRUE(AreNodesEqual(unrecognizedNode, unrecognizedRecursivelyNode));
+    EXPECT_EQ(3, unrecognizedNode->GetChildCount());
+
+    TString expectedYson;
+    expectedYson += "{\"a_unrecognized\"=\"TestString\";";
+    expectedYson += "\"value\"=1337;";
+    expectedYson += "\"value_unrecognized\"=42;";
+    expectedYson += "\"unrecognized\"=\"TestString\";}";
+
+    auto output = ConvertToYsonString(config, NYson::EYsonFormat::Text);
+
+    EXPECT_TRUE(AreNodesEqual(
+        ConvertToNode(TYsonString(expectedYson)),
+        ConvertToNode(TYsonString(output.AsStringBuf()))))
+        << "Expected: " << expectedYson
+        << ", got: " << output.AsStringBuf();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <EUnrecognizedStrategy strategy>
 class TThrowOnUnrecognized
     : public TYsonStruct

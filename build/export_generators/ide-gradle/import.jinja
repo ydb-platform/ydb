@@ -2,8 +2,10 @@
 import net.ltgt.gradle.errorprone.CheckSeverity
 import net.ltgt.gradle.errorprone.errorprone
 
-{% endif -%}
+{%  endif -%}
 {%- if with_kotlin -%}
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
-
-{% endif -%}
+{%-     if with_kapt %}
+import org.jetbrains.kotlin.gradle.internal.KaptGenerateStubsTask
+{%-     endif %}
+{%  endif -%}

@@ -725,6 +725,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             return;
         }
 
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Drop pending page collection request " << request->Label
+            << " class " << request->Priority
+            << " cookie " << request->EventCookie);
+
         auto *collection = Collections.FindPtr(request->Label);
         Y_ENSURE(collection);
 
@@ -739,7 +743,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         TryDropExpiredCollection(*collection);
 
-        Y_ENSURE(request.RefCount() == 1, "Should not be in PendingRequests");
+        // Note: sent request pages will be kept in PendingRequests until their pages are loaded
     }
 
     void Handle(NSharedCache::TEvTouch::TPtr &ev, const TActorContext& ctx) {

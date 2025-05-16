@@ -477,7 +477,7 @@ private:
 
             auto format = ExtractFormat(settings);
             if (!format) {
-                ctx.AddError(TIssue(ctx.GetPosition(settingsPos), "No read format specified."));
+                ctx.AddError(TIssue(ctx.GetPosition(settingsPos), "No read format specified.  Please use WITH FORMAT for reading from S3"));
                 return TStatus::Error;
             }
 

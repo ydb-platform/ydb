@@ -9,6 +9,7 @@
 #include <ydb/core/docapi/traits.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 
 #include <ydb/library/login/login.h>
@@ -713,7 +714,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterColumnTable:
         case NKikimrSchemeOp::ESchemeOpAlterSequence:
         case NKikimrSchemeOp::ESchemeOpAlterReplication:
-        case NKikimrSchemeOp::ESchemeOpAlterTransfer:
         case NKikimrSchemeOp::ESchemeOpAlterBlobDepot:
         case NKikimrSchemeOp::ESchemeOpAlterExternalTable:
         case NKikimrSchemeOp::ESchemeOpAlterExternalDataSource:
@@ -727,6 +727,24 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
             toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpAlterTransfer:
+        {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
+            toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
+            ResolveForACL.push_back(toResolve);
+
+            auto& config = pbModifyScheme.GetReplication().GetConfig();
+            auto& target = config.GetTransferSpecific().GetTarget();
+            if (target.HasDstPath()) {
+                auto toWriteTable = TPathToResolve(pbModifyScheme);
+                toWriteTable.Path = SplitPath(target.GetDstPath());
+                toWriteTable.RequireAccess = NACLib::EAccessRights::UpdateRow;
+                ResolveForACL.push_back(toWriteTable);
+            }
+
             break;
         }
         case NKikimrSchemeOp::ESchemeOpRestoreMultipleIncrementalBackups:
@@ -813,7 +831,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateSolomonVolume:
         case NKikimrSchemeOp::ESchemeOpCreateSequence:
         case NKikimrSchemeOp::ESchemeOpCreateReplication:
-        case NKikimrSchemeOp::ESchemeOpCreateTransfer:
         case NKikimrSchemeOp::ESchemeOpCreateBlobDepot:
         case NKikimrSchemeOp::ESchemeOpCreateExternalTable:
         case NKikimrSchemeOp::ESchemeOpCreateExternalDataSource:
@@ -825,6 +842,22 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             toResolve.Path = workingDir;
             toResolve.RequireAccess = NACLib::EAccessRights::CreateTable | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpCreateTransfer:
+        {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = workingDir;
+            toResolve.RequireAccess = NACLib::EAccessRights::CreateTable | accessToUserAttrs;
+            ResolveForACL.push_back(toResolve);
+
+            auto& config = pbModifyScheme.GetReplication().GetConfig();
+            auto& target = config.GetTransferSpecific().GetTarget();
+            auto toWriteTable = TPathToResolve(pbModifyScheme);
+            toWriteTable.Path = SplitPath(target.GetDstPath());
+            toWriteTable.RequireAccess = NACLib::EAccessRights::UpdateRow;
+            ResolveForACL.push_back(toWriteTable);
+
             break;
         }
         case NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables: {

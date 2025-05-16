@@ -33,13 +33,15 @@ TServiceContextBase::TServiceContextBase(
     TMemoryUsageTrackerGuard memoryGuard,
     IMemoryUsageTrackerPtr memoryUsageTracker,
     NLogging::TLogger logger,
-    NLogging::ELogLevel logLevel)
+    NLogging::ELogLevel logLevel,
+    std::optional<NLogging::ELogLevel> errorLogLevel)
     : RequestHeader_(std::move(header))
     , RequestMessage_(std::move(requestMessage))
     , RequestMemoryGuard_(std::move(memoryGuard))
     , MemoryUsageTracker_(std::move(memoryUsageTracker))
     , Logger(std::move(logger))
     , LogLevel_(logLevel)
+    , ErrorLogLevel_(errorLogLevel.value_or(logLevel))
 {
     Initialize();
 }
@@ -49,13 +51,15 @@ TServiceContextBase::TServiceContextBase(
     TMemoryUsageTrackerGuard memoryGuard,
     IMemoryUsageTrackerPtr memoryUsageTracker,
     NLogging::TLogger logger,
-    NLogging::ELogLevel logLevel)
+    NLogging::ELogLevel logLevel,
+    std::optional<NLogging::ELogLevel> errorLogLevel)
     : RequestHeader_(new TRequestHeader())
     , RequestMessage_(std::move(requestMessage))
     , RequestMemoryGuard_(std::move(memoryGuard))
     , MemoryUsageTracker_(std::move(memoryUsageTracker))
     , Logger(std::move(logger))
     , LogLevel_(logLevel)
+    , ErrorLogLevel_(errorLogLevel.value_or(logLevel))
 {
     YT_VERIFY(TryParseRequestHeader(RequestMessage_, RequestHeader_.get()));
     Initialize();

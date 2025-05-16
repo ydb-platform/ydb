@@ -6,7 +6,7 @@
 #include <aws/compression/compression.h>
 
 #define DEFINE_ERROR_INFO(CODE, STR)                                                                                   \
-    [(CODE)-AWS_ERROR_ENUM_BEGIN_RANGE(AWS_C_COMPRESSION_PACKAGE_ID)] =                                                \
+    [(CODE) - AWS_ERROR_ENUM_BEGIN_RANGE(AWS_C_COMPRESSION_PACKAGE_ID)] =                                              \
         AWS_DEFINE_ERROR_INFO(CODE, STR, "aws-c-compression")
 
 /* clang-format off */

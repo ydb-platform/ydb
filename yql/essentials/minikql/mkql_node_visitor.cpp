@@ -528,7 +528,7 @@ void TExploringNodeVisitor::Clear() {
     ConsumersMap.clear();
 }
 
-void TExploringNodeVisitor::Walk(TNode* root, const TTypeEnvironment& env, const std::vector<TNode*>& terminalNodes,
+void TExploringNodeVisitor::Walk(TNode* root, std::vector<TNode*>& nodeStack, const std::vector<TNode*>& terminalNodes,
     bool buildConsumersMap, size_t nodesCountHint)
 {
     BuildConsumersMap = buildConsumersMap;
@@ -539,7 +539,7 @@ void TExploringNodeVisitor::Walk(TNode* root, const TTypeEnvironment& env, const
         ConsumersMap.reserve(nodesCountHint);
     }
 
-    Stack = &env.GetNodeStack();
+    Stack = &nodeStack;
     Stack->clear();
     AddChildNode(nullptr, *root);
     while (!Stack->empty()) {
@@ -569,6 +569,11 @@ void TExploringNodeVisitor::Walk(TNode* root, const TTypeEnvironment& env, const
     }
 
     Stack = nullptr;
+}
+
+void TExploringNodeVisitor::Walk(TNode* root, const TTypeEnvironment& env, const std::vector<TNode*>& terminalNodes,
+                                 bool buildConsumersMap, size_t nodesCountHint) {
+    return Walk(root, env.GetNodeStack(), terminalNodes, buildConsumersMap, nodesCountHint);
 }
 
 const std::vector<TNode*>& TExploringNodeVisitor::GetNodes() {

@@ -4,6 +4,7 @@ apply-presets: true
 allowCustomResources: true
 included: true
 singlePage: true
+strict: true
 
 resources:
   style:
@@ -12,6 +13,11 @@ resources:
   csp:
     - "img-src":
         - "https://github.ydb.tech"
+    - "frame-src":
+        - "https://vk.com"
+        - "https://login.vk.com"
+        - "https://runtime.strm.yandex.ru"
+        - "https://www.youtube.com"
 
 docs-viewer:
   project-name: ydb
@@ -24,7 +30,8 @@ docs-viewer:
   github-url-prefix: https://github.com/ydb-platform/ydb/tree/main/ydb/docs
   unrestrict-revision-access: true
   need_pdf: true
-  pdf: false
+  pdf: true
+
   
   logo-options:
     url:

@@ -201,6 +201,7 @@ void TCommandLatency::Parse(TConfig& config) {
 
     if (MaxInflight >= 2) {
         config.IsNetworkIntensive = true;
+        config.UsePerChannelTcpConnection = true;
     }
 
     if (Percentiles.empty()) {

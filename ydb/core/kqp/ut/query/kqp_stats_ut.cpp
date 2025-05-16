@@ -279,7 +279,7 @@ Y_UNIT_TEST_TWIN(DataQueryWithEffects, UseSink) {
     NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
 
     if (UseSink) {
-        auto node = FindPlanNodeByKv(plan, "Node Type", "Stage-Sink");
+        auto node = FindPlanNodeByKv(plan, "Node Type", "Stage");
         UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe(), 1);
     } else {
         auto node = FindPlanNodeByKv(plan, "Node Type", "Upsert-ConstantExpr");

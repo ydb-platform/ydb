@@ -29,6 +29,7 @@ struct TQueryInfo {
 
     std::string Query;
     std::string ExpectedResult;
+    std::string QueryName;
     NYdb::TParams Params;
     bool UseReadRows = false;
     bool UseStaleRO = false;

@@ -47,6 +47,10 @@ SELECT String::Strip("YQL ");       -- "YQL"
 
   Проверяет наличие подстроки в строке.
 
+* `String::AsciiContainsIgnoreCase(string:String?, substring:String) -> Bool`
+* `String::AsciiEqualsIgnoreCase(left:String?, right:String) -> Bool`
+  Проверяют наличие подстроки или полное равенство строк без учета регистра символов.
+
 * `String::Find(string:String{Flags:AutoMap}, String, [Uint64?]) -> Int64` - Устаревшая: используйте встроенную функцию [Find](../../builtins/basic.md#find)
 * `String::ReverseFind(string:String{Flags:AutoMap}, String, [Uint64?]) -> Int64` - Устаревшая: используйте встроенную функцию [RFind](../../builtins/basic.md#rfind)
 * `String::Substring(string:String{Flags:AutoMap}, [Uint64?, Uint64?]) -> String` - Устаревшая: используйте встроенную функцию [Substring](../../builtins/basic.md#substring)
@@ -111,6 +115,12 @@ SELECT String::SplitToList("1,2,3,4,5,6,7", ",", 3 as Limit); -- ["1", "2", "3",
 * `String::RemoveLast(input:String{Flags:AutoMap}, symbols:String) -> String`
 
   Удаляют все/первое/последнее вхождения(е) символа в наборе `symbols` из `input`. Второй аргумент интерпретируется как неупорядоченный набор символов для удаления.
+
+* `String::ReverseBytes(input:String{Flags:AutoMap}) -> String` - добавлена в версии [2025.02](../../changelog/2025.02.md#string-module)
+  Разворачивает строку, рассматривая ее как байтовую последовательность.
+
+* `String::ReverseBits(input:String{Flags:AutoMap}) -> String` - добавлена в версии [2025.02](../../changelog/2025.02.md#string-module)
+  Разворачивает строку, рассматривая ее как битовую последовательность.
 
 * `String::IsAscii(string:String{Flags:AutoMap}) -> Bool`
 

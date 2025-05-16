@@ -26,6 +26,7 @@ in rec {
     quictls
     nghttp3
     ngtcp2
+    libssh2
   ];
 
   configureFlags = [
@@ -40,6 +41,7 @@ in rec {
     "--with-brotli=${brotli.dev}"
     "--with-nghttp3"
     "--with-ngtcp2"
+    "--with-libssh2=${libssh2.dev}"
     "--without-gnutls"
     "--without-libidn2"
     "--without-libpsl"

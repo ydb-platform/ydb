@@ -51,4 +51,18 @@ std::optional<ui64> IIndexMeta::CalcCategory(const TString& subColumnName) const
     return DoCalcCategory(subColumnName);
 }
 
+TConclusion<std::vector<std::shared_ptr<IPortionDataChunk>>> IIndexMeta::BuildIndexOptional(
+    const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount, const TIndexInfo& indexInfo) const {
+    auto conclusion = DoBuildIndexOptional(data, recordsCount, indexInfo);
+    if (conclusion.IsFail()) {
+        return conclusion;
+    }
+    ui32 checkRecordsCount = 0;
+    for (auto&& i : *conclusion) {
+        checkRecordsCount += i->GetRecordsCountVerified();
+    }
+    AFL_VERIFY(checkRecordsCount == recordsCount);
+    return conclusion;
+}
+
 }   // namespace NKikimr::NOlap::NIndexes

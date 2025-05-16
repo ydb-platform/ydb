@@ -1,0 +1,433 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 02f4a551d37156b2cadc0a423496ee1b
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1997 Greg Ward Larson
+         * Copyright (c) 1997 Silicon Graphics, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tif_luv.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 0f5876ba2b92a993e7778db495e68853
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1988-1996 Sam Leffler
+         * Copyright (c) 1991-1996 Silicon Graphics, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tif_stream.cxx [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 126b1d950b05c63796863bb1785c8301
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2017, Planet Labs
+         * Author: <even.rouault at spatialys.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tif_zstd.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1a1ec6cbe72c1313391b7bfc4a429b1b
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1997 Greg Ward Larson
+         * Copyright (c) 1997 Silicon Graphics, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tif_luv.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 26e3e126c3c9461c3df25463865d5aed
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1992-1997 Sam Leffler
+         * Copyright (c) 1992-1997 Silicon Graphics, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tif_version.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3703921323d1de27dda336a418a929e1
+BELONGS ya.make
+    License text:
+           Copyright (c) Joris Van Damme <info@awaresystems.be>
+           Copyright (c) AWare Systems <http://www.awaresystems.be/>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tif_ojpeg.c [26:27]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3af43c3228d92ca332f5da1a4e74c462
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2018, Even Rouault
+         * Author: <even.rouault at spatialys.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tif_lerc.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 43efd0408882fc6ab7b4d0e6a509486a
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1994-1997 Sam Leffler
+         * Copyright (c) 1994-1997 Silicon Graphics, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tif_jpeg.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5291d67777cdb207939ae625c800cf7a
+BELONGS ya.make
+    License text:
+           Copyright (c) Joris Van Damme <info@awaresystems.be>
+           Copyright (c) AWare Systems <http://www.awaresystems.be/>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tif_ojpeg.c [26:27]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 5d275e91067f862067c44dab63f228bf
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1994-1997 Sam Leffler
+         * Copyright (c) 1994-1997 Silicon Graphics, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tif_jpeg.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6c8bec88a9b26ce67c07897c4f51fc24
+BELONGS ya.make
+    License text:
+        Copyright © 1988-1997 Sam Leffler\
+        Copyright © 1991-1997 Silicon Graphics, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.md [3:4]
+        README.md [49:50]
+        t4.h [2:3]
+        tif_aux.c [2:3]
+        tif_close.c [2:3]
+        tif_codec.c [2:3]
+        tif_color.c [2:3]
+        tif_compress.c [2:3]
+        tif_dir.c [2:3]
+        tif_dir.h [2:3]
+        tif_dirinfo.c [2:3]
+        tif_dirread.c [2:3]
+        tif_dirwrite.c [2:3]
+        tif_dumpmode.c [2:3]
+        tif_error.c [2:3]
+        tif_extension.c [2:3]
+        tif_fax3.c [2:3]
+        tif_fax3.h [2:3]
+        tif_flush.c [2:3]
+        tif_getimage.c [2:3]
+        tif_jbig.c [2:3]
+        tif_lzw.c [2:4]
+        tif_next.c [2:3]
+        tif_open.c [2:3]
+        tif_packbits.c [2:3]
+        tif_predict.c [2:3]
+        tif_print.c [2:3]
+        tif_read.c [2:3]
+        tif_strip.c [2:3]
+        tif_swab.c [2:3]
+        tif_thunder.c [2:3]
+        tif_tile.c [2:3]
+        tif_unix.c [2:3]
+        tif_warning.c [2:3]
+        tif_win32.c [2:3]
+        tif_write.c [2:3]
+        tiff.h [2:3]
+        tiffio.h [2:3]
+        tiffio.hxx [2:3]
+        tiffiop.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 73224a0952a09c8cd38738dc21c2a50b
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1995-1997 Sam Leffler
+         * Copyright (c) 1995-1997 Silicon Graphics, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tif_predict.h [2:3]
+        tif_zip.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 82fa6685ddccc6547af260e76986db7c
+BELONGS ya.make
+    License text:
+         *      Copyright (C) 1990, 1995  Frank D. Cringle.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tif_fax3.c [37:37]
+        tif_fax3.h [34:34]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 875bb98a0d0a89c2bdf8807f21c47ee2
+BELONGS ya.make
+    License text:
+        Copyright © 1988-1997 Sam Leffler\
+        Copyright © 1991-1997 Silicon Graphics, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE.md [3:4]
+        README.md [49:50]
+        t4.h [2:3]
+        tif_close.c [2:3]
+        tif_codec.c [2:3]
+        tif_color.c [2:3]
+        tif_compress.c [2:3]
+        tif_dir.c [2:3]
+        tif_dir.h [2:3]
+        tif_dirinfo.c [2:3]
+        tif_dirread.c [2:3]
+        tif_dirwrite.c [2:3]
+        tif_dumpmode.c [2:3]
+        tif_error.c [2:3]
+        tif_extension.c [2:3]
+        tif_flush.c [2:3]
+        tif_jbig.c [2:3]
+        tif_lzw.c [2:4]
+        tif_next.c [2:3]
+        tif_open.c [2:3]
+        tif_packbits.c [2:3]
+        tif_predict.c [2:3]
+        tif_print.c [2:3]
+        tif_read.c [2:3]
+        tif_swab.c [2:3]
+        tif_thunder.c [2:3]
+        tif_unix.c [2:3]
+        tif_warning.c [2:3]
+        tif_win32.c [2:3]
+        tif_write.c [2:3]
+        tiff.h [2:3]
+        tiffio.h [2:3]
+        tiffio.hxx [2:3]
+        tiffiop.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8c360d6f0ec71502a00b51fc651777c0
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2008-2009, Even Rouault <even dot rouault at spatialys.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tif_hash_set.c [8:8]
+        tif_hash_set.h [10:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a3cb1aa41ae8a9d75ec398f4f3c190f4
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2018, Mapbox
+         * Author: <norman.barker at mapbox.com>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tif_webp.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL aa60014c4f4fa0103095e881c9058943
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1990-1997 Sam Leffler
+         * Copyright (c) 1991-1997 Silicon Graphics, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tif_fax3.c [2:3]
+        tif_fax3.h [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ab503c149bbdb62e62af4464df420c15
+BELONGS ya.make
+    License text:
+        Use and Copyright
+        -----------------
+        Silicon Graphics has seen fit to allow us to give this work away.  It
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        README.md [39:41]
+
+KEEP     COPYRIGHT_SERVICE_LABEL b8ac42940a6acdcc47bb98264d0c6bb7
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1988-1996 Sam Leffler
+         * Copyright (c) 1991-1996 Silicon Graphics, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tif_stream.cxx [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bbe9fa01e09eaf94b8fa91c442f4aa07
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1988-1997 Sam Leffler
+         * Copyright (c) 1991-1997 Silicon Graphics, Inc.
+         * Copyright (c) 2022 Even Rouault
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tif_lzw.c [2:4]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c095539af5a5517848bb0a8904574572
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1995-1997 Sam Leffler
+         * Copyright (c) 1995-1997 Silicon Graphics, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tif_predict.h [2:3]
+        tif_zip.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cafbf6d6a83504f46e9f5a9ad7dfa19a
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1996-1997 Sam Leffler
+         * Copyright (c) 1996 Pixar
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tif_pixarlog.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e00084e446b0b91449c0de64cf5ac662
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2010, Andrey Kiselev <dron@ak4719.spb.edu>
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tif_lzma.c [2:2]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ea717385f3024bc2714f0b3f66b21801
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1985, 1986 The Regents of the University of California.
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tif_lzw.c [1437:1438]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ef9e24bc2ee738c92b1a0aae6c46127d
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1992-1997 Sam Leffler
+         * Copyright (c) 1992-1997 Silicon Graphics, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tif_version.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f20aeb63cf72afacb350c783e7f989dd
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1996-1997 Sam Leffler
+         * Copyright (c) 1996 Pixar
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tif_pixarlog.c [2:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fc174ce2b63ba019d5be7c31f6de92ec
+BELONGS ya.make
+    License text:
+         * Copyright (c) 1991-1997 Sam Leffler
+         * Copyright (c) 1991-1997 Silicon Graphics, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        tif_aux.c [2:3]
+        tif_getimage.c [2:3]
+        tif_strip.c [2:3]
+        tif_tile.c [2:3]

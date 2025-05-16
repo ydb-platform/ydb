@@ -2,7 +2,6 @@ import os
 import subprocess
 import sys
 from abc import ABCMeta, abstractmethod
-from six import add_metaclass
 
 from .constants import NPM_REGISTRY_URL
 from .package_json import PackageJson
@@ -25,8 +24,7 @@ class PackageManagerCommandError(PackageManagerError):
         super(PackageManagerCommandError, self).__init__(msg)
 
 
-@add_metaclass(ABCMeta)
-class BasePackageManager(object):
+class BasePackageManager(object, metaclass=ABCMeta):
     def __init__(
         self,
         build_root,

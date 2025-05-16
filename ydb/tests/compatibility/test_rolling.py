@@ -15,30 +15,18 @@ class TestRolling(RollingUpdateFixture):
         output_path = yatest.common.test_output_path()
         self.output_f = open(os.path.join(output_path, "out.log"), "w")
         yield from self.setup_cluster(
-            extra_feature_flags={"enable_column_store": True},
+            extra_feature_flags={
+                "enable_column_store": True,
+                "enable_separation_compute_actors_from_read": False,
+            },
 
             column_shard_config={
                 "disabled_on_scheme_shard": False,
             },
         )
 
-    def get_command_prefix_log(self, subcmds: list[str], path: str) -> list[str]:
-        return (
-            [
-                yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
-                "--verbose",
-                "--endpoint",
-                "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
-                "--database=/Root",
-                "workload",
-                "log",
-            ]
-            + subcmds
-            + ["--path", path]
-        )
-
     @pytest.mark.parametrize("store_type", ["row", "column"])
-    def test_log(self, store_type):
+    def test_kv(self, store_type):
         init_command_prefix = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
             "--verbose",

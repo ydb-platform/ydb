@@ -62,11 +62,7 @@
             values: ["YDB"]
     ```
 
-<<<<<<< HEAD:ydb/docs/ru/core/devops/manual/node-authorization.md
-    При необходимости добавьте другие проверки сертификатов [в соответствии с документацией](../../reference/configuration/client_certificate_authorization.md).
-=======
-    При необходимости добавьте другие проверки сертификатов [в соответствии с документацией](../../../reference/configuration/node-authentication.md).
->>>>>>> main:ydb/docs/ru/core/devops/deployment-options/manual/node-authorization.md
+    При необходимости добавьте другие проверки сертификатов [в соответствии с документацией](../../../reference/configuration/client_certificate_authorization.md).
 
     В случае успешной проверки сертификата и соответствия компонентов поля "Subject" сертификата требованиям, установленным в блоке `subject_terms`, подключению будут присвоены субъекты доступа, перечисленные в параметре `member_groups`. Чтобы отделить такие субъекты доступа от других групп и учётных записей, к их наименованию добавляется суффикс `@cert`.
 

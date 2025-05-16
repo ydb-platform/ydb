@@ -144,5 +144,3 @@ class RollingUpdateFixture:
             node.binary_path = current_binary_path
             node.start()
             yield
-        
-

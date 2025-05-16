@@ -423,6 +423,7 @@ void TSchemeShard::Clear() {
     ExternalTables.clear();
     ExternalDataSources.clear();
     Views.clear();
+    SysViews.clear();
 
     ColumnTables = { };
     BackgroundSessionsManager = std::make_shared<NKikimr::NOlap::NBackground::TSessionsManager>(
@@ -1342,7 +1343,7 @@ bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme& scheme, TS
                             actualVersion = pathVersion.GetViewVersion();
                             break;
                         case NKikimrSchemeOp::EPathType::EPathTypeSysView:
-                            Y_ABORT("UNIMPLEMENTED");
+                            actualVersion = pathVersion.GetSysViewVersion();
                             break;
                         default:
                             actualVersion = pathVersion.GetGeneralVersion();
@@ -1607,6 +1608,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateContinuousBackup:
     case TTxState::TxCreateResourcePool:
     case TTxState::TxCreateBackupCollection:
+    case TTxState::TxCreateSysView:
         return TPathElement::EPathState::EPathStateCreate;
     case TTxState::TxAlterPQGroup:
     case TTxState::TxAlterTable:
@@ -1671,6 +1673,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropContinuousBackup:
     case TTxState::TxDropResourcePool:
     case TTxState::TxDropBackupCollection:
+    case TTxState::TxDropSysView:
         return TPathElement::EPathState::EPathStateDrop;
     case TTxState::TxBackup:
         return TPathElement::EPathState::EPathStateBackup;
@@ -3125,6 +3128,33 @@ void TSchemeShard::PersistRemoveView(NIceDb::TNiceDb& db, TPathId pathId) {
     db.Table<Schema::View>().Key(pathId.LocalPathId).Delete();
 }
 
+void TSchemeShard::PersistSysView(NIceDb::TNiceDb& db, TPathId pathId) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+
+    const auto path = PathsById.find(pathId);
+    Y_ABORT_UNLESS(path != PathsById.end());
+    Y_ABORT_UNLESS(path->second && path->second->IsSysView());
+
+    const auto sysView = SysViews.find(pathId);
+    Y_ABORT_UNLESS(sysView != SysViews.end());
+    TSysViewInfo::TPtr sysViewInfo = sysView->second;
+    Y_ABORT_UNLESS(sysViewInfo);
+
+    db.Table<Schema::SysView>().Key(pathId.LocalPathId).Update(
+        NIceDb::TUpdate<Schema::SysView::AlterVersion>{sysViewInfo->AlterVersion},
+        NIceDb::TUpdate<Schema::SysView::SysViewType>{sysViewInfo->Type}
+    );
+}
+
+void TSchemeShard::PersistRemoveSysView(NIceDb::TNiceDb& db, TPathId pathId) {
+    Y_ABORT_UNLESS(IsLocalId(pathId));
+    if (const auto sysView = SysViews.find(pathId); sysView != SysViews.end()) {
+        SysViews.erase(sysView);
+    }
+
+    db.Table<Schema::SysView>().Key(pathId.LocalPathId).Delete();
+}
+
 void TSchemeShard::PersistResourcePool(NIceDb::TNiceDb& db, TPathId pathId, const TResourcePoolInfo::TPtr resourcePool) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
@@ -4473,7 +4503,14 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 break;
             }
 
-            case NKikimrSchemeOp::EPathType::EPathTypeSysView:
+            case NKikimrSchemeOp::EPathType::EPathTypeSysView: {
+                auto it = SysViews.find(pathId);
+                Y_ABORT_UNLESS(it != SysViews.end());
+                result.SetSysViewVersion(it->second->AlterVersion);
+                generalVersion += result.GetSysViewVersion();
+                break;
+            }
+
             case NKikimrSchemeOp::EPathType::EPathTypeInvalid: {
                 Y_UNREACHABLE();
             }
@@ -5341,6 +5378,8 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
         TabletCounters->Simple()[COUNTER_BACKUP_COLLECTION_COUNT].Sub(1);
         break;
     case TPathElement::EPathType::EPathTypeSysView:
+        TabletCounters->Simple()[COUNTER_SYS_VIEW_COUNT].Sub(1);
+        break;
     case TPathElement::EPathType::EPathTypeInvalid:
         Y_ABORT("impossible path type");
     }

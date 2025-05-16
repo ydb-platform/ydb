@@ -4,7 +4,9 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/protos/s3_settings.pb.h>
+#include <ydb/services/lib/actors/pq_schema_actor.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -354,6 +356,34 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
         if (consumer.important()) {
             addedConsumer.SetImportant(true);
         }
+    }
+
+    return propose;
+}
+
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTopicPropose(
+    TSchemeShard* ss,
+    TTxId txId,
+    TImportInfo::TPtr importInfo,
+    ui32 itemIdx,
+    TString& error
+) {
+    Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+    const auto& item = importInfo->Items.at(itemIdx);
+    Y_ABORT_UNLESS(item.Topic);
+
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto& record = propose->Record;
+    auto& modifyScheme = *record.AddTransaction();
+
+    const TFsPath dstPath = item.DstPathName;
+    modifyScheme.SetWorkingDir(dstPath.Dirname());
+
+    auto codes = 
+        NGRpcProxy::V1::FillProposeRequestImpl(dstPath.GetName(), item.Topic.GetRef(), modifyScheme, AppData(), error, dstPath.Dirname());
+
+    if (codes.YdbCode != Ydb::StatusIds::SUCCESS) {
+        return nullptr;
     }
 
     return propose;

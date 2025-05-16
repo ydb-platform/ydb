@@ -16,7 +16,7 @@
 
 {% include [restore-database-nodes.md](./restore-database-nodes.md) %}
 
-[Конфигурация кластера](../../../../maintenance/manual/config-overview.md) восстанавливается отдельно с помощью следующих действий:
+[Конфигурация кластера](../../../../devops/configuration-management/configuration-v2/config-overview.md) восстанавливается отдельно с помощью следующих действий:
 
 1) Загрузить сохраненную конфигурацию с помощью команды `{{ ydb-cli }} admin cluster config replace`.
 2) Перезапустить узлы кластера.
@@ -45,7 +45,7 @@
 
 Восстановление схемных объектов базы данных происходит также, как и описано в разделе [Объекты схемы данных](#schema-objects).
 
-[Конфигурация базы данных](../../../../maintenance/manual/config-overview.md) восстанавливается отдельно с помощью следующих действий:
+[Конфигурация базы данных](../../../../devops/configuration-management/configuration-v2/config-overview.md) восстанавливается отдельно с помощью следующих действий:
 
 1) Загрузить сохранненую конфигурацию с помощью команды `{{ ydb-cli }} admin database config replace`.
 2) Перезапустить узлы базы данных.

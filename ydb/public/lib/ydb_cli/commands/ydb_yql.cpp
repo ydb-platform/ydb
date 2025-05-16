@@ -101,7 +101,7 @@ int TCommandYql::RunCommand(TConfig& config, const TString& script) {
 
     if (!Parameters.empty() || InputParamStream) {
         THolder<TParamsBuilder> paramBuilder;
-        while (!IsInterrupted() && GetNextParams(driver, Script, paramBuilder)) {
+        while (!IsInterrupted() && GetNextParams(driver, Script, paramBuilder, config.IsVerbose())) {
             auto asyncResult = client.StreamExecuteYqlScript(
                     script,
                     paramBuilder->Build(),

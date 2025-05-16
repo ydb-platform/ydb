@@ -1,7 +1,6 @@
 #pragma once
 
-#include "kqp_opt.h"
-
+#include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <iterator>

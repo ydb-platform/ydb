@@ -1,8 +1,7 @@
 #pragma once
 
-#include "kqp_opt.h"
-
-#include <ydb/core/kqp/opt/kqp_operator.h>
+#include <ydb/core/kqp/opt/kqp_opt.h>
+#include <ydb/core/kqp/opt/rbo/kqp_operator.h>
 
 namespace NKikimr {
 namespace NKqp {

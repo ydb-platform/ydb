@@ -1,15 +1,14 @@
 #pragma once
 
-#include "kqp_opt.h"
-
+#include <ydb/core/kqp/opt/kqp_opt.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
-#include <ydb/core/kqp/opt/kqp_new_rbo.h>
-#include <ydb/core/kqp/opt/kqp_new_rbo_rules.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
+#include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
 
 namespace NKikimr {
 namespace NKqp {

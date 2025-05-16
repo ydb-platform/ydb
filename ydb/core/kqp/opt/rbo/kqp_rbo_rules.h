@@ -1,6 +1,6 @@
 #pragma once
 
-#include "kqp_new_rbo.h"
+#include "kqp_rbo.h"
 
 
 namespace NKikimr {

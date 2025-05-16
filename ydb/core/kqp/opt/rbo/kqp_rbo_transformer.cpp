@@ -1,4 +1,4 @@
-#include "kqp_new_rbo_transformer.h"
+#include "kqp_rbo_transformer.h"
 #include <yql/essentials/utils/log/log.h>
 
 using namespace NYql;

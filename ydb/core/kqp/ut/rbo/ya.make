@@ -5,7 +5,7 @@ FORK_SUBTESTS()
 SIZE(MEDIUM)
 
 SRCS(
-    kqp_newrbo_ut.cpp
+    kqp_rbo_ut.cpp
 )
 
 PEERDIR(

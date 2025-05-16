@@ -79,7 +79,7 @@ double TimeQuery(TString schema, TString query, int nIterations) {
     return elapsed_time / nIterations;        
 }
 
-Y_UNIT_TEST_SUITE(KqpNewRbo) {
+Y_UNIT_TEST_SUITE(KqpRbo) {
 
     Y_UNIT_TEST(Select) {
         NKikimrConfig::TAppConfig appConfig;

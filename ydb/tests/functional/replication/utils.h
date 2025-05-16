@@ -172,7 +172,7 @@ struct MainTestCase {
         return config;
     }
 
-    MainTestCase(const std::optional<std::string> user = std::nullopt, const std::string tableType = "COLUMN")
+    MainTestCase(const std::optional<std::string> user = std::nullopt, std::string tableType = "COLUMN")
         : TableType(std::move(tableType))
         , Id(RandomNumber<size_t>())
         , ConnectionString(GetEnv("YDB_ENDPOINT") + "/?database=" + GetEnv("YDB_DATABASE"))

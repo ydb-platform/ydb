@@ -17,7 +17,6 @@ class TestRolling(RollingUpdateFixture):
         yield from self.setup_cluster(
             extra_feature_flags={
                 "enable_column_store": True,
-                "enable_separation_compute_actors_from_read": False,
             },
 
             column_shard_config={

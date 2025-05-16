@@ -836,12 +836,17 @@ TInitEndWriteTimestampStep::TInitEndWriteTimestampStep(TInitializer* initializer
 
 void TInitEndWriteTimestampStep::Execute(const TActorContext &ctx) {
     if (Partition()->EndWriteTimestamp != TInstant::Zero() ||
-        Partition()->BlobEncoder.IsEmpty()) {
+        (Partition()->BlobEncoder.IsEmpty() && Partition()->CompactionBlobEncoder.IsEmpty())) {
         PQ_LOG_I("Initializing EndWriteTimestamp skipped because already initialized.");
         return Done(ctx);
     }
 
-    const TDataKey* lastKey = Partition()->BlobEncoder.GetLastKey();
+    const TDataKey* lastKey = nullptr;
+    if (!Partition()->BlobEncoder.IsEmpty()) {
+        lastKey = Partition()->BlobEncoder.GetLastKey();
+    } else if (!Partition()->CompactionBlobEncoder.IsEmpty()) {
+        lastKey = Partition()->CompactionBlobEncoder.GetLastKey();
+    }
 
     if (lastKey) {
         Partition()->EndWriteTimestamp = lastKey->Timestamp;

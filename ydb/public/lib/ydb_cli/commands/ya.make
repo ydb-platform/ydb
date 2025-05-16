@@ -90,7 +90,6 @@ RECURSE(
     interactive
     sdk_core_access
     topic_workload
-    tpcc
     transfer_workload
     ydb_discovery
 )

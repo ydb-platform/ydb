@@ -418,44 +418,6 @@ void FillEffectRows(const TEffectCallable& callable, TEffectProto& proto, bool i
     }
 }
 
-void FillLookup(const TKqpLookupTable& lookup, NKqpProto::TKqpPhyOpLookup& lookupProto, TExprContext& ctx) {
-    auto maybeList = lookup.LookupKeys().Maybe<TCoIterator>().List();
-    YQL_ENSURE(maybeList, "Expected iterator as lookup input, got: " << lookup.LookupKeys().Ref().Content());
-
-    if (auto maybeParam = maybeList.Cast().Maybe<TCoParameter>()) {
-         lookupProto.MutableKeysValue()->MutableParamValue()->SetParamName(maybeParam.Cast().Name().StringValue());
-    } else if (auto maybeAsList = maybeList.Cast().Maybe<TCoAsList>()) {
-        auto asList = maybeAsList.Cast();
-        auto proto = lookupProto.MutableKeysValue()->MutableRowsList();
-
-        for (auto row : asList) {
-            YQL_ENSURE(row.Maybe<TCoAsStruct>(), "" << row.Ref().Dump());
-            auto asStruct = row.Cast<TCoAsStruct>();
-            auto protoRow = proto->AddRows();
-            auto& protoRowColumns = *protoRow->MutableColumns();
-
-            for (auto item : asStruct) {
-                auto tuple = item.Cast<TCoNameValueTuple>();
-                auto columnName = tuple.Name().StringValue();
-                auto& protoColumn = protoRowColumns[columnName];
-
-                if (auto maybeParam = tuple.Value().Maybe<TCoParameter>()) {
-                    protoColumn.MutableParamValue()->SetParamName(maybeParam.Cast().Name().StringValue());
-                } else if (auto maybeNothing = tuple.Value().Maybe<TCoNothing>()) {
-                    FillNothing(maybeNothing.Cast(), *protoColumn.MutableLiteralValue());
-                } else {
-                    YQL_ENSURE(tuple.Value().Maybe<TCoDataCtor>(), "" << tuple.Value().Ref().Dump());
-                    FillLiteralProto(tuple.Value().Cast<TCoDataCtor>(), *protoColumn.MutableLiteralValue());
-                }
-            }
-        }
-    } else {
-        auto brokenLookup =  KqpExprToPrettyString(lookup, ctx);
-        YQL_ENSURE(false, "Unexpected lookup input: " << maybeList.Cast().Ref().Content()
-            << "lookup: " << brokenLookup);
-    }
-}
-
 std::vector<std::string> GetResultColumnNames(const NKikimr::NMiniKQL::TType* resultType) {
     YQL_ENSURE(resultType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Struct
                 || resultType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Tuple);
@@ -745,16 +707,6 @@ private:
                 FillTableId(readTable.Table(), *tableOp.MutableTable());
                 FillColumns(readTable.Columns(), *tableMeta, tableOp, true);
                 FillReadRange(readTable, *tableMeta, *tableOp.MutableReadRange());
-            } else if (auto maybeLookupTable = node.Maybe<TKqpLookupTable>()) {
-                auto lookupTable = maybeLookupTable.Cast();
-                auto tableMeta = TablesData->ExistingTable(Cluster, lookupTable.Table().Path()).Metadata;
-                YQL_ENSURE(tableMeta);
-
-                auto& tableOp = *stageProto.AddTableOps();
-                FillTablesMap(lookupTable.Table(), lookupTable.Columns(), tablesMap);
-                FillTableId(lookupTable.Table(), *tableOp.MutableTable());
-                FillColumns(lookupTable.Columns(), *tableMeta, tableOp, true);
-                FillLookup(lookupTable, *tableOp.MutableLookup(), ctx);
             } else if (auto maybeUpsertRows = node.Maybe<TKqpUpsertRows>()) {
                 auto upsertRows = maybeUpsertRows.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, upsertRows.Table().Path()).Metadata;
@@ -821,6 +773,7 @@ private:
                 FillDqRead(maybeDqReadWrapBase.Cast(), stageProto, ctx);
             } else {
                 YQL_ENSURE(!node.Maybe<TKqpReadTable>());
+                YQL_ENSURE(!node.Maybe<TKqpLookupTable>());
             }
             return true;
         });

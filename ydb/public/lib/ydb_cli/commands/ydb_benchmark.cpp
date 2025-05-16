@@ -44,39 +44,43 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
         .AppendTo(&QuerySettings);
     config.Opts->MutuallyExclusive("query-prefix", "query-settings");
     config.Opts->AddLongOption("retries", "Max retry count for every request.").StoreResult(&RetrySettings.MaxRetries_).DefaultValue(RetrySettings.MaxRetries_);
-    auto fillTestCases = [](TStringBuf line, std::function<void(ui32)>&& op) {
+    auto fillTestCases = [](TStringBuf line, std::function<void(TStringBuf)>&& op) {
         for (const auto& token : StringSplitter(line).Split(',').SkipEmpty()) {
             TStringBuf part = token.Token();
             TStringBuf from, to;
+            ui32 index;
             if (part.TrySplit('-', from, to)) {
-                ui32 begin = FromString(from);
-                ui32 end = FromString(to);
-                while (begin <= end) {
-                    op(begin);
-                    ++begin;
+                ui32 begin, end;
+                if (TryFromString(from, begin) && TryFromString(to, end)) {
+                    for (;begin <= end; ++begin) {
+                        op(Sprintf("Query%02u", begin));
+                    }
+                    continue;
                 }
-            } else {
-                op(FromString<ui32>(part));
+            } else if (TryFromString(part, index)) {
+                op(Sprintf("Query%02u", index));
+                continue;
             }
+            op(part);
         }
     };
 
     auto& includeOpt = config.Opts->AddLongOption("include",
-        "Run only specified queries (ex.: 0,1,2,3,5-10,20)");
+        "Run only specified queries (ex.: 0,1,2,3,5-10,20). If queries has names then names shoud be used and indexes in other case.");
     includeOpt
         .Optional()
         .GetOpt().Handler1T<TStringBuf>([this, fillTestCases](TStringBuf line) {
             QueriesToRun.clear();
-            fillTestCases(line, [this](ui32 q) {
-                QueriesToRun.insert(q);
+            fillTestCases(line, [this](TStringBuf q) {
+                QueriesToRun.emplace(q);
             });
         });
     auto& excludeOpt = config.Opts->AddLongOption("exclude",
-        "Run all queries except given ones (ex.: 0,1,2,3,5-10,20)");
+        "Run all queries except given ones (ex.: 0,1,2,3,5-10,20). If queries has names then names shoud be used and indexes in other case.");
     excludeOpt
         .Optional()
         .GetOpt().Handler1T<TStringBuf>([this, fillTestCases](TStringBuf line) {
-            fillTestCases(line, [this](ui32 q) {
+            fillTestCases(line, [this](TStringBuf q) {
                 QueriesToSkip.emplace(q);
             });
         });
@@ -123,11 +127,11 @@ TString TWorkloadCommandBenchmark::PatchQuery(const TStringBuf& original) const 
     return JoinSeq('\n', lines);
 }
 
-bool TWorkloadCommandBenchmark::NeedRun(ui32 queryIdx) const {
-    if (QueriesToRun && !QueriesToRun.contains(queryIdx)) {
+bool TWorkloadCommandBenchmark::NeedRun(const TString& queryName) const {
+    if (QueriesToRun && !QueriesToRun.contains(queryName)) {
         return false;
     }
-    if (QueriesToSkip.contains(queryIdx)) {
+    if (QueriesToSkip.contains(queryName)) {
         return false;
     }
     return true;
@@ -232,25 +236,25 @@ struct TValueToCsv<T, true> {
 
 template<class T, bool isDuration, bool is_arr = std::is_arithmetic<T>::value>
 struct TValueToJson {
-    static void Do(NJson::TJsonValue& json, ui32 index, ui32 queryN, const T& value) {
+    static void Do(NJson::TJsonValue& json, ui32 index, TStringBuf queryName, const T& value) {
         Y_UNUSED(json);
         Y_UNUSED(index);
-        Y_UNUSED(queryN);
+        Y_UNUSED(queryName);
         Y_UNUSED(value);
     }
 };
 
 template<class T, bool is_arr>
 struct TValueToJson<T, true, is_arr> {
-    static void Do(NJson::TJsonValue& json, ui32 index, ui32 queryN, const T& value) {
-        json.AppendValue(BenchmarkUtils::GetSensorValue(ColumnNames[index], DurationToDouble(value), queryN));
+    static void Do(NJson::TJsonValue& json, ui32 index, TStringBuf queryName, const T& value) {
+        json.AppendValue(BenchmarkUtils::GetSensorValue(ColumnNames[index], DurationToDouble(value), queryName));
     }
 };
 
 template<class T>
 struct TValueToJson<T, false, true> {
-    static void Do(NJson::TJsonValue& json, ui32 index, ui32 queryN, const T& value) {
-        json.AppendValue(BenchmarkUtils::GetSensorValue(ColumnNames[index], value, queryN));
+    static void Do(NJson::TJsonValue& json, ui32 index, TStringBuf queryName, const T& value) {
+        json.AppendValue(BenchmarkUtils::GetSensorValue(ColumnNames[index], value, queryName));
     }
 };
 
@@ -264,9 +268,8 @@ void CollectField(TPrettyTable::TRow& tableRow, ui32 index, IOutputStream* csv, 
         }
         TValueToCsv<T, isDuration>::Do(*csv, value);
     }
-    auto queryN = rowName;
-    if(json && queryN.SkipPrefix("Query")) {
-        TValueToJson<T, isDuration>::Do(*json, index, FromString<ui32>(queryN), value);
+    if(json) {
+        TValueToJson<T, isDuration>::Do(*json, index, rowName, value);
     }
 }
 
@@ -321,16 +324,13 @@ int TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkload
     TTestInfo sumInfo({}, {});
     TTestInfoProduct productInfo;
 
-    std::map<ui32, TTestInfo> queryRuns;
+    std::map<TString, TTestInfo> queryRuns;
     auto qIter = qtokens.cbegin();
     GlobalDeadline = (GlobalTimeout != TDuration::Zero()) ? Now() + GlobalTimeout : TInstant::Max();
     for (ui32 queryN = 0; queryN < qtokens.size() && Now() < GlobalDeadline; ++queryN, ++qIter) {
         const auto& qInfo = *qIter;
-        if (!NeedRun(queryN)) {
-            continue;
-        }
-
-        if (!HasCharsInString(qInfo.Query.c_str())) {
+        const TString queryName = qInfo.QueryName.empty() ? Sprintf("Query%02u", queryN) : TString(qInfo.QueryName);
+        if (!NeedRun(queryName) || !HasCharsInString(qInfo.Query.c_str())) {
             continue;
         }
 
@@ -341,7 +341,7 @@ int TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkload
         clientTimings.reserve(IterationsCount);
         serverTimings.reserve(IterationsCount);
 
-        Cout << Sprintf("Query%02u", queryN) << ":" << Endl;
+        Cout << queryName << ":" << Endl;
         if (VerboseLevel > 0) {
             Cout << "Query text:" << Endl;
             Cout << query << Endl << Endl;
@@ -362,7 +362,7 @@ int TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkload
             } catch (...) {
                 res = TQueryBenchmarkResult::Error(CurrentExceptionMessage(), "", "");
             }
-            SavePlans(res, queryN, "explain");
+            SavePlans(res, queryName, "explain");
         }
 
         for (ui32 i = 0; i < IterationsCount; ++i) {
@@ -376,7 +376,7 @@ int TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkload
                 if (client) {
                     auto settings = GetBenchmarkSettings(true);
                     if (PlanFileName) {
-                        settings.PlanFileName = TStringBuilder() << PlanFileName << "." << queryN << "." << ToString(i) << ".in_progress";
+                        settings.PlanFileName = TStringBuilder() << PlanFileName << "." << queryName << "." << ToString(i) << ".in_progress";
                     }
                             res = Execute(query, *client, settings);
                 } else {
@@ -396,12 +396,12 @@ int TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkload
                 serverTimings.emplace_back(res.GetServerTiming());
                 ++successIteration;
                 if (successIteration == 1) {
-                    outFStream << queryN << ": " << Endl;
+                    outFStream << queryName << ": " << Endl;
                     PrintResult(res, outFStream, qInfo.ExpectedResult);
                 }
                 const auto resHash = res.CalcHash();
                 if ((!prevResult || *prevResult != resHash) && !res.IsExpected(qInfo.ExpectedResult)) {
-                    outFStream << queryN << ":" << Endl <<
+                    outFStream << queryName << ":" << Endl <<
                         "Query text:" << Endl <<
                         query << Endl << Endl <<
                         "UNEXPECTED DIFF: " << Endl
@@ -415,20 +415,20 @@ int TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkload
             } else {
                 ++failsCount;
                 Cout << "failed\t" << duration << " seconds" << Endl;
-                Cerr << queryN << ":" << Endl
+                Cerr << queryName << ":" << Endl
                     << "iteration " << i << Endl
                     << res.GetErrorInfo() << Endl;
                 Cerr << "Query text:" << Endl;
                 Cerr << query << Endl << Endl;
                 Sleep(TDuration::Seconds(1));
             }
-            SavePlans(res, queryN, ToString(i));
+            SavePlans(res, queryName, ToString(i));
         }
 
-        auto [inserted, success] = queryRuns.emplace(queryN, TTestInfo(std::move(clientTimings), std::move(serverTimings)));
+        auto [inserted, success] = queryRuns.emplace(queryName, TTestInfo(std::move(clientTimings), std::move(serverTimings)));
         Y_ABORT_UNLESS(success);
         auto& testInfo = inserted->second;
-        CollectStats(statTable, csvReport.Get(), jsonReport.Get(), Sprintf("Query%02u", queryN), successIteration, failsCount, diffsCount, testInfo);
+        CollectStats(statTable, csvReport.Get(), jsonReport.Get(), queryName, successIteration, failsCount, diffsCount, testInfo);
         if (successIteration != IterationsCount) {
             ++queriesWithSomeFails;
         } else {
@@ -459,7 +459,7 @@ int TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkload
 
         for (ui32 rowId = 0; rowId < IterationsCount; ++rowId) {
             ui32 colId = 0;
-            for(auto [_, testInfo] : queryRuns) {
+            for(const auto& [_, testInfo] : queryRuns) {
                 if (colId) {
                     jStream << ",";
                 }
@@ -504,12 +504,12 @@ void TWorkloadCommandBenchmark::PrintResult(const BenchmarkUtils::TQueryBenchmar
     out << Endl << Endl;
 }
 
-void TWorkloadCommandBenchmark::SavePlans(const BenchmarkUtils::TQueryBenchmarkResult& res, ui32 queryNum, const TStringBuf name) const {
+void TWorkloadCommandBenchmark::SavePlans(const BenchmarkUtils::TQueryBenchmarkResult& res, TStringBuf queryName, const TStringBuf name) const {
     if (!PlanFileName) {
         return;
     }
     TFsPath(PlanFileName).Parent().MkDirs();
-    const TString planFName =  TStringBuilder() << PlanFileName << "." << queryNum << "." << name << ".";
+    const TString planFName =  TStringBuilder() << PlanFileName << "." << queryName << "." << name << ".";
     if (res.GetQueryPlan()) {
         {
             TFileOutput out(planFName + "table");

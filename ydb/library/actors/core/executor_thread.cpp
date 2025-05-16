@@ -551,6 +551,7 @@ namespace NActors {
             ExecutionStats.SetCurrentActivationTime(0, 0);
         } else {
             ExecutionStats.AddElapsedCycles(activityType, hpnow - hpprev);
+            ExecutionStats.AddOveraddedCpuUs(Ts2Us(hpnow - hpprev));
             NHPTimer::STime activationStart = ThreadCtx.ActivityContext.ActivationStartTS.load(std::memory_order_acquire);
             NHPTimer::STime passedTime = Max<i64>(hpnow - activationStart, 0);
             ExecutionStats.SetCurrentActivationTime(activityType, Ts2Us(passedTime));
@@ -569,6 +570,7 @@ namespace NActors {
     }
 
     void TExecutorThread::GetCurrentStatsForHarmonizer(TExecutorThreadStats& statsCopy) {
+        UpdateThreadStats();
         statsCopy.SafeElapsedTicks = RelaxedLoad(&ExecutionStats.Stats->SafeElapsedTicks);
         statsCopy.SafeParkedTicks = RelaxedLoad(&ExecutionStats.Stats->SafeParkedTicks);
         statsCopy.CpuUs = RelaxedLoad(&ExecutionStats.Stats->CpuUs);
@@ -576,6 +578,7 @@ namespace NActors {
     }
 
     void TExecutorThread::GetSharedStatsForHarmonizer(i16 poolId, TExecutorThreadStats &stats) {
+        UpdateThreadStats();
         stats.SafeElapsedTicks = RelaxedLoad(&Stats[poolId].SafeElapsedTicks);
         stats.SafeParkedTicks = RelaxedLoad(&Stats[poolId].SafeParkedTicks);
         stats.CpuUs = RelaxedLoad(&Stats[poolId].CpuUs);

@@ -112,6 +112,31 @@ def GetLevelColours(maxLevel):
     levelColors[0] = 'red'
     return levelColors
 
+def GetIntersections(portions):
+    points = []
+    for p in portions:
+        points.append((p.PkMin, 1))
+        points.append((p.PkMax, -1))
+
+    points.sort(key=lambda p: p[0])
+    
+    intersections = []
+    prevPk = points[0][0]
+    cur = 0
+    maxIntersections = 0
+    for p in points[1:]:
+        cur += p[1]
+        maxIntersections = max(maxIntersections, cur)
+        r = Rectangle(
+            (prevPk, 0),
+            p[0]-prevPk, cur,
+            linestyle="dashed",
+            linewidth=1,
+        )
+        intersections.append(r)
+        prevPk = p[0]
+    return intersections, maxIntersections
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("""Visualize portions from YDB Column table.
@@ -131,35 +156,45 @@ To get portion info for a table, use ydb cli:
     levelColors = GetLevelColours(portions.MaxCompactionLevel)
     rectangles = [p.ToRectangle(levelColors) for p in portions.Portions]
 
-    dpi = 300
-    figsize = (12000 / dpi, 9000 / dpi)
-    fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-    ax.set_title("Column table portions")
-    ax.add_collection(PatchCollection(rectangles, match_original=True))
+    fig, ax = plt.subplots(nrows=2, ncols=1)
+    for i in [0, 1]:
+        ax[i].set_xlabel("pk")
+        if pk0Type == FirstPkColumnType.Timestamp:
+            ax[i].xaxis.set_major_locator(mdates.AutoDateLocator())
+            ax[i].xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
+            xMin = mdates.date2num(portions.PkMin)
+            xMax = mdates.date2num(portions.PkMax)
+        elif pk0Type == FirstPkColumnType.Integer:
+            xMin = portions.PkMin
+            xMax = portions.PkMax
+        else:
+            raise Exception(f"Unsupported PK column type: {str(pk0Type)}")
+        dx = xMax - xMin
+        ax[i].set_xlim(xMin - 0.05 * dx, xMax + 0.05 * dx)
 
-    ax.set_xlabel("pk")
-    if pk0Type == FirstPkColumnType.Timestamp:
-        ax.xaxis.set_major_locator(mdates.AutoDateLocator())
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
-        xMin = mdates.date2num(portions.PkMin)
-        xMax = mdates.date2num(portions.PkMax)
-    elif pk0Type == FirstPkColumnType.Integer:
-        xMin = portions.PkMin
-        xMax = portions.PkMax
-    else:
-        raise Exception(f"Unsupported PK column type: {str(pk0Type)}")
-    dx = xMax - xMin
-    ax.set_xlim(xMin - 0.05 * dx, xMax + 0.05 * dx)
 
-    ax.set_ylabel("plan_step")
-    ax.yaxis.set_major_locator(mdates.AutoDateLocator())
-    ax.yaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M:%S\n'))
+    ax[0].set_title("Column table portions")
+    ax[0].add_collection(PatchCollection(rectangles, match_original=True))
+
+
+    ax[0].set_ylabel("plan_step")
+    ax[0].yaxis.set_major_locator(mdates.AutoDateLocator())
+    ax[0].yaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M:%S\n'))
     yMin = mdates.date2num(portions.PlanStepMin)
     yMax = mdates.date2num(portions.PlanStepMax)
     dy = yMax - yMin
-    ax.set_ylim(yMin - 0.05 * dy, yMax + 0.05 * dy)
+    ax[0].set_ylim(yMin - 0.05 * dy, yMax + 0.05 * dy)
+
+    intersections, maxIntersections = GetIntersections(portions.Portions)
+    ax[1].set_title("Portion intersections")
+    ax[1].add_collection(PatchCollection(intersections, match_original=True))
+
+    ax[1].set_ylabel("intersection")
+    ax[1].set_ylim(0, maxIntersections * 1.1 + 1)
+    plt.tight_layout()
 
     if args.output_file is None:
         plt.show()
     else:
+        dpi = 300
         plt.savefig(args.output_file, dpi=dpi)

@@ -1,16 +1,16 @@
 import time
 
 from ydb.tests.datashard.lib.vector_base import VectorBase
-from ydb.tests.datashard.lib.vector_index import get_vector, targets
+from ydb.tests.library.common.wait_for import wait_for
+from ydb.tests.datashard.lib.vector_index import BinaryStringConverter, get_vector, targets
 from ydb.tests.datashard.lib.create_table import create_table_sql_request, create_vector_index_sql_request
 from ydb.tests.datashard.lib.types_of_variables import format_sql_value, cleanup_type_name
-from ydb.tests.stress.oltp_workload.workload.type.vector_index import BinaryStringConverter
 
 
 class TestVectorIndexLargeLevelsAndClusters(VectorBase):
     def setup_method(self):
         self.table_name = "table"
-        self.index_name = "vector_idx"
+        self.index_name = "idx_vector_vec_String"
         self.rows_count = 1000
         self.count_prefix = 5
         self.to_binary_string_converters = {
@@ -111,6 +111,7 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
     ):
         vector_index_sql_request = create_vector_index_sql_request(
             table_name=table_path,
+            name_vector_index="idx_vector_vec_String",
             embedding="vec_String",
             prefix=prefix,
             function=function,
@@ -144,6 +145,7 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
             knn_func=targets[function][distance],
             statements=self.create_statements(all_types),
             prefix=prefix,
+            vector_dimension=vector_dimension,
         )
         self._select_top(
             table_path=table_path,
@@ -151,11 +153,14 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
             knn_func=targets[function][distance],
             statements=self.create_statements(all_types),
             prefix=prefix,
+            vector_dimension=vector_dimension,
         )
         self._drop_index(table_path)
 
-    def _select(self, table_path, vector_type, vector_name, col_name, knn_func, statements, numb, prefix):
-        vector = get_vector(vector_type, numb, self.size_vector)
+    def _select(
+        self, table_path, vector_type, vector_name, col_name, knn_func, statements, numb, prefix, vector_dimension
+    ):
+        vector = get_vector(vector_type, numb, vector_dimension)
         select_sql = f"""
                                     $Target = {self.to_binary_string_converters[vector_type].name}(Cast([{vector}] AS List<{vector_type}>));
                                     select {", ".join(statements)}
@@ -179,22 +184,23 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
         values = []
 
         for key in range(1, self.rows_count + 1):
-            vector = get_vector(vector_type, vector_dimension, self.size_vector)
+            vector = get_vector(vector_type, vector_dimension, vector_dimension)
             name = converter.name
             vector_type = converter.vector_type
             values.append(
                 f'''(
-                    {", ".join([format_sql_value(key, type_name) for type_name in pk_types.key()])},
-                    {", ".join([format_sql_value(key, type_name) for type_name in all_types.key()])},
-                    {", ".join([format_sql_value(key % self.count_prefix, type_name) for type_name in prefix.key()])}
-                    Untag({name}([{vector}]), "{vector_type}"))
+                    {", ".join([format_sql_value(key, type_name) for type_name in pk_types.keys()])},
+                    {", ".join([format_sql_value(key, type_name) for type_name in all_types.keys()])},
+                    {", ".join([format_sql_value(key % self.count_prefix, type_name) for type_name in prefix.keys()])},
+                    Untag({name}([{vector}]), "{vector_type}")
+                    )
                     '''
             )
         upsert_sql = f"""
             UPSERT INTO `{table_name}` (
-                {", ".join([f"pk_{cleanup_type_name(type_name)}" for type_name in pk_types.key()])},
-                {", ".join([f"col_{cleanup_type_name(type_name)}" for type_name in all_types.key()])},
-                {", ".join([f"prefix_{cleanup_type_name(type_name)}" for type_name in prefix.key()])},
+                {", ".join([f"pk_{cleanup_type_name(type_name)}" for type_name in pk_types.keys()])},
+                {", ".join([f"col_{cleanup_type_name(type_name)}" for type_name in all_types.keys()])},
+                {", ".join([f"prefix_{cleanup_type_name(type_name)}" for type_name in prefix.keys()])},
                 vec_String
             )
             VALUES {",".join(values)};
@@ -204,10 +210,8 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
     def create_statements(self, all_types):
         return [f"col_{type_name}" for type_name in all_types.keys()]
 
-    def _wait_inddex_ready(self, table_path, vector_type, knn_func, statements, prefix):
-        for _ in range(10):
-            time.sleep(7)
-
+    def _wait_inddex_ready(self, table_path, vector_type, knn_func, statements, prefix, vector_dimension):
+        def predicate():
             try:
                 self._select(
                     table_path=table_path,
@@ -218,11 +222,29 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
                     statements=statements,
                     numb=1,
                     prefix=prefix,
+                    vector_dimension=vector_dimension,
                 )
             except Exception as ex:
-                assert "No global indexes for table" in str(ex), str(ex)
+                return False
+            return True
 
-    def _select_top(self, table_path, vector_type, knn_func, statements, prefix):
+        wait_for(predicate, timeout_seconds=200, step_seconds=5)
+        try:
+            self._select(
+                table_path=table_path,
+                vector_type=vector_type,
+                vector_name="vec_String",
+                col_name="vec_String",
+                knn_func=knn_func,
+                statements=statements,
+                numb=1,
+                prefix=prefix,
+                vector_dimension=vector_dimension,
+            )
+        except Exception as ex:
+            assert str(ex) == "Global index", str(ex)
+
+    def _select_top(self, table_path, vector_type, knn_func, statements, prefix, vector_dimension):
         if prefix == "":
             self._select_assert(
                 table_path=table_path,
@@ -231,6 +253,7 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
                 statements=statements,
                 numb=1,
                 prefix=prefix,
+                vector_dimension=vector_dimension,
             )
         else:
             for numb in range(1, self.count_prefix + 1):
@@ -241,9 +264,10 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
                     statements=statements,
                     numb=numb,
                     prefix=prefix,
+                    vector_dimension=vector_dimension,
                 )
 
-    def _select_assert(self, table_path, vector_type, knn_func, statements, numb, prefix):
+    def _select_assert(self, table_path, vector_type, knn_func, statements, numb, prefix, vector_dimension):
         rows = self._select(
             table_path=table_path,
             vector_type=vector_type,
@@ -253,9 +277,10 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
             statements=statements,
             numb=numb,
             prefix=prefix,
+            vector_dimension=vector_dimension,
         )
 
-        assert len(rows) == 0, "Query returned an empty set"
+        assert len(rows) != 0, "Query returned an empty set"
 
         if knn_func == "Knn::InnerProductSimilarity":
             rows.reverse()
@@ -270,3 +295,9 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
             DROP INDEX `{self.index_name}`;
         """
         self.query(drop_index_sql)
+
+    def _drop_table(self, table_path):
+        drop_table_sql = f"""
+            DROP TABLE `{table_path}`;
+        """
+        self.query(drop_table_sql)

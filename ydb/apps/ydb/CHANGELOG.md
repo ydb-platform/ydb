@@ -1,3 +1,4 @@
+* Fixed a bug where ydb cli was trying to read parameters from stdin even if it had no data.
 * Add `--replace` option to `ydb tools restore` command. If enabled, scheme objects present in the backup would be dropped before restoring.
 * Added date range parameters (--date-to, --date-from to support uniform PK distribution) for ydb workload log run operations including bulk_upsert, insert, and upsert
 * Do not save to local backups destination tables of `ASYNC REPLICATION` and its changefeeds. It prevents duplication of changefeeds and reduces the amount of space the backup takes on disk.

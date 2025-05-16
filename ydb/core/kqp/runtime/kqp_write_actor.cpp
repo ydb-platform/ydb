@@ -1843,7 +1843,7 @@ public:
 
     bool Process() {
         ProcessRequestQueue();
-        if (!ProcessRead()) {
+        if (!ProcessLookup()) {
             return false;
         }
         if (!ProcessWrite()) {
@@ -1939,7 +1939,7 @@ public:
         return true;
     }
 
-    bool ProcessRead() {
+    bool ProcessLookup() {
         return true;
     }
 

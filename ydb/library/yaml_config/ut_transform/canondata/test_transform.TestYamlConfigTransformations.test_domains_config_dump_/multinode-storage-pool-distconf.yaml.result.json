@@ -10,48 +10,32 @@
           {
             "NodeId":1,
             "Port":19001,
-            "Host":"ydb-node-zone-a.local",
-            "InterconnectHost":"ydb-node-zone-a.local",
+            "Host":"host1",
+            "InterconnectHost":"host1",
             "Location":
               {
                 "Body":1,
-                "DataCenter":"zone-a",
+                "DataCenter":"default",
                 "Rack":"generated-rack-1"
               }
           },
           {
             "NodeId":2,
             "Port":19001,
-            "Host":"ydb-node-zone-b.local",
-            "InterconnectHost":"ydb-node-zone-b.local",
+            "Host":"host2",
+            "InterconnectHost":"host2",
             "Location":
               {
                 "Body":2,
-                "DataCenter":"zone-b",
+                "DataCenter":"default",
                 "Rack":"generated-rack-2"
-              }
-          },
-          {
-            "NodeId":3,
-            "Port":19001,
-            "Host":"ydb-node-zone-c.local",
-            "InterconnectHost":"ydb-node-zone-c.local",
-            "Location":
-              {
-                "Body":3,
-                "DataCenter":"zone-c",
-                "Rack":"generated-rack-3"
               }
           }
         ]
     },
   "InterconnectConfig":
     {
-      "StartTcp":true,
-      "EncryptionMode":"OPTIONAL",
-      "PathToCertificateFile":"/opt/ydb/certs/node.crt",
-      "PathToPrivateKeyFile":"/opt/ydb/certs/node.key",
-      "PathToCaFile":"/opt/ydb/certs/ca.crt"
+      "StartTcp":true
     },
   "DomainsConfig":
     {
@@ -68,14 +52,8 @@
                   "Kind":"ssd",
                   "PoolConfig":
                     {
+                      "BoxId":1,
                       "ErasureSpecies":"mirror-3-dc",
-                      "Geometry":
-                        {
-                          "RealmLevelBegin":10,
-                          "RealmLevelEnd":20,
-                          "DomainLevelBegin":10,
-                          "DomainLevelEnd":256
-                        },
                       "VDiskKind":"Default",
                       "Kind":"ssd",
                       "PDiskFilter":
@@ -85,6 +63,27 @@
                               [
                                 {
                                   "Type":"SSD"
+                                }
+                              ]
+                          }
+                        ]
+                    }
+                },
+                {
+                  "Kind":"hdd",
+                  "PoolConfig":
+                    {
+                      "BoxId":1,
+                      "ErasureSpecies":"mirror-3-dc",
+                      "VDiskKind":"Default",
+                      "Kind":"ssd",
+                      "PDiskFilter":
+                        [
+                          {
+                            "Property":
+                              [
+                                {
+                                  "Type":"ROT"
                                 }
                               ]
                           }
@@ -223,15 +222,7 @@
             "Drive":
               [
                 {
-                  "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                  "Type":"SSD"
-                },
-                {
-                  "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_02",
-                  "Type":"SSD"
-                },
-                {
-                  "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_03",
+                  "Path":"ydb.data",
                   "Type":"SSD"
                 }
               ]
@@ -241,33 +232,7 @@
             "Drive":
               [
                 {
-                  "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                  "Type":"SSD"
-                },
-                {
-                  "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_02",
-                  "Type":"SSD"
-                },
-                {
-                  "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_03",
-                  "Type":"SSD"
-                }
-              ]
-          },
-          {
-            "HostConfigId":3,
-            "Drive":
-              [
-                {
-                  "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_01",
-                  "Type":"SSD"
-                },
-                {
-                  "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_02",
-                  "Type":"SSD"
-                },
-                {
-                  "Path":"/dev/disk/by-partlabel/ydb_disk_ssd_03",
+                  "Path":"ydb.data",
                   "Type":"SSD"
                 }
               ]
@@ -285,10 +250,6 @@
               {
                 "HostConfigId":2,
                 "EnforcedNodeId":2
-              },
-              {
-                "HostConfigId":3,
-                "EnforcedNodeId":3
               }
             ]
         }
@@ -329,8 +290,7 @@
             "Node":
               [
                 1,
-                2,
-                3
+                2
               ],
             "Info":
               {
@@ -378,8 +338,7 @@
             "Node":
               [
                 1,
-                2,
-                3
+                2
               ],
             "Info":
               {
@@ -427,8 +386,7 @@
             "Node":
               [
                 1,
-                2,
-                3
+                2
               ],
             "Info":
               {
@@ -476,8 +434,7 @@
             "Node":
               [
                 1,
-                2,
-                3
+                2
               ],
             "Info":
               {
@@ -525,8 +482,7 @@
             "Node":
               [
                 1,
-                2,
-                3
+                2
               ],
             "Info":
               {
@@ -574,8 +530,7 @@
             "Node":
               [
                 1,
-                2,
-                3
+                2
               ],
             "Info":
               {
@@ -623,8 +578,7 @@
             "Node":
               [
                 1,
-                2,
-                3
+                2
               ],
             "Info":
               {
@@ -672,8 +626,7 @@
             "Node":
               [
                 1,
-                2,
-                3
+                2
               ],
             "Info":
               {
@@ -721,8 +674,7 @@
             "Node":
               [
                 1,
-                2,
-                3
+                2
               ],
             "Info":
               {
@@ -770,8 +722,7 @@
             "Node":
               [
                 1,
-                2,
-                3
+                2
               ],
             "Info":
               {
@@ -819,8 +770,7 @@
             "Node":
               [
                 1,
-                2,
-                3
+                2
               ],
             "Info":
               {
@@ -868,8 +818,7 @@
             "Node":
               [
                 1,
-                2,
-                3
+                2
               ],
             "Info":
               {
@@ -917,8 +866,7 @@
             "Node":
               [
                 1,
-                2,
-                3
+                2
               ],
             "Info":
               {
@@ -966,8 +914,7 @@
             "Node":
               [
                 1,
-                2,
-                3
+                2
               ],
             "Info":
               {
@@ -1015,8 +962,7 @@
             "Node":
               [
                 1,
-                2,
-                3
+                2
               ],
             "Info":
               {
@@ -1064,8 +1010,7 @@
             "Node":
               [
                 1,
-                2,
-                3
+                2
               ],
             "Info":
               {
@@ -1112,13 +1057,22 @@
     },
   "GRpcConfig":
     {
-      "Port":2135,
-      "CA":"/opt/ydb/certs/ca.crt",
-      "Cert":"/opt/ydb/certs/node.crt",
-      "Key":"/opt/ydb/certs/node.key"
+      "Port":2135
     },
-  "AuthConfig":
+  "SelfManagementConfig":
     {
-      "PathToRootCA":"/opt/ydb/certs/ca.crt"
+      "Enabled":true,
+      "ErasureSpecies":"mirror-3-dc",
+      "PDiskFilter":
+        [
+          {
+            "Property":
+              [
+                {
+                  "Type":"SSD"
+                }
+              ]
+          }
+        ]
     }
 }

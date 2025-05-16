@@ -17,6 +17,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 namespace NKikimr::NConsole {
 
 using NTabletFlatExecutor::ITransaction;
@@ -229,8 +231,9 @@ private:
     }
 
 public:
-    TConfigsManager(TConsole &self)
+    TConfigsManager(TConsole &self, ::NMonitoring::TDynamicCounterPtr counters)
         : Self(self)
+        , Counters(counters)
     {
     }
 
@@ -249,6 +252,7 @@ public:
 
 private:
     TConsole &Self;
+    ::NMonitoring::TDynamicCounterPtr Counters;
     TConfigsConfig Config;
     // All config items by id.
     TConfigIndex ConfigIndex;

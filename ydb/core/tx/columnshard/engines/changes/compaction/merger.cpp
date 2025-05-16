@@ -225,7 +225,9 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             ++idx;
         }
         auto batchResults = mergeStream.DrainAllParts(checkPoints, indexFields);
-        splitInfo.FillRemapping(std::move(batchResults), NSplitter::TSplitSettings());
+        NSplitter::TSplitSettings settings;
+        settings.SetMaxPortionSize(PortionExpectedSize);
+        splitInfo.FillRemapping(std::move(batchResults), NYDBTest::TControllers::GetColumnShardController()->GetBlobSplitSettings(settings));
     }
 
     using TColumnData = std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>;
@@ -273,7 +275,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             IColumnMerger::TFactory::MakeHolder(commonContext.GetLoader()->GetAccessorConstructor().GetClassName(), commonContext);
         AFL_VERIFY(!!merger)("problem", "cannot create merger")(
             "class_name", commonContext.GetLoader()->GetAccessorConstructor().GetClassName());
-        merger->Start(columnData, mergingContext);
+        merger->Start(std::move(columnData), mergingContext);
 
         for (auto&& batchResult : splitInfo.MutableSplittedBatches()) {
             for (auto&& portion : batchResult.MutablePortions()) {

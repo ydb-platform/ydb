@@ -21,8 +21,8 @@ TConclusionStatus TOneLayerConstructor::DoDeserializeFromJson(const NJson::TJson
             return TConclusionStatus::Fail("incorrect bytes_limit_fraction value (have to be double)");
         }
         BytesLimitFraction = jsonValue.GetDouble();
-        if (BytesLimitFraction < 0.1 || BytesLimitFraction > 1) {
-            return TConclusionStatus::Fail("bytes_limit_fraction have to been in [0.1, 1]");
+        if (BytesLimitFraction < 0 || BytesLimitFraction > 1) {
+            return TConclusionStatus::Fail("bytes_limit_fraction have to been in [0, 1]");
         }
     }
     if (json.Has("expected_portion_size")) {

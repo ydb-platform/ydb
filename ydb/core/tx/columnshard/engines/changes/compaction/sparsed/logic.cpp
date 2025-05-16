@@ -89,7 +89,7 @@ bool TSparsedMerger::TSparsedChunkCursor::AddIndexTo(TWriter& writer) {
 
 void TSparsedMerger::TSparsedChunkCursor::MoveToSignificant(const std::optional<ui32> sourceLowerBound) {
     if (ScanIndex < GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->length()) {
-        MoveToPosition(TBase::GetGlobalPosition(GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->Value(ScanIndex)));
+        AFL_VERIFY(MoveToPosition(TBase::GetGlobalPosition(GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->Value(ScanIndex))));
         if (GetGlobalResultIndexImpl().value_or(0) >= 0) {
             if (!sourceLowerBound || *sourceLowerBound <= GetGlobalPosition()) {
                 return;
@@ -101,7 +101,7 @@ void TSparsedMerger::TSparsedChunkCursor::MoveToSignificant(const std::optional<
         while (ScanIndex < GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->length()) {
             AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "skip_record")("idx", ScanIndex)("cursor_idx", CursorIdx)(
                 "record_idx", GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->Value(ScanIndex))("lb", sourceLowerBound);
-            MoveToPosition(TBase::GetGlobalPosition(GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->Value(ScanIndex)));
+            AFL_VERIFY(MoveToPosition(TBase::GetGlobalPosition(GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->Value(ScanIndex))));
             if (GetGlobalResultIndexImpl().value_or(0) >= 0) {
                 if (!sourceLowerBound || *sourceLowerBound <= GetGlobalPosition()) {
                     return;
@@ -112,7 +112,7 @@ void TSparsedMerger::TSparsedChunkCursor::MoveToSignificant(const std::optional<
     }
     AFL_VERIFY(ScanIndex == GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->length());
     while (TBase::IsValid() && ScanIndex == GetCurrentDataChunk().GetSparsedChunk().GetUI32ColIndex()->length()) {
-        TBase::MoveToPosition(TBase::GetGlobalPosition(GetCurrentDataChunk().GetRecordsCount()));
+        Y_UNUSED(TBase::MoveToPosition(TBase::GetGlobalPosition(GetCurrentDataChunk().GetRecordsCount())));
         ScanIndex = 0;
     }
     if (TBase::IsValid()) {

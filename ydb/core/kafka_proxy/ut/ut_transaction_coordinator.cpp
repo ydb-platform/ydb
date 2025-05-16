@@ -237,6 +237,39 @@ namespace {
             UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
         }
 
+        Y_UNIT_TEST(OnSecondInitProducerId_ShouldSendPoisonPillToTxnActor) {
+            // send valid message
+            ui64 correlationId = 123;
+            TString txnId = "my-tx-id";
+            i64 producerId = 1;
+            i16 producerEpoch = 0;
+            SaveTxnProducer(txnId, producerId, producerEpoch);
+            bool seenEvent = false;
+            TActorId txnActorId;
+            auto observer = [&](TAutoPtr<IEventHandle>& input) {
+                if (auto* event = input->CastAsLocal<NKafka::TEvKafka::TEvEndTxnRequest>()) {
+                    txnActorId = input->Recipient;
+                } else if (auto* event = input->CastAsLocal<TEvents::TEvPoison>()) {
+                    UNIT_ASSERT_VALUES_EQUAL(txnActorId, input->Recipient);
+                    seenEvent = true;
+                }
+
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            };
+            Ctx->Runtime->SetObserverFunc(observer);
+
+            // first request registers actor
+            SendEndTxnRequest(correlationId, txnId, producerId, producerEpoch);
+            // request to save producer with newer epoch should trigger poison pill to current txn actor
+            SaveTxnProducer(txnId, producerId, producerEpoch + 1);
+
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&seenEvent]() {
+                return seenEvent;
+            };
+            UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+        }
+
         Y_UNIT_TEST(OnAddPartitions_ShouldSendBack_PRODUCER_FENCED_ErrorIfProducerIsNotInitialized) {
             ui64 correlationId = 123;
             SendAddPartitionsToTxnRequest(correlationId, "my-tx-id", 1, 0, {{"topic1", {0, 1}}, {"topic2", {0}}});

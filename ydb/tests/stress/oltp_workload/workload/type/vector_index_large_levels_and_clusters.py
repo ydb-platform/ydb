@@ -36,6 +36,8 @@ class WorkloadVectorIndexLargeLevelsAndClusters(WorkloadVectorIndex, WorkloadBas
         distance_data = ["cosine"]  # "cosine", "manhattan", "euclidean"
         similarity_data = ["cosine"]  # "inner_product", "cosine"
         vector_type_data = ["float", "int8"]
+        prefixs = ["", "prefix_String"]
+        covers = [[], [f"col_{cleanup_type_name(type_name)}" for type_name in all_types.keys()]]
         try:
             for vector_type in vector_type_data:
                 for vector_dimension in vector_dimension_data:
@@ -57,40 +59,48 @@ class WorkloadVectorIndexLargeLevelsAndClusters(WorkloadVectorIndex, WorkloadBas
                         vector_dimension=vector_dimension,
                     )
 
-                    for levels in levels_data:
-                        for clusters in clusters_data:
-                            for distance in distance_data:
-                                self._check_loop(
-                                    table_path=table_path,
-                                    function="distance",
-                                    distance=distance,
-                                    vector_type=vector_type,
-                                    vector_dimension=vector_dimension,
-                                    levels=levels,
-                                    clusters=clusters,
-                                    all_types=all_types,
-                                    prefix=""
-                                )
+                    for cover in covers:
+                        for prefix in prefixs:
+                            for levels in levels_data:
+                                for clusters in clusters_data:
+                                    for distance in distance_data:
+                                        self._check_loop(
+                                            table_path=table_path,
+                                            function="distance",
+                                            distance=distance,
+                                            vector_type=vector_type,
+                                            vector_dimension=vector_dimension,
+                                            levels=levels,
+                                            clusters=clusters,
+                                            all_types=all_types,
+                                            prefix=prefix,
+                                            cover=cover,
+                                        )
 
-                    for levels in levels_data:
-                        for clusters in clusters_data:
-                            for similarity in similarity_data:
-                                self._check_loop(
-                                    table_path=table_path,
-                                    function="similarity",
-                                    distance=similarity,
-                                    vector_type=vector_type,
-                                    vector_dimension=vector_dimension,
-                                    levels=levels,
-                                    clusters=clusters,
-                                    all_types=all_types,
-                                    prefix=""
-                                )
+                    for cover in covers:
+                        for prefix in prefixs:
+                            for levels in levels_data:
+                                for clusters in clusters_data:
+                                    for similarity in similarity_data:
+                                        self._check_loop(
+                                            table_path=table_path,
+                                            function="similarity",
+                                            distance=similarity,
+                                            vector_type=vector_type,
+                                            vector_dimension=vector_dimension,
+                                            levels=levels,
+                                            clusters=clusters,
+                                            all_types=all_types,
+                                            prefix=prefix,
+                                            cover=cover,
+                                        )
                     self._drop_table(table_path)
         except Exception as ex:
             logger.info(f"ERRROR {ex}")
 
-    def _create_index(self, table_path, function, distance, vector_type, vector_dimension, levels, clusters, prefix):
+    def _create_index(
+        self, table_path, function, distance, vector_type, vector_dimension, levels, clusters, prefix, cover
+    ):
         vector_index_sql_request = create_vector_index_sql_request(
             table_name=table_path,
             embedding="vec_String",
@@ -102,11 +112,13 @@ class WorkloadVectorIndexLargeLevelsAndClusters(WorkloadVectorIndex, WorkloadBas
             vector_dimension=vector_dimension,
             levels=levels,
             clusters=clusters,
-            cover={},
+            cover=cover,
         )
         self.client.query(vector_index_sql_request, True)
 
-    def _check_loop(self, table_path, function, distance, vector_type, vector_dimension, levels, clusters, all_types, prefix):
+    def _check_loop(
+        self, table_path, function, distance, vector_type, vector_dimension, levels, clusters, all_types, prefix, cover
+    ):
         self._create_index(
             table_path=table_path,
             function=function,
@@ -115,22 +127,22 @@ class WorkloadVectorIndexLargeLevelsAndClusters(WorkloadVectorIndex, WorkloadBas
             vector_dimension=vector_dimension,
             levels=levels,
             clusters=clusters,
-            prefix=prefix
+            prefix=prefix,
+            cover=cover,
         )
         self._wait_inddex_ready(
             table_path=table_path,
             vector_type=vector_type,
             knn_func=self.targets[function][distance],
             statements=self.create_statements(all_types),
-            prefix=prefix
+            prefix=prefix,
         )
         self._select_top(
             table_path=table_path,
             vector_type=vector_type,
             knn_func=self.targets[function][distance],
             statements=self.create_statements(all_types),
-            numb=1,
-            prefix=prefix
+            prefix=prefix,
         )
         self._drop_index(table_path)
 
@@ -166,7 +178,7 @@ class WorkloadVectorIndexLargeLevelsAndClusters(WorkloadVectorIndex, WorkloadBas
                 f'''(
                     {", ".join([format_sql_value(key, type_name) for type_name in pk_types.key()])},
                     {", ".join([format_sql_value(key, type_name) for type_name in all_types.key()])},
-                    {", ".join([format_sql_value(key%self.count_prefix, type_name) for type_name in prefix.key()])}
+                    {", ".join([format_sql_value(key % self.count_prefix, type_name) for type_name in prefix.key()])}
                     Untag({name}([{vector}]), "{vector_type}"))
                     '''
             )
@@ -184,7 +196,7 @@ class WorkloadVectorIndexLargeLevelsAndClusters(WorkloadVectorIndex, WorkloadBas
     def create_statements(self, all_types):
         return [f"col_{type_name}" for type_name in all_types.keys()]
 
-    def _wait_inddex_ready(self, table_path, vector_type, knn_func, statements,prefix):
+    def _wait_inddex_ready(self, table_path, vector_type, knn_func, statements, prefix):
         for _ in range(10):
             time.sleep(7)
 
@@ -197,7 +209,7 @@ class WorkloadVectorIndexLargeLevelsAndClusters(WorkloadVectorIndex, WorkloadBas
                     knn_func=knn_func,
                     statements=statements,
                     numb=1,
-                    prefix=prefix
+                    prefix=prefix,
                 )
             except Exception as ex:
                 if "No global indexes for table" in str(ex):
@@ -207,8 +219,35 @@ class WorkloadVectorIndexLargeLevelsAndClusters(WorkloadVectorIndex, WorkloadBas
             return
         raise Exception("Error getting index status")
 
-    def _select_top(self, table_path, vector_type, knn_func, statements, numb, prefix):
+    def _select_top(self, table_path, vector_type, knn_func, statements, prefix):
         logger.info("Select values from table")
+        if prefix == "":
+            try:
+                self._select_assert(
+                    table_path=table_path,
+                    vector_type=vector_type,
+                    knn_func=knn_func,
+                    statements=statements,
+                    numb=1,
+                    prefix=prefix,
+                )
+            except Exception as ex:
+                raise ex
+        else:
+            for numb in range(1, self.count_prefix + 1):
+                try:
+                    self._select_assert(
+                        table_path=table_path,
+                        vector_type=vector_type,
+                        knn_func=knn_func,
+                        statements=statements,
+                        numb=numb,
+                        prefix=prefix,
+                    )
+                except Exception as ex:
+                    raise ex
+
+    def _select_assert(self, table_path, vector_type, knn_func, statements, numb, prefix):
         result_set = self._select(
             table_path=table_path,
             vector_type=vector_type,
@@ -217,7 +256,7 @@ class WorkloadVectorIndexLargeLevelsAndClusters(WorkloadVectorIndex, WorkloadBas
             knn_func=knn_func,
             statements=statements,
             numb=numb,
-            prefix=prefix
+            prefix=prefix,
         )
         if len(result_set) == 0:
             raise Exception("Query returned an empty set")

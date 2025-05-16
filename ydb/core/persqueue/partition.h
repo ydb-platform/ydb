@@ -483,7 +483,7 @@ public:
     void Bootstrap(const TActorContext& ctx);
 
     ui64 Size() const {
-        return BlobEncoder.GetSize();
+        return CompactionBlobEncoder.GetSize();
     }
 
     // The size of the data realy was persisted in the storage by the partition

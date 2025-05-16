@@ -256,7 +256,7 @@ void TPartition::EmplaceResponse(TMessage&& message, const TActorContext& ctx) {
 }
 
 ui64 TPartition::UserDataSize() const {
-    if (BlobEncoder.DataKeysBody.size() <= 1) {
+    if (CompactionBlobEncoder.DataKeysBody.size() <= 1) {
         // tiny optimization - we do not meter very small queues up to 16MB
         return 0;
     }
@@ -265,7 +265,7 @@ ui64 TPartition::UserDataSize() const {
     // maintained by the background process. However, the last block may contain several irrelevant
     // messages. Because of them, we throw out the size of the entire blob.
     auto size = Size();
-    auto lastBlobSize = BlobEncoder.DataKeysBody[0].Size;
+    auto lastBlobSize = CompactionBlobEncoder.DataKeysBody[0].Size;
     Y_DEBUG_ABORT_UNLESS(size >= lastBlobSize, "Metering data size must be positive");
     return size >= lastBlobSize ? size - lastBlobSize : 0;
 }

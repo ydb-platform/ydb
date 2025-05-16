@@ -579,7 +579,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     }
     PQ_LOG_D(ss);
 
-    CheckHeadConsistency();
+    CompactionBlobEncoder.CheckHeadConsistency(CompactLevelBorder, TotalLevels, TotalMaxCount);
 
     Become(&TThis::StateIdle);
     InitDuration = ctx.Now() - CreationTime;

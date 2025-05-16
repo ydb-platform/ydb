@@ -95,6 +95,6 @@ Yandex Enterprise Database distributions are available for download via the link
 || **v23.4** |  |  |  |  ||
 || v.23.4.11 | 14.05.24 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.4.11` | [See list](../changelog-server.md#23-4) ||
 || **v23.3** |  |  |  |  ||
-|| v.23.3.17 | 14.12.23 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.3.17` | [See list](../changelog-server-23.md#23-3-17) ||
+|| v.23.3.17 | 14.12.23 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.3.17` | [See list](../changelog-server.md#23-3-17) ||
 || v.23.3.13 | 12.10.23 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:23.3.13` | [See list](../changelog-server.md#23-3) ||
 |#

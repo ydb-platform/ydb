@@ -154,6 +154,10 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def binary_path(self):
         return self.__binary_path
 
+    @binary_path.setter
+    def binary_path(self, value):
+        self.__binary_path = value
+
     @property
     def command(self):
         return self.__make_run_command()
@@ -277,6 +281,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
     def start(self):
         try:
+            self.update_command(self.__make_run_command())
             super(KiKiMRNode, self).start()
         finally:
             logger.info("Started node %s", self)

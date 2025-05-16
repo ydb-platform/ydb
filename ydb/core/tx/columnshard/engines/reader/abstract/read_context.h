@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
+#include <ydb/core/tx/conveyor/usage/config.h>
 
 #include <ydb/library/accessor/accessor.h>
 
@@ -148,7 +149,7 @@ public:
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const NColumnShard::TConcreteScanCounters& counters, const TReadMetadataBase::TConstPtr& readMetadata, const TActorId& scanActorId,
         const TActorId& resourceSubscribeActorId, const TActorId& readCoordinatorActorId, const TComputeShardingPolicy& computeShardingPolicy,
-        const ui64 scanId);
+        const ui64 scanId, const NConveyor::TCPULimitsConfig& cpuLimits);
 };
 
 class IDataReader {

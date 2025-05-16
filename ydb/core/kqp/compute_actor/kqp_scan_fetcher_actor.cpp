@@ -26,7 +26,8 @@ static constexpr ui64 MAX_SHARD_RESOLVES = 3;
 TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snapshot, const TComputeRuntimeSettings& settings,
     std::vector<NActors::TActorId>&& computeActors, const ui64 txId, const TMaybe<ui64> lockTxId, const ui32 lockNodeId,
     const TMaybe<NKikimrDataEvents::ELockMode> lockMode, const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta,
-    const TShardsScanningPolicy& shardsScanningPolicy, TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId)
+    const TShardsScanningPolicy& shardsScanningPolicy, TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId,
+    const TCPULimits& cpuLimits)
     : Meta(meta)
     , ScanDataMeta(Meta)
     , RuntimeSettings(settings)
@@ -34,6 +35,7 @@ TKqpScanFetcherActor::TKqpScanFetcherActor(const NKikimrKqp::TKqpSnapshot& snaps
     , LockTxId(lockTxId)
     , LockNodeId(lockNodeId)
     , LockMode(lockMode)
+    , CPULimits(cpuLimits)
     , ComputeActorIds(std::move(computeActors))
     , Snapshot(snapshot)
     , ShardsScanningPolicy(shardsScanningPolicy)
@@ -496,6 +498,11 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEv
         Meta.GetOlapProgram().SerializeToArcadiaStream(&stream);
         ev->Record.SetOlapProgram(programBytes);
         ev->Record.SetOlapProgramType(NKikimrSchemeOp::EOlapProgramType::OLAP_PROGRAM_SSA_PROGRAM_WITH_PARAMETERS);
+    }
+
+    if (const auto cpuGroupThreadsLimit = CPULimits.GetCPUGroupThreadsLimitOptional()) {
+        ev->Record.SetCpuGroupThreadsLimit(*cpuGroupThreadsLimit);
+        ev->Record.SetCpuGroupName(CPULimits.GetCPUGroupName());
     }
 
     ev->Record.SetDataFormat(Meta.GetDataFormat());

@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/tx.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -2030,6 +2031,15 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    struct SysView : Table<119> {
+        struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct SysViewType : Column<3, NScheme::NTypeIds::Uint32> { using Type = NKikimrSysView::ESysViewType; };
+
+        using TKey = TableKey<PathId>;
+        using TColumns = TableColumns<PathId, AlterVersion, SysViewType>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2146,7 +2156,8 @@ struct Schema : NIceDb::Schema {
         DataErasureGenerations,
         WaitingDataErasureTenants,
         TenantDataErasureGenerations,
-        WaitingDataErasureShards
+        WaitingDataErasureShards,
+        SysView
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

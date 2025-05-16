@@ -1,4 +1,4 @@
-#include "kqp_new_rbo.h"
+#include "kqp_rbo.h"
 #include <yql/essentials/utils/log/log.h>
 
 namespace NKikimr {

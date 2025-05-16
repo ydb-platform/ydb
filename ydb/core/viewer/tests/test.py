@@ -6,7 +6,7 @@ from urllib.parse import urlencode
 import time
 
 
-cluster = KiKiMR(KikimrConfigGenerator(enable_alter_database_create_hive_first=True))
+cluster = KiKiMR(KikimrConfigGenerator(enable_alter_database_create_hive_first=True, extra_feature_flags=["enable_resource_pools"]))
 cluster.start()
 domain_name = '/' + cluster.domain_name
 dedicated_db = domain_name + "/dedicated_db"

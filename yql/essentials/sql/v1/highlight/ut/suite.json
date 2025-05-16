@@ -1,0 +1,95 @@
+{
+  "Invalid": [
+    ["!", "E"],
+    ["й", "E#E"],
+    ["编", "E#E#E"],
+    ["\uD83D\uDE00", "E#E#E#E"],
+    ["!select", "E#KKKKKK"],
+    ["!SSelect", "E#IIIIIII"]
+  ],
+  "Operation": [
+    ["(1 + 21 / 4)", "P#L#_#P#_#LL#_#P#_#L#P"],
+    ["(1+21/4)", "P#L#P#LL#P#L#P"]
+  ],
+  "ANSI": [
+    ["--_ansi_lexer\n\n/*/**/*/", "CCCCCCCCCCCCCC#_#CCCCCC#P#P"],
+    ["--!ansi_lexer\n\n/*/**/*/", "CCCCCCCCCCCCCC#_#CCCCCCCC"],
+    ["--_ansi_lexer\n\n\"\\\"\"", "CCCCCCCCCCCCCC#_#SSSS"],
+    ["--!ansi_lexer\n\n\"\\\"\"", "CCCCCCCCCCCCCC#_#SSS#E"],
+    ["\n --!ansi_lexer\n\n/*/**/*/", "_#_#CCCCCCCCCCCCCC#_#CCCCCCCC"]
+  ],
+  "Number": [
+    ["1234", "LLLL"],
+    ["-123", "P#LLL"],
+    ["SELECT 123l AS `Int64`, 0b01u AS `Uint32`, 0xFFul AS `Uint64`, 0o7ut AS `Uint8`, 456s AS `Int16`, 1.2345f AS `Float`;", "KKKKKK#_#LLLL#_#KK#_#QQQQQQQ#P#_#LLLLL#_#KK#_#QQQQQQQQ#P#_#LLLLLL#_#KK#_#QQQQQQQQ#P#_#LLLLL#_#KK#_#QQQQQQQ#P#_#LLLL#_#KK#_#QQQQQQQ#P#_#LLLLLLL#_#KK#_#QQQQQQQ#P"]
+  ],
+  "Comment": [
+    ["- select", "P#_#KKKKKK"],
+    ["select -- select", "KKKKKK#_#CCCCCCCCC"],
+    ["-- select\nselect", "CCCCCCCCCC#KKKKKK"],
+    ["/* select */", "CCCCCCCCCCCC"],
+    ["select /* select */ select", "KKKKKK#_#CCCCCCCCCCCC#_#KKKKKK"],
+    ["/**/ --", "CCCC#_#CC"],
+    ["/*/**/*/", "CCCCCC#P#P"]
+  ],
+  "FunctionIdentifier": [
+    ["MIN", "III"],
+    ["min", "III"],
+    ["MIN(123, 65)", "FFF#P#LLL#P#_#LL#P"],
+    ["minimum", "IIIIIII"],
+    ["MINimum", "IIIIIII"],
+    ["Math::Sin", "FFFFFFFFF"],
+    ["Math", "IIII"],
+    ["Math::", "IIII#PP"],
+    ["::Sin", "PP#III"]
+  ],
+  "SQL": [
+    ["SELECT id, alias from users", "KKKKKK#_#II#P#_#IIIII#_#KKKK#_#IIIII"],
+    ["INSERT INTO users (id, alias) VALUES (12, \"tester\")", "KKKKKK#_#KKKK#_#IIIII#_#P#II#P#_#IIIII#P#_#KKKKKK#_#P#LL#P#_#SSSSSSSS#P"],
+    ["SELECT 123467, \"HeLLo, {name}!\", (1 + (5 * 1 / 0)), MIN(identifier) FROM `local/test/space/table` JOIN test;", "KKKKKK#_#LLLLLL#P#_#SSSSSSSSSSSSSSSS#P#_#P#L#_#P#_#P#L#_#P#_#L#_#P#_#L#P#P#P#_#FFF#P#IIIIIIIIII#P#_#KKKK#_#QQQQQQQQQQQQQQQQQQQQQQQQ#_#KKKK#_#IIII#P"],
+    ["SELECT Bool(phone) FROM customer", "KKKKKK#_#TTTT#P#IIIII#P#_#KKKK#_#IIIIIIII"]
+  ],
+  "TypeIdentifier": [
+    ["Bool", "TTTT"],
+    ["Bool(value)", "TTTT#P#IIIII#P"]
+  ],
+  "Identifier": [
+    ["test", "IIII"]
+  ],
+  "Keyword": [
+    ["SELECT", "KKKKKK"],
+    ["select", "KKKKKK"],
+    ["ALTER", "KKKKK"],
+    ["GROUP BY", "KKKKK#_#KK"],
+    ["INSERT", "KKKKKK"]
+  ],
+  "String": [
+    ["\"\"", "SS"],
+    ["\"test\"", "SSSSSS"],
+    ["\"", "E"],
+    ["\"\"\"", "SS#E"],
+    ["\"\\\"", "E#E#E"],
+    ["\"test select from", "E#IIII#_#KKKKKK#_#KKKK"],
+    ["\"\\\"\"", "SSSS"],
+    ["\"select\"select", "SSSSSSSSS#IIIII"],
+    ["\"select\"group", "SSSSSSSS#KKKKK"],
+    ["SELECT \"\uD83D\uDE00\" FROM test", "KKKKKK#_#SSSSSS#_#KKKK#_#IIII"]
+  ],
+  "Blank": [
+    ["", ""],
+    [" ", "_"],
+    ["   ", "_#_#_"],
+    ["\n", "_"],
+    ["\n\n", "_#_"],
+    ["\r\n", "_#_"],
+    ["\r", "_"],
+    ["\r\n\n", "_#_#_"],
+    ["\r\n\r\n", "_#_#_#_"]
+  ],
+  "QuotedIdentifier": [
+    ["`/cluster/database`", "QQQQQQQQQQQQQQQQQQQ"],
+    ["`test`select", "QQQQQQ#KKKKKK"],
+    ["`/cluster", "E#P#IIIIIII"],
+    ["`\uD83D\uDE00`", "QQQQQQ"]
+  ]
+}

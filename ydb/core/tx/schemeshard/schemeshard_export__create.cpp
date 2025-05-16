@@ -376,7 +376,9 @@ private:
         );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
-        if (item.SourcePathType == NKikimrSchemeOp::EPathTypeView) {
+        if (item.SourcePathType == NKikimrSchemeOp::EPathTypeView 
+            || item.SourcePathType == NKikimrSchemeOp::EPathTypePersQueueGroup)
+        {
             Ydb::Export::ExportToS3Settings exportSettings;
             Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo->Settings));
             const auto databaseRoot = CanonizePath(Self->RootPathElements);
@@ -452,7 +454,9 @@ private:
                     // Anonymize object name in export
                     itemPrefix << std::setfill('0') << std::setw(3) << std::right << itemIndex;
                 } else {
-                    itemPrefix << exportPath;
+                    TStringBuf exportPathBuf = exportPath;
+                    exportPathBuf.SkipPrefix("/");
+                    itemPrefix << exportPathBuf;
                 }
                 destinationPrefix = itemPrefix.str();
             }

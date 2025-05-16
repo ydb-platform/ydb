@@ -109,7 +109,7 @@ AWS_STATIC_IMPL int aws_add_u64_checked(uint64_t a, uint64_t b, uint64_t *r) {
     uint64_t res, flag;
     __asm__("adds %x[res], %x[arga], %x[argb]\n"
             "csinv %x[flag], xzr, xzr, cc\n"
-            : /* inout: res is the result of addition; flag is -1 if carry happened */ 
+            : /* inout: res is the result of addition; flag is -1 if carry happened */
 	      [res]"=&r"(res), [flag] "=r"(flag)
             : /* in: a and b */ [arga] "r"(a), [argb] "r"(b)
             : /* clobbers: cc (cmp clobbers condition codes) */ "cc");

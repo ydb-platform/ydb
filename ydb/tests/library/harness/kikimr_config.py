@@ -170,6 +170,7 @@ class KikimrConfigGenerator(object):
             simple_config=False,
             breakpad_minidumps_path=None,
             breakpad_minidumps_script=None,
+            explicit_hosts_and_host_configs=False,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -180,8 +181,10 @@ class KikimrConfigGenerator(object):
         self.use_self_management = use_self_management
         self.simple_config = simple_config
         self.suppress_version_check = suppress_version_check
+        self.explicit_hosts_and_host_configs = explicit_hosts_and_host_configs
         if use_self_management:
             self.suppress_version_check = False
+            self.explicit_hosts_and_host_configs = True
         self._pdisk_store_path = pdisk_store_path
         self.static_pdisk_size = static_pdisk_size
         self.app_config = config_pb2.TAppConfig()
@@ -480,14 +483,16 @@ class KikimrConfigGenerator(object):
             self.yaml_config["kafka_proxy_config"] = kafka_proxy_config
 
         self.full_config = dict()
+        if self.explicit_hosts_and_host_configs:
+            self._add_host_config_and_hosts()
+            self.yaml_config.pop("nameservice_config")
         if self.use_self_management:
             self.yaml_config["domains_config"].pop("security_config")
             self.yaml_config["default_disk_type"] = "ROT"
             self.yaml_config["fail_domain_type"] = "rack"
-            self._add_host_config_and_hosts()
             self.yaml_config["erasure"] = self.yaml_config.pop("static_erasure")
 
-            for name in ['blob_storage_config', 'domains_config', 'nameservice_config', 'system_tablets', 'grpc_config',
+            for name in ['blob_storage_config', 'domains_config', 'system_tablets', 'grpc_config',
                          'channel_profile_config', 'interconnect_config']:
                 del self.yaml_config[name]
         if self.simple_config:
@@ -780,5 +785,5 @@ class KikimrConfigGenerator(object):
             self.yaml_config["blob_storage_config"]["service_set"]["groups"][0]["rings"].append({"fail_domains": []})
 
         self._add_state_storage_config()
-        if not self.use_self_management:
+        if not self.use_self_management and not self.explicit_hosts_and_host_configs:
             self._initialize_pdisks_info()

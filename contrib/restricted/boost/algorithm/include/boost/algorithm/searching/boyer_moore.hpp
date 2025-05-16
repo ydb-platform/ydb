@@ -10,6 +10,7 @@
 #ifndef BOOST_ALGORITHM_BOYER_MOORE_SEARCH_HPP
 #define BOOST_ALGORITHM_BOYER_MOORE_SEARCH_HPP
 
+#include <algorithm>    // for std::reverse_copy
 #include <iterator>     // for std::iterator_traits
 
 #include <boost/config.hpp>

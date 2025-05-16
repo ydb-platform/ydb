@@ -1,3 +1,10 @@
+class BinaryStringConverter:
+    def __init__(self, name, data_type, vector_type):
+        self.name = name
+        self.data_type = data_type
+        self.vector_type = vector_type
+
+
 def get_vector(type, numb, size_vector):
     if type == "Float":
         values = [float(i) for i in range(size_vector - 1)]

@@ -13,45 +13,49 @@
 #include <limits.h>
 #include <stdlib.h>
 
-AWS_EXTERN_C_BEGIN
+#ifndef __has_builtin
+#    define __has_builtin(x) 0
+#endif
 
-#if defined(AWS_HAVE_GCC_OVERFLOW_MATH_EXTENSIONS) && (defined(__clang__) || !defined(__cplusplus))
-/*
- * GCC and clang have these super convenient overflow checking builtins...
- * but (in the case of GCC) they're only available when building C source.
- * We'll fall back to one of the other inlinable variants (or a non-inlined version)
- * if we are building this header on G++.
- */
+/* CBMC is its own thing */
+#if defined(CBMC)
+#    include <aws/common/math.cbmc.inl>
+
+/* Prefer GCC-style overflow builtins */
+#elif defined(AWS_HAVE_GCC_OVERFLOW_MATH_EXTENSIONS) || __has_builtin(__builtin_add_overflow)
+#    include <aws/common/math.gcc_builtin.inl>
 #    include <aws/common/math.gcc_overflow.inl>
+
+/* Fall back on GCC-style assembly, and ancient builtins available in all versions of GCC and Clang we support */
 #elif defined(__x86_64__) && defined(AWS_HAVE_GCC_INLINE_ASM)
+#    include <aws/common/math.gcc_builtin.inl>
 #    include <aws/common/math.gcc_x64_asm.inl>
+
+/* Fall back on GCC-style assembly, and ancient builtins available in all versions of GCC and Clang we support */
 #elif defined(__aarch64__) && defined(AWS_HAVE_GCC_INLINE_ASM)
 #    include <aws/common/math.gcc_arm64_asm.inl>
-#elif defined(AWS_HAVE_MSVC_INTRINSICS_X64)
-#    include <aws/common/math.msvc.inl>
-#elif defined(CBMC)
-#    include <aws/common/math.cbmc.inl>
-#else
-#    ifndef AWS_HAVE_GCC_OVERFLOW_MATH_EXTENSIONS
-/* Fall back to the pure-C implementations */
-#        include <aws/common/math.fallback.inl>
-#    else
-/*
- * We got here because we are building in C++ mode but we only support overflow extensions
- * in C mode. Because the fallback is _slow_ (involving a division), we'd prefer to make a
- * non-inline call to the fast C intrinsics.
- */
-#    endif /*  AWS_HAVE_GCC_OVERFLOW_MATH_EXTENSIONS */
-#endif     /*  defined(AWS_HAVE_GCC_OVERFLOW_MATH_EXTENSIONS) && (defined(__clang__) || !defined(__cplusplus)) */
-
-#if defined(__clang__) || defined(__GNUC__)
 #    include <aws/common/math.gcc_builtin.inl>
+
+/* On MSVC, use intrinsics */
+#elif defined(AWS_HAVE_MSVC_INTRINSICS_X64)
+#    include <aws/common/math.msvc_x64.inl>
+
+/* Fall back to pure C implementation */
+#else
+#    include <aws/common/math.fallback.inl>
 #endif
+
+AWS_EXTERN_C_BEGIN
 
 #ifdef _MSC_VER
 #    pragma warning(push)
 #    pragma warning(disable : 4127) /*Disable "conditional expression is constant" */
-#endif                              /* _MSC_VER */
+#elif defined(__GNUC__)
+#    pragma GCC diagnostic push
+#    if defined(__cplusplus) && !defined(__clang__)
+#        pragma GCC diagnostic ignored "-Wuseless-cast" /* Warning is C++ only (not C), and GCC only (not clang) */
+#    endif
+#endif
 
 AWS_STATIC_IMPL uint64_t aws_sub_u64_saturating(uint64_t a, uint64_t b) {
     return a <= b ? 0 : a - b;
@@ -190,6 +194,8 @@ AWS_STATIC_IMPL int aws_round_up_to_power_of_two(size_t n, size_t *result) {
 
 #ifdef _MSC_VER
 #    pragma warning(pop)
+#elif defined(__GNUC__)
+#    pragma GCC diagnostic pop
 #endif /* _MSC_VER */
 
 AWS_STATIC_IMPL uint8_t aws_min_u8(uint8_t a, uint8_t b) {

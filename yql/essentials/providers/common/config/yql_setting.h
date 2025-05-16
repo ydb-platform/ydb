@@ -12,7 +12,8 @@ namespace NCommon {
 
 const TString ALL_CLUSTERS = "$all";
 
-template <typename TType, bool RUNTIME = true>
+// TODO: replace RUNTIME/PERCLUSTER with enum
+template <typename TType, bool RUNTIME = true, bool PERCLUSTER = false>
 class TConfSetting {
 public:
     TConfSetting() = default;
@@ -80,7 +81,7 @@ private:
 };
 
 template <typename TType>
-class TConfSetting<TType, false> {
+class TConfSetting<TType, false, false> {
 public:
     TConfSetting() = default;
     TConfSetting(const TType& value)
@@ -97,7 +98,7 @@ public:
 
     TType& operator[](const TString& cluster) {
         if (cluster != ALL_CLUSTERS) {
-            ythrow yexception() << "Static setting cannot be set for specific cluster";
+            ythrow yexception() << "Global static setting cannot be set for specific cluster";
         }
         Value.ConstructInPlace();
         return Value.GetRef();

@@ -12,13 +12,14 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(0.9.17)
+VERSION(0.12.3)
 
-ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-common/archive/v0.9.17.tar.gz)
+ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-common/archive/v0.12.3.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/restricted/aws/aws-c-common/generated/include
     GLOBAL contrib/restricted/aws/aws-c-common/include
+    contrib/restricted/aws/aws-c-common/source/external/libcbor
 )
 
 NO_COMPILER_WARNINGS()
@@ -69,6 +70,7 @@ SRCS(
     source/assert.c
     source/byte_buf.c
     source/cache.c
+    source/cbor.c
     source/codegen.c
     source/command_line_parser.c
     source/common.c
@@ -78,6 +80,26 @@ SRCS(
     source/encoding.c
     source/error.c
     source/external/cJSON.c
+    source/external/libcbor/allocators.c
+    source/external/libcbor/cbor.c
+    source/external/libcbor/cbor/arrays.c
+    source/external/libcbor/cbor/bytestrings.c
+    source/external/libcbor/cbor/callbacks.c
+    source/external/libcbor/cbor/common.c
+    source/external/libcbor/cbor/encoding.c
+    source/external/libcbor/cbor/floats_ctrls.c
+    source/external/libcbor/cbor/internal/builder_callbacks.c
+    source/external/libcbor/cbor/internal/encoders.c
+    source/external/libcbor/cbor/internal/loaders.c
+    source/external/libcbor/cbor/internal/memory_utils.c
+    source/external/libcbor/cbor/internal/stack.c
+    source/external/libcbor/cbor/internal/unicode.c
+    source/external/libcbor/cbor/ints.c
+    source/external/libcbor/cbor/maps.c
+    source/external/libcbor/cbor/serialization.c
+    source/external/libcbor/cbor/streaming.c
+    source/external/libcbor/cbor/strings.c
+    source/external/libcbor/cbor/tags.c
     source/fifo_cache.c
     source/file.c
     source/hash_table.c
@@ -95,7 +117,6 @@ SRCS(
     source/memtrace.c
     source/priority_queue.c
     source/process_common.c
-    source/promise.c
     source/ref_count.c
     source/ring_buffer.c
     source/statistics.c

@@ -30,7 +30,7 @@ The `topic write` command writes messages to a topic from a file or `stdin`:
 - Defaults to `none`.
 - Possible values:
 
-   - `base64`: Decode each message in the input stream from [Base64](https://ru.wikipedia.org/wiki/Base64) and write the output to the topic. If decoding fails, the command is aborted with an error.
+   - `base64`: Decode each message in the input stream from [Base64](https://en.wikipedia.org/wiki/Base64) and write the output to the topic. If decoding fails, the command is aborted with an error.
    - `none`: Write the contents of a message from the input stream to the topic byte by byte without transforming them.
 
 ### Additional parameters

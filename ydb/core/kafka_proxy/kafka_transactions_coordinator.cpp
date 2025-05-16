@@ -22,6 +22,7 @@ namespace NKafka {
             } 
 
             currentProducerState = std::move(newProducerState);
+            DeleteTransactionActor(request->TransactionalId);
         } else {
             ProducersByTransactionalId.emplace(request->TransactionalId, request->ProducerState);
         }
@@ -121,6 +122,15 @@ namespace NKafka {
         ctx.Forward(tmpPtr, txnActorId);
         KAFKA_LOG_D("Forwarded message to TTransactionActor with id " << txnActorId << " for transactionalId " << ev->Request->TransactionalId->c_str() << " and ApiKey " << ev->Request->ApiKey());
     };
+
+    void TTransactionsCoordinator::DeleteTransactionActor(const TString& transactionalId) {
+        auto it = TxnActorByTransactionalId.find(transactionalId);
+        if (it != TxnActorByTransactionalId.end()) {
+            Send(it->second, new TEvents::TEvPoison());
+            TxnActorByTransactionalId.erase(it);
+        } 
+        // we ignore case when there is no actor, cause it means that no actor was ever created for this transactionalId
+    }
 
     bool TTransactionsCoordinator::NewProducerStateIsOutdated(const TEvKafka::TProducerInstanceId& currentProducerState, const TEvKafka::TProducerInstanceId& newProducerState) {
         return currentProducerState > newProducerState;

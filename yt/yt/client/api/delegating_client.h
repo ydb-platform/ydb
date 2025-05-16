@@ -768,6 +768,10 @@ public:
         const TListUserTokensOptions& options),
         (user, passwordSha256, options))
 
+    DELEGATE_METHOD(TFuture<TGetCurrentUserResultPtr>, GetCurrentUser, (
+        const TGetCurrentUserOptions& options),
+        (options))
+
     // Query tracker
     DELEGATE_METHOD(TFuture<NQueryTrackerClient::TQueryId>, StartQuery, (
         NQueryTrackerClient::EQueryEngine engine,
@@ -905,14 +909,16 @@ public:
     DELEGATE_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (
         const TShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
-        const NTableClient::TTableReaderConfigPtr& config),
-        (shuffleHandle, partitionIndex, config))
+        std::optional<std::pair<int, int>> writerIndexRange,
+        const TShuffleReaderOptions& options),
+        (shuffleHandle, partitionIndex, writerIndexRange, options))
 
     DELEGATE_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (
         const TShuffleHandlePtr& shuffleHandle,
         const std::string& partitionColumn,
-        const NTableClient::TTableWriterConfigPtr& config),
-        (shuffleHandle, partitionColumn, config))
+        std::optional<int> writerIndex,
+        const TShuffleWriterOptions& options),
+        (shuffleHandle, partitionColumn, writerIndex, options))
 
     #undef DELEGATE_METHOD
 

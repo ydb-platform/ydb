@@ -288,11 +288,31 @@ bool TBlobStorageController::HostConfigEquals(const THostConfigInfo& left, const
     return driveMap.empty();
 }
 
+void TBlobStorageController::ApplyBscSettings(const NKikimrConfig::TBlobStorageConfig& bsConfig) {
+    if (!bsConfig.HasBscSettings()) {
+        return;
+    }
+
+    auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+    auto& r = ev->Record;
+    auto *request = r.MutableRequest();
+    auto* command = request->AddCommand();
+
+    auto updateSettings = command->MutableUpdateSettings();
+
+    updateSettings->CopyFrom(bsConfig.GetBscSettings());
+
+    STLOG(PRI_DEBUG, BS_CONTROLLER, BSC17, "ApplyBSCSettings", (Request, r));
+    Send(SelfId(), ev.release());
+}
+
 void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
     if (!StorageConfig.HasBlobStorageConfig()) {
         return;
     }
     const auto& bsConfig = StorageConfig.GetBlobStorageConfig();
+
+    ApplyBscSettings(bsConfig);
 
     if (Boxes.size() > 1) {
         return;

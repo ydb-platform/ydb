@@ -61,7 +61,7 @@ void TTenantDataErasureManager::UpdateConfig(const NKikimrConfig::TDataErasureCo
 void TTenantDataErasureManager::Start() {
     TDataErasureManager::Start();
     const auto ctx = SchemeShard->ActorContext();
-    LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[TenantDataErasureManager] Start: Status# " << static_cast<ui32>(Status));
 
     Queue->Start();
@@ -76,7 +76,7 @@ void TTenantDataErasureManager::Start() {
 void TTenantDataErasureManager::Stop() {
     TDataErasureManager::Stop();
     const auto ctx = SchemeShard->ActorContext();
-    LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[TenantDataErasureManager] Stop");
 
     Queue->Stop();
@@ -134,7 +134,7 @@ void TTenantDataErasureManager::Run(NIceDb::TNiceDb& db) {
     db.Table<Schema::TenantDataErasureGenerations>().Key(Generation).Update<Schema::TenantDataErasureGenerations::Status>(Status);
 
     const auto ctx = SchemeShard->ActorContext();
-    LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[TenantDataErasureManager] Run: Queue.Size# " << Queue->Size()
         << ", WaitingDataErasureShards.size# " << WaitingDataErasureShards.size()
         << ", Status# " << static_cast<ui32>(Status));
@@ -322,7 +322,7 @@ void TTenantDataErasureManager::OnDone(const TTabletId& tabletId, NIceDb::TNiceD
     UpdateMetrics();
 
     if (WaitingDataErasureShards.empty()) {
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "[TenantDataErasureManager] Data erasure in shards is completed. Send response to root schemeshard");
         Complete();
         db.Table<Schema::TenantDataErasureGenerations>().Key(Generation).Update<Schema::TenantDataErasureGenerations::Status>(Status);
@@ -345,7 +345,7 @@ void TTenantDataErasureManager::Complete() {
     Status = EDataErasureStatus::COMPLETED;
 
     auto ctx = SchemeShard->ActorContext();
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "[TenantDataErasureManager] Complete: Generation# " << Generation);
 }
 

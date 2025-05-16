@@ -1952,6 +1952,28 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Read SysViews
+        {
+            auto rowset = db.Table<Schema::SysView>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                TLocalPathId localPathId = rowset.GetValue<Schema::SysView::PathId>();
+                TPathId pathId(selfId, localPathId);
+
+                auto& sysView = Self->SysViews[pathId] = new TSysViewInfo();
+                sysView->AlterVersion = rowset.GetValue<Schema::SysView::AlterVersion>();
+                sysView->Type = rowset.GetValue<Schema::SysView::SysViewType>();
+                Self->IncrementPathDbRefCount(pathId);
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
         // Resorce Pool
         {
             auto rowset = db.Table<Schema::ResourcePool>().Range().Select();
@@ -4501,6 +4523,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     if (rowset.HaveValue<Schema::ImportItems::Changefeeds>()) {
                         item.Changefeeds = rowset.GetValue<Schema::ImportItems::Changefeeds>();
+                    }
+
+                    if (rowset.HaveValue<Schema::ImportItems::Topic>()) {
+                        Ydb::Topic::CreateTopicRequest topic;
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(topic, rowset.GetValue<Schema::ImportItems::Topic>()));
+                        item.Topic = topic;
                     }
 
                     item.State = static_cast<TImportInfo::EState>(rowset.GetValue<Schema::ImportItems::State>());

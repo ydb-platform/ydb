@@ -26,11 +26,9 @@ struct aws_mutex {
 };
 
 #ifdef _WIN32
-#    define AWS_MUTEX_INIT                                                                                             \
-        { .mutex_handle = NULL, .initialized = true }
+#    define AWS_MUTEX_INIT {.mutex_handle = NULL, .initialized = true}
 #else
-#    define AWS_MUTEX_INIT                                                                                             \
-        { .mutex_handle = PTHREAD_MUTEX_INITIALIZER, .initialized = true }
+#    define AWS_MUTEX_INIT {.mutex_handle = PTHREAD_MUTEX_INITIALIZER, .initialized = true}
 #endif
 
 AWS_EXTERN_C_BEGIN

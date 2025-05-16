@@ -104,21 +104,28 @@ public:
             return 0;
         }
         AFL_VERIFY(from <= to);
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("from", from.DebugString())("to", to.DebugString());
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("from", from.DebugString())("to", to.DebugString());
         ui64 result = 0;
+        ui64 resultPacked = 0;
         auto itFrom = Portions.upper_bound(from);
         auto itTo = Portions.upper_bound(to);
+        ui32 count = 0;
         if (itFrom != Portions.begin()) {
             auto it = itFrom;
             --it;
             if (from <= it->GetPortion()->IndexKeyEnd()) {
                 result += it->GetPortion()->GetTotalRawBytes();
+                resultPacked += it->GetPortion()->GetTotalBlobBytes();
+                ++count;
             }
         }
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("itFrom", itFrom == Portions.end())("itTo", itTo == Portions.end());
         for (auto it = itFrom; it != itTo; ++it) {
             result += it->GetPortion()->GetTotalRawBytes();
+            resultPacked += it->GetPortion()->GetTotalBlobBytes();
+            ++count;
         }
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("itFrom", itFrom == Portions.end())("itTo", itTo == Portions.end())("raw", result)(
+            "count", count)("packed", resultPacked);
         return result;
     }
 

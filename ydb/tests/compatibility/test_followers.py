@@ -1,51 +1,29 @@
 # -*- coding: utf-8 -*-
 import logging
 import time
-import yatest
-from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+import pytest
 from ydb.tests.library.harness.param_constants import kikimr_driver_path
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.clients.kikimr_http_client import SwaggerClient
-from ydb.tests.library.common.types import Erasure, TabletStates, TabletTypes
+from ydb.tests.library.common.types import TabletStates, TabletTypes
 from ydb.tests.oss.ydb_sdk_import import ydb
+from ydb.tests.library.compatibility.fixtures import MixedClusterFixture
+
 
 logger = logging.getLogger(__name__)
 
 
-class TestFollowersCompatibility(object):
-    @classmethod
-    def setup_class(cls):
-        last_stable_path = yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-last-stable")
-        binary_paths = [kikimr_driver_path(), last_stable_path]
-        cls.datacenters = [1, 2, 3]
-        cls.dc_map = {i : cls.datacenters[(i - 1) % 3] for i in range(1, 10)}
-        cls.dc_map[0] = "NO DC"
-        cls.cfg = KikimrConfigGenerator(erasure=Erasure.MIRROR_3_DC,
-                                        binary_paths=binary_paths,
-                                        dc_mapping=cls.dc_map,
-                                        additional_log_configs={'HIVE': LogLevels.DEBUG},
-                                        use_in_memory_pdisks=False)
-        cls.cluster = KiKiMR(cls.cfg)
-        cls.cluster.start()
-        cls.endpoint = "%s:%s" % (
-            cls.cluster.nodes[1].host, cls.cluster.nodes[1].port
+class TestFollowersCompatibility(MixedClusterFixture):
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        self.datacenters = [1, 2, 3]
+        self.dc_map = {i : self.datacenters[(i - 1) % 3] for i in range(1, 10)}
+        self.dc_map[0] = "NO DC"
+        yield from self.setup_cluster(
+            dc_mapping=self.dc_map,
+            additional_log_configs={'HIVE': LogLevels.DEBUG},
+            use_in_memory_pdisks=False
         )
-        cls.driver = ydb.Driver(
-            ydb.DriverConfig(
-                database='/Root',
-                endpoint=cls.endpoint
-            )
-        )
-        cls.driver.wait()
-
-    @classmethod
-    def teardown_class(cls):
-        if hasattr(cls, 'driver'):
-            cls.driver.stop()
-
-        if hasattr(cls, 'cluster'):
-            cls.cluster.stop(kill=True)
 
     def check_followers(self, node_idx=1):
         client = SwaggerClient(self.cluster.nodes[node_idx].host, self.cluster.nodes[node_idx].mon_port)
@@ -75,7 +53,7 @@ class TestFollowersCompatibility(object):
         if hive_node == 0:
             return False, "hive is down"
         for tablet_id, data_centers in tablet_to_dc.items():
-            if self.cfg.get_binary_path(hive_node) == kikimr_driver_path():
+            if self.config.get_binary_path(hive_node) == kikimr_driver_path():
                 if len(set(data_centers)) != len(self.datacenters) or len(data_centers) != len(self.datacenters):
                     msg = f"datacenters for tablet {tablet_id} are {data_centers}, hive on node {hive_node} - new version"
                     logger.info(msg)

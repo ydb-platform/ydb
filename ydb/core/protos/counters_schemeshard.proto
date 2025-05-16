@@ -247,6 +247,10 @@ enum ESimpleCounters {
 
     COUNTER_TENANT_DATA_ERASURE_QUEUE_SIZE = 194          [(CounterOpts) = {Name: "TenantDataErasureQueueSize"}];
     COUNTER_TENANT_DATA_ERASURE_QUEUE_RUNNING = 195       [(CounterOpts) = {Name: "TenantDataErasureQueueRunning"}];
+
+    COUNTER_SYS_VIEW_COUNT = 196                    [(CounterOpts) = {Name: "SysViewCount"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateSysView = 197     [(CounterOpts) = {Name: "InFlightOps/CreateSysView"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropSysView = 198       [(CounterOpts) = {Name: "InFlightOps/DropSysView"}];
 }
 
 enum ECumulativeCounters {
@@ -397,6 +401,9 @@ enum ECumulativeCounters {
 
     COUNTER_TENANT_DATA_ERASURE_OK = 117                   [(CounterOpts) = {Name: "TenantDataErasureOK"}];
     COUNTER_TENANT_DATA_ERASURE_TIMEOUT = 118              [(CounterOpts) = {Name: "TenantDataErasureTimeout"}];
+
+    COUNTER_FINISHED_OPS_TxCreateSysView = 119              [(CounterOpts) = {Name: "FinishedOps/CreateSysView"}];
+    COUNTER_FINISHED_OPS_TxDropSysView = 120                [(CounterOpts) = {Name: "FinishedOps/DropSysView"}];
 }
 
 enum EPercentileCounters {

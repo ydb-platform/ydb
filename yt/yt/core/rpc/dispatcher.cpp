@@ -37,6 +37,8 @@ public:
         FairShareCompressionPool_->SetThreadCount(config->CompressionPoolSize);
         AlertOnMissingRequestInfo_.store(config->AlertOnMissingRequestInfo);
         SendTracingBaggage_.store(config->SendTracingBaggage);
+        DefaultRequestTimeout_.store(config->DefaultRequestTimeout);
+        AlertOnUnsetRequestTimeout_.store(config->AlertOnUnsetRequestTimeout);
     }
 
     const IInvokerPtr& GetLightInvoker()
@@ -69,6 +71,16 @@ public:
         return SendTracingBaggage_.load(std::memory_order::relaxed);
     }
 
+    TDuration GetDefaultRequestTimeout()
+    {
+        return DefaultRequestTimeout_.load(std::memory_order::relaxed);
+    }
+
+    bool ShouldAlertOnUnsetRequestTimeout()
+    {
+        return AlertOnUnsetRequestTimeout_.load(std::memory_order::relaxed);
+    }
+
     const IInvokerPtr& GetCompressionPoolInvoker()
     {
         return CompressionPool_->GetInvoker();
@@ -94,6 +106,9 @@ private:
 
     std::atomic<bool> AlertOnMissingRequestInfo_;
     std::atomic<bool> SendTracingBaggage_;
+
+    std::atomic<TDuration> DefaultRequestTimeout_;
+    std::atomic<bool> AlertOnUnsetRequestTimeout_;
 
     TAtomicIntrusivePtr<IServiceDiscovery> ServiceDiscovery_;
 };
@@ -149,6 +164,16 @@ bool TDispatcher::ShouldAlertOnMissingRequestInfo()
 bool TDispatcher::ShouldSendTracingBaggage()
 {
     return Impl_->ShouldSendTracingBaggage();
+}
+
+TDuration TDispatcher::GetDefaultRequestTimeout()
+{
+    return Impl_->GetDefaultRequestTimeout();
+}
+
+bool TDispatcher::ShouldAlertOnUnsetRequestTimeout()
+{
+    return Impl_->ShouldAlertOnUnsetRequestTimeout();
 }
 
 IServiceDiscoveryPtr TDispatcher::GetServiceDiscovery()

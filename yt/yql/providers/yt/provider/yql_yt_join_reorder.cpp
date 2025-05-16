@@ -474,6 +474,12 @@ TYtJoinNode::TPtr BuildYtJoinTree(std::shared_ptr<IBaseOptimizerNode> node, TVec
             ret = MakeIntrusive<TYtJoinNodeOp>();
             ret->JoinKind = ctx.NewAtom(pos, ConvertToJoinString(op->JoinType));
             ret->LinkSettings.JoinAlgo = op->JoinAlgo;
+            if (op->LeftAny) {
+                ret->LinkSettings.LeftHints.insert("any");
+            }
+            if (op->RightAny) {
+                ret->LinkSettings.RightHints.insert("any");
+            }
             TVector<TExprNodePtr> leftLabel, rightLabel;
             leftLabel.reserve(op->LeftJoinKeys.size() * 2);
             rightLabel.reserve(op->RightJoinKeys.size() * 2);

@@ -203,7 +203,7 @@ namespace NSchemeShardUT_Private {
 
     TEvSchemeShard::TEvModifySchemeTransaction* CreateModifyACLRequest(
         ui64 txId, ui64 schemeshard,
-        TString parentPath, TString name, 
+        TString parentPath, TString name,
         const TString& diffAcl, const TString& newOwner, const TApplyIf& applyIf
     )
     {
@@ -973,6 +973,11 @@ namespace NSchemeShardUT_Private {
     DROP_BY_PATH_ID_HELPERS(DropBackupCollection, NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection)
     GENERIC_HELPERS(BackupBackupCollection, NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection, &NKikimrSchemeOp::TModifyScheme::MutableBackupBackupCollection)
     GENERIC_HELPERS(BackupIncrementalBackupCollection, NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection, &NKikimrSchemeOp::TModifyScheme::MutableBackupIncrementalBackupCollection)
+
+    // sysview
+    GENERIC_HELPERS(CreateSysView, NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView, &NKikimrSchemeOp::TModifyScheme::MutableCreateSysView)
+    GENERIC_HELPERS(DropSysView, NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+    DROP_BY_PATH_ID_HELPERS(DropSysView, NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView)
 
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
@@ -2129,7 +2134,7 @@ namespace NSchemeShardUT_Private {
 
         AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
         TAutoPtr<IEventHandle> handle;
-        [[maybe_unused]]auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle); // wait()        
+        [[maybe_unused]]auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle); // wait()
     }
 
     void ChangeIsEnabledUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, bool isEnabled) {

@@ -10,7 +10,14 @@ namespace NKikimr::NOlap::NCompaction::NDictionary {
 
 void TMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& input, TMergingContext& /*mergingContext*/) {
     for (auto&& i : input) {
-        Iterators.emplace_back(TIterator(i, Context.GetLoader()));
+        std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> arrList;
+        NArrow::NAccessor::IChunkedArray::VisitDataOwners<bool>(i, [&arrList](const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& arr) {
+            arrList.emplace_back(arr);
+            return false;
+        });
+        Iterators.emplace_back(
+            TIterator(std::make_shared<NArrow::NAccessor::TCompositeChunkedArray>(std::move(arrList), i->GetRecordsCount(), i->GetDataType()),
+                Context.GetLoader()));
     }
     RemapIndexes.resize(input.size());
     AFL_VERIFY(NArrow::SwitchType(Context.GetResultField()->type()->id(), [&](const auto type) {
@@ -18,15 +25,19 @@ void TMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAccessor::IChun
             std::map<typename decltype(type)::ValueType, ui32> globalDecoder;
             std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> chunks;
             for (ui32 idx = 0; idx < input.size(); ++idx) {
-                while (Iterators[idx].IsValid()) {
-                    AFL_VERIFY(Iterators[idx].GetCurrentDataChunk().GetType() == NArrow::NAccessor::IChunkedArray::EType::Dictionary);
-                    const auto* dict = static_cast<const NArrow::NAccessor::TDictionaryArray*>(&Iterators[idx].GetCurrentDataChunk());
-                    const auto* arrVariants = type.CastArray(dict->GetVariants().get());
-                    for (ui32 r = 0; r < (ui32)arrVariants->length(); ++r) {
-                        auto it = globalDecoder.emplace(type.GetValue(*arrVariants, r), globalDecoder.size()).first;
-                        RemapIndexes[idx].emplace_back(it->second);
+                if (Iterators[idx].IsValid()) {
+                    while (true) {
+                        AFL_VERIFY(Iterators[idx].GetCurrentDataChunk().GetType() == NArrow::NAccessor::IChunkedArray::EType::Dictionary);
+                        const auto* dict = static_cast<const NArrow::NAccessor::TDictionaryArray*>(&Iterators[idx].GetCurrentDataChunk());
+                        const auto* arrVariants = type.CastArray(dict->GetVariants().get());
+                        for (ui32 r = 0; r < (ui32)arrVariants->length(); ++r) {
+                            auto it = globalDecoder.emplace(type.GetValue(*arrVariants, r), globalDecoder.size()).first;
+                            RemapIndexes[idx].emplace_back(it->second);
+                        }
+                        if (!Iterators[idx].MoveFurther(Iterators[idx].GetCurrentDataChunk().GetRecordsCount())) {
+                            break;
+                        }
                     }
-                    Iterators[idx].MoveFurther(Iterators[idx].GetCurrentDataChunk().GetRecordsCount());
                 }
             }
             std::vector<i32> remap;
@@ -63,13 +74,13 @@ TColumnPortionResult TMerger::DoExecute(const TChunkMergeContext& chunkContext, 
     std::vector<bool> mask(ArrayVariantsFull->length(), false);
     ui32 maskSize = 0;
     std::vector<i32> records;
+    records.reserve(chunkContext.GetRemapper().GetRecordsCount());
     for (ui32 resultRecordIdx = 0; resultRecordIdx < chunkContext.GetRemapper().GetRecordsCount(); ++resultRecordIdx) {
         const ui32 inputIdx = chunkContext.GetRemapper().GetIdxArray().Value(resultRecordIdx);
         const ui32 inputRecordIdx = chunkContext.GetRemapper().GetRecordIdxArray().Value(resultRecordIdx);
         if (!Iterators[inputIdx].IsEmpty()) {
-            Iterators[inputIdx].MoveToPosition(inputRecordIdx);
-            AFL_VERIFY(Iterators[inputIdx].IsValid());
-            AFL_VERIFY(NArrow::SwitchType(Iterators[inputIdx].GetCurrentDataChunk().GetRecords()->type()->id(), [&](const auto type) {
+            AFL_VERIFY(Iterators[inputIdx].MoveToPosition(inputRecordIdx));
+            AFL_VERIFY(NArrow::SwitchType(Iterators[inputIdx].GetCurrentRecordsType(), [&](const auto type) {
                 const auto* arr = type.CastArray(Iterators[inputIdx].GetCurrentDataChunk().GetRecords().get());
                 if constexpr (type.IsIndexType()) {
                     if (arr->IsNull(Iterators[inputIdx].GetLocalPosition())) {

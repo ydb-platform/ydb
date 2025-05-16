@@ -384,6 +384,10 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         // Note: may erase persistent locks, must be after we persist volatile tx
         AddLocksToResult(op, ctx);
 
+        if (!guardLocks.LockTxId) {
+            writeVersion.ToProto(op->Result()->Record.MutableCommitVersion());
+        }
+
         if (auto changes = std::move(dataTx->GetCollectedChanges())) {
             op->ChangeRecords() = std::move(changes);
         }

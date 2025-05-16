@@ -252,14 +252,12 @@ THttpInput::THttpInput(
     const TNetworkAddress& remoteAddress,
     IInvokerPtr readInvoker,
     EMessageType messageType,
-    THttpIOConfigPtr config,
-    IMemoryUsageTrackerPtr memoryUsageTracker)
+    THttpIOConfigPtr config)
     : Connection_(std::move(connection))
     , RemoteAddress_(remoteAddress)
     , MessageType_(messageType)
     , Config_(std::move(config))
     , ReadInvoker_(std::move(readInvoker))
-    , MemoryUsageTracker_(std::move(memoryUsageTracker))
     , InputBuffer_(TSharedMutableRef::Allocate<THttpParserTag>(Config_->ReadBufferSize, {.InitializeStorage = false}))
     , Parser_(messageType == EMessageType::Request ? HTTP_REQUEST : HTTP_RESPONSE)
     , StartByteCount_(Connection_->GetReadByteCount())
@@ -516,8 +514,7 @@ TSharedRef THttpInput::DoRead()
         auto chunk = Parser_.GetLastBodyChunk();
         if (!chunk.Empty()) {
             Connection_->SetReadDeadline(std::nullopt);
-            auto trackedChunk = TrackMemory(MemoryUsageTracker_, chunk);
-            return trackedChunk;
+            return chunk;
         }
 
         bool eof = false;
@@ -579,13 +576,11 @@ THttpOutput::THttpOutput(
     THeadersPtr headers,
     IConnectionPtr connection,
     EMessageType messageType,
-    THttpIOConfigPtr config,
-    IMemoryUsageTrackerPtr memoryUsageTracker)
+    THttpIOConfigPtr config)
     : Connection_(std::move(connection))
     , MessageType_(messageType)
     , Config_(std::move(config))
     , OnWriteFinish_(BIND_NO_PROPAGATE(&THttpOutput::OnWriteFinish, MakeWeak(this)))
-    , MemoryUsageTracker_(std::move(memoryUsageTracker))
     , StartByteCount_(Connection_->GetWriteByteCount())
     , StartStatistics_(Connection_->GetWriteStatistics())
     , LastProgressLogTime_(TInstant::Now())
@@ -595,14 +590,12 @@ THttpOutput::THttpOutput(
 THttpOutput::THttpOutput(
     IConnectionPtr connection,
     EMessageType messageType,
-    THttpIOConfigPtr config,
-    IMemoryUsageTrackerPtr memoryUsageTracker)
+    THttpIOConfigPtr config)
     : THttpOutput(
         New<THeaders>(),
         std::move(connection),
         messageType,
-        std::move(config),
-        std::move(memoryUsageTracker))
+        std::move(config))
 { }
 
 const THeadersPtr& THttpOutput::GetHeaders()
@@ -770,8 +763,6 @@ TFuture<void> THttpOutput::Write(const TSharedRef& data)
         THROW_ERROR(AnnotateError(TError("Cannot write to finished HTTP message")));
     }
 
-    auto trackedData = TrackMemory(MemoryUsageTracker_, data);
-
     std::vector<TSharedRef> writeRefs;
     if (!HeadersFlushed_) {
         HeadersFlushed_ = true;
@@ -779,9 +770,9 @@ TFuture<void> THttpOutput::Write(const TSharedRef& data)
         writeRefs.push_back(CrLfBuffer());
     }
 
-    if (!trackedData.Empty()) {
-        writeRefs.push_back(GetChunkHeader(trackedData.Size()));
-        writeRefs.push_back(trackedData);
+    if (!data.Empty()) {
+        writeRefs.push_back(GetChunkHeader(data.Size()));
+        writeRefs.push_back(data);
         writeRefs.push_back(CrLfBuffer());
     }
 

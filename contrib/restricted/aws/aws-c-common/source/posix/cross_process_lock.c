@@ -133,7 +133,6 @@ cleanup:
 
 void aws_cross_process_lock_release(struct aws_cross_process_lock *instance_lock) {
     if (instance_lock) {
-        flock(instance_lock->locked_fd, LOCK_UN);
         close(instance_lock->locked_fd);
         AWS_LOGF_TRACE(AWS_LS_COMMON_GENERAL, "static: Lock file released for fd %d", instance_lock->locked_fd);
         aws_mem_release(instance_lock->allocator, instance_lock);

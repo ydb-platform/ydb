@@ -194,13 +194,13 @@ static inline bool decode(const unsigned char *in, unsigned char *out) {
 
 size_t aws_common_private_base64_decode_sse41(const unsigned char *in, unsigned char *out, size_t len) {
     if (len % 4) {
-        return (size_t)-1;
+        return SIZE_MAX;
     }
 
     size_t outlen = 0;
     while (len > 32) {
         if (!decode(in, out)) {
-            return (size_t)-1;
+            return SIZE_MAX;
         }
         len -= 32;
         in += 32;
@@ -230,13 +230,13 @@ size_t aws_common_private_base64_decode_sse41(const unsigned char *in, unsigned 
         }
 
         if (!decode(tmp_in, tmp_out)) {
-            return (size_t)-1;
+            return SIZE_MAX;
         }
 
         /* Check that there are no trailing ones bits */
         for (size_t i = final_out; i < sizeof(tmp_out); i++) {
             if (tmp_out[i]) {
-                return (size_t)-1;
+                return SIZE_MAX;
             }
         }
 

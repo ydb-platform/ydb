@@ -275,6 +275,25 @@ int aws_thread_launch(
             if (attr_return) {
                 goto cleanup;
             }
+        } else if (!options->stack_size) {
+            /**
+             * On some systems, the default stack size is too low (128KB on musl at the time of writing this), which can
+             * cause stack overflow when the dependency chain is long. Increase the stack size to at
+             * least 1MB, which is the default on Windows.
+             */
+            size_t min_stack_size = (size_t)1 * 1024 * 1024;
+            size_t current_stack_size;
+            attr_return = pthread_attr_getstacksize(attributes_ptr, &current_stack_size);
+            if (attr_return) {
+                goto cleanup;
+            }
+
+            if (current_stack_size < min_stack_size) {
+                attr_return = pthread_attr_setstacksize(attributes_ptr, min_stack_size);
+                if (attr_return) {
+                    goto cleanup;
+                }
+            }
         }
 
 /* AFAIK you can't set thread affinity on apple platforms, and it doesn't really matter since all memory

@@ -69,7 +69,7 @@ YdbConnection.ClearAllPools()
 
 ## Data Source
 
-Starting with .NET 7.0, the starting point for any database operation is [DbDataSource](https://learn.microsoft.com/en-us/dotnet/api/system.data.common.dbdatasource). 
+Starting with .NET 7.0, the starting point for any database operation is [DbDataSource](https://learn.microsoft.com/en-us/dotnet/api/system.data.common.dbdatasource).
 
 The simplest way to create a data source is the following:
 
@@ -140,7 +140,7 @@ ydbCommand.CommandText = """
                          DECLARE $series_id AS Uint64;
                          DECLARE $season_id AS Uint64;
                          DECLARE $limit_size AS Uint64;
-                         
+
                          SELECT series_id, season_id, episode_id, air_date, title
                          FROM episodes WHERE series_id = $series_id AND season_id > $season_id
                          ORDER BY series_id, season_id, episode_id
@@ -171,10 +171,10 @@ ydbCommand.CommandText = """
                          """;
 ydbCommand.Parameters.Add(new YdbParameter("series_id", DbType.UInt64, 1U));
 ydbCommand.Parameters.Add(new YdbParameter("season_id", DbType.UInt64, 1U));
-ydbCommand.Parameters.Add(new YdbParameter("limit_size", DbType.UInt64, 3U));                         
+ydbCommand.Parameters.Add(new YdbParameter("limit_size", DbType.UInt64, 3U));
 ```
 
-With ADO.NET, the query will be prepared for you so that the variables match [YQL](../../yql/reference/index.md). The type will be determined according to the [DbType](https://learn.microsoft.com/en-us/dotnet/api/system.data.dbtype) or the .NET type of the value itself.
+With ADO.NET, the query will be prepared for you so that the variables match [YQL](../../../yql/reference/index.md). The type will be determined according to the [DbType](https://learn.microsoft.com/en-us/dotnet/api/system.data.dbtype) or the .NET type of the value itself.
 
 ## Parameter Types
 

@@ -14,11 +14,6 @@ SRCS(
     kqp_statistics_transformer.cpp
     kqp_column_statistics_requester.cpp
     kqp_constant_folding_transformer.cpp
-    kqp_new_rbo_transformer.cpp
-    kqp_operator.cpp
-    kqp_new_rbo.cpp
-    kqp_new_rbo_rules.cpp
-    kqp_convert_to_physical.cpp
 )
 
 PEERDIR(
@@ -26,6 +21,7 @@ PEERDIR(
     ydb/core/kqp/opt/logical
     ydb/core/kqp/opt/peephole
     ydb/core/kqp/opt/physical
+    ydb/core/kqp/opt/rbo
     ydb/library/yql/dq/common
     ydb/library/yql/dq/opt
     ydb/library/yql/dq/type_ann

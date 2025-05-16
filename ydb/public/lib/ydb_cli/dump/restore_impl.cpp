@@ -355,6 +355,10 @@ TRestoreResult TDelayedRestoreManager::Restore(const TDelayedRestoreCall& call) 
             const auto& dbPath = std::get<TDelayedRestoreCall::TSimplePath>(call.DbPath);
             return Client->RestoreExternalTable(call.FsPath, dbPath, call.Settings, call.IsAlreadyExisting);
         }
+        case ESchemeEntryType::Replication: {
+            const auto& [dbRestoreRoot, dbPathRelativeToRestoreRoot] = std::get<TDelayedRestoreCall::TTwoComponentPath>(call.DbPath);
+            return Client->RestoreReplication(call.FsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, call.Settings, call.IsAlreadyExisting);
+        }
         default:
             ythrow TBadArgumentException() << "Attempting to restore an unexpected object from: " << call.FsPath;
     }
@@ -1032,6 +1036,10 @@ TRestoreResult TRestoreClient::Restore(NScheme::ESchemeEntryType type, const TFs
         case ESchemeEntryType::ExternalDataSource:
             return RestoreExternalDataSource(fsPath, dbPath, settings, isAlreadyExisting);
         case ESchemeEntryType::Replication:
+            if (delay) {
+                DelayedRestoreManager.Add(ESchemeEntryType::Replication, fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings, isAlreadyExisting);
+                return Result<TRestoreResult>();
+            }
             return RestoreReplication(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings, isAlreadyExisting);
         default:
             ythrow TBadArgumentException() << "Attempting to restore an unexpected object from: " << fsPath << ", type: " << type;

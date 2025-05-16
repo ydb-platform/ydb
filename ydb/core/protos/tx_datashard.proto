@@ -647,6 +647,7 @@ message TEvProposeTransactionResult {
     optional bytes DataLastKey = 25; // Response data last key (for retries)
     reserved 26; // optional NKqpProto.TKqpStatsRun KqpRunStats = 26;
     optional NYql.NDqProto.TDqComputeActorStats ComputeActorStats = 27; // overall time + per-task statistics
+    optional NKikimrProto.TRowVersion CommitVersion = 28;
 }
 
 message TEvProposeTransactionRestart {

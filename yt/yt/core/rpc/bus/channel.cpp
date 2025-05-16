@@ -372,7 +372,14 @@ private:
                 // NB: Requests without timeout are rare but may occur.
                 // For these requests we still need to register a timeout cookie with TDelayedExecutor
                 // since this also provides proper cleanup and cancelation when global shutdown happens.
-                auto effectiveTimeout = options.Timeout.value_or(TDuration::Hours(24));
+                if (TDispatcher::Get()->ShouldAlertOnUnsetRequestTimeout() && !options.Timeout.has_value()) {
+                    YT_LOG_ALERT("Request without timeout (RequestId: %v, Method: %v.%v, Endpoint: %v)",
+                        requestControl->GetRequestId(),
+                        requestControl->GetService(),
+                        requestControl->GetMethod(),
+                        Bus_->GetEndpointDescription());
+                }
+                auto effectiveTimeout = options.Timeout.value_or(TDispatcher::Get()->GetDefaultRequestTimeout());
                 auto timeoutCookie = TDelayedExecutor::Submit(
                     BIND(&TSession::HandleTimeout, MakeWeak(this), requestControl),
                     effectiveTimeout,

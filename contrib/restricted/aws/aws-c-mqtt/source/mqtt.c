@@ -5,20 +5,25 @@
 
 #include <aws/mqtt/mqtt.h>
 
+#include <aws/common/encoding.h>
+#include <aws/http/http.h>
 #include <aws/io/logging.h>
-
-#ifdef AWS_MQTT_WITH_WEBSOCKETS
-#    include <aws/http/http.h>
-#endif
 
 /*******************************************************************************
  * Topic Validation
  ******************************************************************************/
 
 static bool s_is_valid_topic(const struct aws_byte_cursor *topic, bool is_filter) {
+    if (topic == NULL) {
+        return false;
+    }
 
     /* [MQTT-4.7.3-1] Check existance and length */
     if (!topic->ptr || !topic->len) {
+        return false;
+    }
+
+    if (aws_mqtt_validate_utf8_text(*topic) == AWS_OP_ERR) {
         return false;
     }
 
@@ -216,6 +221,54 @@ bool aws_mqtt_is_valid_topic_filter(const struct aws_byte_cursor *topic_filter) 
             AWS_DEFINE_ERROR_INFO_MQTT(
                 AWS_ERROR_MQTT5_INVALID_OUTBOUND_TOPIC_ALIAS,
                 "Outgoing publish contained an invalid (too large or unknown) topic alias"),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                AWS_ERROR_MQTT5_INVALID_UTF8_STRING,
+                "Outbound packet contains invalid utf-8 data in a field that must be utf-8"),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                AWS_ERROR_MQTT_CONNECTION_RESET_FOR_ADAPTER_CONNECT,
+                "Mqtt5 connection was reset by the Mqtt3 adapter in order to guarantee correct connection configuration"),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                AWS_ERROR_MQTT_CONNECTION_RESUBSCRIBE_NO_TOPICS,
+                "Resubscribe was called when there were no subscriptions"),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                AWS_ERROR_MQTT_CONNECTION_SUBSCRIBE_FAILURE,
+                "MQTT subscribe operation failed"),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                AWS_ERROR_MQTT_ACK_REASON_CODE_FAILURE,
+                "MQTT ack packet received with a failing reason code"),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                AWS_ERROR_MQTT_PROTOCOL_ADAPTER_FAILING_REASON_CODE,
+                "MQTT operation returned a failing reason code"),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                AWS_ERROR_MQTT_REQUEST_RESPONSE_CLIENT_SHUT_DOWN,
+                "Request operation failed due to client shut down"),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                AWS_ERROR_MQTT_REQUEST_RESPONSE_TIMEOUT,
+                "Request operation failed due to timeout"),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                AWS_ERROR_MQTT_REQUEST_RESPONSE_NO_SUBSCRIPTION_CAPACITY,
+                "Streaming request operation failed because there was no space for the subscription"),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                AWS_ERROR_MQTT_REQUEST_RESPONSE_SUBSCRIBE_FAILURE,
+                "Request operation failed because the associated subscribe failed synchronously"),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                AWS_ERROR_MQTT_REQUEST_RESPONSE_INTERNAL_ERROR,
+                "Request operation failed due to a non-specific internal error within the client."),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                AWS_ERROR_MQTT_REQUEST_RESPONSE_PUBLISH_FAILURE,
+                "Request-response operation failed because the associated publish failed synchronously."),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                AWS_ERROR_MQTT_REUQEST_RESPONSE_STREAM_ALREADY_ACTIVATED,
+                "Streaming operation activation failed because the operation had already been activated."),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                 AWS_ERROR_MQTT_REQUEST_RESPONSE_MODELED_SERVICE_ERROR,
+                 "Request-response operation failed with a modeled service error."),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                 AWS_ERROR_MQTT_REQUEST_RESPONSE_PAYLOAD_PARSE_ERROR,
+                 "Request-response operation failed due to an inability to parse the payload."),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                 AWS_ERROR_MQTT_REQUEST_RESPONSE_INVALID_RESPONSE_PATH,
+                 "Request-response operation failed due to arrival on an unknown response path"),
         };
 /* clang-format on */
 #undef AWS_DEFINE_ERROR_INFO_MQTT
@@ -233,6 +286,8 @@ static struct aws_error_info_list s_error_list = {
             DEFINE_LOG_SUBJECT_INFO(AWS_LS_MQTT5_GENERAL, "mqtt5-general", "Misc MQTT5 logging"),
             DEFINE_LOG_SUBJECT_INFO(AWS_LS_MQTT5_CLIENT, "mqtt5-client", "MQTT5 client and connections"),
             DEFINE_LOG_SUBJECT_INFO(AWS_LS_MQTT5_CANARY, "mqtt5-canary", "MQTT5 canary logging"),
+            DEFINE_LOG_SUBJECT_INFO(AWS_LS_MQTT5_TO_MQTT3_ADAPTER, "mqtt5-to-mqtt3-adapter", "MQTT5-To-MQTT3 adapter logging"),
+            DEFINE_LOG_SUBJECT_INFO(AWS_LS_MQTT_REQUEST_RESPONSE, "mqtt-request-response-systems", "MQTT request-response systems logging"),
         };
 /* clang-format on */
 
@@ -250,9 +305,8 @@ void aws_mqtt_library_init(struct aws_allocator *allocator) {
     if (!s_mqtt_library_initialized) {
         s_mqtt_library_initialized = true;
         aws_io_library_init(allocator);
-#ifdef AWS_MQTT_WITH_WEBSOCKETS
         aws_http_library_init(allocator);
-#endif
+
         aws_register_error_info(&s_error_list);
         aws_register_log_subject_info_list(&s_logging_subjects_list);
     }
@@ -264,9 +318,8 @@ void aws_mqtt_library_clean_up(void) {
         aws_thread_join_all_managed();
         aws_unregister_error_info(&s_error_list);
         aws_unregister_log_subject_info_list(&s_logging_subjects_list);
-#ifdef AWS_MQTT_WITH_WEBSOCKETS
+
         aws_http_library_clean_up();
-#endif
         aws_io_library_clean_up();
     }
 }
@@ -279,4 +332,38 @@ void aws_mqtt_fatal_assert_library_initialized(void) {
 
         AWS_FATAL_ASSERT(s_mqtt_library_initialized);
     }
+}
+
+/* UTF-8 encoded string validation respect to [MQTT-1.5.3-2]. */
+static int aws_mqtt_utf8_decoder(uint32_t codepoint, void *user_data) {
+    (void)user_data;
+    /* U+0000 - A UTF-8 Encoded String MUST NOT include an encoding of the null character U+0000. [MQTT-1.5.4-2]
+     * U+0001..U+001F control characters are not valid
+     */
+    if (AWS_UNLIKELY(codepoint <= 0x001F)) {
+        return aws_raise_error(AWS_ERROR_MQTT5_INVALID_UTF8_STRING);
+    }
+
+    /* U+007F..U+009F control characters are not valid */
+    if (AWS_UNLIKELY((codepoint >= 0x007F) && (codepoint <= 0x009F))) {
+        return aws_raise_error(AWS_ERROR_MQTT5_INVALID_UTF8_STRING);
+    }
+
+    /* Unicode non-characters are not valid: https://www.unicode.org/faq/private_use.html#nonchar1 */
+    if (AWS_UNLIKELY((codepoint & 0x00FFFF) >= 0x00FFFE)) {
+        return aws_raise_error(AWS_ERROR_MQTT5_INVALID_UTF8_STRING);
+    }
+    if (AWS_UNLIKELY(codepoint >= 0xFDD0 && codepoint <= 0xFDEF)) {
+        return aws_raise_error(AWS_ERROR_MQTT5_INVALID_UTF8_STRING);
+    }
+
+    return AWS_OP_SUCCESS;
+}
+
+static struct aws_utf8_decoder_options s_aws_mqtt_utf8_decoder_options = {
+    .on_codepoint = aws_mqtt_utf8_decoder,
+};
+
+int aws_mqtt_validate_utf8_text(struct aws_byte_cursor text) {
+    return aws_decode_utf8(text, &s_aws_mqtt_utf8_decoder_options);
 }

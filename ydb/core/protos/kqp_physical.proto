@@ -261,6 +261,8 @@ message TKqpPhyCnHashShuffle {
         THashV1 HashV1 = 2;
         TColumnShardHashV1 ColumnShardHashV1 = 3;
     }
+
+    bool UseSpilling = 4;
 }
 
 message TKqpPhyCnBroadcast {

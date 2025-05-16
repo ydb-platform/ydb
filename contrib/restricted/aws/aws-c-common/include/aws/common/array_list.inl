@@ -123,7 +123,7 @@ AWS_STATIC_IMPL
 void aws_array_list_clean_up_secure(struct aws_array_list *AWS_RESTRICT list) {
     AWS_PRECONDITION(AWS_IS_ZEROED(*list) || aws_array_list_is_valid(list));
     if (list->alloc && list->data) {
-        aws_secure_zero((void *)list->data, list->current_size);
+        aws_secure_zero(list->data, list->current_size);
         aws_mem_release(list->alloc, list->data);
     }
 

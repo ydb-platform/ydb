@@ -37,6 +37,7 @@
 #include <ydb/core/protos/filestore_config.pb.h>
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/protos/yql_translation_settings.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
@@ -2885,6 +2886,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TString SrcPrefix;
         TString SrcPath; // Src path from schema mapping
         Ydb::Table::CreateTableRequest Scheme;
+        TMaybe<Ydb::Topic::CreateTopicRequest> Topic;
         TString CreationQuery;
         TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
@@ -3867,6 +3869,13 @@ struct TBackupCollectionInfo : TSimpleRefCount<TBackupCollectionInfo> {
 
     ui64 AlterVersion = 0;
     NKikimrSchemeOp::TBackupCollectionDescription Description;
+};
+
+struct TSysViewInfo : TSimpleRefCount<TSysViewInfo> {
+    using TPtr = TIntrusivePtr<TSysViewInfo>;
+
+    ui64 AlterVersion = 0;
+    NKikimrSysView::ESysViewType Type;
 };
 
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,

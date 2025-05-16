@@ -993,16 +993,27 @@ class DockerImage:
                         link
                     )
             else:
-                msg = 'Invalid docker image: {}. Image should be provided in format <link>=<tag>'.format(img)
+                msg = 'Invalid docker image: {}. Image should be provided in format <tag>=<link>'.format(img)
             if msg:
                 ymake.report_configure_error(msg)
                 raise DartValueError(msg)
 
+    @staticmethod
+    def unify_images(images):
+        res = []
+        for image in images:
+            if not image.startswith('docker://'):
+                alias, url = image.split('=', 1)
+                image = url + "=" + alias
+            res.append(image)
+        return res
+
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        raw_value = get_values_list(unit, 'DOCKER_IMAGES_VALUE')
-        images = sorted(raw_value)
+        images = get_values_list(unit, 'DOCKER_IMAGES_VALUE')
         if images:
+            images = cls.unify_images(images)
+            images = sorted(images)
             cls._validate(images)
         return {cls.KEY: serialize_list(images)}
 
@@ -1122,13 +1133,16 @@ class TestFiles:
         'maps/renderer/libs/hd3d',
         'maps/renderer/libs/image',
         'maps/renderer/libs/kv_storage',
+        'maps/renderer/libs/mapreduce',
         'maps/renderer/libs/marking',
         'maps/renderer/libs/mesh',
         'maps/renderer/libs/serializers',
         'maps/renderer/libs/style2',
         'maps/renderer/libs/style2_layer_bundle',
         'maps/renderer/libs/terrain',
+        'maps/renderer/libs/threading',
         'maps/renderer/libs/vec',
+        'maps/renderer/libs/yt',
         'maps/renderer/tilemill',
         'maps/renderer/tools/fontograph',
         'maps/renderer/tools/terrain_cli',

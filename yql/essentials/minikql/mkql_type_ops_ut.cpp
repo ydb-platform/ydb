@@ -1,10 +1,11 @@
 #include <yql/essentials/parser/pg_wrapper/pg_compat.h>
-#include <yql/essentials/public/udf/tz/udf_tz.h>
 
 #include "mkql_type_ops.h"
 #include "mkql_alloc.h"
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <library/cpp/type_info/tz/tz.h>
 
 #include <util/stream/format.h>
 #include <util/stream/str.h>
@@ -77,7 +78,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLTypeOps) {
 
         const ui32 beginDate = urdist(rand) % step;
 
-        const auto timezones = NUdf::GetTimezones();
+        const auto timezones = NTi::GetTimezones();
         for (size_t tzId = 0; tzId < timezones.size(); tzId++) {
             // XXX: Several timezones are missing, so skip them.
             if (timezones[tzId].empty()) {

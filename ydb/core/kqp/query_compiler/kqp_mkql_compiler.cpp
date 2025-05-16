@@ -333,23 +333,6 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             return result;
         });
 
-    compiler->AddCallable(TKqpLookupTable::CallableName(),
-        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            TKqpLookupTable lookupTable(&node);
-            const auto& tableMeta = ctx.GetTableMeta(lookupTable.Table());
-            auto lookupKeys = MkqlBuildExpr(lookupTable.LookupKeys().Ref(), buildCtx);
-
-            auto keysType = lookupTable.LookupKeys().Ref().GetTypeAnn()->Cast<TStreamExprType>();
-            ValidateColumnsType(keysType, tableMeta);
-
-            TVector<TStringBuf> keyColumns(tableMeta.KeyColumnNames.begin(), tableMeta.KeyColumnNames.end());
-            auto result = ctx.PgmBuilder().KqpLookupTable(MakeTableId(lookupTable.Table()), lookupKeys,
-                GetKqpColumns(tableMeta, keyColumns, false),
-                GetKqpColumns(tableMeta, lookupTable.Columns(), true));
-
-            return result;
-        });
-
     compiler->AddCallable(TKqpUpsertRows::CallableName(),
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
             TKqpUpsertRows upsertRows(&node);

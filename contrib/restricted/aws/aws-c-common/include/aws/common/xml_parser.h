@@ -6,6 +6,7 @@
  * SPDX-License-Identifier: Apache-2.0.
  */
 
+/* WARNING: This is not a public API. It is only intended for use within the aws-c libraries. */
 #include <aws/common/array_list.h>
 #include <aws/common/byte_buf.h>
 

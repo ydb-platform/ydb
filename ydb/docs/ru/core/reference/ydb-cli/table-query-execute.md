@@ -28,9 +28,9 @@
 ||`-t`, `--type` | Тип запроса.
 Возможные значения:
 
-* `data` — YQL-запрос, содержащий [DML]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Data_Manipulation_Language){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Data_Manipulation_Language){% endif %} операции, допускает как изменение данных в базе, так и получение нескольких выборок с ограничением в 1000 строк в каждой выборке.
+* `data` — YQL-запрос, содержащий [DML](https://ru.wikipedia.org/wiki/Data_Manipulation_Language) операции, допускает как изменение данных в базе, так и получение нескольких выборок с ограничением в 1000 строк в каждой выборке.
 * `scan` — YQL-запрос типа [скан](../../concepts/scan_query.md), допускает только чтение данных из базы, может вернуть только одну выборку, но без ограничения на количество записей в ней. Алгоритм исполнения запроса типа `scan` на сервере более сложный по сравнению с `data`, поэтому в отсутствие требований по возврату более 1000 строк эффективнее использовать тип запроса `data`.
-* `scheme` — YQL-запрос, содержащий [DDL]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Data_Definition_Language){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Data_Definition_Language){% endif %} операции.
+* `scheme` — YQL-запрос, содержащий [DDL](https://ru.wikipedia.org/wiki/Data_Definition_Language) операции.
 
 Значение по умолчанию — `data`.||
 ||`--stats` | Режим сбора статистики.

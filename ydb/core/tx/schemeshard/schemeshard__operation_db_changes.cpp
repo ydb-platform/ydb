@@ -104,6 +104,10 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
     for (const auto& [pathId, pqGroup] : AddPersQueueGroupAlter) {
         ss->PersistAddPersQueueGroupAlter(db, pathId, pqGroup);
     }
+
+    for (const auto& pId : SysViews) {
+        ss->PersistSysView(db, pId);
+    }
 }
 
 }

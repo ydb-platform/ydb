@@ -520,7 +520,7 @@ TString TWorkerFactory<TBase>::GetCompiledProgram() {
         NKikimr::NMiniKQL::TTypeEnvironment env(alloc);
 
         auto rootNode = CompileMkql(ExprRoot_, ExprContext_, *FuncRegistry_, env, UserData_);
-        return NKikimr::NMiniKQL::SerializeRuntimeNode(rootNode, env);
+        return NKikimr::NMiniKQL::SerializeRuntimeNode(rootNode, env.GetNodeStack());
     }
 
     return SerializedProgram_;

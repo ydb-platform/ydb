@@ -255,7 +255,7 @@ The limits on the number of traced requests are local to the cluster node. For e
 
 As with [logs](../../../reference/embedded-ui/logs.md), diagnosing most system issues does not require the most detailed trace. Therefore, in {{ ydb-short-name }}, each span has its own level described by an integer from 0 to 15 inclusive. Each rule in the `sampling` section must include the detail level of the generated trace (`level`); spans with a level less than or equal to `level` will be included in it.
 
-The [{{ ydb-short-name }} architecture](../../../concepts/_includes/index/how_it_works.md#ydb-architecture) section describes the system's division into 5 layers:
+The [{{ ydb-short-name }} architecture](../../../concepts/index.md#ydb-architecture) section describes the system's division into 5 layers:
 
 | Layer | Components |
 | ---- | --------- |

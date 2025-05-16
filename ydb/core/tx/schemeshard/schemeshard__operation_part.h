@@ -676,5 +676,13 @@ TVector<ISubOperation::TPtr> CreateRestoreBackupCollection(TOperationId opId, co
 TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 TVector<ISubOperation::TPtr> CreateBackupIncrementalBackupCollection(TOperationId opId, const TTxTransaction& tx, TOperationContext& context);
 
+// SysView
+// Create
+ISubOperation::TPtr CreateNewSysView(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewSysView(TOperationId id, TTxState::ETxState state);
+// Drop
+ISubOperation::TPtr CreateDropSysView(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateDropSysView(TOperationId id, TTxState::ETxState state);
+
 }
 }

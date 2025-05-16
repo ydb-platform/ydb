@@ -33,6 +33,21 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TGetCurrentUserCommand
+    : public TCommandBase
+{
+public:
+    REGISTER_YSON_STRUCT_LITE(TGetCurrentUserCommand);
+
+    static void Register(TRegistrar)
+    { }
+
+private:
+    void DoExecute(ICommandContextPtr context) override;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TAddMemberCommand
     : public TUpdateMembershipCommand<NApi::TAddMemberOptions>
 {

@@ -9,6 +9,7 @@ YQL_UDF_CONTRIB(datetime2_udf)
     )
     PEERDIR(
         util/draft
+        library/cpp/type_info/tz
         yql/essentials/public/udf/arrow
         yql/essentials/minikql
         yql/essentials/minikql/datetime

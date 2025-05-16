@@ -1,3 +1,4 @@
+* Do not save to local backups destination tables of `ASYNC REPLICATION` and its changefeeds. It prevents duplication of changefeeds and reduces the amount of space the backup takes on disk.
 * Fix `ydb operation get` not working for running operations.
 * Improved `ydb import file` commands to support files with BOM (Byte Order Mark).
 * Brackets are now inserted in pairs in YDB CLI interactive mode

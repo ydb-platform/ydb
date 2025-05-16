@@ -1,7 +1,6 @@
 import collections
 import json
 import os
-import six
 from hashlib import md5
 
 import ymake
@@ -108,7 +107,7 @@ def parse_pyx_includes(filename, path, source_root, seen=None):
 
     with open(abs_path, 'rb') as f:
         # Don't parse cimports and etc - irrelevant for cython, it's linker work
-        includes = [six.ensure_str(x) for x in ymake.parse_cython_includes(f.read())]
+        includes = [x.decode('utf-8') for x in ymake.parse_cython_includes(f.read())]
 
     abs_dirname = os.path.dirname(abs_path)
     # All includes are relative to the file which include
@@ -534,8 +533,7 @@ def onpy_srcs(unit, *args):
             data = ['DONT_COMPRESS']
             prefix = 'resfs/cython/include'
             for line in sorted(
-                '{}/{}={}'.format(prefix, filename, ':'.join(sorted(files)))
-                for filename, files in six.iteritems(include_map)
+                '{}/{}={}'.format(prefix, filename, ':'.join(sorted(files))) for filename, files in include_map.items()
             ):
                 data += ['-', line]
             unit.onresource(data)
@@ -566,7 +564,7 @@ def onpy_srcs(unit, *args):
             resfs_mocks = []
 
             for path, mod in pys:
-                mod_list_md5.update(six.ensure_binary(mod))
+                mod_list_md5.update(mod.encode('utf-8'))
                 dest = 'py/' + mod.replace('.', '/') + '.py'
                 # In external_py_files mode we want to build python binaries without embedded python files.
                 # The application will still be able to load them from the file system.

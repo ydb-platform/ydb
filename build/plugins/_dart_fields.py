@@ -8,7 +8,6 @@ import shlex
 import sys
 from functools import reduce
 
-import six
 import ymake
 
 import _common
@@ -101,7 +100,7 @@ def format_recipes(data: str | None) -> str:
 
 def prepare_recipes(data: str | None) -> bytes:
     formatted = format_recipes(data)
-    return base64.b64encode(six.ensure_binary(formatted))
+    return base64.b64encode(formatted.encode('utf-8'))
 
 
 def prepare_env(data):
@@ -159,7 +158,7 @@ def _get_external_resources_from_canon_data(data):
             if resource:
                 res.add(resource)
         else:
-            for k, v in six.iteritems(data):
+            for k, v in data.items():
                 res.update(_get_external_resources_from_canon_data(v))
     elif isinstance(data, list):
         for e in data:
@@ -1445,7 +1444,7 @@ class SystemProperties:
             ymake.report_configure_error(error_mgs)
             raise DartValueError()
 
-        props = base64.b64encode(six.ensure_binary(json.dumps(props)))
+        props = base64.b64encode(json.dumps(props).encode('utf-8'))
         return {cls.KEY: props}
 
 

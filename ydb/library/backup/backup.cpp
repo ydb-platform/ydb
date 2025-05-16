@@ -587,7 +587,7 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     WriteProtoToFile(proto, folderPath, NDump::NFiles::TableScheme());
 
     BackupChangefeeds(driver, originalTablePath, folderPath, originalTableDesc);
-    BackupPermissions(driver, fullPath, folderPath);
+    BackupPermissions(driver, originalTablePath, folderPath);
 
     if (!schemaOnly) {
         ReadTable(driver, desc, fullPath, folderPath, ordered);

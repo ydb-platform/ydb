@@ -2,7 +2,7 @@ PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
 FORK_SUBTESTS()
-SPLIT_FACTOR(38)
+SPLIT_FACTOR(39)
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
@@ -12,6 +12,7 @@ ELSE()
 ENDIF()
 
 TEST_SRCS(
+    test_vector_index_large_levels_and_clusters.py
     test_vector_index.py
 
 )

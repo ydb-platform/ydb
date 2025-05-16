@@ -225,8 +225,9 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
             ++idx;
         }
         auto batchResults = mergeStream.DrainAllParts(checkPoints, indexFields);
-        splitInfo.FillRemapping(
-            std::move(batchResults), NYDBTest::TControllers::GetColumnShardController()->GetBlobSplitSettings(NSplitter::TSplitSettings()));
+        NSplitter::TSplitSettings settings;
+        settings.SetMaxPortionSize(PortionExpectedSize);
+        splitInfo.FillRemapping(std::move(batchResults), NYDBTest::TControllers::GetColumnShardController()->GetBlobSplitSettings(settings));
     }
 
     using TColumnData = std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>;

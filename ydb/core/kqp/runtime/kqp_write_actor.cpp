@@ -1787,7 +1787,7 @@ public:
             }
 
             auto& writeInfo = WriteInfos[settings.TableId];
-            if (!writeInfo.WriteTableActor) {
+            if (!writeInfo.Actor.Ptr) {
                 TVector<NScheme::TTypeInfo> keyColumnTypes;
                 keyColumnTypes.reserve(settings.KeyColumns.size());
                 for (const auto& column : settings.KeyColumns) {
@@ -1795,7 +1795,7 @@ public:
                         column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
                     keyColumnTypes.push_back(typeInfoMod.TypeInfo);
                 }
-                writeInfo.WriteTableActor = new TKqpTableWriteActor(
+                writeInfo.Actor.Ptr = new TKqpTableWriteActor(
                     this,
                     settings.TableId,
                     settings.TablePath,
@@ -1810,15 +1810,15 @@ public:
                     TxManager,
                     SessionActorId,
                     Counters);
-                writeInfo.WriteTableActor->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
-                writeInfo.WriteTableActorId = RegisterWithSameMailbox(writeInfo.WriteTableActor);
-                CA_LOG_D("Create new TableWriteActor for table `" << settings.TablePath << "` (" << settings.TableId << "). lockId=" << LockTxId << " " << writeInfo.WriteTableActorId);
+                writeInfo.Actor.Ptr->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
+                writeInfo.Actor.Id = RegisterWithSameMailbox(writeInfo.Actor.Ptr);
+                CA_LOG_D("Create new TableWriteActor for table `" << settings.TablePath << "` (" << settings.TableId << "). lockId=" << LockTxId << " " << writeInfo.Actor.Id);
             }
 
             EnableStreamWrite &= settings.EnableStreamWrite;
 
             token = TWriteToken{settings.TableId, CurrentWriteToken++};
-            writeInfo.WriteTableActor->Open(
+            writeInfo.Actor.Ptr->Open(
                 token.Cookie,
                 settings.OperationType,
                 std::move(settings.KeyColumns),
@@ -1854,7 +1854,7 @@ public:
         if (State == EState::FLUSHING) {
             bool isEmpty = true;
             for (auto& [_, info] : WriteInfos) {
-                isEmpty = isEmpty && info.WriteTableActor->IsReady() && info.WriteTableActor->IsEmpty();
+                isEmpty = isEmpty && info.Actor.Ptr->IsReady() && info.Actor.Ptr->IsEmpty();
             }
             if (isEmpty) {
                 OnFlushed();
@@ -1867,7 +1867,7 @@ public:
         for (auto& [tableId, queue] : DataQueues) {
             auto& writeInfo = WriteInfos.at(tableId);
 
-            if (!writeInfo.WriteTableActor->IsReady()) {
+            if (!writeInfo.Actor.Ptr->IsReady()) {
                 CA_LOG_D("ProcessRequestQueue " << tableId << " NOT READY queue=" << queue.size());
                 return;
             }
@@ -1876,11 +1876,11 @@ public:
                 auto& message = queue.front();
 
                 if (message.Data) {
-                    writeInfo.WriteTableActor->Write(message.Token.Cookie, std::move(message.Data));
+                    writeInfo.Actor.Ptr->Write(message.Token.Cookie, std::move(message.Data));
                 }
 
                 if (message.Close) {
-                    writeInfo.WriteTableActor->Close(message.Token.Cookie);
+                    writeInfo.Actor.Ptr->Close(message.Token.Cookie);
                 }
 
                 AckQueue.push(TAckMessage{
@@ -1929,8 +1929,8 @@ public:
         if (needToFlush) {
             CA_LOG_D("Flush data");
             for (auto& [_, info] : WriteInfos) {
-                if (info.WriteTableActor->IsReady()) {
-                    if (!info.WriteTableActor->Flush()) {
+                if (info.Actor.Ptr->IsReady()) {
+                    if (!info.Actor.Ptr->Flush()) {
                         return false;
                     }
                 }
@@ -1969,7 +1969,7 @@ public:
         }
         TxId = txId;
         for (auto& [_, info] : WriteInfos) {
-            info.WriteTableActor->SetPrepare(txId);
+            info.Actor.Ptr->SetPrepare(txId);
         }
         Close();
         if (!Process()) {
@@ -1993,7 +1993,7 @@ public:
             YQL_ENSURE(queue.empty());
         }
         for (auto& [_, info] : WriteInfos) {
-            info.WriteTableActor->SetImmediateCommit();
+            info.Actor.Ptr->SetImmediateCommit();
         }
         Close();
         if (!Process()) {
@@ -2014,7 +2014,7 @@ public:
             YQL_ENSURE(queue.empty());
         }
         for (auto& [_, info] : WriteInfos) {
-            info.WriteTableActor->SetDistributedCommit();
+            info.Actor.Ptr->SetDistributedCommit();
         }
         SendCommitToCoordinator();
     }
@@ -2032,7 +2032,7 @@ public:
         THashSet<ui64> shards = TxManager->GetShards();
         if (!isRollback) {
             for (auto& [_, info] : WriteInfos) {
-                for (const auto& shardId : info.WriteTableActor->GetShardsIds()) {
+                for (const auto& shardId : info.Actor.Ptr->GetShardsIds()) {
                     shards.erase(shardId);
                 }
             }
@@ -2175,16 +2175,16 @@ public:
 
     void Close() {
         for (auto& [_, info] : WriteInfos) {
-            if (!info.WriteTableActor->IsClosed()) {
-                info.WriteTableActor->Close();
+            if (!info.Actor.Ptr->IsClosed()) {
+                info.Actor.Ptr->Close();
             }
         }
     }
 
     i64 GetFreeSpace(TWriteToken token) const {
         auto& info = WriteInfos.at(token.TableId);
-        return info.WriteTableActor->IsReady()
-            ? MessageSettings.InFlightMemoryLimitPerActorBytes - info.WriteTableActor->GetMemory()
+        return info.Actor.Ptr->IsReady()
+            ? MessageSettings.InFlightMemoryLimitPerActorBytes - info.Actor.Ptr->GetMemory()
             : std::numeric_limits<i64>::min(); // Can't use zero here because compute can use overcommit!
     }
 
@@ -2195,8 +2195,8 @@ public:
     i64 GetTotalMemory() const {
         i64 totalMemory = 0;
         for (auto& [_, info] : WriteInfos) {
-            totalMemory += info.WriteTableActor->IsReady()
-                ? info.WriteTableActor->GetMemory()
+            totalMemory += info.Actor.Ptr->IsReady()
+                ? info.Actor.Ptr->GetMemory()
                 : 0;
         }
         return totalMemory;
@@ -2205,7 +2205,7 @@ public:
     THashSet<ui64> GetShardsIds() const {
         THashSet<ui64> shardIds;
         for (auto& [_, info] : WriteInfos) {
-            for (const auto& id : info.WriteTableActor->GetShardsIds()) {
+            for (const auto& id : info.Actor.Ptr->GetShardsIds()) {
                 shardIds.insert(id);
             }
         }
@@ -2221,8 +2221,8 @@ public:
         }
 
         for (auto& [_, info] : WriteInfos) {
-            if (info.WriteTableActor) {
-                info.WriteTableActor->Terminate();
+            if (info.Actor.Ptr) {
+                info.Actor.Ptr->Terminate();
             }
         }
 
@@ -2396,7 +2396,7 @@ public:
     void Handle(TEvKqpBuffer::TEvFlush::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
         for (auto& [_, info] : WriteInfos) {
-            info.WriteTableActor->FlushBuffers();
+            info.Actor.Ptr->FlushBuffers();
         }
         Flush(std::move(ev->TraceId));
     }
@@ -2404,7 +2404,7 @@ public:
     void Handle(TEvKqpBuffer::TEvCommit::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
         for (auto& [_, info] : WriteInfos) {
-            info.WriteTableActor->FlushBuffers();
+            info.Actor.Ptr->FlushBuffers();
         }
 
         if (!TxManager->NeedCommit()) {
@@ -2808,7 +2808,7 @@ public:
         Y_ABORT_UNLESS(GetTotalMemory() == 0);
 
         for (auto& [_, info] : WriteInfos) {
-            info.WriteTableActor->Unlink();
+            info.Actor.Ptr->Unlink();
         }
     }
 
@@ -2848,7 +2848,7 @@ public:
             BufferWriteActorStateSpan.Link(BufferWriteActorSpan.GetTraceId());
         }
         for (auto& [_, info] : WriteInfos) {
-            info.WriteTableActor->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
+            info.Actor.Ptr->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
         }
     }
 
@@ -2873,7 +2873,7 @@ public:
     NYql::NDqProto::TDqTaskStats BuildStats() {
         NYql::NDqProto::TDqTaskStats result;
         for (const auto& [_, writeInfo] : WriteInfos) {
-            writeInfo.WriteTableActor->FillStats(&result);
+            writeInfo.Actor.Ptr->FillStats(&result);
         }
         return result;
     }
@@ -2916,8 +2916,13 @@ private:
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
     struct TWriteInfo {
-        TKqpTableWriteActor* WriteTableActor = nullptr;
-        TActorId WriteTableActorId;
+        struct TActorInfo {
+            TKqpTableWriteActor* Ptr = nullptr;
+            TActorId Id;
+        };
+
+        TActorInfo Actor;
+        THashMap<TTableId, TActorInfo> Indexes;
     };
 
     THashMap<TTableId, TWriteInfo> WriteInfos;

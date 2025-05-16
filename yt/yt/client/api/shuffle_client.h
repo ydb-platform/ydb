@@ -34,6 +34,17 @@ struct TStartShuffleOptions
     std::optional<int> ReplicationFactor;
 };
 
+struct TShuffleReaderOptions
+{
+    NTableClient::TTableReaderConfigPtr Config;
+};
+
+struct TShuffleWriterOptions
+{
+    NTableClient::TTableWriterConfigPtr Config;
+    bool OverwriteExistingWriterData = false;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct IShuffleClient
@@ -49,14 +60,14 @@ struct IShuffleClient
     virtual TFuture<IRowBatchReaderPtr> CreateShuffleReader(
         const TShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
-        std::optional<std::pair<int, int>> writerIndexRange,
-        const NTableClient::TTableReaderConfigPtr& config = New<NTableClient::TTableReaderConfig>()) = 0;
+        std::optional<std::pair<int, int>> writerIndexRange = {},
+        const TShuffleReaderOptions& options = {}) = 0;
 
     virtual TFuture<IRowBatchWriterPtr> CreateShuffleWriter(
         const TShuffleHandlePtr& shuffleHandle,
         const std::string& partitionColumn,
-        std::optional<int> writerIndex,
-        const NTableClient::TTableWriterConfigPtr& config = New<NTableClient::TTableWriterConfig>()) = 0;
+        std::optional<int> writerIndex = {},
+        const TShuffleWriterOptions& options = {}) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

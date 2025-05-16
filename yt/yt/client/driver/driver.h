@@ -157,8 +157,6 @@ struct IDriver
     //! Returns the underlying connection.
     virtual NApi::IConnectionPtr GetConnection() = 0;
 
-    virtual NSignature::ISignatureGeneratorPtr GetSignatureGenerator() = 0;
-
     virtual NSignature::ISignatureValidatorPtr GetSignatureValidator() = 0;
 
     //! Terminates the underlying connection.
@@ -172,7 +170,6 @@ DEFINE_REFCOUNTED_TYPE(IDriver)
 IDriverPtr CreateDriver(
     NApi::IConnectionPtr connection,
     TDriverConfigPtr config,
-    NSignature::ISignatureGeneratorPtr signatureGenerator,
     NSignature::ISignatureValidatorPtr signatureValidator);
 
 ////////////////////////////////////////////////////////////////////////////////

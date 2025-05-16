@@ -197,6 +197,9 @@ public:
         const NApi::TPutFileToCacheOptions& options) override;
 
     // Security.
+    TFuture<TGetCurrentUserResultPtr> GetCurrentUser(
+        const TGetCurrentUserOptions& options) override;
+
     TFuture<void> AddMember(
         const TString& group,
         const TString& member,
@@ -606,13 +609,13 @@ public:
         const TShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
         std::optional<std::pair<int, int>> writerIndexRange,
-        const NTableClient::TTableReaderConfigPtr& config) override;
+        const TShuffleReaderOptions& options) override;
 
     TFuture<IRowBatchWriterPtr> CreateShuffleWriter(
         const TShuffleHandlePtr& shuffleHandle,
         const std::string& partitionColumn,
         std::optional<int> writerIndex,
-        const NTableClient::TTableWriterConfigPtr& config) override;
+        const TShuffleWriterOptions& options) override;
 
 private:
     const TConnectionPtr Connection_;

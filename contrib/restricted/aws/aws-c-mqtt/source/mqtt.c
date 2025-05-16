@@ -236,6 +236,39 @@ bool aws_mqtt_is_valid_topic_filter(const struct aws_byte_cursor *topic_filter) 
             AWS_DEFINE_ERROR_INFO_MQTT(
                 AWS_ERROR_MQTT_ACK_REASON_CODE_FAILURE,
                 "MQTT ack packet received with a failing reason code"),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                AWS_ERROR_MQTT_PROTOCOL_ADAPTER_FAILING_REASON_CODE,
+                "MQTT operation returned a failing reason code"),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                AWS_ERROR_MQTT_REQUEST_RESPONSE_CLIENT_SHUT_DOWN,
+                "Request operation failed due to client shut down"),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                AWS_ERROR_MQTT_REQUEST_RESPONSE_TIMEOUT,
+                "Request operation failed due to timeout"),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                AWS_ERROR_MQTT_REQUEST_RESPONSE_NO_SUBSCRIPTION_CAPACITY,
+                "Streaming request operation failed because there was no space for the subscription"),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                AWS_ERROR_MQTT_REQUEST_RESPONSE_SUBSCRIBE_FAILURE,
+                "Request operation failed because the associated subscribe failed synchronously"),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                AWS_ERROR_MQTT_REQUEST_RESPONSE_INTERNAL_ERROR,
+                "Request operation failed due to a non-specific internal error within the client."),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                AWS_ERROR_MQTT_REQUEST_RESPONSE_PUBLISH_FAILURE,
+                "Request-response operation failed because the associated publish failed synchronously."),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                AWS_ERROR_MQTT_REUQEST_RESPONSE_STREAM_ALREADY_ACTIVATED,
+                "Streaming operation activation failed because the operation had already been activated."),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                 AWS_ERROR_MQTT_REQUEST_RESPONSE_MODELED_SERVICE_ERROR,
+                 "Request-response operation failed with a modeled service error."),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                 AWS_ERROR_MQTT_REQUEST_RESPONSE_PAYLOAD_PARSE_ERROR,
+                 "Request-response operation failed due to an inability to parse the payload."),
+            AWS_DEFINE_ERROR_INFO_MQTT(
+                 AWS_ERROR_MQTT_REQUEST_RESPONSE_INVALID_RESPONSE_PATH,
+                 "Request-response operation failed due to arrival on an unknown response path"),
         };
 /* clang-format on */
 #undef AWS_DEFINE_ERROR_INFO_MQTT
@@ -254,6 +287,7 @@ static struct aws_error_info_list s_error_list = {
             DEFINE_LOG_SUBJECT_INFO(AWS_LS_MQTT5_CLIENT, "mqtt5-client", "MQTT5 client and connections"),
             DEFINE_LOG_SUBJECT_INFO(AWS_LS_MQTT5_CANARY, "mqtt5-canary", "MQTT5 canary logging"),
             DEFINE_LOG_SUBJECT_INFO(AWS_LS_MQTT5_TO_MQTT3_ADAPTER, "mqtt5-to-mqtt3-adapter", "MQTT5-To-MQTT3 adapter logging"),
+            DEFINE_LOG_SUBJECT_INFO(AWS_LS_MQTT_REQUEST_RESPONSE, "mqtt-request-response-systems", "MQTT request-response systems logging"),
         };
 /* clang-format on */
 

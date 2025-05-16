@@ -1,6 +1,19 @@
 ## AWS C S3
 
-C99 library implementation for communicating with the S3 service, designed for maximizing throughput on high bandwidth EC2 instances.
+The AWS-C-S3 library is an asynchronous AWS S3 client focused on maximizing throughput and network utilization.
+
+### Key features:
+- **Automatic Request Splitting**: Improves throughput by automatically splitting the request into part-sized chunks and performing parallel uploads/downloads of these chunks over multiple connections. There's a cap on the throughput of single S3 connection, the only way to go faster is multiple parallel connections.
+- **Automatic Retries**: Increases resilience by retrying individual failed chunks of a file transfer, eliminating the need to restart transfers from scratch after an intermittent error.
+- **DNS Load Balancing**: DNS resolver continuously harvests Amazon S3 IP addresses. When load is spread across the S3 fleet, overall throughput more reliable than if all connections are going to a single IP.
+- **Advanced Network Management**: The client incorporates automatic request parallelization, effective timeouts and retries, and efficient connection reuse. This approach helps to maximize throughput and network utilization, and to avoid network overloads.
+- **Thread Pools and Async I/O**: Avoids bottlenecks associated with single-thread processing.
+- **Parallel Reads**: When uploading a large file from disk, reads from multiple parts of the file in parallel. This is faster than reading the file sequentially from beginning to end.
+
+### Documentation
+
+- [GetObject](docs/GetObject.md): A visual representation of the GetObject request flow.
+- [Memory Aware Requests Execution](docs/memory_aware_request_execution.md): An in-depth guide on optimizing memory usage during request executions.
 
 ## License
 
@@ -66,6 +79,23 @@ cmake --build aws-c-auth/build --target install
 git clone git@github.com:awslabs/aws-c-s3.git
 cmake -S aws-c-s3 -B aws-c-s3/build -DCMAKE_INSTALL_PREFIX=<install-path> -DCMAKE_PREFIX_PATH=<install-path>
 cmake --build aws-c-s3/build --target install
+```
+
+#### Running S3 sample
+
+After installing all the dependencies, and building aws-c-s3, you can run the sample directly from the s3 build directory.
+
+To download:
+```
+aws-c-s3/build/samples/s3/s3 cp s3://<bucket-name>/<object-name> <download-path> --region <region>
+```
+To upload:
+```
+aws-c-s3/build/samples/s3/s3 cp <upload-path> s3://<bucket-name>/<object-name> --region <region>
+```
+To list objects:
+```
+aws-c-s3/build/samples/s3/s3 ls s3://<bucket-name> --region <region>
 ```
 
 ## Testing

@@ -1146,27 +1146,36 @@ void TestReplicationSettingsArePreserved(
         NQuery::TSession& session,
         TReplicationClient& client,
         TBackupFunction&& backup,
-        TRestoreFunction&& restore)
+        TRestoreFunction&& restore,
+        bool useSecret)
 {
-    ExecuteQuery(session, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
+    if (useSecret) {
+        ExecuteQuery(session, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
+    }
     ExecuteQuery(session, "CREATE TABLE `/Root/table` (k Uint32, v Utf8, PRIMARY KEY (k));", true);
     ExecuteQuery(session, Sprintf(R"(
-        CREATE ASYNC REPLICATION `/Root/replication` FOR
-            `/Root/table` AS `/Root/replica`
-        WITH (
-            CONNECTION_STRING = 'grpc://%s/?database=/Root',
-            TOKEN_SECRET_NAME = 'secret'
-        );)", endpoint.c_str()), true
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = 'grpc://%s/?database=/Root'
+                    %s
+                );
+            )",
+            endpoint.c_str(),
+            (useSecret ? ", TOKEN_SECRET_NAME = 'secret'" : "")
+        ), true
     );
 
-    auto checkDescription = [&client, &endpoint]() {
+    auto checkDescription = [&]() {
         auto result = client.DescribeReplication("/Root/replication").ExtractValueSync();
         const auto& desc = result.GetReplicationDescription();
 
         const auto& params = desc.GetConnectionParams();
         UNIT_ASSERT_VALUES_EQUAL(params.GetDiscoveryEndpoint(), endpoint);
         UNIT_ASSERT_VALUES_EQUAL(params.GetDatabase(), "/Root");
-        UNIT_ASSERT_VALUES_EQUAL(params.GetOAuthCredentials().TokenSecretName, "secret");
+        if (useSecret) {
+            UNIT_ASSERT_VALUES_EQUAL(params.GetOAuthCredentials().TokenSecretName, "secret");
+        }
 
         const auto& items = desc.GetItems();
         UNIT_ASSERT_VALUES_EQUAL(items.size(), 1);
@@ -1462,7 +1471,7 @@ void TestPrimitiveType(
 
 Y_UNIT_TEST_SUITE(BackupRestore) {
     auto CreateBackupLambda(const TDriver& driver, const TFsPath& fsPath, const TString& dbPath = "/Root") {
-        return [&]() {
+        return [=, &driver]() {
             NDump::TClient backupClient(driver);
             const auto result = backupClient.Dump(dbPath, fsPath, NDump::TDumpSettings().Database(dbPath));
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -1470,7 +1479,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     }
 
     auto CreateRestoreLambda(const TDriver& driver, const TFsPath& fsPath, const TString& dbPath = "/Root") {
-        return [&]() {
+        return [=, &driver]() {
             NDump::TClient backupClient(driver);
             const auto result = backupClient.Restore(fsPath, dbPath);
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -1986,11 +1995,15 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
-    void TestReplicationBackupRestore() {
+    void TestReplicationBackupRestore(bool useSecret = true) {
         TKikimrWithGrpcAndRootSchema server;
 
         const auto endpoint = Sprintf("localhost:%u", server.GetPort());
-        auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetAuthToken("root@builtin"));
+        auto driverConfig = TDriverConfig().SetEndpoint(endpoint);
+        if (useSecret) {
+            driverConfig.SetAuthToken("root@builtin");
+        }
+        auto driver = TDriver(driverConfig);
 
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
@@ -2002,7 +2015,8 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TestReplicationSettingsArePreserved(
             endpoint, session, replicationClient,
             CreateBackupLambda(driver, pathToBackup),
-            CreateRestoreLambda(driver, pathToBackup)
+            CreateRestoreLambda(driver, pathToBackup),
+            useSecret
         );
     }
 
@@ -2225,6 +2239,10 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             CreateRestoreLambda(driver, pathToBackup)
         );
     }
+
+    Y_UNIT_TEST(RestoreReplicationThatDoesNotUseSecret) {
+        TestReplicationBackupRestore(false);
+    }
 }
 
 Y_UNIT_TEST_SUITE(BackupRestoreS3) {
@@ -2369,7 +2387,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
     const TString DefaultS3Prefix = "";
 
     auto CreateBackupLambda(const TDriver& driver, ui16 s3Port, const TString& source = "/Root") {
-        return [&, s3Port]() {
+        return [=, &driver]() {
             const auto clientSettings = TCommonClientSettings().Database(source);
             TSchemeClient schemeClient(driver, clientSettings);
             NExport::TExportClient exportClient(driver, clientSettings);
@@ -2402,7 +2420,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
     // to do: implement source item list expansion
     auto CreateRestoreLambda(const TDriver& driver, ui16 s3Port, const TVector<TString>& sourceItems, const TString& destinationPrefix = "/Root") {
-        return [&, s3Port]() {
+        return [=, &driver]() {
             const auto clientSettings = TCommonClientSettings().Database(destinationPrefix);
             NImport::TImportClient importClient(driver, clientSettings);
             NOperation::TOperationClient operationClient(driver, clientSettings);

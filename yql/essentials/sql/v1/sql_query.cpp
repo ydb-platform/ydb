@@ -3200,6 +3200,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "orderedcolumns") {
             Ctx.OrderedColumns = true;
             Ctx.IncrementMonCounter("sql_pragma", "OrderedColumns");
+        } else if (normalizedPragma == "derivecolumnorder") {
+            Ctx.DeriveColumnOrder = true;
+            Ctx.IncrementMonCounter("sql_pragma", "DeriveColumnOrder");
+        } else if (normalizedPragma == "disablederivecolumnorder") {
+            Ctx.DeriveColumnOrder = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableDeriveColumnOrder");
         } else if (normalizedPragma == "disableorderedcolumns") {
             Ctx.OrderedColumns = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableOrderedColumns");

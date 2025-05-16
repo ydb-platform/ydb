@@ -931,9 +931,9 @@ IGraphTransformer::TStatus EquiJoinAnnotation(
         const auto& it = labels.Inputs[i];
         for (auto item: it.InputType->GetItems()) {
             TString fullName = it.FullName(item->GetName());
-            auto type_it = columnTypes.find(fullName);
-            if (type_it != columnTypes.end()) {
-                auto type = type_it->second;
+            auto typeIt = columnTypes.find(fullName);
+            if (typeIt != columnTypes.end()) {
+                auto type = typeIt->second;
                 if (joinsStates[i].IsMultiget) {
                     auto wasOptional = type->IsOptionalOrNull();
                     type = ctx.MakeType<TListExprType>(type);

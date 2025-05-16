@@ -6,18 +6,12 @@
  * SPDX-License-Identifier: Apache-2.0.
  */
 
-/**
- * DEVELOPER PREVIEW DISCLAIMER
- *
- * MQTT5 support is currently in **developer preview**.  We encourage feedback at all times, but feedback during the
- * preview window is especially valuable in shaping the final product.  During the preview period we may make
- * backwards-incompatible changes to the public API, but in general, this is something we will try our best to avoid.
- */
-
 #include <aws/mqtt/mqtt.h>
 
 #include <aws/common/array_list.h>
 #include <aws/common/byte_buf.h>
+
+AWS_PUSH_SANE_WARNING_LEVEL
 
 /**
  * Some artificial (non-MQTT spec specified) limits that we place on input packets (publish, subscribe, unsubscibe)
@@ -482,5 +476,6 @@ struct aws_mqtt5_packet_unsuback_view {
     size_t reason_code_count;
     const enum aws_mqtt5_unsuback_reason_code *reason_codes;
 };
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_MQTT_MQTT5_TYPES_H */

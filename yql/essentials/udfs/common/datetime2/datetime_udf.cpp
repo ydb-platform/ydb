@@ -1,5 +1,4 @@
 #include <yql/essentials/minikql/mkql_type_ops.h>
-#include <yql/essentials/public/udf/tz/udf_tz.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/minikql/datetime/datetime.h>
 #include <yql/essentials/minikql/datetime/datetime64.h>
@@ -673,7 +672,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
     }
 
     inline bool ValidateTimezoneId(ui16 timezoneId) {
-        const auto& zones = NUdf::GetTimezones();
+        const auto& zones = NTi::GetTimezones();
         return timezoneId < zones.size() && !zones[timezoneId].empty();
     }
 
@@ -1616,10 +1615,10 @@ TUnboxedValue GetDayOfWeekName(const IValueBuilder* valueBuilder, const TUnboxed
         static void Process(const IValueBuilder* valueBuilder, TBlockItem item, const TSink& sink) {
             Y_UNUSED(valueBuilder);
             auto timezoneId = GetTimezoneId<TMResourceName>(item);
-            if (timezoneId >= NUdf::GetTimezones().size()) {
+            if (timezoneId >= NTi::GetTimezones().size()) {
                 sink(TBlockItem{});
             } else {
-                sink(TBlockItem{NUdf::GetTimezones()[timezoneId]});
+                sink(TBlockItem{NTi::GetTimezones()[timezoneId]});
             }
         }
     };
@@ -1627,7 +1626,7 @@ TUnboxedValue GetDayOfWeekName(const IValueBuilder* valueBuilder, const TUnboxed
 template<const char* TResourceName>
 TUnboxedValue GetTimezoneName(const IValueBuilder* valueBuilder, const TUnboxedValuePod& arg) {
     const ui16 tzId = GetTimezoneId<TResourceName>(arg);
-    const auto& tzNames = NUdf::GetTimezones();
+    const auto& tzNames = NTi::GetTimezones();
     if (tzId >= tzNames.size()) {
         return TUnboxedValuePod();
     }
@@ -2934,7 +2933,7 @@ private:
                     case 'Z':
                         Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
                             const auto timezoneId = GetTimezoneId<TM64ResourceName>(value);
-                            const auto tzName = NUdf::GetTimezones()[timezoneId];
+                            const auto tzName = NTi::GetTimezones()[timezoneId];
                             std::memcpy(out, tzName.data(), std::min(tzName.size(), MAX_TIMEZONE_NAME_LEN));
                             return tzName.size();
                         });

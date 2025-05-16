@@ -590,7 +590,7 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
     for (ui32 i = 0; i < join.JoinKeys().Size(); ++i) {
         const auto& keyTuple = join.JoinKeys().Item(i);
 
-        auto leftKey = join.LeftLabel().Maybe<TCoVoid>()
+        auto leftKey = (join.LeftLabel().Maybe<TCoVoid>() || join.LeftLabel().Maybe<TCoAtomList>())
             ? Join('.', keyTuple.LeftLabel().Value(), keyTuple.LeftColumn().Value())
             : keyTuple.LeftColumn().StringValue();
 

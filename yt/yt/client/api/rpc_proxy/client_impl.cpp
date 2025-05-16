@@ -7,6 +7,7 @@
 #include "row_batch_writer.h"
 #include "table_mount_cache.h"
 #include "table_writer.h"
+#include "target_cluster_injecting_channel.h"
 #include "timestamp_provider.h"
 #include "transaction.h"
 
@@ -65,12 +66,10 @@ TClient::TClient(
     TConnectionPtr connection,
     const TClientOptions& clientOptions)
     : Connection_(std::move(connection))
-    , RetryingChannel_(CreateSequoiaAwareRetryingChannel(
-        CreateCredentialsInjectingChannel(
-            Connection_->CreateChannel(false),
-            clientOptions),
-        /*retryProxyBanned*/ true))
     , ClientOptions_(clientOptions)
+    , RetryingChannel_(CreateSequoiaAwareRetryingChannel(
+        WrapNonRetryingChannel(Connection_->CreateChannel(false)),
+        /*retryProxyBanned*/ true))
     , TableMountCache_(BIND(
         &CreateTableMountCache,
         Connection_->GetConfig()->TableMountCache,
@@ -116,9 +115,7 @@ IChannelPtr TClient::CreateSequoiaAwareRetryingChannel(IChannelPtr channel, bool
 
 IChannelPtr TClient::CreateNonRetryingChannelByAddress(const std::string& address) const
 {
-    return CreateCredentialsInjectingChannel(
-        Connection_->CreateChannelByAddress(address),
-        ClientOptions_);
+    return WrapNonRetryingChannel(Connection_->CreateChannelByAddress(address));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -142,9 +139,7 @@ IChannelPtr TClient::GetRetryingChannel() const
 
 IChannelPtr TClient::CreateNonRetryingStickyChannel() const
 {
-    return CreateCredentialsInjectingChannel(
-        Connection_->CreateChannel(true),
-        ClientOptions_);
+    return WrapNonRetryingChannel(Connection_->CreateChannel(true));
 }
 
 IChannelPtr TClient::WrapStickyChannelIntoRetrying(IChannelPtr underlying) const
@@ -152,6 +147,19 @@ IChannelPtr TClient::WrapStickyChannelIntoRetrying(IChannelPtr underlying) const
     return CreateSequoiaAwareRetryingChannel(
         std::move(underlying),
         /*retryProxyBanned*/ false);
+}
+
+IChannelPtr TClient::WrapNonRetryingChannel(IChannelPtr underlying) const
+{
+    auto credentialsInjected = CreateCredentialsInjectingChannel(
+        std::move(underlying),
+        ClientOptions_);
+
+    auto targetClusterInjected = CreateTargetClusterInjectingChannel(
+        std::move(credentialsInjected),
+        ClientOptions_.MultiproxyTargetCluster);
+
+    return targetClusterInjected;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -685,7 +693,7 @@ TFuture<TGetTabletErrorsResult> TClient::GetTabletErrors(
 }
 
 TFuture<std::vector<TTabletActionId>> TClient::BalanceTabletCells(
-    const TString& tabletCellBundle,
+    const std::string& tabletCellBundle,
     const std::vector<TYPath>& movableTables,
     const TBalanceTabletCellsOptions& options)
 {
@@ -1054,8 +1062,8 @@ TFuture<TCheckPermissionByAclResult> TClient::CheckPermissionByAcl(
 }
 
 TFuture<void> TClient::TransferAccountResources(
-    const TString& srcAccount,
-    const TString& dstAccount,
+    const std::string& srcAccount,
+    const std::string& dstAccount,
     NYTree::INodePtr resourceDelta,
     const TTransferAccountResourcesOptions& options)
 {
@@ -2521,14 +2529,14 @@ TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
 }
 
 TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr> TClient::GetBundleConfig(
-    const TString& /*bundleName*/,
+    const std::string& /*bundleName*/,
     const NBundleControllerClient::TGetBundleConfigOptions& /*options*/)
 {
     ThrowUnimplemented("GetBundleConfig");
 }
 
 TFuture<void> TClient::SetBundleConfig(
-    const TString& /*bundleName*/,
+    const std::string& /*bundleName*/,
     const NBundleControllerClient::TBundleTargetConfigPtr& /*bundleConfig*/,
     const NBundleControllerClient::TSetBundleConfigOptions& /*options*/)
 {
@@ -2788,6 +2796,7 @@ TFuture<TShuffleHandlePtr> TClient::StartShuffle(
 TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
     const TShuffleHandlePtr& shuffleHandle,
     int partitionIndex,
+    std::optional<std::pair<int, int>> writerIndexRange,
     const TTableReaderConfigPtr& config)
 {
     auto proxy = CreateApiServiceProxy();
@@ -2798,6 +2807,11 @@ TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
     req->set_shuffle_handle(ConvertToYsonString(shuffleHandle).ToString());
     req->set_partition_index(partitionIndex);
     req->set_reader_config(ConvertToYsonString(config).ToString());
+    if (writerIndexRange) {
+        auto* writerIndexRangeProto = req->mutable_writer_index_range();
+        writerIndexRangeProto->set_begin(writerIndexRange->first);
+        writerIndexRangeProto->set_end(writerIndexRange->second);
+    }
 
     return CreateRpcClientInputStream(std::move(req))
         .ApplyUnique(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) {
@@ -2808,6 +2822,7 @@ TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
 TFuture<IRowBatchWriterPtr> TClient::CreateShuffleWriter(
     const TShuffleHandlePtr& shuffleHandle,
     const std::string& partitionColumn,
+    std::optional<int> writerIndex,
     const TTableWriterConfigPtr& config)
 {
     auto proxy = CreateApiServiceProxy();
@@ -2817,6 +2832,9 @@ TFuture<IRowBatchWriterPtr> TClient::CreateShuffleWriter(
     req->set_shuffle_handle(ConvertToYsonString(shuffleHandle).ToString());
     req->set_partition_column(ToProto(partitionColumn));
     req->set_writer_config(ConvertToYsonString(config).ToString());
+    if (writerIndex) {
+        req->set_writer_index(*writerIndex);
+    }
 
     return CreateRpcClientOutputStream(std::move(req))
         .ApplyUnique(BIND([] (IAsyncZeroCopyOutputStreamPtr&& outputStream) {

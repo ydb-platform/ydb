@@ -288,7 +288,7 @@ private:
 
         if (const auto* authorizationString = httpHeaders->Find(AuthorizationHeaderName)) {
             const TStringBuf Prefix = "OAuth ";
-            if (!authorizationString->StartsWith(Prefix)) {
+            if (!authorizationString->starts_with(Prefix)) {
                 return TError("Invalid \"Authorization\" header value");
             }
             getCredentialsExt()->set_token(TrimLeadingWhitespaces(authorizationString->substr(Prefix.length())));
@@ -347,10 +347,10 @@ private:
         NRpc::NProto::TCustomMetadataExt customMetadataExt;
         bool hasCustomHeaders = false;
         for (const auto& [header, value] : DumpUnknownHeaders(httpHeaders)) {
-            if (!header.StartsWith("X-") && !header.StartsWith("x-")) {
+            if (!header.starts_with("X-") && !header.starts_with("x-")) {
                 continue;
             }
-            TString key = header.substr(2);
+            auto key = ToProto(header.substr(2));
             (*customMetadataExt.mutable_entries())[key] = value;
             hasCustomHeaders = true;
         }

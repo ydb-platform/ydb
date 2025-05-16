@@ -69,8 +69,9 @@ NKikimr::TConclusionStatus TOptimizerPlannerConstructor::DoDeserializeFromJson(c
         if (!level) {
             return TConclusionStatus::Fail("incorrect level class_name: " + className);
         }
-        if (!level->DeserializeFromJson(i)) {
-            return TConclusionStatus::Fail("cannot parse level: " + i.GetStringRobust());
+        auto parseConclusion = level->DeserializeFromJson(i);
+        if (parseConclusion.IsFail()) {
+            return TConclusionStatus::Fail("cannot parse level: " + i.GetStringRobust() + "; " + parseConclusion.GetErrorMessage());
         }
         Levels.emplace_back(TLevelConstructorContainer(std::shared_ptr<ILevelConstructor>(level.Release())));
     }

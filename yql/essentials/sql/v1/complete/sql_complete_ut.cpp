@@ -495,18 +495,6 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
                 {ClusterName, "example"},
                 {ClusterName, "yt:saurus"},
                 {Keyword, "ANY"},
-                {Keyword, "CALLABLE"},
-                {Keyword, "DICT"},
-                {Keyword, "ENUM"},
-                {Keyword, "FLOW"},
-                {Keyword, "LIST"},
-                {Keyword, "OPTIONAL"},
-                {Keyword, "RESOURCE"},
-                {Keyword, "SET"},
-                {Keyword, "STRUCT"},
-                {Keyword, "TAGGED"},
-                {Keyword, "TUPLE"},
-                {Keyword, "VARIANT"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM "), expected);
         }
@@ -590,18 +578,6 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         {
             TVector<TCandidate> expected = {
                 {TableName, "`maxim`"},
-                {Keyword, "CALLABLE"},
-                {Keyword, "DICT"},
-                {Keyword, "ENUM"},
-                {Keyword, "FLOW"},
-                {Keyword, "LIST"},
-                {Keyword, "OPTIONAL"},
-                {Keyword, "RESOURCE"},
-                {Keyword, "SET"},
-                {Keyword, "STRUCT"},
-                {Keyword, "TAGGED"},
-                {Keyword, "TUPLE"},
-                {Keyword, "VARIANT"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM yt:saurus."), expected);
         }

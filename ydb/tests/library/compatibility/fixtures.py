@@ -83,6 +83,7 @@ all_binary_combinations_ids_mixed = [
     "current_and_last_stable",
 ]
 
+
 class MixedClusterFixture:
     @pytest.fixture(autouse=True, params=all_binary_combinations_mixed, ids=all_binary_combinations_ids_mixed)
     def base_setup(self, request):

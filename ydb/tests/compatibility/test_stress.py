@@ -8,6 +8,7 @@ import yatest
 from ydb.tests.stress.simple_queue.workload import Workload
 from ydb.tests.library.compatibility.fixtures import MixedClusterFixture
 
+
 class TestStress(MixedClusterFixture):
     @pytest.fixture(autouse=True)
     def setup(self):

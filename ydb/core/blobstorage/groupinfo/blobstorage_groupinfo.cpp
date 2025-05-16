@@ -87,6 +87,27 @@ public:
         }
     }
 
+    TBlobStorageGroupInfo::EBlobState GetBlobStateWithoutLayoutCheck(const TSubgroupPartLayout& parts,
+            const TBlobStorageGroupInfo::TSubgroupVDisks& failedDisks) const override {
+        if (!CheckFailModelForSubgroup(failedDisks)) {
+            return TBlobStorageGroupInfo::EBS_DISINTEGRATED;
+        }
+
+        const TBlobStorageGroupType type = Top->GType;
+        ui32 effectiveReplicas = parts.CountEffectiveReplicas(type);
+        auto state = Top->BlobState(effectiveReplicas, failedDisks.GetNumSetItems());
+        if (state == TBlobStorageGroupInfo::EBS_FULL) {
+            return state;
+        }
+
+        ui32 distinctParts = parts.CountDistinctParts(type);
+        if (distinctParts < type.MinimalRestorablePartCount()) {
+            return TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY;
+        }
+
+        return TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY;
+    }
+
     ui32 GetPartsToResurrect(const TSubgroupPartLayout& parts, ui32 idxInSubgroup) const override {
         const TBlobStorageGroupType type = Top->GType;
         const ui32 effectiveReplicas = parts.CountEffectiveReplicas(Top->GType);
@@ -160,6 +181,11 @@ public:
         } else {
             return TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY;
         }
+    }
+
+    TBlobStorageGroupInfo::EBlobState GetBlobStateWithoutLayoutCheck(const TSubgroupPartLayout& parts,
+            const TBlobStorageGroupInfo::TSubgroupVDisks& failedDisks) const override {
+        return GetBlobState(parts, failedDisks);
     }
 
     ui32 GetPartsToResurrect(const TSubgroupPartLayout& parts, ui32 idxInSubgroup) const override {
@@ -273,6 +299,11 @@ quitIter:   ;
                 return TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY;
             }
         }
+    }
+
+    TBlobStorageGroupInfo::EBlobState GetBlobStateWithoutLayoutCheck(const TSubgroupPartLayout& parts,
+            const TBlobStorageGroupInfo::TSubgroupVDisks& failedDisks) const override {
+        return GetBlobState(parts, failedDisks);
     }
 
     ui32 GetPartsToResurrect(const TSubgroupPartLayout& parts, ui32 idxInSubgroup) const override {

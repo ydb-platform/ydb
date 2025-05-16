@@ -10,6 +10,7 @@
 #include <ydb/core/base/feature_flags.h>
 
 #include <util/string/type.h>
+#include <ydb/core/external_sources/iceberg_fields.h>
 
 namespace NKikimr::NKqp {
 
@@ -80,8 +81,17 @@ void FillCreateExternalDataSourceDesc(NKikimrSchemeOp::TExternalDataSourceDescri
         "folder_id" // logging
     };
 
-    for (const auto& property: properties) {
-        if (auto value = settings.GetFeaturesExtractor().Extract(property)) {
+    auto& featuresExtractor = settings.GetFeaturesExtractor();
+
+    for (const auto& property : properties) {
+        if (const auto value = featuresExtractor.Extract(property)) {
+            externaDataSourceDesc.MutableProperties()->MutableProperties()->insert({property, *value});
+        }
+    }
+
+    // Iceberg properties for connector
+    for (const auto& property : NKikimr::NExternalSource::NIceberg::FieldsToConnector) {
+        if (const auto value = featuresExtractor.Extract(property)) {
             externaDataSourceDesc.MutableProperties()->MutableProperties()->insert({property, *value});
         }
     }

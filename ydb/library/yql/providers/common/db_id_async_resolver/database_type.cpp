@@ -17,7 +17,8 @@ std::set<TString> GetAllExternalDataSourceTypes() {
         ToString(NYql::EDatabaseType::MsSQLServer),
         ToString(NYql::EDatabaseType::Oracle),
         ToString(NYql::EDatabaseType::Logging),
-        ToString(NYql::EDatabaseType::Solomon)
+        ToString(NYql::EDatabaseType::Solomon),
+        ToString(NYql::EDatabaseType::Iceberg)
     };
     return allTypes;
 }
@@ -35,11 +36,13 @@ EDatabaseType DatabaseTypeFromDataSourceKind(NYql::EGenericDataSourceKind dataSo
         case NYql::EGenericDataSourceKind::GREENPLUM:
             return EDatabaseType::Greenplum;
         case NYql::EGenericDataSourceKind::MS_SQL_SERVER:
-          return EDatabaseType::MsSQLServer;
+            return EDatabaseType::MsSQLServer;
         case NYql::EGenericDataSourceKind::ORACLE:
-          return EDatabaseType::Oracle;
+            return EDatabaseType::Oracle;
         case NYql::EGenericDataSourceKind::LOGGING:
-          return EDatabaseType::Logging;
+            return EDatabaseType::Logging;
+        case NYql::EGenericDataSourceKind::ICEBERG:
+            return EDatabaseType::Iceberg;
         default:
             ythrow yexception() << "Unknown data source kind: " << NYql::EGenericDataSourceKind_Name(dataSourceKind);
     }
@@ -48,21 +51,23 @@ EDatabaseType DatabaseTypeFromDataSourceKind(NYql::EGenericDataSourceKind dataSo
 NYql::EGenericDataSourceKind DatabaseTypeToDataSourceKind(EDatabaseType databaseType) {
     switch (databaseType) {
         case EDatabaseType::PostgreSQL:
-            return  NYql::EGenericDataSourceKind::POSTGRESQL;
+            return NYql::EGenericDataSourceKind::POSTGRESQL;
         case EDatabaseType::ClickHouse:
-            return  NYql::EGenericDataSourceKind::CLICKHOUSE;
+            return NYql::EGenericDataSourceKind::CLICKHOUSE;
         case EDatabaseType::Ydb:
-            return  NYql::EGenericDataSourceKind::YDB;
+            return NYql::EGenericDataSourceKind::YDB;
         case EDatabaseType::MySQL:
             return NYql::EGenericDataSourceKind::MYSQL;
         case EDatabaseType::Greenplum:
-            return  NYql::EGenericDataSourceKind::GREENPLUM;
+            return NYql::EGenericDataSourceKind::GREENPLUM;
         case EDatabaseType::MsSQLServer:
             return NYql::EGenericDataSourceKind::MS_SQL_SERVER;
         case EDatabaseType::Oracle:
             return NYql::EGenericDataSourceKind::ORACLE;
         case EDatabaseType::Logging:
             return NYql::EGenericDataSourceKind::LOGGING;
+        case EDatabaseType::Iceberg:
+            return NYql::EGenericDataSourceKind::ICEBERG;
         default:
             ythrow yexception() << "Unknown database type: " << ToString(databaseType);
     }

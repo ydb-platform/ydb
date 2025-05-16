@@ -4,6 +4,8 @@
 #include "timer_queue.h"
 #include "log.h"
 
+#include <util/system/thread.h>
+
 #include <chrono>
 #include <thread>
 
@@ -149,6 +151,8 @@ void TTaskQueue::AsyncSleep(TTerminalTask::TCoroHandle handle, size_t terminalId
 }
 
 void TTaskQueue::RunThread(size_t threadId) {
+    TThread::SetCurrentThreadName((TStringBuilder() << "task_queue_" << threadId).c_str());
+
     auto& context = PerThreadContext[threadId];
 
     while (!ThreadsStopSource.stop_requested()) {

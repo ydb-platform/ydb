@@ -154,7 +154,7 @@ public:
             }
         }
         SendNodeRequest(nodeIds);
-        if (TBase::Requests > 0) {
+        if (WaitingForResponse()) {
             TBase::Become(&TThis::StateRequestedNodeInfo);
         } else {
             ReplyAndPassAway();
@@ -190,7 +190,7 @@ public:
         }
         nodeIds.push_back(TBase::SelfId().NodeId());
         SendNodeRequest(nodeIds);
-        if (TBase::Requests > 0) {
+        if (WaitingForResponse() > 0) {
             TBase::Become(&TThis::StateRequestedNodeInfo);
         } else {
             ReplyAndPassAway();

@@ -40,6 +40,7 @@ public:
         TString Certificate;
         ui32 MaxRequestsPerSecond = 0;
         TDuration InactivityTimeout = TDuration::Minutes(2);
+        TString AllowOrigin;
     };
 
     TMon(TConfig config);
@@ -84,6 +85,10 @@ public:
             .Path = path,
             .Handler = handler
         });
+    }
+
+    const TConfig& GetConfig() const {
+        return Config;
     }
 
 protected:

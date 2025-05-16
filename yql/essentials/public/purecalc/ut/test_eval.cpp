@@ -53,4 +53,25 @@ Y_UNIT_TEST_SUITE(TestEval) {
             UNIT_FAIL(e.GetIssues());
         }
     }
+
+    Y_UNIT_TEST(CantUseSelfInsideEvaluation) {
+        using namespace NYql::NPureCalc;
+
+        auto options = TProgramFactoryOptions();
+        auto factory = MakeProgramFactory(options);
+
+        try {
+            auto program = factory->MakePullListProgram(
+                TProtobufInputSpec<NPureCalcProto::TStringMessage>(),
+                TProtobufOutputSpec<NPureCalcProto::TStringMessage>(),
+                "$x = SELECT count(*) FROM Input;select unwrap(cast(EvaluateExpr($x) AS Utf8)) AS X",
+                ETranslationMode::SQL
+            );
+
+            program->Apply(EmptyStream<NPureCalcProto::TStringMessage*>());
+            UNIT_FAIL("Exception is expected");
+        } catch (const TCompileError& e) {
+            UNIT_ASSERT_C(TString(e.GetIssues()).Contains("Inputs aren't available during evaluation"), e.GetIssues());
+        }
+    }
 }

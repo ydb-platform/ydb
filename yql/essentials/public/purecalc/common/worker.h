@@ -31,7 +31,8 @@ namespace NYql {
                 NKikimr::NUdf::ICountersProvider* countersProvider,
                 ui64 nativeYtTypeFlags,
                 TMaybe<ui64> deterministicTimeProviderSeed,
-                TLangVersion langver
+                TLangVersion langver,
+                bool insideEvaluation
             );
 
             ~TWorkerGraph();

@@ -26,6 +26,7 @@ class TJsonHealthCheck : public TViewerPipeClient {
     TString Database;
     bool Cache = true;
     bool MergeRecords = false;
+    TViewerPipeClient::TRequestResponse<TEvStateStorage::TEvBoardInfo> MetadataCacheEndpointsLookup;
     std::optional<Ydb::Monitoring::SelfCheckResult> Result;
     std::optional<TRequestResponse<NHealthCheck::TEvSelfCheckResult>> SelfCheckResult;
     Ydb::Monitoring::StatusFlag::Status MinStatus = Ydb::Monitoring::StatusFlag::UNSPECIFIED;
@@ -102,7 +103,7 @@ public:
             return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "The field 'min_status' cannot be parsed"));
         }
         if (AppData()->FeatureFlags.GetEnableDbMetadataCache() && Cache && Database && MergeRecords) {
-            RequestStateStorageMetadataCacheEndpointsLookup(Database);
+            MetadataCacheEndpointsLookup = MakeRequestStateStorageMetadataCacheEndpointsLookup(Database);
         } else {
             SendHealthCheckRequest();
         }
@@ -221,13 +222,16 @@ public:
     }
 
     void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        auto activeNode = TDatabaseMetadataCache::PickActiveNode(ev->Get()->InfoEntries);
-        if (activeNode != 0) {
-            TActorId cache = MakeDatabaseMetadataCacheId(activeNode);
-            auto request = MakeHolder<NHealthCheck::TEvSelfCheckRequestProto>();
-            Send(cache, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, activeNode);
-        } else {
-            SendHealthCheckRequest();
+        MetadataCacheEndpointsLookup.Set(std::move(ev));
+        if (MetadataCacheEndpointsLookup.IsOk()) {
+            auto activeNode = TDatabaseMetadataCache::PickActiveNode(MetadataCacheEndpointsLookup->InfoEntries);
+            if (activeNode != 0) {
+                TActorId cache = MakeDatabaseMetadataCacheId(activeNode);
+                auto request = MakeHolder<NHealthCheck::TEvSelfCheckRequestProto>();
+                Send(cache, request.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, activeNode);
+            } else {
+                SendHealthCheckRequest();
+            }
         }
     }
 

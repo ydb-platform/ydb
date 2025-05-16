@@ -680,7 +680,7 @@ struct TEnvironmentSetup {
         return nullptr;
     }
 
-    TActorId CreateQueueActor(const TVDiskID& vdiskId, NKikimrBlobStorage::EVDiskQueueId queueId, ui32 index) {
+    TActorId CreateQueueActor(const TVDiskID& vdiskId, NKikimrBlobStorage::EVDiskQueueId queueId, ui32 index, ui32 nodeId = 0) {
         TBSProxyContextPtr bspctx = MakeIntrusive<TBSProxyContext>(MakeIntrusive<::NMonitoring::TDynamicCounters>());
         auto flowRecord = MakeIntrusive<NBackpressure::TFlowRecord>();
         auto groupInfo = GetGroupInfo(vdiskId.GroupID.GetRawId());
@@ -688,9 +688,9 @@ struct TEnvironmentSetup {
             MakeIntrusive<::NMonitoring::TDynamicCounters>(), bspctx,
             NBackpressure::TQueueClientId(NBackpressure::EQueueClientType::DSProxy, index), TStringBuilder()
             << "test# " << index, 0, false, TDuration::Seconds(60), flowRecord, NMonitoring::TCountableBase::EVisibility::Private));
-        const ui32 nodeId = Settings.ControllerNodeId;
-        const TActorId edge = Runtime->AllocateEdgeActor(nodeId, __FILE__, __LINE__);
-        const TActorId actorId = Runtime->Register(actor.release(), edge, {}, {}, nodeId);
+        const ui32 chosenNodeId = nodeId ? nodeId : Settings.ControllerNodeId;
+        const TActorId edge = Runtime->AllocateEdgeActor(chosenNodeId, __FILE__, __LINE__);
+        const TActorId actorId = Runtime->Register(actor.release(), edge, {}, {}, chosenNodeId);
         const TInstant deadline = Runtime->GetClock() + TDuration::Minutes(1);
         for (;;) {
             auto ev = WaitForEdgeActorEvent<TEvProxyQueueState>(edge, false, deadline);

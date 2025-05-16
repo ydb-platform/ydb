@@ -317,7 +317,7 @@ class DMLOperations():
             for i in range(len(rows)):
                 self.assert_type(ttl_types, ttl, i+1, rows[i][count])
             count += 1
-       
+
     def create_statements(self, pk_types, all_types, index, ttl):
         # delete if after https://github.com/ydb-platform/ydb/issues/16930
         statements = []

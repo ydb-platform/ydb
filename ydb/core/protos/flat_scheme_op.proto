@@ -522,12 +522,18 @@ message TStorageTierConfig {
 message TCompactionLevelConstructorContainer {
     optional string ClassName = 1;
 
+    message TDataSnapshotInterval {
+        optional uint32 StartInstantSecondsUTC = 1;
+        optional uint32 FinishInstantSecondsUTC = 2;
+    }
+
     message TZeroLevel {
         optional uint32 PortionsLiveDurationSeconds = 1;
         optional uint64 ExpectedBlobsSize = 2;
         optional uint64 PortionsCountAvailable = 3;
         optional uint64 PortionsCountLimit = 4;
         optional uint64 PortionsSizeLimit = 5;
+		optional TDataSnapshotInterval DataSnapshotInterval = 6;
     }
 
     message TOneLayer {

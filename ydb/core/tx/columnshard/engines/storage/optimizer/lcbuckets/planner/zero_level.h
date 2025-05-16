@@ -13,6 +13,7 @@ private:
     const ui64 PortionsCountAvailable;
     const std::optional<ui64> PortionsCountLimit;
     const std::optional<ui64> PortionsSizeLimit;
+    const TDataSnapshotInterval DataSnapshotInterval;
     class TOrderedPortion {
     private:
         YDB_READONLY_DEF(TPortionInfo::TConstPtr, Portion);
@@ -70,6 +71,9 @@ private:
             std::vector<TOrderedPortion> ordered;
             ordered.reserve(add.size());
             for (auto&& i : add) {
+                if (!DataSnapshotInterval.CheckPortion(i)) {
+                    continue;
+                }
                 ordered.emplace_back(i);
             }
             std::sort(ordered.begin(), ordered.end());
@@ -80,11 +84,17 @@ private:
             if (!constructionFlag) {
                 AFL_VERIFY(Portions.emplace(i).second);
             }
+            if (!DataSnapshotInterval.CheckPortion(i)) {
+                continue;
+            }
             PortionsInfo.AddPortion(i);
             LevelCounters.Portions->AddPortion(i);
             i->InitRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized, !NextLevel);
         }
         for (auto&& i : remove) {
+            if (!DataSnapshotInterval.CheckPortion(i)) {
+                continue;
+            }
             AFL_VERIFY(Portions.erase(i));
             LevelCounters.Portions->RemovePortion(i);
             PortionsInfo.RemovePortion(i);
@@ -108,7 +118,7 @@ private:
 public:
     TZeroLevelPortions(const ui32 levelIdx, const std::shared_ptr<IPortionsLevel>& nextLevel, const TLevelCounters& levelCounters,
         const TDuration durationToDrop, const ui64 expectedBlobsSize, const ui64 portionsCountAvailable,
-        const std::optional<ui64> portionsCountLimit, const std::optional<ui64> portionsSizeLimit);
+        const std::optional<ui64> portionsCountLimit, const std::optional<ui64> portionsSizeLimit, const TDataSnapshotInterval& dsInterval);
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

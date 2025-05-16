@@ -8,6 +8,16 @@ TConclusionStatus TZeroLevelConstructor::DoDeserializeFromJson(const NJson::TJso
     if (!json.IsMap()) {
         return TConclusionStatus::Fail("incorrect level description");
     }
+    if (json.Has("data_snapshot_interval")) {
+        const auto& jsonValue = json["data_snapshot_interval"];
+        if (!jsonValue.IsMap()) {
+            return TConclusionStatus::Fail("incorrect data_snapshot_interval value (have to be map)");
+        }
+        auto conclusion = DataSnapshotInterval.DeserializeFromJson(jsonValue);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+    }
     if (json.Has("portions_count_available")) {
         const auto& jsonValue = json["portions_count_available"];
         if (!jsonValue.IsUInteger()) {
@@ -54,39 +64,51 @@ bool TZeroLevelConstructor::DoDeserializeFromProto(const NKikimrSchemeOp::TCompa
     if (!proto.HasZeroLevel()) {
         return true;
     }
-    if (proto.GetZeroLevel().HasPortionsLiveDurationSeconds()) {
-        PortionsLiveDuration = TDuration::Seconds(proto.GetZeroLevel().GetPortionsLiveDurationSeconds());
+    auto& pLevel = proto.GetZeroLevel();
+    if (pLevel.HasPortionsLiveDurationSeconds()) {
+        PortionsLiveDuration = TDuration::Seconds(pLevel.GetPortionsLiveDurationSeconds());
     }
-    if (proto.GetZeroLevel().HasExpectedBlobsSize()) {
-        ExpectedBlobsSize = proto.GetZeroLevel().GetExpectedBlobsSize();
+    if (pLevel.HasExpectedBlobsSize()) {
+        ExpectedBlobsSize = pLevel.GetExpectedBlobsSize();
     }
-    if (proto.GetZeroLevel().HasPortionsCountAvailable()) {
-        PortionsCountAvailable = proto.GetZeroLevel().GetPortionsCountAvailable();
+    if (pLevel.HasPortionsCountAvailable()) {
+        PortionsCountAvailable = pLevel.GetPortionsCountAvailable();
     }
-    if (proto.GetZeroLevel().HasPortionsCountLimit()) {
-        PortionsCountLimit = proto.GetZeroLevel().GetPortionsCountLimit();
+    if (pLevel.HasPortionsCountLimit()) {
+        PortionsCountLimit = pLevel.GetPortionsCountLimit();
     }
-    if (proto.GetZeroLevel().HasPortionsSizeLimit()) {
-        PortionsSizeLimit = proto.GetZeroLevel().GetPortionsSizeLimit();
+    if (pLevel.HasPortionsSizeLimit()) {
+        PortionsSizeLimit = pLevel.GetPortionsSizeLimit();
+    }
+    if (pLevel.HasDataSnapshotInterval()) {
+        auto conclusion = DataSnapshotInterval.DeserializeFromProto(pLevel.GetDataSnapshotInterval());
+        if (conclusion.IsFail()) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot parse compaction level")("error", conclusion.GetErrorMessage());
+            return false;
+        }
     }
     return true;
 }
 
 void TZeroLevelConstructor::DoSerializeToProto(NKikimrSchemeOp::TCompactionLevelConstructorContainer& proto) const {
+    auto& mLevel = *proto.MutableZeroLevel();
     if (PortionsLiveDuration) {
-        proto.MutableZeroLevel()->SetPortionsLiveDurationSeconds(PortionsLiveDuration->Seconds());
+        mLevel.SetPortionsLiveDurationSeconds(PortionsLiveDuration->Seconds());
     }
     if (ExpectedBlobsSize) {
-        proto.MutableZeroLevel()->SetExpectedBlobsSize(*ExpectedBlobsSize);
+        mLevel.SetExpectedBlobsSize(*ExpectedBlobsSize);
     }
     if (PortionsCountAvailable) {
-        proto.MutableZeroLevel()->SetPortionsCountAvailable(*PortionsCountAvailable);
+        mLevel.SetPortionsCountAvailable(*PortionsCountAvailable);
     }
     if (PortionsCountLimit) {
-        proto.MutableZeroLevel()->SetPortionsCountLimit(*PortionsCountLimit);
+        mLevel.SetPortionsCountLimit(*PortionsCountLimit);
     }
     if (PortionsSizeLimit) {
-        proto.MutableZeroLevel()->SetPortionsSizeLimit(*PortionsSizeLimit);
+        mLevel.SetPortionsSizeLimit(*PortionsSizeLimit);
+    }
+    if (!DataSnapshotInterval.IsEmpty()) {
+        *mLevel.MutableDataSnapshotInterval() = DataSnapshotInterval.SerializeToProto();
     }
 }
 
@@ -94,7 +116,8 @@ std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::NLCBuckets::IPortionsLevel> T
     const std::shared_ptr<IPortionsLevel>& nextLevel, const ui32 indexLevel, const std::shared_ptr<TSimplePortionsGroupInfo>& /*portionsInfo*/,
     const TLevelCounters& counters) const {
     return std::make_shared<TZeroLevelPortions>(indexLevel, nextLevel, counters, PortionsLiveDuration.value_or(TDuration::Max()),
-        ExpectedBlobsSize.value_or((ui64)1 << 20), PortionsCountAvailable.value_or(10), PortionsCountLimit, PortionsSizeLimit);
+        ExpectedBlobsSize.value_or((ui64)1 << 20), PortionsCountAvailable.value_or(10), PortionsCountLimit, PortionsSizeLimit,
+        DataSnapshotInterval);
 }
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

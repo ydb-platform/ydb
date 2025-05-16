@@ -95,6 +95,7 @@ target_sources(yql-essentials-core PRIVATE
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_expr_csee.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_expr_optimize.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_expr_type_annotation.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_func_stack.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_gc_transformer.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_graph_transformer.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_holding_file_storage.cpp
@@ -122,6 +123,7 @@ target_sources(yql-essentials-core PRIVATE
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_expr_csee.h
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_expr_optimize.h
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_expr_type_annotation.h
+  ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_func_stack.h
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_gc_transformer.h
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_graph_transformer.h
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/yql_holding_file_storage.h

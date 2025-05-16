@@ -45,9 +45,14 @@ target_sources(restricted-aws-aws-c-mqtt PRIVATE
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/fixed_header.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/mqtt.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/mqtt311_decoder.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/mqtt311_listener.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/mqtt_subscription_set.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/packets.c
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/shared_constants.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/request-response/protocol_adapter.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/request-response/request_response_client.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/request-response/request_response_subscription_set.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/request-response/subscription_manager.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/shared.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/topic_tree.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_callbacks.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-c-mqtt/source/v5/mqtt5_client.c

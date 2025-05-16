@@ -1829,9 +1829,18 @@ public:
                     return {ptr, id};
                 };
 
-                const auto [ptr, id] = createWriteActor(settings.TableId, settings.TablePath, settings.KeyColumns);
-                writeInfo.Actor.Ptr = ptr;
-                writeInfo.Actor.Id = id;
+                {
+                    const auto [ptr, id] = createWriteActor(settings.TableId, settings.TablePath, settings.KeyColumns);
+                    writeInfo.Actor.Ptr = ptr;
+                    writeInfo.Actor.Id = id;
+                }
+                for (const auto& indexSettings : settings.Indexes) {
+                    const auto [ptr, id] = createWriteActor(indexSettings.TableId, indexSettings.TablePath, indexSettings.KeyColumns);
+                    writeInfo.Indexes.emplace_back(TWriteInfo::TActorInfo{
+                        .Ptr = ptr,
+                        .Id = id,
+                    });
+                }
             }
 
             EnableStreamWrite &= settings.EnableStreamWrite;
@@ -1844,6 +1853,18 @@ public:
                 std::move(settings.Columns),
                 std::move(settings.WriteIndex),
                 settings.Priority);
+
+            AFL_ENSURE(writeInfo.Indexes.size() == settings.Indexes.size());
+            for (size_t index = 0; index < settings.Indexes.size(); ++index) {
+                auto& indexSettings = settings.Indexes[index];
+                writeInfo.Indexes[index].Ptr->Open(
+                    token.Cookie,
+                    NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, // TODO: Operation for index (delete by key + upsert)
+                    std::move(indexSettings.KeyColumns),
+                    std::move(indexSettings.Columns),
+                    std::move(indexSettings.WriteIndex),
+                    settings.Priority);
+            }
         } else {
             token = *ev->Get()->Token;
         }
@@ -3099,7 +3120,29 @@ private:
                 .IsOlap = Settings.GetIsOlap(),
             };
 
+            for (const auto& indexSettings : Settings.GetIndexes()) {
+                TVector<NKikimrKqp::TKqpColumnMetadataProto> keyColumnsMetadata(
+                    indexSettings.GetKeyColumns().begin(),
+                    indexSettings.GetKeyColumns().end());
+                TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata(
+                    indexSettings.GetColumns().begin(),
+                    indexSettings.GetColumns().end());
+                std::vector<ui32> writeIndex(
+                    indexSettings.GetWriteIndexes().begin(),
+                    indexSettings.GetWriteIndexes().end());
+                AFL_ENSURE(writeIndex.size() == columnsMetadata.size());
 
+                ev->Settings->Indexes.push_back(TWriteSettings::TIndex {
+                    .TableId = TTableId(Settings.GetTable().GetOwnerId(),
+                                        Settings.GetTable().GetTableId(),
+                                        Settings.GetTable().GetVersion()),
+                    .TablePath = "",
+                    .KeyColumns = std::move(keyColumnsMetadata),
+                    .Columns = std::move(columnsMetadata),
+                    .WriteIndex = std::move(writeIndex),
+                    .IsUniq = indexSettings.GetIsUniq(),
+                });
+            }
         }
 
         ev->SendTime = TInstant::Now();

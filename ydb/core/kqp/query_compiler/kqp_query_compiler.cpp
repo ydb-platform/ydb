@@ -1271,7 +1271,7 @@ private:
                         implTable,
                         implTable->Kind == EKikimrTableKind::Datashard);
                     for (const auto& [columnName, _] : implTable->Columns) {
-                        settingsProto.AddWriteIndexes(indexColumnToOrder.at(columnName));
+                        indexSettings->AddWriteIndexes(indexColumnToOrder.at(columnName));
                     }
 
                     //const auto indexPathes = NSchemeHelpers::CreateIndexTablePath(TString(settings.Table().Cast().Path()), indexDescription);

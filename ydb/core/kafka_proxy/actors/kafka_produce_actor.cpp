@@ -99,11 +99,9 @@ void TKafkaProduceActor::CleanWriters(const TActorContext& ctx) {
     const auto earliestAllowedTs = ctx.Now() - WRITER_EXPIRATION_INTERVAL;
 
     for (auto& [topicPath, partitionWriters] : NonTransactionalWriters) {
-        std::unordered_map<ui32, TWriterInfo> newPartitionWriters;
         for (const auto& [partitionId, writerInfo] : partitionWriters) {
             CleanWriterIfExpired({topicPath, partitionId}, writerInfo, earliestAllowedTs);
         }
-        partitionWriters = std::move(newPartitionWriters);
     }
     for (auto& [topicParition, writerInfo] : TransactionalWriters) {
         CleanWriterIfExpired(topicParition, writerInfo, earliestAllowedTs);
@@ -112,7 +110,7 @@ void TKafkaProduceActor::CleanWriters(const TActorContext& ctx) {
     KAFKA_LOG_T("Produce actor: CleanWriters was completed successfully");
 }
 
-void TKafkaProduceActor::CleanWriterIfExpired(const TTopicPartition& topicPartition, TWriterInfo& writerInfo, TInstant earliestAllowedTs) {
+void TKafkaProduceActor::CleanWriterIfExpired(const TTopicPartition& topicPartition, const TWriterInfo& writerInfo, TInstant earliestAllowedTs) {
     if (writerInfo.LastAccessed < earliestAllowedTs) {
         TStringBuilder sb;
         sb << "Produce actor: Destroing inactive PartitionWriter. Topic='" << topicPartition.TopicPath << "', Partition=" << topicPartition.PartitionId;

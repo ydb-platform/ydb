@@ -547,10 +547,13 @@ public:                                                                         
             }
                 
             void MinHugeBlobInBytes(ui32 size) {
+                auto getCounter = [&](ui32 size) {
+                    return GroupCounters->GetSubgroup("MinHugeBlobInBytes", ToString(size))->GetCounter("count", 1);
+                };
                 if (PrevMinHugeBlobInBytes) {
-                    GroupCounters->GetNamedCounter("MinHugeBlobInBytes", ToString(PrevMinHugeBlobInBytes), false)->Dec();
+                    *getCounter(PrevMinHugeBlobInBytes) = 0;
                 }
-                GroupCounters->GetNamedCounter("MinHugeBlobInBytes", ToString(size), false)->Inc();
+                *getCounter(size) = 1;
                 PrevMinHugeBlobInBytes = size;
             }
 

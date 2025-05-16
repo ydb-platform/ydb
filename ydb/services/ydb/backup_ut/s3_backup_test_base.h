@@ -155,7 +155,7 @@ protected:
     NYdb::NImport::TListObjectsInS3ExportSettings MakeListObjectsInS3ExportSettings(const TString& prefix) {
         NYdb::NImport::TListObjectsInS3ExportSettings listSettings;
         listSettings
-            .Endpoint(TStringBuilder() << "localhost:" << S3Port)
+            .Endpoint(TStringBuilder() << "localhost:" << S3Port())
             .Bucket("test_bucket")
             .Scheme(NYdb::ES3Scheme::HTTP)
             .AccessKey("test_key")

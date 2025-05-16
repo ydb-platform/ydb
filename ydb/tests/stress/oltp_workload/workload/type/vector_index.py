@@ -3,15 +3,9 @@ import random
 import time
 
 from ydb.tests.stress.common.common import WorkloadBase
+from ydb.tests.datashard.lib.vector_index import BinaryStringConverter
 
 logger = logging.getLogger("VectorIndexWorkload")
-
-
-class BinaryStringConverter:
-    def __init__(self, name, data_type, vector_type):
-        self.name = name
-        self.data_type = data_type
-        self.vector_type = vector_type
 
 
 class WorkloadVectorIndex(WorkloadBase):

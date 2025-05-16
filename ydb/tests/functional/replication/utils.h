@@ -620,7 +620,7 @@ struct MainTestCase {
             Sleep(TDuration::Seconds(1));
         }
 
-	    CheckTransferState(TReplicationDescription::EState::Running);
+        CheckTransferState(TReplicationDescription::EState::Running);
         UNIT_ASSERT_C(false, "Unable to wait transfer result");
     }
 
@@ -636,7 +636,8 @@ struct MainTestCase {
                 issues = result.GetErrorState().GetIssues().ToOneLineString();
             }
     
-            UNIT_ASSERT_C(i, "Unable to wait transfer state. Expected: " << expected << ", actual: " << result.GetState() << ", " << issues);            Sleep(TDuration::Seconds(1));
+            UNIT_ASSERT_C(i, "Unable to wait transfer state. Expected: " << expected << ", actual: " << result.GetState() << ", " << issues);
+            Sleep(TDuration::Seconds(1));
         }
 
         Y_UNREACHABLE();

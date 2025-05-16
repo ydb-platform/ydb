@@ -5,7 +5,16 @@ import six
 from hashlib import md5
 
 import ymake
-from _common import stripext, rootrel_arc_src, listid, pathid, lazy, get_no_lint_value, ugly_conftest_exception
+from _common import (
+    stripext,
+    rootrel_arc_src,
+    listid,
+    pathid,
+    lazy,
+    get_no_lint_value,
+    ugly_conftest_exception,
+    resolve_common_const,
+)
 
 
 PY_NAMESPACE_PREFIX = 'py/namespace'
@@ -150,9 +159,13 @@ def add_python_lint_checks(unit, py_ver, files):
     def get_resolved_files():
         resolved_files = []
         for path in files:
-            resolved = unit.resolve_arc_path([path])
-            if resolved.startswith('$S'):  # path was resolved as source file.
+            resolved = resolve_common_const(path)  # files can come from glob (ALL_PY_EXTRA_LINT_FILES macro)
+            if resolved.startswith('$S'):
                 resolved_files.append(resolved)
+            else:
+                resolved = unit.resolve_arc_path([path])
+                if resolved.startswith('$S'):  # path was resolved as source file.
+                    resolved_files.append(resolved)
         return resolved_files
 
     upath = unit.path()[3:]

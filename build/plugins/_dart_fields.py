@@ -1246,7 +1246,9 @@ class TestFiles:
             lint_name = LintName.value(unit, flat_args, spec_args)[LintName.KEY]
             message = 'No files to lint for {}'.format(lint_name)
             raise DartValueError(message)
-        test_files = serialize_list(test_files)
+        # XXX: we may have duplicated files because of macroses used to gather extra files for linting
+        # including those that use globs
+        test_files = serialize_list(_common.sort_uniq(test_files))
         return {cls.KEY: test_files, cls.KEY2: test_files}
 
     @classmethod

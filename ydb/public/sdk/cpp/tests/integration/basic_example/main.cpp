@@ -12,6 +12,8 @@ static void ValidateResultSet(const std::vector<NYdb::TColumn>& columns,
                               const std::vector<std::vector<NYdb::TValue>>& values,
                               const NYdb::TResultSet& rs) {
     Ydb::ResultSet protoResultSet;
+    protoResultSet.set_type(Ydb::ResultSet::MESSAGE);
+
     for (const auto& column : columns) {
         auto* protoColumn = protoResultSet.add_columns();
         protoColumn->set_name(column.Name);

@@ -3614,7 +3614,7 @@ Y_UNIT_TEST_F(EndWriteTimestamp_DataKeysBody, TPartitionFixture) {
 
     auto endWriteTimestamp = actor->GetEndWriteTimestamp();
     UNIT_ASSERT_C(now - TDuration::Seconds(2) < endWriteTimestamp && endWriteTimestamp < now, "" << (now - TDuration::Seconds(2)) << " < " << endWriteTimestamp << " < " << now );
-} // EndWriteTimestamp_FromBlob
+} // EndWriteTimestamp_DataKeysBody
 
 Y_UNIT_TEST_F(EndWriteTimestamp_FromMeta, TPartitionFixture) {
     auto now = TInstant::Now();
@@ -3632,7 +3632,7 @@ Y_UNIT_TEST_F(EndWriteTimestamp_HeadKeys, TPartitionFixture) {
 
     auto endWriteTimestamp = actor->GetEndWriteTimestamp();
     UNIT_ASSERT_C(now - TDuration::Seconds(2) < endWriteTimestamp && endWriteTimestamp < now, "" << (now - TDuration::Seconds(2)) << " < " << endWriteTimestamp << " < " << now );
-} // EndWriteTimestamp_FromMeta
+} // EndWriteTimestamp_HeadKeys
 
 Y_UNIT_TEST_F(The_DeletePartition_Message_Arrives_Before_The_ApproveWriteQuota_Message, TPartitionFixture)
 {

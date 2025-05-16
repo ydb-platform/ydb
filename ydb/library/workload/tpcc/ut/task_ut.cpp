@@ -1,4 +1,4 @@
-#include <ydb/public/lib/ydb_cli/commands/tpcc/task_queue.h>
+#include <ydb/library/workload/tpcc/task_queue.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

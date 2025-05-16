@@ -1,4 +1,4 @@
-#include <ydb/public/lib/ydb_cli/commands/tpcc/circular_queue.h>
+#include <ydb/library/workload/tpcc/circular_queue.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

@@ -9,7 +9,6 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <ydb/library/workload/abstract/workload_factory.h>
-#include <ydb/public/lib/ydb_cli/commands/tpcc/command_root.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>

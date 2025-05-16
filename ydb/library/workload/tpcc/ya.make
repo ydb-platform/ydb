@@ -1,8 +1,6 @@
-LIBRARY(tpcc)
+LIBRARY()
 
 SRCS(
-    command_root.cpp
-    command_run.cpp
     common_queries.cpp
     runner.cpp
     task_queue.cpp
@@ -13,7 +11,6 @@ SRCS(
 PEERDIR(
     ydb/public/api/grpc
     ydb/public/api/protos
-    ydb/public/lib/ydb_cli/commands/command_base
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/proto
     ydb/public/sdk/cpp/src/client/query

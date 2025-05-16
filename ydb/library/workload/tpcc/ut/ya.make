@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/public/lib/ydb_cli/commands/tpcc)
+UNITTEST_FOR(ydb/library/workload/tpcc)
 
 SRCS(
     circular_queue_ut.cpp
@@ -10,7 +10,7 @@ SRCS(
 PEERDIR(
     library/cpp/testing/gmock_in_unittest
     library/cpp/getopt/small
-    ydb/public/lib/ydb_cli/commands/tpcc
+    ydb/library/workload/tpcc
 )
 
 END()

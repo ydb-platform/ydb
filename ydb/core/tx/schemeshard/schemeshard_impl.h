@@ -270,6 +270,7 @@ public:
     THashMap<TPathId, TViewInfo::TPtr> Views;
     THashMap<TPathId, TResourcePoolInfo::TPtr> ResourcePools;
     THashMap<TPathId, TBackupCollectionInfo::TPtr> BackupCollections;
+    THashMap<TPathId, TSysViewInfo::TPtr> SysViews;
 
     TTempDirsState TempDirsState;
 
@@ -868,6 +869,10 @@ public:
     // BackupCollection
     void PersistBackupCollection(NIceDb::TNiceDb& db, TPathId pathId, const TBackupCollectionInfo::TPtr backupCollection);
     void PersistRemoveBackupCollection(NIceDb::TNiceDb& db, TPathId pathId);
+
+    // SysView
+    void PersistSysView(NIceDb::TNiceDb &db, TPathId pathId);
+    void PersistRemoveSysView(NIceDb::TNiceDb& db, TPathId pathId);
 
     TTabletId GetGlobalHive(const TActorContext& ctx) const;
 

@@ -121,7 +121,7 @@ namespace NKikimr {
                 ctx.Send(ReplSchedulerId, new TEvBlobStorage::TEvEnrichNotYet(BatcherCtx->OrigEv, std::move(Result)));
             } else {
                 // send reply event to sender
-                SendVDiskResponse(ctx, BatcherCtx->OrigEv->Sender, Result.release(), BatcherCtx->OrigEv->Cookie, QueryCtx->HullCtx->VCtx);
+                SendVDiskResponse(ctx, BatcherCtx->OrigEv->Sender, Result.release(), BatcherCtx->OrigEv->Cookie, QueryCtx->HullCtx->VCtx, Record.GetHandleClass());
             }
 
             ctx.Send(ParentId, new TEvents::TEvGone);

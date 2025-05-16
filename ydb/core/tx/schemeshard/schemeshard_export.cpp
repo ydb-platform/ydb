@@ -141,7 +141,7 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
     }
 }
 
-void TSchemeShard::PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo::TPtr exportInfo) {
+void TSchemeShard::PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo::TPtr& exportInfo) {
     db.Table<Schema::Exports>().Key(exportInfo->Id).Update(
         NIceDb::TUpdate<Schema::Exports::Uid>(exportInfo->Uid),
         NIceDb::TUpdate<Schema::Exports::Kind>(static_cast<ui8>(exportInfo->Kind)),
@@ -172,7 +172,7 @@ void TSchemeShard::PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo::T
     }
 }
 
-void TSchemeShard::PersistRemoveExport(NIceDb::TNiceDb& db, const TExportInfo::TPtr exportInfo) {
+void TSchemeShard::PersistRemoveExport(NIceDb::TNiceDb& db, const TExportInfo::TPtr& exportInfo) {
     for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
         db.Table<Schema::ExportItems>().Key(exportInfo->Id, itemIdx).Delete();
     }
@@ -180,14 +180,14 @@ void TSchemeShard::PersistRemoveExport(NIceDb::TNiceDb& db, const TExportInfo::T
     db.Table<Schema::Exports>().Key(exportInfo->Id).Delete();
 }
 
-void TSchemeShard::PersistExportPathId(NIceDb::TNiceDb& db, const TExportInfo::TPtr exportInfo) {
+void TSchemeShard::PersistExportPathId(NIceDb::TNiceDb& db, const TExportInfo::TPtr& exportInfo) {
     db.Table<Schema::Exports>().Key(exportInfo->Id).Update(
         NIceDb::TUpdate<Schema::Exports::ExportOwnerPathId>(exportInfo->ExportPathId.OwnerId),
         NIceDb::TUpdate<Schema::Exports::ExportPathId>(exportInfo->ExportPathId.LocalPathId)
     );
 }
 
-void TSchemeShard::PersistExportState(NIceDb::TNiceDb& db, const TExportInfo::TPtr exportInfo) {
+void TSchemeShard::PersistExportState(NIceDb::TNiceDb& db, const TExportInfo::TPtr& exportInfo) {
     db.Table<Schema::Exports>().Key(exportInfo->Id).Update(
         NIceDb::TUpdate<Schema::Exports::State>(static_cast<ui8>(exportInfo->State)),
         NIceDb::TUpdate<Schema::Exports::WaitTxId>(exportInfo->WaitTxId),
@@ -197,7 +197,14 @@ void TSchemeShard::PersistExportState(NIceDb::TNiceDb& db, const TExportInfo::TP
     );
 }
 
-void TSchemeShard::PersistExportItemState(NIceDb::TNiceDb& db, const TExportInfo::TPtr exportInfo, ui32 itemIdx) {
+void TSchemeShard::PersistExportMetadata(NIceDb::TNiceDb& db, const TExportInfo::TPtr& exportInfo) {
+    db.Table<Schema::Exports>().Key(exportInfo->Id).Update(
+        NIceDb::TUpdate<Schema::Exports::Settings>(exportInfo->Settings),
+        NIceDb::TUpdate<Schema::Exports::ExportMetadata>(exportInfo->ExportMetadata)
+    );
+}
+
+void TSchemeShard::PersistExportItemState(NIceDb::TNiceDb& db, const TExportInfo::TPtr& exportInfo, ui32 itemIdx) {
     Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
     const auto& item = exportInfo->Items.at(itemIdx);
 

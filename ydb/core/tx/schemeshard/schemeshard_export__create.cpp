@@ -376,7 +376,7 @@ private:
         );
 
         Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
-        if (item.SourcePathType == NKikimrSchemeOp::EPathTypeView 
+        if (item.SourcePathType == NKikimrSchemeOp::EPathTypeView
             || item.SourcePathType == NKikimrSchemeOp::EPathTypePersQueueGroup)
         {
             Ydb::Export::ExportToS3Settings exportSettings;
@@ -1298,10 +1298,7 @@ private:
                 exportInfo->State = EState::UploadExportMetadata;
 
                 // Persist modified metadata and new settings
-                db.Table<Schema::Exports>().Key(exportInfo->Id).Update(
-                    NIceDb::TUpdate<Schema::Exports::Settings>(exportInfo->Settings),
-                    NIceDb::TUpdate<Schema::Exports::ExportMetadata>(exportInfo->ExportMetadata)
-                );
+                Self->PersistExportMetadata(db, exportInfo);
             } else if (AnyOf(exportInfo->Items, &IsPathTypeTable)) {
                 exportInfo->State = EState::CopyTables;
                 AllocateTxId(exportInfo);

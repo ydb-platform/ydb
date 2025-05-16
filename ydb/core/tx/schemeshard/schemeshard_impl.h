@@ -1264,11 +1264,12 @@ public:
 
     void FromXxportInfo(NKikimrExport::TExport& exprt, const TExportInfo::TPtr exportInfo);
 
-    static void PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo::TPtr exportInfo);
-    static void PersistRemoveExport(NIceDb::TNiceDb& db, const TExportInfo::TPtr exportInfo);
-    static void PersistExportPathId(NIceDb::TNiceDb& db, const TExportInfo::TPtr exportInfo);
-    static void PersistExportState(NIceDb::TNiceDb& db, const TExportInfo::TPtr exportInfo);
-    static void PersistExportItemState(NIceDb::TNiceDb& db, const TExportInfo::TPtr exportInfo, ui32 targetIdx);
+    static void PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo::TPtr& exportInfo);
+    static void PersistRemoveExport(NIceDb::TNiceDb& db, const TExportInfo::TPtr& exportInfo);
+    static void PersistExportPathId(NIceDb::TNiceDb& db, const TExportInfo::TPtr& exportInfo);
+    static void PersistExportState(NIceDb::TNiceDb& db, const TExportInfo::TPtr& exportInfo);
+    static void PersistExportMetadata(NIceDb::TNiceDb& db, const TExportInfo::TPtr& exportInfo);
+    static void PersistExportItemState(NIceDb::TNiceDb& db, const TExportInfo::TPtr& exportInfo, ui32 targetIdx);
 
     struct TExport {
         struct TTxCreate;

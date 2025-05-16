@@ -1539,7 +1539,6 @@ public:
 
         auto bufferForStringLikeValues = std::make_shared<TChunkedOutputStream>(
             GetRefCountedTypeCookie<TArrowParserTag>(),
-            GetNullMemoryUsageTracker(),
             256_KB,
             1_MB);
 

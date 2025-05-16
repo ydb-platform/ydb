@@ -12,6 +12,7 @@
 #include <yt/yt/core/concurrency/thread_pool_poller.h>
 
 #include <yt/yt/core/misc/finally.h>
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 #include <yt/yt/core/misc/public.h>
 
 #include <yt/yt/core/ytree/convert.h>
@@ -19,8 +20,6 @@
 #include <yt/yt/core/tracing/trace_context.h>
 
 #include <yt/yt/core/profiling/timing.h>
-
-#include <library/cpp/yt/memory/memory_usage_tracker.h>
 
 namespace NYT::NHttp {
 

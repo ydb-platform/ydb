@@ -2,11 +2,11 @@
 
 #include "channel.h"
 
+#include <yt/yt/core/misc/memory_usage_tracker.h>
+
 #include <yt/yt/core/ytree/helpers.h>
 
 #include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
-
-#include <library/cpp/yt/memory/memory_usage_tracker.h>
 
 namespace NYT::NRpc {
 

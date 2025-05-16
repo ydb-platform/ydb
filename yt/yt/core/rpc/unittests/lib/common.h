@@ -50,6 +50,7 @@
 #include <yt/yt/core/rpc/http/channel.h>
 
 #include <yt/yt/core/misc/error.h>
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 #include <yt/yt/core/misc/shutdown.h>
 
 #include <yt/yt/core/tracing/public.h>
@@ -60,8 +61,6 @@
 #include <yt/yt/core/ytree/helpers.h>
 
 #include <yt/yt/build/ya_version.h>
-
-#include <library/cpp/yt/memory/memory_usage_tracker.h>
 
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/common/network.h>

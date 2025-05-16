@@ -457,7 +457,7 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
 
     if (!Parameters.empty() || InputParamStream) {
         THolder<TParamsBuilder> paramBuilder;
-        while (GetNextParams(driver, Query, paramBuilder)) {
+        while (GetNextParams(driver, Query, paramBuilder, config.IsVerbose())) {
             TParams params = paramBuilder->Build();
             auto operation = [this, &txSettings, &params, &settings, &asyncResult](NTable::TSession session) {
                 auto promise = NThreading::NewPromise<NTable::TDataQueryResult>();
@@ -723,7 +723,7 @@ int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
     SetInterruptHandlers();
     if (!Parameters.empty() || InputParamStream) {
         THolder<TParamsBuilder> paramBuilder;
-        while (GetNextParams(driver, Query, paramBuilder)) {
+        while (GetNextParams(driver, Query, paramBuilder, config.IsVerbose())) {
             auto operation = [this, &paramBuilder, &settings, &asyncResult](TClient client) {
                 auto promise = NThreading::NewPromise<TPartIterator<TClient>>();
                 asyncResult = promise.GetFuture();

@@ -32,7 +32,7 @@ protected:
     void AddLegacyBatchParametersOptions(TClientCommand::TConfig& config);
     void AddDefaultParamFormats(TClientCommand::TConfig& config);
     void AddLegacyStdinFormats(TClientCommand::TConfig& config);
-    bool GetNextParams(const TDriver& driver, const TString& queryText, THolder<TParamsBuilder>& paramBuilder);
+    bool GetNextParams(const TDriver& driver, const TString& queryText, THolder<TParamsBuilder>& paramBuilder, bool verbose);
     
     THashMap<EDataFormat, TString>& GetInputFormatDescriptions() override;
 
@@ -41,9 +41,9 @@ private:
     static void ParseJson(TString&& str, std::map<TString, TString>& result);
     void ApplyJsonParams(const std::map<TString, TString>& params, TParamsBuilder& paramBuilder);
     void SetParamsInput(IInputStream* input);
-    void SetParamsInputFromFile(TString& file);
-    void SetParamsInputFromStdin();
-    void InitParamTypes(const TDriver& driver, const TString& queryText);
+    void SetParamsInputFromFile(TString& file, bool verbose);
+    void SetParamsInputFromStdin(bool verbose);
+    void InitParamTypes(const TDriver& driver, const TString& queryText, bool verbose);
 
     TMaybe<TString> ReadData();
 

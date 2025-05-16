@@ -398,7 +398,11 @@ void TLogWorkloadParams::ConfigureOptsFillData(NLastGetopt::TOpts& opts) {
         .DefaultValue(NullPercent).StoreResult(&NullPercent);
 }
 
-void TLogWorkloadParams::Validate() const {
+void TLogWorkloadParams::Validate(int workloadType) const {
+    if (static_cast<TLogGenerator::EType>(workloadType) == TLogGenerator::EType::Select) {
+        return;
+    }
+
     const bool timestampDevPassed = TimestampStandardDeviationMinutes;
     const bool dateFromPassed = !!TimestampDateFrom;
     const bool dateToPassed = !!TimestampDateTo;

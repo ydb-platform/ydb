@@ -855,9 +855,9 @@ struct TEnvironmentSetup {
         NKikimrBlobStorage::TConfigRequest request;
         auto *cmd = request.AddCommand();
         auto *us = cmd->MutableUpdateSettings();
-        us->AddEnableSelfHeal(selfHeal);
-        us->AddEnableDonorMode(donorMode);
-        us->AddEnableGroupLayoutSanitizer(groupLayoutSanitizer);
+        us->SetEnableSelfHeal(selfHeal);
+        us->SetEnableDonorMode(donorMode);
+        us->SetEnableGroupLayoutSanitizer(groupLayoutSanitizer);
         auto response = Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
     }

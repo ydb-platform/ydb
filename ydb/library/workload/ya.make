@@ -23,6 +23,7 @@ RECURSE(
     log
     mixed
     stock
+    tpcc
     tpc_base
     tpcds
     tpch

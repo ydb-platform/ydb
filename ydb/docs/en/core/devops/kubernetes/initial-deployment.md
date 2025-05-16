@@ -1,6 +1,6 @@
 # Getting started with {{ ydb-short-name }} in {{ k8s }}
 
-Deploying {{ ydb-short-name }} in {{ k8s }} is a simple way to set up and run a {{ ydb-short-name }} cluster. {{ k8s }} allows to use an universal approach to managing your application in any cloud service provider. This guide provides instructions on how to deploy {{ ydb-short-name }} in [AWS EKS](https://aws.amazon.com/eks/) or [{{ managed-k8s-full-name }}](https://cloud.yandex.com/services/managed-kubernetes).
+Deploying {{ ydb-short-name }} in {{ k8s }} is a simple way to set up and run a {{ ydb-short-name }} cluster. {{ k8s }} allows to use an universal approach to managing your application in any cloud service provider. This guide provides instructions on how to deploy {{ ydb-short-name }} in [AWS EKS](https://aws.amazon.com/eks/) or [{{ managed-k8s-full-name }}](https://yandex.cloud/services/managed-kubernetes).
 
 ## Prerequisites
 
@@ -43,7 +43,7 @@ Skip this section if you have already configured a suitable {{ k8s }} cluster.
 
 - {{ managed-k8s-full-name }}
 
-  Follow the instructions in the [{{ managed-k8s-full-name }} quick start guide](https://cloud.yandex.com/en/docs/managed-kubernetes/quickstart).
+  Follow the instructions in the [{{ managed-k8s-full-name }} quick start guide](https://yandex.cloud/en/docs/managed-kubernetes/quickstart).
 
 {% endlist %}
 

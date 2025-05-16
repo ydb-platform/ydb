@@ -704,26 +704,6 @@ supported_codecs {
 }
 partition_write_speed_bytes_per_second: 50000000
 partition_write_burst_bytes: 50000000
-attributes {
-  key: "__max_partition_message_groups_seqno_stored"
-  value: "6000000"
-}
-attributes {
-  key: "_allow_unauthenticated_read"
-  value: "true"
-}
-attributes {
-  key: "_allow_unauthenticated_write"
-  value: "true"
-}
-attributes {
-  key: "_message_group_seqno_retention_period_ms"
-  value: "1382400000"
-}
-attributes {
-  key: "_partitions_per_tablet"
-  value: "1"
-}
 )");
     
           if (enablePermissions) {

@@ -5,6 +5,8 @@ SRCS(
     common.cpp
     counters_logger.h
     deferred_commit.cpp
+    direct_reader.h
+    direct_reader.cpp
     event_handlers.cpp
     offsets_collector.cpp
     proto_accessor.cpp

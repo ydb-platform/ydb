@@ -1,9 +1,11 @@
 #pragma once
 
 #include "codecs.h"
+#include "control_plane.h"
 #include "events_common.h"
 
 #include <util/datetime/base.h>
+
 
 namespace NYdb::inline Dev::NTopic {
 
@@ -42,10 +44,14 @@ public:
     }
 
 protected:
+
     uint64_t PartitionSessionId;
     std::string TopicPath;
     std::string ReadSessionId;
     uint64_t PartitionId;
+    TMaybe<TPartitionLocation> Location;
+    /*TDirectReadId*/ i64 NextDirectReadId = 1;
+    TMaybe</*TDirectReadId*/ i64> LastDirectReadId;
 };
 
 template<>

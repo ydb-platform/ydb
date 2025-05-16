@@ -341,7 +341,7 @@ protected:
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TAddPartitionsToTxnRequestData>& message) {
-        Send(MakeKafkaTransactionsServiceID(), new TEvKafka::TEvAddPartitionsToTxnRequest(
+        Send(MakeTransactionsServiceID(), new TEvKafka::TEvAddPartitionsToTxnRequest(
             header->CorrelationId, 
             message,
             Context->ConnectionId,
@@ -350,7 +350,7 @@ protected:
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TAddOffsetsToTxnRequestData>& message) {
-        Send(MakeKafkaTransactionsServiceID(), new TEvKafka::TEvAddOffsetsToTxnRequest(
+        Send(MakeTransactionsServiceID(), new TEvKafka::TEvAddOffsetsToTxnRequest(
             header->CorrelationId, 
             message,
             Context->ConnectionId,
@@ -359,7 +359,7 @@ protected:
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TTxnOffsetCommitRequestData>& message) {
-        Send(MakeKafkaTransactionsServiceID(), new TEvKafka::TEvTxnOffsetCommitRequest(
+        Send(MakeTransactionsServiceID(), new TEvKafka::TEvTxnOffsetCommitRequest(
             header->CorrelationId, 
             message,
             Context->ConnectionId,
@@ -368,7 +368,7 @@ protected:
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TEndTxnRequestData>& message) {
-        Send(MakeKafkaTransactionsServiceID(), new TEvKafka::TEvEndTxnRequest(
+        Send(MakeTransactionsServiceID(), new TEvKafka::TEvEndTxnRequest(
             header->CorrelationId, 
             message,
             Context->ConnectionId,

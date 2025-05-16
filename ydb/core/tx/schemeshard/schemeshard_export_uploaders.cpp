@@ -66,6 +66,8 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         Ydb::Topic::CreateTopicRequest request;
         NYdb::NTopic::TTopicDescription(std::move(descTopicResult)).SerializeTo(request);
 
+        request.clear_attributes();
+
         return google::protobuf::TextFormat::PrintToString(request, &Scheme);
     }
 

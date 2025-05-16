@@ -326,7 +326,7 @@ namespace {
         private:
             void MatchPartitionsInTxn(const NKikimr::NKqp::TEvKqp::TEvQueryRequest* request, const TQueryRequestMatcher& matcher) {
                 auto& partitionsInRequest = request->Record.GetRequest().GetKafkaApiOperations().GetPartitionsInTxn();
-                std::unordered_set<TTransactionActor::TTopicPartition, TTransactionActor::TopicPartitionHashFn> paritionsInRequestSet;
+                std::unordered_set<TTopicPartition, TTopicPartitionHashFn> paritionsInRequestSet;
                 paritionsInRequestSet.reserve(partitionsInRequest.size());
                 for (auto& partition : partitionsInRequest) {
                     paritionsInRequestSet.emplace(partition.GetTopicPath(), partition.GetPartitionId());

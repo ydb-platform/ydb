@@ -45,6 +45,7 @@ SRCS(
     kafka_consumer_members_metadata_initializers.cpp
     kafka_transactional_producers_initializers.cpp
     kafka_transactions_coordinator.cpp
+    kafka_producer_instance_id.h
 )
 
 GENERATE_ENUM_SERIALIZATION(kafka.h)

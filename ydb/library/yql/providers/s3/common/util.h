@@ -13,6 +13,9 @@ TIssues AddParentIssue(const TStringBuilder& prefix, TIssues&& issues);
 // '#', '?'
 TString UrlEscapeRet(const TStringBuf from);
 
+bool ValidateS3ReadSchema(TPositionHandle pos, std::string_view format, const TStructExprType* schemaStructRowType, bool enableCoroReadActor, TExprContext& ctx);
+bool ValidateS3WriteSchema(TPositionHandle pos, std::string_view format, const TStructExprType* schemaStructRowType, TExprContext& ctx);
+
 class TUrlBuilder {
     struct TParam {
         TString Name;
@@ -30,7 +33,5 @@ private:
     std::vector<TParam> Params;
     TString MainUri;
 };
-
-bool ValidateS3ReadWriteSchema(const TStructExprType* schemaStructRowType, TExprContext& ctx);
 
 }

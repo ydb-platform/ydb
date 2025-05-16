@@ -678,8 +678,8 @@ TColumnConverter BuildColumnConverter(const std::string& columnName, const std::
         auto pgType = AS_TYPE(TPgType, yqlType);
         auto conv = BuildPgColumnConverter(originalType, pgType);
         if (!conv) {
-            ythrow yexception() << "Arrow type: " << originalType->ToString() <<
-                " of field: " << columnName << " isn't compatible to PG type: " << NPg::LookupType(pgType->GetTypeId()).Name;
+            throw parquet::ParquetException(TStringBuilder() << "Arrow type: " << originalType->ToString() <<
+                " of field: " << columnName << " isn't compatible to PG type: " << NPg::LookupType(pgType->GetTypeId()).Name);
         }
 
         return conv;
@@ -693,9 +693,10 @@ TColumnConverter BuildColumnConverter(const std::string& columnName, const std::
         return {};
     }
 
-    YQL_ENSURE(arrow::compute::CanCast(*originalType, *targetType), "Mismatch type for field: " << columnName << ", expected: "
-        << targetType->ToString() << ", got: " << originalType->ToString());
-
+    if (!arrow::compute::CanCast(*originalType, *targetType)) {
+        throw parquet::ParquetException(TStringBuilder() << "Mismatch type for field: " << columnName << ", expected: "
+            << targetType->ToString() << ", got: " << originalType->ToString());
+    }
 
     return [targetType](const std::shared_ptr<arrow::Array>& value) {
         auto res = arrow::compute::Cast(*value, targetType);

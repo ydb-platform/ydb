@@ -17,6 +17,8 @@ PEERDIR(
     ydb/core/kqp/common
     ydb/library/yql/providers/common/http_gateway
     ydb/library/yql/providers/s3/events
+    ydb/library/yql/core
+    ydb/library/yql/minikql/dom
     ydb/library/yql/public/issue
     ydb/library/yql/public/issue/protos
     ydb/library/yql/ast

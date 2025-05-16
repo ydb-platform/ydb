@@ -207,11 +207,11 @@
 
 Имя метрики<br/>Тип, единицы измерения | Описание<br/>Метки
 ----- | -----
-`SchemeShard.DataErasureQueueSize`<br/>`RATE`, штуки | Количество баз данных, ожидающих очистки.
-`SchemeShard.DataErasureQueueRunning`<br/>`RATE`, штуки | Количество баз данных, для которых очистка производится в данный момент.
-`SchemeShard.TenantDataErasureQueueSize`<br/>`RATE`, штуки | Количество таблеток в базе данных, ожидающих очистки.
-`SchemeShard.TenantDataErasureQueueRunning`<br/>`RATE`, штуки | Количество таблеток в базе данных, для которых очистка производится в данный момент.
-`SchemeShard.DataErasureOK`<br/>`RATE`, штуки | Количество баз данных, в которых завершена очистка в таблетках.
-`SchemeShard.DataErasureTimeout`<br/>`RATE`, штуки | Количество баз данных. для которых истекло время ожидания очистки в таблетках.
-`SchemeShard.TenantDataErasureOK`<br/>`RATE`, штуки | Количество таблеток в конкретной базе, завершивших очистку.
-`SchemeShard.TenantDataErasureTimeout`<br/>`RATE`, штуки | Количество таблеток, которые не успели завершить очистку за отведенное время.
+`SchemeShard.DataErasureQueueSize`<br/>`GAUGE`, штуки | Количество баз данных, ожидающих очистки.
+`SchemeShard.DataErasureQueueRunning`<br/>`GAUGE`, штуки | Количество баз данных, для которых очистка производится в данный момент.
+`SchemeShard.TenantDataErasureQueueSize`<br/>`GAUGE`, штуки | Количество таблеток в базе данных, ожидающих очистки.
+`SchemeShard.TenantDataErasureQueueRunning`<br/>`GAUGE`, штуки | Количество таблеток в базе данных, для которых очистка производится в данный момент.
+`SchemeShard.DataErasureOK`<br/>`GAUGE`, штуки | Количество баз данных, в которых завершена очистка в таблетках в текущей итерации очистки.
+`SchemeShard.DataErasureTimeout`<br/>`GAUGE`, штуки | Количество баз данных. для которых истекло время ожидания очистки в таблетках в текущей итерации очистки.
+`SchemeShard.TenantDataErasureOK`<br/>`GAUGE`, штуки | Количество таблеток в конкретной базе, завершивших очистку.
+`SchemeShard.TenantDataErasureTimeout`<br/>`GAUGE`, штуки | Количество таблеток в конкретной базе, которые не успели завершить очистку за отведенное время.

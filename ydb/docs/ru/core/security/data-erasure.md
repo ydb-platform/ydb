@@ -26,10 +26,8 @@
   * `[RootDataErasureManager] Run: Queue.Size# 2, WaitingDataErasureTenants.size# 2, Status# 1` - запуск новой очистки для баз кластера. Уровень логирования `NOTICE`.
     * `Queue.Size` - количество баз, для которых была запущена очистка.
     * `WaitingDataErasureTenants.size` - количество баз, для которых очистка еще не завершена.
-  * `[RootDataErasureManager] ScheduleDataErasureWakeup: Interval# 600, Timestamp# 01-01-2025`
-  информация о том, через сколько секунд должна будет запуститься следующая очистка. Уровень логирования `NOTICE`.
-  * `[RootDataErasureManager] [Start] Data erasure for pathId# 12345, tenant schemeshard# 5555555, next wakeup# 5, rate# 1, in queue# 2, running# 1 at schemeshard 2222222`
-  выводится при запуске очистки в конкретной базе данных. Уровень логирования `NOTICE`.
+  * `[RootDataErasureManager] ScheduleDataErasureWakeup: Interval# 600, Timestamp# 01-01-2025` - информация о том, через сколько секунд должна будет запуститься следующая очистка. Уровень логирования `NOTICE`.
+  * `[RootDataErasureManager] [Start] Data erasure for pathId# 12345, tenant schemeshard# 5555555, next wakeup# 5, rate# 1, in queue# 2, running# 1 at schemeshard 2222222` - выводится при запуске очистки в конкретной базе данных. Уровень логирования `NOTICE`.
   * `[RootDataErasureManager] [Finished] Data erasure completed for pathId# 12345 in# 900 ms, next wakeup# 5, rate# 1, in queue# 0 tenants, running# 0 tenants at schemeshard 2222222` - выводится при завершении очистки в конкретной базе данных. Уровень логирования `INFO`.
   * `[RootDataErasureManager] Data erasure in tenants is completed. Send request to BS controller` - выводится при завершении очистки внутренних структур всех баз данных кластера. Старт очистки в слое хранения. Уровень логирования `INFO`.
   * `TTxCompleteDataErasureBSC: Progress data shred in BSC 88.88%` - очистка в слое хранения завершена на 88%. Уровень логирования `NOTICE`.
@@ -40,10 +38,8 @@
   * `[TenantDataErasureManager] Run: Queue.Size# 50, WaitingDataErasureShards.size# 50, Status# 1` - запуск новой очистки для таблеток базы данных. Уровень логирования `NOTICE`.
     * `Queue.Size` - количество таблеток, для которых была запущена очистка.
     * `WaitingDataErasureShards.size` - количество таблеток, для которых очистка еще не завершена.
-  * `[TenantDataErasureManager] [Start] Data erasure for pathId# 2, datashard# 7777777, next wakeup# 5, rate# 15, in queue# 50 shards, running# 28 shards at schemeshard 12345`
-  старт очистки в конкретной таблетке базы данных. Уровень логирования `INFO`.
-  * `[TenantDataErasureManager] [Finished] Data erasure is completed for pathId# 2, datashard# 777777777, shardIdx# 12312313" in# 600 ms, next wakeup in# 3600, rate# 50, in queue# 50 shards, running# 0 shards at schemeshard 12345`
-  выводится при завершении очистки в таблетке базы данных. Уровень логирования `INFO`.
+  * `[TenantDataErasureManager] [Start] Data erasure for pathId# 2, datashard# 7777777, next wakeup# 5, rate# 15, in queue# 50 shards, running# 28 shards at schemeshard 12345` - старт очистки в конкретной таблетке базы данных. Уровень логирования `INFO`.
+  * `[TenantDataErasureManager] [Finished] Data erasure is completed for pathId# 2, datashard# 777777777, shardIdx# 12312313" in# 600 ms, next wakeup in# 3600, rate# 50, in queue# 50 shards, running# 0 shards at schemeshard 12345` - выводится при завершении очистки в таблетке базы данных. Уровень логирования `INFO`.
   * `[TenantDataErasureManager] Data erasure in shards is completed. Send response to root schemeshard` - выводится при завершении очистки всех таблеток конкретной базы данных. Уровень логирования `NOTICE`.
   * `[TenantDataErasureManager] Complete: Generation# 5` - завершение очистки таблеток в базе данных. Уровень логирования `NOTICE`.
 

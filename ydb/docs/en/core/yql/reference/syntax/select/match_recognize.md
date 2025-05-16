@@ -312,7 +312,7 @@ PARTITION BY device_id, zone_id
 
 ## Limitations {#limitations}
 
-Our support for the `MATCH_RECOGNIZE` expression will eventually comply with [SQL-2016](https://ru.wikipedia.org/wiki/SQL:2016); currently, however, the following limitations apply:
+Our support for the `MATCH_RECOGNIZE` expression will eventually comply with [SQL-2016](https://en.wikipedia.org/wiki/SQL:2016); currently, however, the following limitations apply:
 
 - [`MEASURES`](#measures). Functions `PREV`/`NEXT` are not supported.
 - [`AFTER MATCH SKIP`](#after_match_skip). Only the `AFTER MATCH SKIP TO NEXT ROW` and `AFTER MATCH SKIP PAST LAST ROW` modes are supported.

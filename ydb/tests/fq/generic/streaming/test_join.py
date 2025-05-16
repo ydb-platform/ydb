@@ -692,7 +692,6 @@ TESTCASES = [
                 left join {streamlookup} $listified as u
                 on(e.za = u.a AND e.yb = u.b)
                 -- MultiGet true
-                on(e.za = u.a AND e.yb = u.b)
             ;
 
             insert into myyds.`{output_topic}`

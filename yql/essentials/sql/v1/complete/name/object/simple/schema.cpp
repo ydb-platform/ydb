@@ -54,7 +54,7 @@ namespace NSQLComplete {
 
             NThreading::TFuture<TListResponse> List(const TListRequest& request) const override {
                 auto [path, name] = Simple_->Split(request.Path);
-                return Simple_->List(TString(path))
+                return Simple_->List(request.Cluster, TString(path))
                     .Apply(FilterByName(TString(name)))
                     .Apply(FilterByTypes(std::move(request.Filter.Types)))
                     .Apply(Crop(request.Limit))

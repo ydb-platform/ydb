@@ -1,3 +1,4 @@
+* Added object names completion in interactive mode
 * Fix `ydb operation get` not working for running operations.
 * Improved `ydb import file` commands to support files with BOM (Byte Order Mark).
 * Brackets are now inserted in pairs in YDB CLI interactive mode

@@ -1,6 +1,6 @@
 # Миграция конфигурации кластера
 
-В {{ ydb-short-name }} поддерживается два механизма управления конфигурацией: [V1](../configuration-management/configuration-v1/index.md) и [V2](../configuration-management/configuration-v2/config-overview.md) (рекомендуемый, доступен с версии 25.1). Ключевые различия между ними описаны в статье [Сравнение конфигураций V1 и V2](../configuration-management/compare-configs.md).
+В {{ ydb-short-name }} поддерживается два механизма управления конфигурацией: [V1](../configuration-v1/index.md) и [V2](../configuration-v2/config-overview.md) (рекомендуемый, доступен с версии 25.1). Ключевые различия между ними описаны в статье [Сравнение конфигураций V1 и V2](../compare-configs.md).
 
 {% include [_](../_includes/configuration-version-note.md) %}
 
@@ -15,4 +15,4 @@
 
 {% endnote %}
 
-Прежде чем выполнять миграцию, убедитесь, какая версия конфигурации используется в вашем кластере в данный момент, с помощью [инструкции по проверке](../configuration-management/check-config-version.md).
+Прежде чем выполнять миграцию, убедитесь, какая версия конфигурации используется в вашем кластере в данный момент, с помощью [инструкции по проверке](../check-config-version.md).

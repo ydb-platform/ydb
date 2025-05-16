@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(TTaskTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(outerState, 2); // outer reached end
         UNIT_ASSERT_VALUES_EQUAL(innerState, 1); // inner executed
-        task.Get(); // should not throw
+        task.await_resume(); // should not throw
     }
 
     TTransactionTask MakeInnerTaskWithException() {
@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(TTaskTest) {
         auto task = MakeOuterThatAwaitsInnerException();
         task.Handle.resume(); // start outer (which starts inner)
 
-        UNIT_ASSERT_EXCEPTION_CONTAINS(task.Get(), std::runtime_error, "Inner failure");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(task.await_resume(), std::runtime_error, "Inner failure");
     }
 
     TTerminalTask MakeOuterThrows() {
@@ -68,7 +68,7 @@ Y_UNIT_TEST_SUITE(TTaskTest) {
         auto task = MakeOuterThrows();
         task.Handle.resume(); // start outer (throws immediately)
 
-        UNIT_ASSERT_EXCEPTION_CONTAINS(task.Get(), std::runtime_error, "Outer failure");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(task.await_resume(), std::runtime_error, "Outer failure");
     }
 
     TTerminalTask MakeDeeplyNested(int& counter) {
@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(TTaskTest) {
         task.Handle.resume();
 
         UNIT_ASSERT_VALUES_EQUAL(counter, 2);
-        task.Get(); // no exception
+        task.await_resume(); // no exception
     }
 
     TTerminalTask MakeVoidTask(bool& flag) {
@@ -100,6 +100,6 @@ Y_UNIT_TEST_SUITE(TTaskTest) {
         task.Handle.resume();
 
         UNIT_ASSERT(ok);
-        task.Get(); // must complete
+        task.await_resume(); // must complete
     }
 }

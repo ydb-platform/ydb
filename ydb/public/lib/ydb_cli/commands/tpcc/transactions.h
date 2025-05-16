@@ -18,11 +18,3 @@ struct TTransactionContext {
 TTransactionTask GetNewOrderTask(TTransactionContext& context);
 
 } // namespace NYdb::NTPCC
-
-// TODO: can we eliminate this?
-namespace std {
-    template<>
-    struct coroutine_traits<NYdb::NTPCC::TTransactionTask, NYdb::NTPCC::TTransactionContext&> {
-        using promise_type = NYdb::NTPCC::TTransactionTask::TPromiseType;
-    };
-}

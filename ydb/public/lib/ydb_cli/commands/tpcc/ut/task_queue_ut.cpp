@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(TTaskQueueTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(transactionCounter, 2);
         UNIT_ASSERT_VALUES_EQUAL(sleepCounter, 3);
-        task.Get(); // should not throw
+        task.await_resume(); // should not throw
 
         queue->Join();
     }
@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(TTaskQueueTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(transactionCounter, numTransactions);
         UNIT_ASSERT_VALUES_EQUAL(sleepCounter, numTransactions);
-        task.Get(); // should not throw
+        task.await_resume(); // should not throw
 
         queue->Join();
     }
@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(TTaskQueueTest) {
 
         WaitFor(task);
 
-        UNIT_ASSERT_EXCEPTION_CONTAINS(task.Get(), std::runtime_error, "Transaction failed");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(task.await_resume(), std::runtime_error, "Transaction failed");
 
         queue->Join();
     }
@@ -162,7 +162,7 @@ Y_UNIT_TEST_SUITE(TTaskQueueTest) {
         // Wait for all tasks to complete
         for (auto& task : tasks) {
             WaitFor(task);
-            task.Get(); // should not throw
+            task.await_resume(); // should not throw
         }
 
         // Verify all terminals completed their work
@@ -202,7 +202,7 @@ Y_UNIT_TEST_SUITE(TTaskQueueTest) {
         // Wait for tasks that were accepted
         for (size_t i = 0; i < maxTerminals; ++i) {
             WaitFor(tasks[i]);
-            tasks[i].Get(); // should not throw
+            tasks[i].await_resume(); // should not throw
         }
 
         queue->Join();

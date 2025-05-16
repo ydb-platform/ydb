@@ -2,16 +2,6 @@
 
 #include "log.h"
 
-#include <thread>
-
-// TODO: can we elliminate this?
-namespace std {
-    template<>
-    struct coroutine_traits<NYdb::NTPCC::TTerminalTask, NYdb::NTPCC::TTerminal&> {
-        using promise_type = NYdb::NTPCC::TTerminalTask::TPromiseType;
-    };
-}
-
 namespace NYdb::NTPCC {
 
 TTerminal::TTerminal(size_t terminalID,

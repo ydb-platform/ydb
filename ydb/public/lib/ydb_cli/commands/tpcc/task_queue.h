@@ -40,10 +40,11 @@ struct TTask {
         auto final_suspend() noexcept {
             struct TFinalAwaiter {
                 bool await_ready() noexcept { return false; }
-                void await_suspend(TCoroHandle h) noexcept {
-                    if (h.promise().Continuation && !h.promise().Continuation.done()) {
-                        h.promise().Continuation.resume(); // resume outer task (terminal)
+                std::coroutine_handle<> await_suspend(TCoroHandle h) noexcept {
+                    if (h.promise().Continuation) {
+                        return h.promise().Continuation;
                     }
+                    return std::noop_coroutine();
                 }
                 void await_resume() noexcept {}
             };
@@ -64,6 +65,8 @@ struct TTask {
         std::coroutine_handle<> Continuation;
     };
 
+    using promise_type = TPromiseType;
+
     TTask(TCoroHandle h)
         : Handle(h)
     {
@@ -94,14 +97,6 @@ struct TTask {
         }
     }
 
-    T& Get() {
-        if (Handle.promise().Exception) {
-            std::rethrow_exception(Handle.promise().Exception);
-        }
-
-        return Handle.promise().Value;
-    }
-
     // awaitable task
 
     bool await_ready() const noexcept {
@@ -113,8 +108,12 @@ struct TTask {
         Handle.resume();  // start inner task
     }
 
-    T& await_resume() {
-        return Get();
+    T&& await_resume() {
+        if (Handle.promise().Exception) {
+            std::rethrow_exception(Handle.promise().Exception);
+        }
+
+        return std::move(Handle.promise().Value);
     }
 
     TCoroHandle Handle;
@@ -135,10 +134,11 @@ struct TTask<void> {
         auto final_suspend() noexcept {
             struct TFinalAwaiter {
                 bool await_ready() noexcept { return false; }
-                void await_suspend(TCoroHandle h) noexcept {
-                    if (h.promise().Continuation && !h.promise().Continuation.done()) {
-                        h.promise().Continuation.resume(); // resume outer task (terminal)
+                std::coroutine_handle<> await_suspend(TCoroHandle h) noexcept {
+                    if (h.promise().Continuation) {
+                        return h.promise().Continuation;
                     }
+                    return std::noop_coroutine();
                 }
                 void await_resume() noexcept {}
             };
@@ -154,6 +154,8 @@ struct TTask<void> {
         std::exception_ptr Exception;
         std::coroutine_handle<> Continuation;
     };
+
+    using promise_type = TPromiseType;
 
     TTask(TCoroHandle h)
         : Handle(h)
@@ -185,12 +187,6 @@ struct TTask<void> {
         }
     }
 
-    void Get() {
-        if (Handle.promise().Exception) {
-            std::rethrow_exception(Handle.promise().Exception);
-        }
-    }
-
     // awaitable task
 
     bool await_ready() const noexcept {
@@ -203,7 +199,9 @@ struct TTask<void> {
     }
 
     void await_resume() {
-        Get();
+        if (Handle.promise().Exception) {
+            std::rethrow_exception(Handle.promise().Exception);
+        }
     }
 
     TCoroHandle Handle;

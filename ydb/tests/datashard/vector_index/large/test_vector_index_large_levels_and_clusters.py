@@ -1,5 +1,3 @@
-import time
-
 from ydb.tests.datashard.lib.vector_base import VectorBase
 from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.datashard.lib.vector_index import BinaryStringConverter, get_vector, targets
@@ -224,7 +222,7 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
                     prefix=prefix,
                     vector_dimension=vector_dimension,
                 )
-            except Exception as ex:
+            except Exception:
                 return False
             return True
 

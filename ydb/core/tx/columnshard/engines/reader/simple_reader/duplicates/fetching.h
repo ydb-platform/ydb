@@ -87,8 +87,7 @@ public:
     }
 
     void OnError(const TString& message) {
-        TActorContext::AsActorContext().Send(
-            Owner, new TEvDuplicateFilterDataFetched(Source->GetSourceId(), TConclusionStatus::Fail(message), nullptr));
+        TActorContext::AsActorContext().Send(Owner, new TEvDuplicateFilterDataFetched(Source->GetSourceId(), TConclusionStatus::Fail(message)));
         OnDone();
     }
 
@@ -112,9 +111,10 @@ public:
         AFL_VERIFY(PortionAccessor);
         TActorContext::AsActorContext().Send(
             Owner, new TEvDuplicateFilterDataFetched(Source->GetSourceId(),
-                       PortionAccessor->PrepareForAssemble(*ResultSchema, *ResultSchema, Blobs, Source->GetDataSnapshot())
-                           .AssembleToGeneralContainer({}),
-                       std::move(AllocatedMemory)));
+                       TColumnsData(PortionAccessor->PrepareForAssemble(*ResultSchema, *ResultSchema, Blobs, Source->GetDataSnapshot())
+                                        .AssembleToGeneralContainer({})
+                                        .DetachResult(),
+                           std::move(AllocatedMemory))));
         OnDone();
     }
 

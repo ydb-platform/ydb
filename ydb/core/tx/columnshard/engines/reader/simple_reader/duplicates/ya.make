@@ -13,6 +13,7 @@ SRCS(
     fetching.cpp
     interval_tree.cpp
     source_cache.cpp
+    splitter.cpp
 )
 
 PEERDIR(

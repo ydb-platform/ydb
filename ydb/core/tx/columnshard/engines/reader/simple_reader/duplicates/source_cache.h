@@ -16,7 +16,6 @@ class IDataSource;
 class TSourceCache: public NActors::TActor<TSourceCache> {
     // TODO: add cache hit/miss metrics
 public:
-    using TColumnsData = NArrow::TGeneralContainer;
     using TCacheItem = std::shared_ptr<TColumnsData>;
     using TSourcesData = THashMap<ui64, TCacheItem>;
 
@@ -31,7 +30,7 @@ private:
     class TSizeProvider {
     public:
         size_t operator()(const TCacheItem& item) const {
-            return item->GetRawSizeVerified();
+            return item->GetData()->GetRawSizeVerified();
         }
     };
 

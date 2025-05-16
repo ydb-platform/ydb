@@ -13,8 +13,6 @@ namespace NKikimr::NOlap::NReader::NSimple {
 
 class IDataSource;
 
-using TIntervalId = ui64;   // SourceId
-
 class IFilterSubscriber {
 public:
     virtual void OnFilterReady(const NArrow::TColumnFilter&) = 0;

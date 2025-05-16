@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             auto it = tableClient
                           .StreamExecuteScanQuery(R"(
                 --!syntax_v1
-                SELECT JSON_VALUE(CAST(Details AS JsonDocument), "$.level") AS LEVEL, JSON_VALUE(CAST(Details AS JsonDocument), "$.portions.blob_bytes") AS BYTES
+                SELECT CAST(JSON_VALUE(CAST(Details AS JsonDocument), "$.level") AS Uint64) AS LEVEL, CAST(JSON_VALUE(CAST(Details AS JsonDocument), "$.portions.blob_bytes") AS Uint64) AS BYTES
                 FROM `/Root/olapStore/olapTable/.sys/primary_index_optimizer_stats`
                 ORDER BY LEVEL
             )")
@@ -82,6 +82,7 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             for (auto&& i : rows) {
                 AFL_VERIFY(levelIdx == GetUint64(i.at("LEVEL")));
                 AFL_VERIFY(GetUint64(i.at("BYTES")) < maxVal[levelIdx]);
+                ++levelIdx;
             }
         }
     }
@@ -102,7 +103,7 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             auto alterQuery =
                 TStringBuilder() <<
                 R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
-                {"levels" : [{"class_name" : "Zero", "expected_blobs_size" : 1073741824, "portions_count_available" : 2},
+                {"levels" : [{"class_name" : "Zero", "portions_live_duration" : "20s", "expected_blobs_size" : 1073741824, "portions_count_available" : 2},
                              {"class_name" : "Zero"}]}`);
             )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();

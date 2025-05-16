@@ -865,12 +865,12 @@ void TCommandVersionDynamicConfig::Config(TConfig& config) {
         .StoreTrue(&ListNodes);
     config.SetFreeArgsNum(0);
     config.AllowEmptyDatabase = AllowEmptyDatabase;
-
     AddOutputFormats(config, {
         EDataFormat::Pretty,
         EDataFormat::Json,
         EDataFormat::Csv
     });
+    config.Opts->MutuallyExclusive("list-nodes", "format");
 }
 
 void TCommandVersionDynamicConfig::Parse(TConfig& config) {
@@ -882,7 +882,9 @@ int TCommandVersionDynamicConfig::Run(TConfig& config) {
 
     auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
     auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
-
+    if (OutputFormat != EDataFormat::Default) {
+        ListNodes = true;
+    }
     auto result = client.GetConfigurationVersion(ListNodes).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     auto sortNodes = [&](const auto& list) {
@@ -891,9 +893,6 @@ int TCommandVersionDynamicConfig::Run(TConfig& config) {
         return sortedNodes;
     };
     if (OutputFormat == EDataFormat::Json) {
-        if (ListNodes) {
-            Cerr << "Flag --list-nodes is redundant when using --format json, as node lists are included in output by default" << Endl;
-        }
         NJson::TJsonValue jsonOutput(NJson::JSON_MAP);
         auto serializeNodesInfo = [&](const TString& key, const auto& listGetter) {
             NJson::TJsonValue nodesArray(NJson::JSON_ARRAY);
@@ -907,54 +906,40 @@ int TCommandVersionDynamicConfig::Run(TConfig& config) {
             jsonOutput.InsertValue(key, nodesArray);
         };
 
-#define SERIALIZE_NODES_INFO(type, key) \
+#define PRINT_NODES_TO_JSON(type, key) \
         serializeNodesInfo(#key "_nodes_list", [&]() { return result.Get##type##NodesList(); }); \
 
-        SERIALIZE_NODES_INFO(V1, v1)
-        SERIALIZE_NODES_INFO(V2, v2)
-        SERIALIZE_NODES_INFO(Unknown, unknown)
+        PRINT_NODES_TO_JSON(V1, v1)
+        PRINT_NODES_TO_JSON(V2, v2)
+        PRINT_NODES_TO_JSON(Unknown, unknown)
 
         NJson::WriteJson(&Cout, &jsonOutput, true);
         Cout << Endl;
     } else if (OutputFormat == EDataFormat::Csv) {
-        if (ListNodes) {
-            Cerr << "Flag --list-nodes is redundant when using --format csv, as node lists are included in output by default" << Endl;
-        }
-
-        Cout << "config_version,nodes_count,nodes_list" << Endl;
-        auto printNodesRow = [&](const TString& version, const auto& nodesCountGetter, const auto& listGetter) {
-            TStringBuilder row;
-            row << version << "," << nodesCountGetter();
-            row << ",\"";
-            bool first = true;
+        Cout << "config_version,node_id,hostname,port" << Endl;
+        auto printNodesToCsv = [&](const TString& versionString, const auto& listGetter) {
             for (const auto& node : sortNodes(listGetter())) {
-                if (!first) {
-                    row << " ";
-                }
-                row << node.NodeId << "-" << node.Hostname << ":" << node.Port;
-                first = false;
+                TStringBuilder row;
+                row << versionString << "," << node.NodeId << ",\"" << node.Hostname << "\"," << node.Port;
+                Cout << row << Endl;
             }
-            row << "\"";
-            Cout << row << Endl;
         };
-        printNodesRow("v1", [&]() { return result.GetV1Nodes(); }, [&]() { return result.GetV1NodesList(); });
-        printNodesRow("v2", [&]() { return result.GetV2Nodes(); }, [&]() { return result.GetV2NodesList(); });
-        printNodesRow("unknown", [&]() { return result.GetUnknownNodes(); }, [&]() { return result.GetUnknownNodesList(); });
+
+#define PRINT_NODES_TO_CSV(type, key) \
+    printNodesToCsv(#key, [&]() { return result.Get##type##NodesList(); }); \
+
+        PRINT_NODES_TO_CSV(V1, v1)
+        PRINT_NODES_TO_CSV(V2, v2)
+        PRINT_NODES_TO_CSV(Unknown, unknown)
     } else {
         auto printNodeList = [&](const TString& header, const auto& listGetter) {
             const auto& nodesVector = sortNodes(listGetter());
             Cout << header;
-            if (OutputFormat == EDataFormat::Default) {
-                bool first = true;
-                for (const auto& node : nodesVector) {
-                    if (!first) {
-                        Cout << "\n";
-                    }
-                    Cout << node.NodeId << "-" << node.Hostname << ":" << node.Port;
-                    first = false;
-                }
-                Cout << Endl;
+            for (const auto& node : nodesVector) {
+                Cout << "\n";
+                Cout << "  - " << node.Hostname << ":" << node.Port << " (node_id: " << node.NodeId << ")";
             }
+            Cout << Endl;
         };
 
 #define PRINT_NODE_VERSION_INFO(type) \

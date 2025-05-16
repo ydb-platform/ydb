@@ -407,7 +407,6 @@ public:
             DbDriverState_,
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings));
-
         return promise.GetFuture();
     }
 };

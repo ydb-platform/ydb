@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0.
  */
 
-#include <aws/mqtt/private/shared_constants.h>
+#include <aws/mqtt/private/shared.h>
 
 #include <aws/http/request_response.h>
 

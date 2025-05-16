@@ -11,6 +11,11 @@ namespace NKikimr::NConsole {
 
 class TConfigurationInfoCollector : public TActorBootstrapped<TConfigurationInfoCollector> {
 private:
+    struct TEndpoint {
+        TString Host;
+        ui16 Port;
+    };
+
     using TBase = TActorBootstrapped<TConfigurationInfoCollector>;
     const TActorId ReplyToActorId;
 
@@ -22,7 +27,8 @@ private:
     std::vector<ui32> UnknownNodesList;
     bool ListNodes = false;
 
-    std::unordered_map<ui32, TEndpoint> PendingNodes;
+    std::unordered_set<ui32> PendingNodes;
+    std::unordered_map<ui32, TEndpoint> NodesInfo;
     ui32 TotalNodes = 0;
 
     const TDuration Timeout = TDuration::Seconds(5);
@@ -37,17 +43,12 @@ private:
         struct TEvTimeout : public TEventLocal<TEvTimeout, EvTimeout> {};
     };
 
-    struct TEndpoint {
-        TString Host;
-        ui16 Port;
-    };
-
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::CMS_CONFIG_INFO_COLLECTOR;
     }
 
-    TConfigurationInfoCollector(TActorId replyToActorId);
+    TConfigurationInfoCollector(TActorId replyToActorId, bool listNodes);
 
     void Bootstrap();
 
@@ -63,6 +64,6 @@ private:
     STFUNC(StateWork);
 };
 
-IActor *CreateConfigurationInfoCollector(TActorId replyToActorId);
+IActor *CreateConfigurationInfoCollector(TActorId replyToActorId, bool listNodes);
 
 } // namespace NKikimr::NConsole

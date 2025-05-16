@@ -897,7 +897,7 @@ void TConfigsManager::Handle(TEvConsole::TEvFetchStartupConfigRequest::TPtr &ev,
 
 void TConfigsManager::Handle(TEvConsole::TEvGetConfigurationVersionRequest::TPtr &ev, const TActorContext &ctx)
 {
-    ctx.Register(CreateConfigurationInfoCollector(ev->Sender));
+    ctx.Register(CreateConfigurationInfoCollector(ev->Sender, ev->Get()->Record.GetRequest().list_nodes()));
 }
 
 void TConfigsManager::Handle(TEvConsole::TEvGetAllMetadataRequest::TPtr &ev, const TActorContext &ctx)

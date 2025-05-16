@@ -88,7 +88,7 @@ namespace NActors {
     void TExecutorThread::UnregisterActor(TMailbox* mailbox, TActorId actorId) {
         Y_DEBUG_ABORT_UNLESS(actorId.PoolID() == ThreadCtx.PoolId() && ThreadCtx.Pool()->ResolveMailbox(actorId.Hint()) == mailbox);
         IActor* actor = mailbox->DetachActor(actorId.LocalId());
-        ExecutionStats.DecrementActorsAliveByActivity(actor->GetActivityType());
+        ExecutionStats.DecrementActorsAliveByActivity(actor->GetActivityType().GetIndex());
         DyingActors.push_back(THolder(actor));
     }
 
@@ -103,7 +103,7 @@ namespace NActors {
                         actorPtr = pool->Actors.back();
                         actorPtr->StuckIndex = i;
                         pool->Actors.pop_back();
-                        pool->DeadActorsUsage.emplace_back(actor->GetActivityType(), actor->GetUsage(GetCycleCountFast()));
+                        pool->DeadActorsUsage.emplace_back(actor->GetActivityType().GetIndex(), actor->GetUsage(GetCycleCountFast()));
                     }
                 }
             }
@@ -259,7 +259,7 @@ namespace NActors {
 
                     ui32 evTypeForTracing = ev->Type;
 
-                    ui32 activityType = actor->GetActivityType();
+                    ui32 activityType = actor->GetActivityType().GetIndex();
                     if (activityType != prevActivityType) {
                         prevActivityType = activityType;
                         NProfiling::TMemoryTagScope::Reset(activityType);

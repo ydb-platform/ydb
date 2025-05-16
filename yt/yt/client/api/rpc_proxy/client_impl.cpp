@@ -967,6 +967,20 @@ TFuture<void> TClient::RemoveQueueProducerSession(
     return req->Invoke().AsVoid();
 }
 
+TFuture<TGetCurrentUserResultPtr> TClient::GetCurrentUser(const TGetCurrentUserOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.GetCurrentUser();
+    SetTimeoutOptions(*req, options);
+
+    return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetCurrentUserPtr& rsp) {
+        auto response = New<TGetCurrentUserResult>();
+        response->User = rsp->user();
+        return response;
+    }));
+}
+
 TFuture<void> TClient::AddMember(
     const TString& group,
     const TString& member,
@@ -2797,7 +2811,7 @@ TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
     const TShuffleHandlePtr& shuffleHandle,
     int partitionIndex,
     std::optional<std::pair<int, int>> writerIndexRange,
-    const TTableReaderConfigPtr& config)
+    const TShuffleReaderOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
 
@@ -2806,7 +2820,9 @@ TFuture<IRowBatchReaderPtr> TClient::CreateShuffleReader(
 
     req->set_shuffle_handle(ConvertToYsonString(shuffleHandle).ToString());
     req->set_partition_index(partitionIndex);
-    req->set_reader_config(ConvertToYsonString(config).ToString());
+    if (options.Config) {
+        req->set_reader_config(ConvertToYsonString(options.Config).ToString());
+    }
     if (writerIndexRange) {
         auto* writerIndexRangeProto = req->mutable_writer_index_range();
         writerIndexRangeProto->set_begin(writerIndexRange->first);
@@ -2823,7 +2839,7 @@ TFuture<IRowBatchWriterPtr> TClient::CreateShuffleWriter(
     const TShuffleHandlePtr& shuffleHandle,
     const std::string& partitionColumn,
     std::optional<int> writerIndex,
-    const TTableWriterConfigPtr& config)
+    const TShuffleWriterOptions& options)
 {
     auto proxy = CreateApiServiceProxy();
     auto req = proxy.WriteShuffleData();
@@ -2831,10 +2847,13 @@ TFuture<IRowBatchWriterPtr> TClient::CreateShuffleWriter(
 
     req->set_shuffle_handle(ConvertToYsonString(shuffleHandle).ToString());
     req->set_partition_column(ToProto(partitionColumn));
-    req->set_writer_config(ConvertToYsonString(config).ToString());
+    if (options.Config) {
+        req->set_writer_config(ConvertToYsonString(options.Config).ToString());
+    }
     if (writerIndex) {
         req->set_writer_index(*writerIndex);
     }
+    req->set_overwrite_existing_writer_data(options.OverwriteExistingWriterData);
 
     return CreateRpcClientOutputStream(std::move(req))
         .ApplyUnique(BIND([] (IAsyncZeroCopyOutputStreamPtr&& outputStream) {

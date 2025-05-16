@@ -13,7 +13,7 @@ tasks.compileJava.configure {
 tasks.compileTestJava.configure {
     dependsOn({{ taskvar }})
 }
-{%-     if current_target.use_annotation_processor|select('startsWith', 'contrib/java/org/projectlombok/lombok')|length %}
+{%-     if not(disable_lombok_plugin) and (current_target.use_annotation_processor|select('startsWith', 'contrib/java/org/projectlombok/lombok')|length) %}
 tasks.getByName("delombok").mustRunAfter({{ taskvar }})
 {%-     endif -%}
 
@@ -27,7 +27,7 @@ tasks.compileKotlin.configure {
 tasks.compileTestKotlin.configure {
     dependsOn({{ taskvar }})
 }
-{%-         if with_kapt %}
+{%-         if with_kapt or with_test_kapt %}
 tasks.withType<KaptGenerateStubsTask>().configureEach {
     mustRunAfter({{ taskvar }})
 }

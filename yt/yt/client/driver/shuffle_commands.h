@@ -27,7 +27,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////
 
 class TReadShuffleDataCommand
-    : public TTypedCommand<NTableClient::TTableReaderConfigPtr>
+    : public TTypedCommand<NApi::TShuffleReaderOptions>
 {
 public:
     REGISTER_YSON_STRUCT_LITE(TReadShuffleDataCommand);
@@ -46,7 +46,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////
 
 class TWriteShuffleDataCommand
-    : public TTypedCommand<NTableClient::TTableWriterConfigPtr>
+    : public TTypedCommand<NApi::TShuffleWriterOptions>
 {
 public:
     REGISTER_YSON_STRUCT_LITE(TWriteShuffleDataCommand);
@@ -58,6 +58,7 @@ private:
     std::string PartitionColumn;
     i64 MaxRowBufferSize;
     std::optional<int> WriterIndex;
+    bool OverwriteExistingWriterData;
 
     void DoExecute(ICommandContextPtr context) override;
 };

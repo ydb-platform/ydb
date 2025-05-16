@@ -676,15 +676,19 @@ void TInitDataRangeStep::FormHeadAndProceed() {
         keys[k].CumulativeSize = cz.DataKeysBody.empty() ? 0 : (cz.DataKeysBody.back().CumulativeSize + cz.DataKeysBody.back().Size);
         cz.DataKeysBody.push_back(std::move(keys[k]));
 
-        cz.Head.Offset = cz.DataKeysBody.back().Key.GetOffset();
-        cz.Head.PartNo = cz.DataKeysBody.back().Key.GetPartNo();
+        const auto& bodyKey = cz.DataKeysBody.back().Key;
+
+        cz.Head.Offset = bodyKey.GetOffset() + bodyKey.GetCount();
+        cz.Head.PartNo = 0;
     }
 
     for (size_t k = kb.Head; k < kb.FastWrite; ++k) {
         cz.HeadKeys.push_back(std::move(keys[k]));
 
-        cz.Head.Offset = cz.HeadKeys.back().Key.GetOffset();
-        cz.Head.PartNo = cz.HeadKeys.back().Key.GetPartNo();
+        const auto& headKey = cz.HeadKeys.back().Key;
+
+        cz.Head.Offset = headKey.GetOffset();
+        cz.Head.PartNo = headKey.GetPartNo();
     }
 
     for (size_t k = kb.FastWrite; k < keys.size(); ++k) {
@@ -692,29 +696,24 @@ void TInitDataRangeStep::FormHeadAndProceed() {
         keys[k].CumulativeSize = fwz.DataKeysBody.empty() ? 0 : (fwz.DataKeysBody.back().CumulativeSize + fwz.DataKeysBody.back().Size);
         fwz.DataKeysBody.push_back(std::move(keys[k]));
 
-        fwz.Head.Offset = fwz.DataKeysBody.back().Key.GetOffset();
-        fwz.Head.PartNo = fwz.DataKeysBody.back().Key.GetPartNo();
+        const auto& bodyKey = fwz.DataKeysBody.back().Key;
+
+        fwz.Head.Offset = bodyKey.GetOffset() + bodyKey.GetCount();
+        fwz.Head.PartNo = 0;
     }
 
     if (fwz.DataKeysBody.empty()) {
         cz.StartOffset = startOffset;
         cz.EndOffset = endOffset;
-        cz.Head.Offset = cz.EndOffset;
-        cz.Head.PartNo = 0; // ???
 
         fwz.StartOffset = endOffset;
         fwz.EndOffset = endOffset;
-        fwz.Head.Offset = endOffset;
     } else {
         cz.StartOffset = startOffset;
         cz.EndOffset = fwz.DataKeysBody.front().Key.GetOffset();
-        cz.Head.Offset = cz.EndOffset;
-        cz.Head.PartNo = fwz.DataKeysBody.front().Key.GetPartNo();
 
         fwz.StartOffset = cz.EndOffset;
         fwz.EndOffset = endOffset;
-
-        fwz.Head.Offset = endOffset;
     }
 
     Y_ABORT_UNLESS(fwz.HeadKeys.empty() || fwz.Head.Offset == fwz.HeadKeys.front().Key.GetOffset() && fwz.Head.PartNo == fwz.HeadKeys.front().Key.GetPartNo());
@@ -734,7 +733,7 @@ TInitDataStep::TInitDataStep(TInitializer* initializer)
 void TInitDataStep::Execute(const TActorContext &ctx) {
     TVector<TString> keys;
     //form head request
-    for (const auto& p : Partition()->BlobEncoder.HeadKeys) {
+    for (const auto& p : Partition()->CompactionBlobEncoder.HeadKeys) {
         keys.emplace_back(p.Key.Data(), p.Key.Size());
     }
     Y_ABORT_UNLESS(keys.size() < Partition()->TotalMaxCount);
@@ -760,9 +759,9 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
     auto& response = ev->Get()->Record;
     Y_ABORT_UNLESS(response.ReadResultSize());
 
-    auto& head = Partition()->BlobEncoder.Head;
-    auto& headKeys = Partition()->BlobEncoder.HeadKeys;
-    auto& dataKeysHead = Partition()->BlobEncoder.DataKeysHead;
+    auto& head = Partition()->CompactionBlobEncoder.Head;
+    auto& headKeys = Partition()->CompactionBlobEncoder.HeadKeys;
+    auto& dataKeysHead = Partition()->CompactionBlobEncoder.DataKeysHead;
     auto& compactLevelBorder = Partition()->CompactLevelBorder;
     auto totalLevels = Partition()->TotalLevels;
 
@@ -791,8 +790,8 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                         << " expected " << size
                 );
 
-                Y_ABORT_UNLESS(offset + 1 >= Partition()->BlobEncoder.StartOffset);
-                Y_ABORT_UNLESS(offset < Partition()->BlobEncoder.EndOffset);
+                Y_ABORT_UNLESS(offset + 1 >= Partition()->CompactionBlobEncoder.StartOffset);
+                Y_ABORT_UNLESS(offset < Partition()->CompactionBlobEncoder.EndOffset);
                 Y_ABORT_UNLESS(size == read.GetValue().size(), "size=%d == read.GetValue().size() = %d", size, read.GetValue().size());
 
                 for (TBlobIterator it(key, read.GetValue()); it.IsValid(); it.Next()) {

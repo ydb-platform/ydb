@@ -4,6 +4,7 @@ import time
 import threading
 
 from ydb.tests.stress.oltp_workload.workload.type.vector_index import WorkloadVectorIndex
+from ydb.tests.stress.oltp_workload.workload.type.vector_index_large_levels_and_clusters import WorkloadVectorIndexLargeLevelsAndClusters
 from ydb.tests.stress.oltp_workload.workload.type.insert_delete_all_types import WorkloadInsertDeleteAllTypes
 from ydb.tests.stress.oltp_workload.workload.type.select_partition import WorkloadSelectPartition
 

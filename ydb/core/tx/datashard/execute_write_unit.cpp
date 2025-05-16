@@ -471,6 +471,10 @@ public:
             // Note: may erase persistent locks, must be after we persist volatile tx
             AddLocksToResult(writeOp, ctx);
 
+            if (!guardLocks.LockTxId) {
+                writeVersion.ToProto(writeResult->Record.MutableCommitVersion());
+            }
+
             if (auto changes = std::move(userDb.GetCollectedChanges())) {
                 op->ChangeRecords() = std::move(changes);
             }

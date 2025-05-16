@@ -9,4 +9,5 @@ RECURSE(
     secondary_index
     s3
     vector_index
+    ttl
 )

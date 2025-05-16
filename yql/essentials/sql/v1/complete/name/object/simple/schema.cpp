@@ -67,6 +67,16 @@ namespace NSQLComplete {
 
     } // namespace
 
+    NThreading::TFuture<TVector<TFolderEntry>>
+    ISimpleSchema::List(TString folder) const {
+        return List(/* cluster = */ "", folder);
+    }
+
+    NThreading::TFuture<TVector<TFolderEntry>>
+    ISimpleSchema::List(TString /* cluster */, TString folder) const {
+        return List(folder);
+    }
+
     ISchema::TPtr MakeSimpleSchema(ISimpleSchema::TPtr simple) {
         return ISchema::TPtr(new TSimpleSchema(std::move(simple)));
     }

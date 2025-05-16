@@ -1,6 +1,8 @@
 #include "flat_executor_ut_common.h"
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/core/testlib/actors/block_events.h>
+#include <ydb/core/testlib/actors/wait_events.h>
 
 namespace NKikimr::NTable {
 
@@ -24,9 +26,10 @@ enum : ui32  {
 
 class TTxInitSchema : public ITransaction {
 public:
-    TTxInitSchema(const TVector<ui32>& tableIds, bool addColumnsInFamily = false)
+    TTxInitSchema(const TVector<ui32>& tableIds, bool addColumnsInFamily = false, bool allowLogBatching = false)
         : TableIds(tableIds)
         , AddColumnsInFamily(addColumnsInFamily)
+        , AllowLogBatching(allowLogBatching)
     { }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
@@ -43,7 +46,8 @@ public:
                 .AddColumn(tableId, "key", KeyColumnId, NScheme::TInt64::TypeId, false)
                 .AddColumn(tableId, "value", ValueColumnId, NScheme::TString::TypeId, false)
                 .AddColumnToKey(tableId, KeyColumnId)
-                .SetCompactionPolicy(tableId, policy);
+                .SetCompactionPolicy(tableId, policy)
+                .SetExecutorAllowLogBatching(AllowLogBatching);
 
             if (AddColumnsInFamily) {
                 txc.DB.Alter()
@@ -72,6 +76,7 @@ public:
 private:
     const TVector<ui32> TableIds;
     const bool AddColumnsInFamily;
+    const bool AllowLogBatching;
 };
 
 class TTxWriteRow : public ITransaction {
@@ -340,7 +345,9 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         env.SendSync(new NFake::TEvExecute{ new TTxDeleteRow(101, 43) });
 
         // defer GC after compaction in channel 2
-        env.SendEvToBSProxy(2, new NFake::TEvBlobStorageDeferGc(true));
+        TBlockEvents<TEvBlobStorage::TEvCollectGarbage> gcEvents(*env, [](const auto& ev) {
+            return ev->Get()->Channel == 2;
+        });
 
         env.SendSync(new NFake::TEvCompact(101));
         env.WaitFor<NFake::TEvCompacted>();
@@ -350,10 +357,12 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
+        env->WaitFor("gc events", [&gcEvents]{ return gcEvents.size() >= 1; });
+
         // should not be cleaned without GC
         UNIT_ASSERT(!env.GrabEdgeEvent<NFake::TEvDataCleaned>(TDuration::Seconds(10)));
 
-        env.SendEvToBSProxy(2, new NFake::TEvBlobStorageDeferGc(false));
+        gcEvents.Stop().Unblock();
         auto ev2 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
         UNIT_ASSERT_VALUES_EQUAL(ev2->Get()->DataCleanupGeneration, 235);
 
@@ -565,7 +574,9 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         env.SendSync(new NFake::TEvExecute{ new TTxDeleteRow(101, 42) });
 
         // defer GC after compaction in channel 1
-        env.SendEvToBSProxy(1, new NFake::TEvBlobStorageDeferGc(true));
+        TBlockEvents<TEvBlobStorage::TEvCollectGarbage> gcEvents(*env, [](const auto& ev) {
+            return ev->Get()->Channel == 1;
+        });
 
         env.SendSync(new NFake::TEvCompact(101));
         env.WaitFor<NFake::TEvCompacted>();
@@ -575,10 +586,12 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
             ctx.Send(ctx.SelfID, new NFake::TEvReturn);
         } });
 
+        env->WaitFor("gc events", [&gcEvents]{ return gcEvents.size() >= 1; });
+
         // should not be cleaned without GC
         UNIT_ASSERT(!env.GrabEdgeEvent<NFake::TEvDataCleaned>(TDuration::Seconds(10)));
 
-        env.SendEvToBSProxy(1, new NFake::TEvBlobStorageDeferGc(false));
+        gcEvents.Stop().Unblock();
         auto ev2 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
         UNIT_ASSERT_VALUES_EQUAL(ev2->Get()->DataCleanupGeneration, 235);
 
@@ -625,6 +638,110 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         } });
         auto ev3 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
         UNIT_ASSERT_VALUES_EQUAL(ev3->Get()->DataCleanupGeneration, 234);
+
+        UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value42), 0);
+    }
+
+    Y_UNIT_TEST(CleanupDataWithTabletGCErrors) {
+        TString value42(size_t(100 * 1024), 'a');
+        TString value43(size_t(100 * 1024), 'b');
+
+        TMyEnvBase env;
+        env.FireDummyTablet(TestTabletFlags);
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema({ 101 }, true) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(101, 42, value42) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(101, 43, value43, ValueFamily2ColumnId) });
+
+        env.SendSync(new NFake::TEvCompact(101));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCount(env, value42, 1), 1);
+        UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCount(env, value43, 2), 1);
+
+        env.RestartTablet(TestTabletFlags);
+
+        int readRows = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(101, readRows) }, true);
+        UNIT_ASSERT_EQUAL(readRows, 2);
+
+        UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCount(env, value42, 1), 1);
+        UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCount(env, value43, 2), 1);
+
+        env.SendSync(new NFake::TEvExecute{ new TTxDeleteRow(101, 42) });
+        env.SendSync(new NFake::TEvExecute{ new TTxDeleteRow(101, 43) });
+
+        // channel 2 contains only compacted table data
+        TBlockEvents<TEvBlobStorage::TEvCollectGarbageResult> gcResults(*env, [](const auto& ev) {
+            return ev->Get()->Channel == 2;
+        });
+
+        env.SendSync(new NFake::TEvCompact(101));
+        env.WaitFor<NFake::TEvCompacted>();
+
+        env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
+            executor->CleanupData(235);
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        } });
+
+        env->WaitFor("gc results", [&gcResults]{ return gcResults.size() >= 1; });
+
+        // should not be cleaned without GC
+        UNIT_ASSERT(!env.GrabEdgeEvent<NFake::TEvDataCleaned>(TDuration::Seconds(10)));
+
+        // convert all caught results to errors that should be retried
+        TWaitForFirstEvent<TEvBlobStorage::TEvCollectGarbageResult> retriedGcResults(*env, [](const auto& ev) {
+            return ev->Get()->Channel == 2 && ev->Get()->Status == NKikimrProto::OK;
+        });
+        for (auto& gcResult : gcResults) {
+            gcResult->Get()->Status = NKikimrProto::ERROR;
+        }
+        gcResults.Stop().Unblock();
+        retriedGcResults.Wait();
+        retriedGcResults.Stop();
+
+        auto ev2 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev2->Get()->DataCleanupGeneration, 235);
+
+        UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value42), 0);
+        UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value43), 0);
+    }
+
+    Y_UNIT_TEST(CleanupDataWithSysTabletGCErrors) {
+        TString value42 = "Some_value";
+
+        TMyEnvBase env;
+        env.FireDummyTablet(TestTabletFlags);
+        env.SendSync(new NFake::TEvExecute{ new TTxInitSchema({ 101 }, false, true) });
+        env.SendSync(new NFake::TEvExecute{ new TTxWriteRow(101, 42, value42) });
+
+        int readRows = 0;
+        env.SendSync(new NFake::TEvExecute{ new TTxFullScan(101, readRows) }, true);
+        UNIT_ASSERT_EQUAL(readRows, 1);
+
+        UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCount(env, value42, 0), 1);
+
+        // make all log GC responses failed
+        auto obs = env->AddObserver<TEvBlobStorage::TEvCollectGarbageResult>([](auto& ev) {
+            if (ev->Get()->Channel == 0) {
+                ev->Get()->Status = NKikimrProto::ERROR;
+            }
+        });
+
+        env.SendSync(new NFake::TEvExecute{ new TTxDeleteRow(101, 42) });
+
+        env.SendSync(new NFake::TEvCall{ [](auto* executor, const auto& ctx) {
+            executor->CleanupData(235);
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        } });
+
+        // should not be cleaned without successful log GC
+        UNIT_ASSERT(!env.GrabEdgeEvent<NFake::TEvDataCleaned>(TDuration::Seconds(10)));
+
+        // make all subsequent log GC responses OK
+        obs.Remove();
+
+        auto ev2 = env.GrabEdgeEvent<NFake::TEvDataCleaned>();
+        UNIT_ASSERT_VALUES_EQUAL(ev2->Get()->DataCleanupGeneration, 235);
 
         UNIT_ASSERT_VALUES_EQUAL(BlobStorageValueCountInAllGroups(env, value42), 0);
     }

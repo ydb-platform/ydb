@@ -3106,6 +3106,15 @@ private:
                 if (attrs.AsMap().contains("schema_mode") && attrs["schema_mode"].AsString() == "weak") {
                     metaInfo->Attrs["schema_mode"] = attrs["schema_mode"].AsString();
                 }
+                if (attrs.AsMap().contains("compression_codec") && attrs["compression_codec"].AsString() != "none") {
+                    metaInfo->Attrs["compression_codec"] = attrs["compression_codec"].AsString();
+                }
+                if (attrs.AsMap().contains("primary_medium") && attrs["primary_medium"].AsString() != "default") {
+                    metaInfo->Attrs["primary_medium"] = attrs["primary_medium"].AsString();
+                }
+                if (attrs.AsMap().contains("media") && (!attrs["media"].AsMap().contains("default") || attrs["media"].AsMap().size() != 1)) {
+                    metaInfo->Attrs["media"] = NYT::NodeToYsonString(attrs["media"]);
+                }
                 if (isDynamic && attrs.AsMap().contains("enable_dynamic_store_read") && NYT::GetBool(attrs["enable_dynamic_store_read"])) {
                     metaInfo->Attrs["enable_dynamic_store_read"] = "true";
                 }
@@ -3325,7 +3334,13 @@ private:
         bool ref = NCommon::HasResOrPullOption(pull.Ref(), "ref");
         bool autoRef = NCommon::HasResOrPullOption(pull.Ref(), "autoref");
 
-        auto cluster = TString{GetClusterName(pull.Input())};
+        TString cluster = options.UsedCluster();
+        if (cluster.empty()) {
+            cluster = options.Config()->DefaultCluster.Get().GetOrElse(TString());
+        }
+        if (cluster.empty()) {
+            cluster = Clusters_->GetDefaultClusterName();
+        }
         auto execCtx = MakeExecCtx(std::move(options), session, cluster, pull.Raw(), &ctx);
 
         if (auto read = pull.Input().Maybe<TCoRight>().Input().Maybe<TYtReadTable>()) {
@@ -3464,12 +3479,14 @@ private:
                     }
                 }
             } else  if (auto limiter = TTableLimiter(range)) {
-                auto entry = execCtx->GetEntry();
                 bool stop = false;
                 const bool useNativeDyntableRead = execCtx->Options_.Config()->UseNativeDynamicTableRead.Get().GetOrElse(DEFAULT_USE_NATIVE_DYNAMIC_TABLE_READ);
                 for (size_t i = 0; i < execCtx->InputTables_.size(); ++i) {
                     TString srcTableName = execCtx->InputTables_[i].Name;
                     NYT::TRichYPath srcTable = execCtx->InputTables_[i].Path;
+                    srcTable.Cluster_.Clear();
+                    TString srcTableCluster = execCtx->InputTables_[i].Cluster;
+                    YQL_ENSURE(srcTableCluster);
                     const bool isDynamic = execCtx->InputTables_[i].Dynamic;
                     if (!isDynamic || useNativeDyntableRead) {
                         if (const auto recordsCount = execCtx->InputTables_[i].Records; recordsCount || !isDynamic) {
@@ -3481,6 +3498,7 @@ private:
                         limiter.NextDynamicTable();
                     }
 
+                    auto entry = execCtx->GetEntryForCluster(srcTableCluster);
                     if (isDynamic && !useNativeDyntableRead) {
                         YQL_ENSURE(srcTable.GetRanges().Empty());
                         stop = NYql::SelectRows(entry->Client, srcTableName, i, specsCache, pullData, limiter);
@@ -3766,8 +3784,51 @@ private:
     }
 
     TFuture<void> DoMerge(TYtMerge merge, const TExecContext<TRunOptions>::TPtr& execCtx) {
+        YQL_LOG_CTX_SCOPE(__FUNCTION__);
         YQL_ENSURE(execCtx->OutTables_.size() == 1);
-        bool forceTransform = NYql::HasAnySetting(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::SoftTransform);
+        bool forceTransform = NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::ForceTransform);
+        if (!forceTransform) {
+            if (auto values = NYql::GetSettingAsColumnList(merge.Settings().Ref(), EYtSettingType::SoftTransform)) {
+                if (Find(values, "column_groups") != values.end()) {
+                    if (execCtx->Options_.Config()->OptimizeFor.Get(execCtx->Cluster_).GetOrElse(NYT::OF_LOOKUP_ATTR) != NYT::OF_LOOKUP_ATTR) {
+                        forceTransform = true;
+                        YQL_CLOG(INFO, ProviderYt) << "Force transform for column_groups";
+                    }
+                }
+                if (!forceTransform && Find(values, "storage") != values.end()) {
+                    for (const auto& in: execCtx->InputTables_) {
+                        if (in.Temp) {
+                            continue;
+                        }
+                        if (in.Lookup != (execCtx->Options_.Config()->OptimizeFor.Get(execCtx->Cluster_).GetOrElse(NYT::OF_LOOKUP_ATTR) == NYT::OF_LOOKUP_ATTR)) {
+                            forceTransform = true;
+                            YQL_CLOG(INFO, ProviderYt) << "Force transform for input lookup=" << in.Lookup;
+                            break;
+                        }
+                        if (in.CompressionCode != execCtx->Options_.Config()->TemporaryCompressionCodec.Get(execCtx->Cluster_).GetOrElse("none")) {
+                            forceTransform = true;
+                            YQL_CLOG(INFO, ProviderYt) << "Force transform for input compression_codec=" << in.CompressionCode;
+                            break;
+                        }
+                        if (in.ErasureCodec != ToString(execCtx->Options_.Config()->TemporaryErasureCodec.Get(execCtx->Cluster_).GetOrElse(NYT::EErasureCodecAttr::EC_NONE_ATTR))) {
+                            forceTransform = true;
+                            YQL_CLOG(INFO, ProviderYt) << "Force transform for input erasure_codec=" << in.ErasureCodec;
+                            break;
+                        }
+                        if (in.PrimaryMedium != execCtx->Options_.Config()->TemporaryPrimaryMedium.Get(execCtx->Cluster_).GetOrElse("default")) {
+                            forceTransform = true;
+                            YQL_CLOG(INFO, ProviderYt) << "Force transform for input primary_medium=" << in.PrimaryMedium;
+                            break;
+                        }
+                        if (in.Media != execCtx->Options_.Config()->TemporaryMedia.Get(execCtx->Cluster_).GetOrElse(NYT::TNode::CreateEntity())) {
+                            forceTransform = true;
+                            YQL_CLOG(INFO, ProviderYt) << "Force transform for input media=" << NYT::NodeToYsonString(in.Media);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
         bool combineChunks = NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::CombineChunks);
         TMaybe<ui64> limit = GetLimit(merge.Settings().Ref());
         const TString inputQueryExpr = GenerateInputQueryWhereExpression(merge.Settings().Ref());

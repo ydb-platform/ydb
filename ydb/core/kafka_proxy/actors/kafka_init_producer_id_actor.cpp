@@ -151,7 +151,7 @@ namespace NKafka {
     }
 
     void TKafkaInitProducerIdActor::HandleQueryResponseFromKqp(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx) {
-        KAFKA_LOG_D(TStringBuilder() << "Handle kqp response for " << GetAsStr(LastSentToKqpRequest) << " request");
+        KAFKA_LOG_D("Handle kqp response for " << GetAsStr(LastSentToKqpRequest) << " request");
 
         try {
             switch (LastSentToKqpRequest) {
@@ -282,7 +282,7 @@ namespace NKafka {
     void TKafkaInitProducerIdActor::SendSaveTxnProducerStateRequest(const TProducerState& producerState) {
         KAFKA_LOG_D("Sending save txn producer state request");
 
-        Send(NKafka::MakeKafkaTransactionsServiceID(), new TEvKafka::TEvSaveTxnProducerRequest(
+        Send(NKafka::MakeTransactionsServiceID(), new TEvKafka::TEvSaveTxnProducerRequest(
             producerState.TransactionalId,
             {
                 producerState.ProducerId, 

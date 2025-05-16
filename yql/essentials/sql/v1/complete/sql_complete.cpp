@@ -1,7 +1,7 @@
 #include "sql_complete.h"
 
 #include <yql/essentials/sql/v1/complete/text/word.h>
-#include <yql/essentials/sql/v1/complete/name/static/name_service.h>
+#include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
 #include <yql/essentials/sql/v1/complete/syntax/local.h>
 #include <yql/essentials/sql/v1/complete/syntax/format.h>
 
@@ -16,13 +16,17 @@ namespace NSQLComplete {
             TLexerSupplier lexer,
             INameService::TPtr names,
             ISqlCompletionEngine::TConfiguration configuration)
-            : Configuration(std::move(configuration))
-            , SyntaxAnalysis(MakeLocalSyntaxAnalysis(lexer))
-            , Names(std::move(names))
+            : Configuration_(std::move(configuration))
+            , SyntaxAnalysis_(MakeLocalSyntaxAnalysis(lexer))
+            , Names_(std::move(names))
         {
         }
 
-        TCompletion Complete(TCompletionInput input) {
+        TCompletion Complete(TCompletionInput input) override {
+            return CompleteAsync(std::move(input)).ExtractValueSync();
+        }
+
+        virtual NThreading::TFuture<TCompletion> CompleteAsync(TCompletionInput input) override {
             if (
                 input.CursorPosition < input.Text.length() &&
                     IsUTF8ContinuationByte(input.Text.at(input.CursorPosition)) ||
@@ -32,29 +36,35 @@ namespace NSQLComplete {
                     << " for input size " << input.Text.size();
             }
 
-            TLocalSyntaxContext context = SyntaxAnalysis->Analyze(input);
+            TLocalSyntaxContext context = SyntaxAnalysis_->Analyze(input);
+            auto keywords = context.Keywords;
 
-            TStringBuf prefix = input.Text.Head(input.CursorPosition);
-            TCompletedToken completedToken = GetCompletedToken(prefix);
+            TNameRequest request = NameRequestFrom(input, context);
+            if (request.IsEmpty()) {
+                return NThreading::MakeFuture<TCompletion>({
+                    .CompletedToken = GetCompletedToken(input, context.EditRange),
+                    .Candidates = {},
+                });
+            }
 
-            return {
-                .CompletedToken = std::move(completedToken),
-                .Candidates = GetCanidates(std::move(context), completedToken),
-            };
+            return Names_->Lookup(std::move(request))
+                .Apply([this, input, context = std::move(context)](auto f) {
+                    return ToCompletion(input, context, f.ExtractValue());
+                });
         }
 
     private:
-        TCompletedToken GetCompletedToken(TStringBuf prefix) {
+        TCompletedToken GetCompletedToken(TCompletionInput input, TEditRange editRange) const {
             return {
-                .Content = LastWord(prefix),
-                .SourcePosition = LastWordIndex(prefix),
+                .Content = input.Text.SubStr(editRange.Begin, editRange.Length),
+                .SourcePosition = editRange.Begin,
             };
         }
 
-        TVector<TCandidate> GetCanidates(TLocalSyntaxContext context, const TCompletedToken& prefix) {
+        TNameRequest NameRequestFrom(TCompletionInput input, const TLocalSyntaxContext& context) const {
             TNameRequest request = {
-                .Prefix = TString(prefix.Content),
-                .Limit = Configuration.Limit,
+                .Prefix = TString(GetCompletedToken(input, context.EditRange).Content),
+                .Limit = Configuration_.Limit,
             };
 
             for (const auto& [first, _] : context.Keywords) {
@@ -67,7 +77,7 @@ namespace NSQLComplete {
                 request.Constraints.Pragma = std::move(constraints);
             }
 
-            if (context.IsTypeName) {
+            if (context.Type) {
                 request.Constraints.Type = TTypeName::TConstraints();
             }
 
@@ -83,55 +93,117 @@ namespace NSQLComplete {
                 request.Constraints.Hint = std::move(constraints);
             }
 
-            if (request.IsEmpty()) {
-                return {};
+            if (context.Object) {
+                request.Constraints.Object = TObjectNameConstraints{
+                    .Provider = context.Object->Provider,
+                    .Cluster = context.Object->Cluster,
+                    .Kinds = context.Object->Kinds,
+                };
+                request.Prefix = context.Object->Path;
             }
 
-            // User should prepare a robust INameService
-            TNameResponse response = Names->Lookup(std::move(request)).ExtractValueSync();
+            if (context.Cluster) {
+                TClusterName::TConstraints constraints;
+                constraints.Namespace = context.Cluster->Provider;
+                request.Constraints.Cluster = std::move(constraints);
+            }
 
-            return Convert(std::move(response.RankedNames), std::move(context.Keywords));
+            return request;
         }
 
-        TVector<TCandidate> Convert(TVector<TGenericName> names, TLocalSyntaxContext::TKeywords keywords) {
+        TCompletion ToCompletion(
+            TCompletionInput input,
+            TLocalSyntaxContext context,
+            TNameResponse response) const {
+            TCompletion completion = {
+                .CompletedToken = GetCompletedToken(input, context.EditRange),
+                .Candidates = Convert(std::move(response.RankedNames), std::move(context)),
+            };
+
+            if (response.NameHintLength) {
+                const auto length = *response.NameHintLength;
+                TEditRange editRange = {
+                    .Begin = input.CursorPosition - length,
+                    .Length = length,
+                };
+                completion.CompletedToken = GetCompletedToken(input, editRange);
+            }
+
+            return completion;
+        }
+
+        static TVector<TCandidate> Convert(TVector<TGenericName> names, TLocalSyntaxContext context) {
             TVector<TCandidate> candidates;
+            candidates.reserve(names.size());
             for (auto& name : names) {
-                candidates.emplace_back(std::visit([&](auto&& name) -> TCandidate {
-                    using T = std::decay_t<decltype(name)>;
-                    if constexpr (std::is_base_of_v<TKeyword, T>) {
-                        TVector<TString>& seq = keywords[name.Content];
-                        seq.insert(std::begin(seq), name.Content);
-                        return {ECandidateKind::Keyword, FormatKeywords(seq)};
-                    }
-                    if constexpr (std::is_base_of_v<TPragmaName, T>) {
-                        return {ECandidateKind::PragmaName, std::move(name.Indentifier)};
-                    }
-                    if constexpr (std::is_base_of_v<TTypeName, T>) {
-                        return {ECandidateKind::TypeName, std::move(name.Indentifier)};
-                    }
-                    if constexpr (std::is_base_of_v<TFunctionName, T>) {
-                        name.Indentifier += "(";
-                        return {ECandidateKind::FunctionName, std::move(name.Indentifier)};
-                    }
-                    if constexpr (std::is_base_of_v<THintName, T>) {
-                        return {ECandidateKind::HintName, std::move(name.Indentifier)};
-                    }
-                }, std::move(name)));
+                candidates.emplace_back(Convert(std::move(name), context));
             }
             return candidates;
         }
 
-        TConfiguration Configuration;
-        ILocalSyntaxAnalysis::TPtr SyntaxAnalysis;
-        INameService::TPtr Names;
+        static TCandidate Convert(TGenericName name, TLocalSyntaxContext& context) {
+            return std::visit([&](auto&& name) -> TCandidate {
+                using T = std::decay_t<decltype(name)>;
+
+                if constexpr (std::is_base_of_v<TKeyword, T>) {
+                    TVector<TString>& seq = context.Keywords[name.Content];
+                    seq.insert(std::begin(seq), name.Content);
+                    return {ECandidateKind::Keyword, FormatKeywords(seq)};
+                }
+
+                if constexpr (std::is_base_of_v<TPragmaName, T>) {
+                    return {ECandidateKind::PragmaName, std::move(name.Indentifier)};
+                }
+
+                if constexpr (std::is_base_of_v<TTypeName, T>) {
+                    return {ECandidateKind::TypeName, std::move(name.Indentifier)};
+                }
+
+                if constexpr (std::is_base_of_v<TFunctionName, T>) {
+                    name.Indentifier += "(";
+                    return {ECandidateKind::FunctionName, std::move(name.Indentifier)};
+                }
+
+                if constexpr (std::is_base_of_v<THintName, T>) {
+                    return {ECandidateKind::HintName, std::move(name.Indentifier)};
+                }
+
+                if constexpr (std::is_base_of_v<TFolderName, T>) {
+                    name.Indentifier.append('/');
+                    if (!context.Object->IsEnclosed) {
+                        name.Indentifier = Quoted(std::move(name.Indentifier));
+                    }
+                    return {ECandidateKind::FolderName, std::move(name.Indentifier)};
+                }
+
+                if constexpr (std::is_base_of_v<TTableName, T>) {
+                    if (!context.Object->IsEnclosed) {
+                        name.Indentifier = Quoted(std::move(name.Indentifier));
+                    }
+                    return {ECandidateKind::TableName, std::move(name.Indentifier)};
+                }
+
+                if constexpr (std::is_base_of_v<TClusterName, T>) {
+                    return {ECandidateKind::ClusterName, std::move(name.Indentifier)};
+                }
+
+                if constexpr (std::is_base_of_v<TUnkownName, T>) {
+                    return {ECandidateKind::UnknownName, std::move(name.Content)};
+                }
+            }, std::move(name));
+        }
+
+        TConfiguration Configuration_;
+        ILocalSyntaxAnalysis::TPtr SyntaxAnalysis_;
+        INameService::TPtr Names_;
     };
 
     ISqlCompletionEngine::TPtr MakeSqlCompletionEngine(
         TLexerSupplier lexer,
         INameService::TPtr names,
         ISqlCompletionEngine::TConfiguration configuration) {
-        return ISqlCompletionEngine::TPtr(
-            new TSqlCompletionEngine(lexer, std::move(names), std::move(configuration)));
+        return MakeHolder<TSqlCompletionEngine>(
+            lexer, std::move(names), std::move(configuration));
     }
 
 } // namespace NSQLComplete
@@ -153,6 +225,18 @@ void Out<NSQLComplete::ECandidateKind>(IOutputStream& out, NSQLComplete::ECandid
             break;
         case NSQLComplete::ECandidateKind::HintName:
             out << "HintName";
+            break;
+        case NSQLComplete::ECandidateKind::FolderName:
+            out << "FolderName";
+            break;
+        case NSQLComplete::ECandidateKind::TableName:
+            out << "TableName";
+            break;
+        case NSQLComplete::ECandidateKind::ClusterName:
+            out << "ClusterName";
+            break;
+        case NSQLComplete::ECandidateKind::UnknownName:
+            out << "UnknownName";
             break;
     }
 }

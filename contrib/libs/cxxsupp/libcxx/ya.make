@@ -34,7 +34,7 @@ ELSEIF (OS_IOS)
         contrib/libs/cxxsupp/builtins
     )
 ELSEIF (OS_LINUX OR OS_DARWIN)
-    IF (ARCH_ARM7)
+    IF (ARCH_ARM6 OR ARCH_ARM7)
         # libcxxrt support for ARM is currently broken, use libcxxabi instead
         SET(CXX_RT "libcxxabi")
     ELSE()

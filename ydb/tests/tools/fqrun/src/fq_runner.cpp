@@ -55,14 +55,14 @@ public:
         }
 
         CurrentOptions = query.FqOptions;
-        const TRequestResult status = FqSetup.QueryRequest(query, StreamQueryId);
+        const TRequestResult status = FqSetup.QueryRequest(query, QueryId);
 
         if (!status.IsSuccess()) {
             Cerr << CerrColors.Red() << "Failed to start stream request execution, reason:" << CerrColors.Default() << Endl << status.ToString() << Endl;
             return false;
         }
 
-        return WaitStreamQuery();
+        return WaitQuery(query.QueryId);
     }
 
     bool FetchQueryResults() {
@@ -74,7 +74,7 @@ public:
                 Cerr << CerrColors.Red() << "Result set with id " << resultSetId << " have " << rowsCount << " rows, it is larger than allowed limit " << MAX_RESULT_SET_ROWS << ", results will be truncated" << CerrColors.Default() << Endl;
             }
 
-            const TRequestResult status = FqSetup.FetchQueryResults(StreamQueryId, resultSetId, CurrentOptions, ResultSets[resultSetId]);
+            const TRequestResult status = FqSetup.FetchQueryResults(QueryId, resultSetId, CurrentOptions, ResultSets[resultSetId]);
             if (!status.IsSuccess()) {
                 Cerr << CerrColors.Red() << "Failed to fetch result set with id " << resultSetId << ", reason:" << CerrColors.Default() << Endl << status.ToString() << Endl;
                 return false;
@@ -110,8 +110,8 @@ public:
                 return false;
             }
 
-            if (!ConnectionNameToId.emplace(connection.name(), connectionId).second) {
-                Cerr << CerrColors.Red() << "Got duplicated connection name '" << connection.name() << "'" << CerrColors.Default() << Endl;
+            if (!ConnectionNameToId.emplace(std::make_pair(options.Scope, connection.name()), connectionId).second) {
+                Cerr << CerrColors.Red() << "Got duplicated connection name '" << connection.name() << "' in scope " << options.Scope << CerrColors.Default() << Endl;
                 return false;
             }
         }
@@ -125,9 +125,9 @@ public:
                 Cout << CoutColors.Cyan() << "Creating binding:\n" << CoutColors.Default() << Endl << binding.DebugString() << Endl;
             }
 
-            const auto it = ConnectionNameToId.find(binding.connection_id());
+            const auto it = ConnectionNameToId.find(std::make_pair(options.Scope, binding.connection_id()));
             if (it == ConnectionNameToId.end()) {
-                Cerr << CerrColors.Red() << "Failed to create binding '" << binding.name() << "', connection with name '" << binding.connection_id() << "' not found" << CerrColors.Default() << Endl;
+                Cerr << CerrColors.Red() << "Failed to create binding '" << binding.name() << "', connection with name '" << binding.connection_id() << "' not found in scope " << options.Scope << CerrColors.Default() << Endl;
                 return false;
             }
 
@@ -158,7 +158,7 @@ public:
     }
 
 private:
-    bool WaitStreamQuery() {
+    bool WaitQuery(size_t queryId) {
         StartTime = TInstant::Now();
         Y_DEFER {
             TFqSetup::StopTraceOpt();
@@ -166,7 +166,7 @@ private:
 
         while (true) {
             TExecutionMeta meta;
-            const TRequestResult status = FqSetup.DescribeQuery(StreamQueryId, CurrentOptions, meta);
+            const TRequestResult status = FqSetup.DescribeQuery(QueryId, CurrentOptions, meta);
 
             if (meta.TransientIssues.Size() != ExecutionMeta.TransientIssues.Size() && VerboseLevel >= EVerbose::Info) {
                 Cerr << CerrColors.Red() << "Query transient issues updated:" << CerrColors.Default() << Endl << meta.TransientIssues.ToString() << Endl;
@@ -185,8 +185,8 @@ private:
             Sleep(Options.PingPeriod);
         }
 
-        PrintQueryAst(ExecutionMeta.Ast);
-        PrintQueryPlan(ExecutionMeta.Plan);
+        PrintQueryAst(queryId, ExecutionMeta.Ast);
+        PrintQueryPlan(queryId, ExecutionMeta.Plan);
         if (VerboseLevel >= EVerbose::Info) {
             Cout << CoutColors.Cyan() << "Query finished. Duration: " << TInstant::Now() - StartTime << CoutColors.Default() << Endl;
         }
@@ -209,42 +209,40 @@ private:
         }
     }
 
-    void PrintQueryAst(TString ast) const {
-        if (!Options.AstOutput) {
-            return;
+    void PrintQueryAst(size_t queryId, TString ast) const {
+        if (const auto output = GetValue<IOutputStream*>(queryId, Options.AstOutputs, nullptr)) {
+            if (VerboseLevel >= EVerbose::Info) {
+                Cout << CoutColors.Cyan() << "Writing query ast" << CoutColors.Default() << Endl;
+            }
+            if (Options.CanonicalOutput) {
+                ast = CanonizeEndpoints(ast, Options.FqSettings.AppConfig.GetFederatedQueryConfig().GetGateways());
+                ast = CanonizeAstLogicalId(ast);
+            }
+            output->Write(ast);
+            output->Flush();
         }
-        if (VerboseLevel >= EVerbose::Info) {
-            Cout << CoutColors.Cyan() << "Writing query ast" << CoutColors.Default() << Endl;
-        }
-        if (Options.CanonicalOutput) {
-            ast = CanonizeEndpoints(ast, Options.FqSettings.AppConfig.GetFederatedQueryConfig().GetGateways());
-            ast = CanonizeAstLogicalId(ast);
-        }
-        Options.AstOutput->Write(ast);
-        Options.AstOutput->Flush();
     }
 
-    void PrintQueryPlan(TString plan) const {
-        if (!Options.PlanOutput) {
-            return;
-        }
-        if (VerboseLevel >= EVerbose::Info) {
-            Cout << CoutColors.Cyan() << "Writing query plan" << CoutColors.Default() << Endl;
-        }
-        if (!plan) {
-            return;
-        }
+    void PrintQueryPlan(size_t queryId, TString plan) const {
+        if (const auto output = GetValue<IOutputStream*>(queryId, Options.PlanOutputs, nullptr)) {
+            if (VerboseLevel >= EVerbose::Info) {
+                Cout << CoutColors.Cyan() << "Writing query plan" << CoutColors.Default() << Endl;
+            }
+            if (!plan) {
+                return;
+            }
 
-        NJson::TJsonValue planJson;
-        NJson::ReadJsonTree(plan, &planJson, true);
-        plan = NJson::PrettifyJson(plan, false);
+            NJson::TJsonValue planJson;
+            NJson::ReadJsonTree(plan, &planJson, true);
+            plan = NJson::PrettifyJson(plan, false);
 
-        if (Options.CanonicalOutput) {
-            plan = CanonizeEndpoints(plan, Options.FqSettings.AppConfig.GetFederatedQueryConfig().GetGateways());
+            if (Options.CanonicalOutput) {
+                plan = CanonizeEndpoints(plan, Options.FqSettings.AppConfig.GetFederatedQueryConfig().GetGateways());
+            }
+
+            output->Write(plan);
+            output->Flush();
         }
-
-        Options.PlanOutput->Write(plan);
-        Options.PlanOutput->Flush();
     }
 
 private:
@@ -254,12 +252,12 @@ private:
     const NColorizer::TColors CerrColors;
     const NColorizer::TColors CoutColors;
 
-    TString StreamQueryId;
+    TString QueryId;
     TInstant StartTime;
     TFqOptions CurrentOptions;
     TExecutionMeta ExecutionMeta;
     std::vector<Ydb::ResultSet> ResultSets;
-    std::unordered_map<TString, TString> ConnectionNameToId;
+    THashMap<std::pair<TString, TString>, TString> ConnectionNameToId;
 };
 
 TFqRunner::TFqRunner(const TRunnerOptions& options)

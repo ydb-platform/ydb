@@ -8,6 +8,8 @@
 #include <aws/io/channel.h>
 #include <aws/io/io.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 enum aws_socket_domain {
     AWS_SOCKET_IPV4,
     AWS_SOCKET_IPV6,
@@ -96,7 +98,7 @@ typedef void(aws_socket_on_readable_fn)(struct aws_socket *socket, int error_cod
 #endif
 struct aws_socket_endpoint {
     char address[AWS_ADDRESS_MAX_LEN];
-    uint16_t port;
+    uint32_t port;
 };
 
 struct aws_socket {
@@ -300,6 +302,29 @@ AWS_IO_API int aws_socket_get_error(struct aws_socket *socket);
  */
 AWS_IO_API bool aws_socket_is_open(struct aws_socket *socket);
 
+/**
+ * Raises AWS_IO_SOCKET_INVALID_ADDRESS and logs an error if connecting to this port is illegal.
+ * For example, port must be in range 1-65535 to connect with IPv4.
+ * These port values would fail eventually in aws_socket_connect(),
+ * but you can use this function to validate earlier.
+ */
+AWS_IO_API int aws_socket_validate_port_for_connect(uint32_t port, enum aws_socket_domain domain);
+
+/**
+ * Raises AWS_IO_SOCKET_INVALID_ADDRESS and logs an error if binding to this port is illegal.
+ * For example, port must in range 0-65535 to bind with IPv4.
+ * These port values would fail eventually in aws_socket_bind(),
+ * but you can use this function to validate earlier.
+ */
+AWS_IO_API int aws_socket_validate_port_for_bind(uint32_t port, enum aws_socket_domain domain);
+
+/**
+ * Assigns a random address (UUID) for use with AWS_SOCKET_LOCAL (Unix Domain Sockets).
+ * For use in internal tests only.
+ */
+AWS_IO_API void aws_socket_endpoint_init_local_address_for_test(struct aws_socket_endpoint *endpoint);
+
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_IO_SOCKET_H */

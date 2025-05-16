@@ -1,6 +1,12 @@
 RECURSE(
     async_replication
     dml
-    lib
     dump_restore
+    copy_table
+    lib
+    partitioning
+    split_merge
+    secondary_index
+    s3
+    vector_index
 )

@@ -77,11 +77,11 @@ namespace NKafka {
             std::unordered_map<TString, TActorId> TxnActorByTransactionalId;
     };
 
-    inline NActors::IActor* CreateKafkaTransactionsCoordinator() {
+    inline NActors::IActor* CreateTransactionsCoordinator() {
         return new TTransactionsCoordinator();
     };
 
-    inline TActorId MakeKafkaTransactionsServiceID() {
+    inline TActorId MakeTransactionsServiceID() {
         static const char x[12] = "kafka_txns";
         return TActorId(0, TStringBuf(x, 12));
     };

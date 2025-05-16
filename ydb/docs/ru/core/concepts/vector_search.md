@@ -24,13 +24,13 @@
 
 ## Точный векторный поиск {#vector-search-exact}
 
-{% include [vector_search_exact.md](_includes/vector_search_exact.md) %}
+{% include [vector_search_exact.md](../yql/reference/_includes/vector_search_exact.md) %}
 
 Подробнее о [точном векторном поиске](../yql/reference/udf/list/knn.md#exact-vector-search-examples).
 
 ## Приближенный векторный поиск без индекса {#vector-search-approximate}
 
-{% include [vector_search_approximate.md](_includes/vector_search_approximate.md) %}
+{% include [vector_search_approximate.md](../yql/reference/_includes/vector_search_approximate.md) %}
 
 Подробнее о [приближенном векторном поиске без индекса](../yql/reference/udf/list/knn.md#approximate-vector-search-examples).
 

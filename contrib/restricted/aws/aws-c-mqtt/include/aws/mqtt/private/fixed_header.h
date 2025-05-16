@@ -59,4 +59,6 @@ AWS_MQTT_API int aws_mqtt_fixed_header_encode(struct aws_byte_buf *buf, const st
  */
 AWS_MQTT_API int aws_mqtt_fixed_header_decode(struct aws_byte_cursor *cur, struct aws_mqtt_fixed_header *header);
 
+AWS_MQTT_API int aws_mqtt311_decode_remaining_length(struct aws_byte_cursor *cur, size_t *remaining_length_out);
+
 #endif /* AWS_MQTT_PRIVATE_FIXED_HEADER_H */

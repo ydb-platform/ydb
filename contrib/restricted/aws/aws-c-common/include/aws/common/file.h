@@ -191,6 +191,8 @@ bool aws_path_exists(const struct aws_string *path);
  *   fseeko() on linux
  *
  * whence can either be SEEK_SET or SEEK_END
+ *
+ * Returns AWS_OP_SUCCESS, or AWS_OP_ERR (after an error has been raised).
  */
 AWS_COMMON_API
 int aws_fseek(FILE *file, int64_t offset, int whence);

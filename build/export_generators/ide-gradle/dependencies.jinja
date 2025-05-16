@@ -13,9 +13,17 @@
 {%-     endif -%}
 {%- endmacro -%}
 
-{%- macro AddFileDeps(file_deps) -%}
-{%-     for file_dep in file_deps %}
-        "$arcadia_root/{{ file_dep.jar }}"{%- if not loop.last -%},{%- endif -%}
+{%- macro Kapts(funcName, kapts) -%}
+{%-     if kapts|length -%}
+{%-         for kapt in kapts %}
+    {{ funcName }}(files("$arcadia_root/{{ kapt }}"))
+{%-         endfor -%}
+{%-     endif -%}
+{%- endmacro -%}
+
+{%- macro AddFileJars(file_jars) -%}
+{%-     for file_jar in file_jars %}
+        "$arcadia_root/{{ file_jar }}"{%- if not loop.last -%},{%- endif -%}
 {%-     endfor -%}
 {%- endmacro -%}
 
@@ -38,12 +46,14 @@
 {%-             else %}
     {{ apiFunc }}({{ classpath }})
 {%-             endif -%}
-{%-             if library.excludes.consumer|length -%} {
+{%-             if library.excludes.consumer|length and not build_contribs -%} {
 {%-                 for exclude in library.excludes.consumer if exclude.classpath -%}
 {%-                     set classpath = exclude.classpath|replace('"','') -%}
-{%-                     set classpath_parts = split(classpath, ':') %}
+{%-                     set classpath_parts = split(classpath, ':') -%}
+{%-                     if (classpath_parts[0] != "") and (classpath_parts[1] != "") %}
         exclude(group = "{{ classpath_parts[0] }}", module = "{{ classpath_parts[1] }}")
-{%-                endfor %}
+{%-                     endif -%}
+{%-                 endfor %}
     }
 {%-             endif -%}
 {%-         endif -%}
@@ -54,20 +64,22 @@
 {%- if not build_contribs -%}
 {%-     set file_deps = file_deps|selectattr('type', 'ne', 'contrib') -%}
 {%- endif -%}
-{%- set file_classpaths = file_deps|map(attribute='classpath') -%}
+{%- set file_classpaths = file_deps|map(attribute='classpath')|unique|sort -%}
+{%- set file_jars = file_deps|map(attribute='jar')|unique|sort -%}
 
 {%- set test_file_deps = extra_targets|selectattr('consumer')|map(attribute='consumer')|sum|selectattr('classpath')|selectattr('jar')|selectattr('prebuilt', 'eq', true) -%}
 {%- if not build_contribs -%}
 {%-     set test_file_deps = test_file_deps|selectattr('type', 'ne', 'contrib') -%}
 {%- endif -%}
-{%- set test_file_classpaths = test_file_deps|map(attribute='classpath') -%}
+{%- set test_file_classpaths = test_file_deps|map(attribute='classpath')|unique|sort -%}
+{%- set test_file_jars = test_file_deps|map(attribute='jar')|reject("in", file_jars)|unique|sort -%}
 
 dependencies {
 {%- if has_errorprone -%}
 {%-     set errorprones = target.consumer|selectattr('classpath')|selectattr('jar', 'startsWith', 'contrib/java/com/google/errorprone/error_prone_annotations') -%}
 {%-     if errorprones|length -%}
 {%-         for errorprone in errorprones -%}
-{%-             set errorprone_version = library.jar|replace("contrib/java/com/google/errorprone/error_prone_annotations/", "") -%}
+{%-             set errorprone_version = errorprone.jar|replace("contrib/java/com/google/errorprone/error_prone_annotations/", "") -%}
 {%-             set errorprone_parts = split(errorprone_version, '/', 2) %}
     errorprone("com.google.errorprone:error_prone_core:{{ errorprone_parts[0] }}")
 {%-         endfor -%}
@@ -78,21 +90,27 @@ dependencies {
 {%- for extra_target in extra_targets -%}
 {{ AnnotationProcessors("testAnnotationProcessor", extra_target.use_annotation_processor) }}
 {%- endfor -%}
+{%- if with_kapt -%}
+{{ Kapts("kapt", target.kapt.classpaths) }}
+{%-     for extra_target in extra_targets -%}
+{{ Kapts("testKapt", extra_target.kapt.classpaths) }}
+{%-     endfor -%}
+{%- endif -%}
 {#- glue -#}
 {{ AddNonFileDeps(target, file_classpaths, "implementation", "api") }}
 {%- for extra_target in extra_targets -%}
 {{ AddNonFileDeps(extra_target, test_file_classpaths, "testImplementation", "testImplementation") }}
 {%- endfor -%}
 
-{%- if file_deps|length %}
+{%- if file_jars|length %}
     implementation(files(listOf({#- glue -#}
-{{ AddFileDeps(file_deps) }}
+{{ AddFileJars(file_jars) }}
     )))
 {%- endif -%}
 
-{%- if test_file_deps|length %}
+{%- if test_file_jars|length %}
     testImplementation(files(listOf({#- glue -#}
-{{ AddFileDeps(test_file_deps) }}
+{{ AddFileJars(test_file_jars) }}
     )))
 {%- endif %}
 }

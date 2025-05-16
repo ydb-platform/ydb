@@ -95,7 +95,7 @@ protected:
         // retry failed GC logic
         ui32 TryCounter;
         TBackoffTimer BackoffTimer;
-        bool RetryIsScheduled;
+        bool PendingRetry;
         ui32 FailCount;
 
         inline TChannelInfo();

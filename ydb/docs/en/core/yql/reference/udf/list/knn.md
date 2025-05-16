@@ -8,11 +8,11 @@ The k-NN problem solution is divided into two major subclasses of methods: exact
 
 ### Exact method {#exact-method}
 
-{% include [vector_search_exact.md](../../../../concepts/_includes/vector_search_exact.md) %}
+{% include [vector_search_exact.md](../../_includes/vector_search_exact.md) %}
 
 ### Approximate methods {#approximate-methods}
 
-{% include [vector_search_approximate.md](../../../../concepts/_includes/vector_search_approximate.md) %}
+{% include [vector_search_approximate.md](../../_includes/vector_search_approximate.md) %}
 
 {% note info %}
 
@@ -36,7 +36,21 @@ Conversion functions are needed to serialize vectors into an internal binary rep
 All serialization functions wrap returned `String` data into [Tagged](../../types/special.md) types.
 
 {% if backend_name == "YDB" %}
-The binary representation of the vector can be stored in the {{ ydb-short-name }} table column. Currently {{ ydb-short-name }} does not support storing `Tagged`, so before storing binary representation vectors you must call [Untag](../../builtins/basic#as-tagged).
+
+The binary representation of the vector can be stored in the {{ ydb-short-name }} table column.
+
+{% note info %}
+
+Currently {{ ydb-short-name }} does not support storing `Tagged`, so before storing binary representation vectors you must call [Untag](../../builtins/basic#as-tagged).
+
+{% endnote %}
+
+{% note info %}
+
+Currently {{ ydb-short-name }} does not support building an index for vectors with bit quantization `BitVector`.
+
+{% endnote %}
+
 {% endif %}
 
 #### Function signatures {#functions-convert-signature}

@@ -325,6 +325,7 @@ namespace NSQLTranslationV1 {
         const bool AnsiQuotedIdentifiers;
         bool AnsiOptionalAs = true;
         bool OrderedColumns = false;
+        bool DeriveColumnOrder = false;
         bool PositionalUnionAll = false;
         bool BogousStarInGroupByOverJoin = false;
         bool UnorderedSubqueries = true;
@@ -376,6 +377,7 @@ namespace NSQLTranslationV1 {
         bool GroupByExprAfterWhere = false;
         bool FailOnGroupByExprOverride = false;
         bool EmitUnionMerge = false;
+        bool OptimizeSimpleIlike = false;
         TVector<size_t> ForAllStatementsParts;
 
         TMaybe<TString> Engine;

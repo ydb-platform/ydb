@@ -279,6 +279,7 @@ private:
 
             auto& item = importInfo->Items.emplace_back(dstPath);
             item.SrcPrefix = settings.items(itemIdx).source_prefix();
+            item.SrcPath = settings.items(itemIdx).source_path();
         }
 
         return true;
@@ -1050,26 +1051,29 @@ private:
         }
 
         // Path in database for import
-        TVector<TString> dstPath;
+        TString dstRoot;
         if (importInfo->Settings.destination_path().empty()) {
-            dstPath = Self->RootPathElements;
+            dstRoot = CanonizePath(Self->RootPathElements);
         } else {
-            dstPath = SplitPath(importInfo->Settings.destination_path());
+            dstRoot = CanonizePath(importInfo->Settings.destination_path());
         }
         TString sourcePrefix = importInfo->Settings.source_prefix();
         if (sourcePrefix && sourcePrefix.back() != '/') {
             sourcePrefix.push_back('/');
         }
-        auto combineDstPath = [&](const TString& mappingObjectPath) {
-            TVector<TString> objectPath = SplitPath(mappingObjectPath);
-            TVector<TString> dstObjectPath = dstPath;
-            dstObjectPath.insert(dstObjectPath.end(), objectPath.begin(), objectPath.end());
-            return CombinePath(dstObjectPath.begin(), dstObjectPath.end());
+        auto combineDstPath = [&](const TString& path) -> TString {
+            TString objectPath = CanonizePath(path);
+            if (objectPath.size() > dstRoot.size() && objectPath.StartsWith(dstRoot) && objectPath[dstRoot.size()] == '/') {
+                return objectPath;
+            } else {
+                return dstRoot + objectPath;
+            }
         };
         auto init = [&](const NBackup::TSchemaMapping::TItem& schemaMappingItem, NSchemeShard::TImportInfo::TItem& item) {
             TStringBuf exportPrefix(schemaMappingItem.ExportPrefix);
             exportPrefix.SkipPrefix("/");
             item.SrcPrefix = TStringBuilder() << sourcePrefix << exportPrefix;
+            item.SrcPath = schemaMappingItem.ObjectPath;
             item.ExportItemIV = schemaMappingItem.IV;
         };
         if (importInfo->Items.empty()) { // Fill the whole list from schema mapping
@@ -1084,16 +1088,29 @@ private:
                 init(schemaMappingItem, item);
             }
         } else { // Take existing items from items list
-            THashMap<TString, size_t> schemaMappingIndex;
+            using TMapping = THashMap<TString, size_t>;
+            TMapping schemaMappingPrefixIndex;
+            TMapping schemaMappingObjectPathIndex;
             for (size_t i = 0; i < importInfo->SchemaMapping->Items.size(); ++i) {
-                schemaMappingIndex[combineDstPath(importInfo->SchemaMapping->Items[i].ObjectPath)] = i;
+                const auto& schemaMappingItem = importInfo->SchemaMapping->Items[i];
+                schemaMappingPrefixIndex[schemaMappingItem.ExportPrefix] = i;
+                schemaMappingObjectPathIndex[CanonizePath(schemaMappingItem.ObjectPath)] = i;
             }
             for (auto& item : importInfo->Items) {
                 TString dstPath = CanonizePath(item.DstPathName);
-                auto mappingIt = schemaMappingIndex.find(dstPath);
-                if (mappingIt == schemaMappingIndex.end()) {
-                    return CancelAndPersist(db, importInfo, -1, {}, TStringBuilder() << "cannot find path " << dstPath << " in schema mapping");
+                TMapping::iterator mappingIt;
+                if (item.SrcPrefix) {
+                    mappingIt = schemaMappingPrefixIndex.find(item.SrcPrefix);
+                    if (mappingIt == schemaMappingPrefixIndex.end()) {
+                        return CancelAndPersist(db, importInfo, -1, {}, TStringBuilder() << "cannot find prefix \"" << item.SrcPrefix << "\" in schema mapping");
+                    }
+                } else if (item.SrcPath) {
+                    mappingIt = schemaMappingObjectPathIndex.find(CanonizePath(item.SrcPath));
+                    if (mappingIt == schemaMappingObjectPathIndex.end()) {
+                        return CancelAndPersist(db, importInfo, -1, {}, TStringBuilder() << "cannot find source path \"" << item.SrcPath << "\" in schema mapping");
+                    }
                 }
+
                 const auto& schemaMappingItem = importInfo->SchemaMapping->Items[mappingIt->second];
                 init(schemaMappingItem, item);
             }

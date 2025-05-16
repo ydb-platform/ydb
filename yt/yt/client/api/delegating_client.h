@@ -370,7 +370,7 @@ public:
         (path, options))
 
     DELEGATE_METHOD(TFuture<std::vector<NTabletClient::TTabletActionId>>, BalanceTabletCells, (
-        const TString& tabletCellBundle,
+        const std::string& tabletCellBundle,
         const std::vector<NYPath::TYPath>& movableTables,
         const TBalanceTabletCellsOptions& options),
         (tabletCellBundle, movableTables, options))
@@ -452,8 +452,8 @@ public:
         (user, permission, acl, options))
 
     DELEGATE_METHOD(TFuture<void>, TransferAccountResources, (
-        const TString& srcAccount,
-        const TString& dstAccount,
+        const std::string& srcAccount,
+        const std::string& dstAccount,
         NYTree::INodePtr resourceDelta,
         const TTransferAccountResourcesOptions& options),
         (srcAccount, dstAccount, resourceDelta, options))
@@ -812,12 +812,12 @@ public:
 
     // Bundle Controller
     DELEGATE_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (
-        const TString& bundleName,
+        const std::string& bundleName,
         const NBundleControllerClient::TGetBundleConfigOptions& options),
         (bundleName, options))
 
     DELEGATE_METHOD(TFuture<void>, SetBundleConfig, (
-        const TString& bundleName,
+        const std::string& bundleName,
         const NBundleControllerClient::TBundleTargetConfigPtr& bundleConfig,
         const NBundleControllerClient::TSetBundleConfigOptions& options),
         (bundleName, bundleConfig, options))
@@ -905,14 +905,16 @@ public:
     DELEGATE_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (
         const TShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
+        std::optional<std::pair<int, int>> writerIndexRange,
         const NTableClient::TTableReaderConfigPtr& config),
-        (shuffleHandle, partitionIndex, config))
+        (shuffleHandle, partitionIndex, writerIndexRange, config))
 
     DELEGATE_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (
         const TShuffleHandlePtr& shuffleHandle,
         const std::string& partitionColumn,
+        std::optional<int> writerIndex,
         const NTableClient::TTableWriterConfigPtr& config),
-        (shuffleHandle, partitionColumn, config))
+        (shuffleHandle, partitionColumn, writerIndex, config))
 
     #undef DELEGATE_METHOD
 

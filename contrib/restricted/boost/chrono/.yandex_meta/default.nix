@@ -1,13 +1,13 @@
 self: super: with self; {
   boost_chrono = stdenv.mkDerivation rec {
     pname = "boost_chrono";
-    version = "1.87.0";
+    version = "1.88.0";
 
     src = fetchFromGitHub {
       owner = "boostorg";
       repo = "chrono";
       rev = "boost-${version}";
-      hash = "sha256-pwuPMr+mo5u8xHJgV8+tysVO5NFMJwzsktULyR8cdo0=";
+      hash = "sha256-AK5kbnidHvzGpUd/VU4RPrsJsbQ2rB8obyJOa4ZrWMc=";
     };
   };
 }

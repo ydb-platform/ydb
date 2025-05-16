@@ -49,7 +49,7 @@ namespace NKafka {
 
             // we need to exlplicitly specify kqpActorId and txnCoordinatorActorId for unit tests
             TTransactionActor(const TString& transactionalId, i64 producerId, i16 producerEpoch, const TString& DatabasePath, const TActorId& kqpActorId, const TActorId& txnCoordinatorActorId) : 
-                TActor<TTransactionActor>(&TTransactionActor::StateFunc),
+                TBase(&TTransactionActor::StateFunc),
                 TransactionalId(transactionalId),
                 ProducerInstanceId({producerId, producerEpoch}),
                 DatabasePath(DatabasePath),

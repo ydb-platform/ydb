@@ -4,6 +4,8 @@
 
 {% include [OLAP_not_allow_note](../../../../_includes/not_allow_for_olap_note.md) %}
 
+{% include [limitations](../../../../_includes/vector_index_limitations.md) %}
+
 {% endif %}
 
 ## Adding an index {#add-index}
@@ -14,8 +16,8 @@
 ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 ```
 
-You can specify any secondary index parameters from the [`CREATE TABLE`](../create_table/secondary_index.md) command.
-You can specify any vector index parameters from the [`CREATE TABLE`](../create_table/vector_index.md) command.
+You can specify any [secondary index](../../../../concepts/glossary.md#secondary-index) parameters from the `CREATE TABLE` [command](../create_table/secondary_index.md).
+You can specify any [vector index](../../../../concepts/glossary.md#vector-index) parameters from the `CREATE TABLE` [command](../create_table/vector_index.md).
 
 {% if backend_name == "YDB" %}
 
@@ -25,7 +27,7 @@ You can also add a secondary index using the {{ ydb-short-name }} CLI [table ind
 
 ## Altering an index {#alter-index}
 
-Indexes have type-specific parameters that can be tuned. Global indexes, whether [synchronous]({{ concept_secondary_index }}#sync) or [asynchronous]({{ concept_secondary_index }}#async), are implemented as hidden tables, and their automatic partitioning settings can be adjusted just like those of regular tables.
+Indexes have type-specific parameters that can be tuned. Global indexes, whether [synchronous]({{ concept_secondary_index }}#sync) or [asynchronous]({{ concept_secondary_index }}#async), are implemented as hidden tables, and their automatic partitioning and followers settings can be adjusted just like those of regular tables.
 
 {% note info %}
 
@@ -34,18 +36,21 @@ Currently, specifying secondary index partitioning settings during index creatio
 {% endnote %}
 
 ```sql
-ALTER TABLE <table_name> ALTER INDEX <index_name> SET <partitioning_setting_name> <value>;
-ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<partitioning_setting_name_1> = <value_1>, ...);
+ALTER TABLE <table_name> ALTER INDEX <index_name> SET <setting_name> <value>;
+ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value_1>, ...);
 ```
 
 * `<table_name>`: The name of the table whose index is to be modified.
 * `<index_name>`: The name of the index to be modified.
-* `<partitioning_setting_name>`: The name of the setting to be modified, which should be one of the following:
+* `<setting_name>`: The name of the setting to be modified, which should be one of the following:
+
     * [AUTO_PARTITIONING_BY_SIZE]({{ concept_table }}#auto_partitioning_by_size)
     * [AUTO_PARTITIONING_BY_LOAD]({{ concept_table }}#auto_partitioning_by_load)
     * [AUTO_PARTITIONING_PARTITION_SIZE_MB]({{ concept_table }}#auto_partitioning_partition_size_mb)
     * [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_min_partitions_count)
     * [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_max_partitions_count)
+    * [READ_REPLICAS_SETTINGS]({{ concept_table }}#read_only_replicas)
+
 
 {% note info %}
 
@@ -56,17 +61,19 @@ These settings cannot be reset.
 
 * `<value>`: The new value for the setting. Possible values include:
     * `ENABLED` or `DISABLED` for the `AUTO_PARTITIONING_BY_SIZE` and `AUTO_PARTITIONING_BY_LOAD` settings
+    * `"PER_AZ:<count>"` or `"ANY_AZ:<count>"` where `<count>` is the number of replicas for the `READ_REPLICAS_SETTINGS`
     * An integer of `Uint64` type for the other settings
 
 ### Example
 
-The query in the following example enables automatic partitioning by load for the index named `title_index` of table `series` and sets its minimum partition count to 5:
+The query in the following example enables automatic partitioning by load for the index named `title_index` of the table `series`, sets its minimum partition count to 5, and enables one follower per AZ for every partition:
 
 
 ```yql
 ALTER TABLE `series` ALTER INDEX `title_index` SET (
     AUTO_PARTITIONING_BY_LOAD = ENABLED,
-    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 5
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 5,
+    READ_REPLICAS_SETTINGS = "PER_AZ:1"
 );
 ```
 

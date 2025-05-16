@@ -592,7 +592,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.FeatureFlags.SetEnableTableDatetime64(true);
     app.FeatureFlags.SetEnableVectorIndex(true);
     app.FeatureFlags.SetEnableColumnStore(true);
-    app.FeatureFlags.SetEnableStrictAclCheck(opts.EnableStrictAclCheck_);    
+    app.FeatureFlags.SetEnableStrictAclCheck(opts.EnableStrictAclCheck_);
     app.SetEnableMoveIndex(opts.EnableMoveIndex_);
     app.SetEnableChangefeedInitialScan(opts.EnableChangefeedInitialScan_);
     app.SetEnableNotNullDataColumns(opts.EnableNotNullDataColumns_);
@@ -713,11 +713,10 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
 }
 
 NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime &runtime, ui32 nchannels, bool enablePipeRetries,
-        NSchemeShardUT_Private::TTestEnv::TSchemeShardFactory ssFactory, bool enableSystemViews)
+        NSchemeShardUT_Private::TTestEnv::TSchemeShardFactory ssFactory)
     : TTestEnv(runtime, TTestEnvOptions()
         .NChannels(nchannels)
-        .EnablePipeRetries(enablePipeRetries)
-        .EnableSystemViews(enableSystemViews), ssFactory)
+        .EnablePipeRetries(enablePipeRetries), ssFactory)
 {
 }
 

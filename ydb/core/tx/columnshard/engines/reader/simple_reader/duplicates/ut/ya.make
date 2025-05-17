@@ -21,7 +21,6 @@ SIZE(SMALL)
 YQL_LAST_ABI_VERSION()
 
 SRCS(
-    ut_manager.cpp
 )
 
 END()

@@ -593,7 +593,7 @@ namespace NYql {
                 case NYql::EGenericDataSourceKind::REDIS:
                     break;
                 case NYql::EGenericDataSourceKind::PROMETHEUS:
-                    break;   
+                    break;
                 case NYql::EGenericDataSourceKind::MONGO_DB: {
                     auto* options = request.mutable_data_source_instance()->mutable_mongodb_options();
                     return SetMongoDBOptions(*options, clusterConfig);

@@ -182,6 +182,10 @@ message ExecuteQueryRequest {
     // When query statistics are enabled (stats_mode != STATS_MODE_NONE), by default statistics will be sent only once after query execution is finished.
     // In case when stats_period_ms is specified and is non-zero, query statistics will be additionally sent every stats_period_ms milliseconds beginning from the start of query execution.
     int64 stats_period_ms = 11 [(Ydb.value) = ">= 0"];
+
+    // Type of query result set parts.
+    // It's for get default ResultSet or some result_data with a different type in response stream.
+    Ydb.ResultSet.Type result_set_type = 12;
 }
 
 message ResultSetMeta {

@@ -7,6 +7,7 @@ RECURSE(
     partitioning
     split_merge
     secondary_index
+    select
     s3
     vector_index
     ttl

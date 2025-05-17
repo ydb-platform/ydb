@@ -3,7 +3,6 @@
 
 #include "topic_workload/topic_workload.h"
 #include "transfer_workload/transfer_workload.h"
-#include "query_workload.h"
 #include "ydb_benchmark.h"
 
 #include <ydb/library/yverify_stream/yverify_stream.h>
@@ -47,7 +46,6 @@ TCommandWorkload::TCommandWorkload()
 {
     AddCommand(std::make_unique<TCommandWorkloadTopic>());
     AddCommand(std::make_unique<TCommandWorkloadTransfer>());
-    AddCommand(std::make_unique<TCommandQueryWorkload>());
     for (const auto& key: NYdbWorkload::TWorkloadFactory::GetRegisteredKeys()) {
         AddCommand(std::make_unique<TWorkloadCommandRoot>(key.c_str()));
     }

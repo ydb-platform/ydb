@@ -47,7 +47,7 @@ public:
     const std::string& GetUserTag() const override;
     void SetUserTag(const std::string& tag) override;
 
-    void SetUserAgent(const TString& userAgent) override;
+    void SetUserAgent(const std::string& userAgent) override;
 
     bool GetRetry() const override;
     void SetRetry(bool value) override;

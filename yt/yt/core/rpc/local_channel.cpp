@@ -182,7 +182,7 @@ private:
 
         const std::string& GetEndpointAddress() const override
         {
-            static const TString EmptyAddress;
+            static const std::string EmptyAddress;
             return EmptyAddress;
         }
 

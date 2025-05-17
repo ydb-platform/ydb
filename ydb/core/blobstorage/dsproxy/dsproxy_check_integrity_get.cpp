@@ -6,15 +6,17 @@
 
 namespace NKikimr {
 
-
 class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestActor {
     const TLogoBlobID Id;
     const TInstant Deadline;
     const NKikimrBlobStorage::EGetHandleClass GetHandleClass;
 
     TGroupQuorumTracker QuorumTracker;
-    std::unique_ptr<TBlobStatusTracker> BlobStatus; // treats NOT_YET as ERROR
-    std::unique_ptr<TBlobStatusTracker> BlobStatusOptimistic; // treats NOT_YET as currently replicating -> OK in the future
+
+    TSubgroupPartLayout PartLayout;
+    TSubgroupPartLayout PartLayoutWithNotYet;
+
+    TBlobStorageGroupInfo::TSubgroupVDisks FaultyDisks;
 
     ui32 VGetsInFlight = 0;
 
@@ -33,10 +35,44 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
         SendResponseAndDie(std::move(PendingResult));
     }
 
-    TString DumpBlobStatus() const {
+    TString DumpLayout() const {
         TStringStream str;
-        BlobStatus->Output(str, Info.Get());
+        PartLayout.Output(str, Info->Type);
         return str.Str();
+    }
+
+    void UpdateFromResponseData(const NKikimrBlobStorage::TQueryResult& result, const TVDiskID& vDiskId) {
+        Y_ABORT_UNLESS(result.HasBlobID());
+        const TLogoBlobID id = LogoBlobIDFromLogoBlobID(result.GetBlobID());
+        Y_ABORT_UNLESS(id.FullID() == Id);
+
+        Y_ABORT_UNLESS(result.HasStatus());
+        const NKikimrProto::EReplyStatus status = result.GetStatus();
+
+        ui32 nodeId = Info->GetTopology().GetIdxInSubgroup(vDiskId, Id.Hash());
+        const ui32 partId = id.PartId();
+
+        switch (status) {
+            case NKikimrProto::OK:
+                PartLayout.AddItem(nodeId, partId - 1, Info->Type);
+                PartLayoutWithNotYet.AddItem(nodeId, partId - 1, Info->Type);
+                break;
+
+            case NKikimrProto::NOT_YET:
+                PartLayoutWithNotYet.AddItem(nodeId, partId - 1, Info->Type);
+                break;
+
+            case NKikimrProto::NODATA:
+                break;
+
+            case NKikimrProto::ERROR:
+            case NKikimrProto::VDISK_ERROR_STATE:
+                FaultyDisks += TBlobStorageGroupInfo::TSubgroupVDisks(&Info->GetTopology(), nodeId);
+                break;
+
+            default:
+                Y_ABORT("unexpected blob status# %s", NKikimrProto::EReplyStatus_Name(status).data());
+        }
     }
 
     void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev) {
@@ -45,14 +81,14 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
         const NKikimrBlobStorage::TEvVGetResult& record = ev->Get()->Record;
 
         if (!record.HasStatus()) {
-            ErrorReason = "erron in TEvVGetResult - no status";
+            ErrorReason = "error in TEvVGetResult - no status";
             ReplyAndDie(NKikimrProto::ERROR);
             return;
         }
         NKikimrProto::EReplyStatus status = record.GetStatus();
 
         if (!record.HasVDiskID()) {
-            ErrorReason = "erron in TEvVGetResult - no VDisk id";
+            ErrorReason = "error in TEvVGetResult - no VDisk id";
             ReplyAndDie(NKikimrProto::ERROR);
             return;
         }
@@ -76,16 +112,7 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
         }
 
         for (size_t i = 0; i < record.ResultSize(); ++i) {
-            const auto& result = record.GetResult(i);
-            BlobStatus->UpdateFromResponseData(result, vDiskId, Info.Get());
-
-            if (result.GetStatus() == NKikimrProto::NOT_YET) {
-                NKikimrBlobStorage::TQueryResult okResult = result;
-                okResult.SetStatus(NKikimrProto::OK);
-                BlobStatusOptimistic->UpdateFromResponseData(okResult, vDiskId, Info.Get());
-            } else {
-                BlobStatusOptimistic->UpdateFromResponseData(result, vDiskId, Info.Get());
-            }
+            UpdateFromResponseData(record.GetResult(i), vDiskId);
         }
 
         if (!VGetsInFlight) {
@@ -94,11 +121,13 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
     }
 
     void Analyze() {
-        PendingResult.reset(new TEvBlobStorage::TEvCheckIntegrityResult(NKikimrProto::OK));
+        PendingResult.reset(new TEvCheckIntegrityResult(NKikimrProto::OK));
         PendingResult->Id = Id;
         PendingResult->DataStatus = TEvCheckIntegrityResult::DS_UNKNOWN; // TODO
 
-        TBlobStorageGroupInfo::EBlobState state = BlobStatus->GetBlobState(Info.Get(), nullptr);
+        const auto& checker = Info->GetQuorumChecker();
+        TBlobStorageGroupInfo::EBlobState state = checker.GetBlobStateWithoutLayoutCheck(
+            PartLayout, FaultyDisks);
 
         switch (state) {
             case TBlobStorageGroupInfo::EBS_DISINTEGRATED:
@@ -110,24 +139,24 @@ class TBlobStorageGroupCheckIntegrityRequest : public TBlobStorageGroupRequestAc
                 PendingResult->PlacementStatus = TEvCheckIntegrityResult::PS_OK;
                 break;
 
-            case TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY:
-                PendingResult->PlacementStatus = TEvCheckIntegrityResult::PS_ERROR;
+            case TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY:
+                PendingResult->PlacementStatus = TEvCheckIntegrityResult::PS_RECOVERABLE;
                 break;
 
-            case TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY: {
-                TBlobStorageGroupInfo::EBlobState stateOptimistic =
-                    BlobStatusOptimistic->GetBlobState(Info.Get(), nullptr);
+            case TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY:
+            case TBlobStorageGroupInfo::EBS_RECOVERABLE_DOUBTED: {
+                TBlobStorageGroupInfo::EBlobState stateNotYet = checker.GetBlobStateWithoutLayoutCheck(
+                    PartLayoutWithNotYet, FaultyDisks);
 
-                if (stateOptimistic == TBlobStorageGroupInfo::EBS_FULL) {
+                if (stateNotYet == TBlobStorageGroupInfo::EBS_FULL) {
                     PendingResult->PlacementStatus = TEvCheckIntegrityResult::PS_NOT_YET;
+                } else if (FaultyDisks) {
+                    PendingResult->PlacementStatus = TEvCheckIntegrityResult::PS_UNKNOWN;
                 } else {
                     PendingResult->PlacementStatus = TEvCheckIntegrityResult::PS_ERROR;
                 }
                 break;
             }
-            case TBlobStorageGroupInfo::EBS_RECOVERABLE_DOUBTED:
-                PendingResult->PlacementStatus = TEvCheckIntegrityResult::PS_UNKNOWN;
-                break;
         }
 
         ReplyAndDie(NKikimrProto::OK);
@@ -157,12 +186,10 @@ public:
         , Deadline(params.Common.Event->Deadline)
         , GetHandleClass(params.Common.Event->GetHandleClass)
         , QuorumTracker(Info.Get())
+        , FaultyDisks(&Info->GetTopology())
     {}
 
     void Bootstrap() override {
-        BlobStatus.reset(new TBlobStatusTracker(Id, Info.Get()));
-        BlobStatusOptimistic.reset(new TBlobStatusTracker(Id, Info.Get()));
-
         for (const auto& vdisk : Info->GetVDisks()) {
             auto vDiskId = Info->GetVDiskId(vdisk.OrderNumber);
 

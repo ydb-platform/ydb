@@ -261,7 +261,11 @@ class TRandomLogGenerator {
 
     TInstant RandomInstant() const {
         auto result = TInstant::Now() - TDuration::Seconds(Params.TimestampSubtract);
-        i64 millisecondsDiff = 60 * 1000 * NormalRandom<double>(0., Params.TimestampStandardDeviationMinutes);
+        ui64 timestampStandardDeviationMinutes = 0;
+        if (Params.TimestampStandardDeviationMinutes.Defined()) {
+            timestampStandardDeviationMinutes = *Params.TimestampStandardDeviationMinutes;
+        }
+        i64 millisecondsDiff = 60 * 1000 * NormalRandom<double>(0., timestampStandardDeviationMinutes);
         if (millisecondsDiff >= 0) { // TDuration::MilliSeconds can't be negative for some reason...
             result += TDuration::MilliSeconds(millisecondsDiff);
         } else {
@@ -383,7 +387,7 @@ void TLogWorkloadParams::ConfigureOptsFillData(NLastGetopt::TOpts& opts) {
     opts.AddLongOption("rows", "Number of rows to upsert")
         .DefaultValue(RowsCnt).StoreResult(&RowsCnt);
     opts.AddLongOption("timestamp_deviation", "Standard deviation. For each timestamp, a random variable with a specified standard deviation in minutes is added.")
-        .DefaultValue(TimestampStandardDeviationMinutes).StoreResult(&TimestampStandardDeviationMinutes);
+        .StoreResult(&TimestampStandardDeviationMinutes);
     opts.AddLongOption("date-from", "Left boundary of the interval to generate "
         "timestamp uniformly from specified interval. Presents as seconds since epoch. Once this option passed, 'date-to' "
         "should be passed as well. This option is mutually exclusive with 'timestamp_deviation'")
@@ -398,8 +402,8 @@ void TLogWorkloadParams::ConfigureOptsFillData(NLastGetopt::TOpts& opts) {
         .DefaultValue(NullPercent).StoreResult(&NullPercent);
 }
 
-void TLogWorkloadParams::Validate(const ECommandType commandType, int workloadType) const {
-    const bool timestampDevPassed = TimestampStandardDeviationMinutes;
+void TLogWorkloadParams::Validate(const ECommandType commandType, int workloadType) {
+    bool timestampDevPassed = !!TimestampStandardDeviationMinutes;
     const bool dateFromPassed = !!TimestampDateFrom;
     const bool dateToPassed = !!TimestampDateTo;
 
@@ -411,14 +415,9 @@ void TLogWorkloadParams::Validate(const ECommandType commandType, int workloadTy
                 case TLogGenerator::EType::Insert:
                 case TLogGenerator::EType::Upsert:
                 case TLogGenerator::EType::BulkUpsert:
-                    
-
-                    Cerr << "TimestampDevPassed: " << timestampDevPassed << "\n";
-                    Cerr << "DateFromPassed: " << dateFromPassed << "\n";
-                    Cerr << "DateToPassed: " << dateToPassed << "\n";
-
-                    if (!timestampDevPassed && (!dateFromPassed || !dateToPassed)) {
-                        throw yexception() << "One of parameter should be provided - timestamp_deviation or date-from and date-to";
+                    if (!timestampDevPassed && !dateFromPassed && !dateToPassed) {
+                        timestampDevPassed = true;
+                        TimestampStandardDeviationMinutes = 0;
                     }
 
                     if (timestampDevPassed && (dateFromPassed || dateToPassed)) {
@@ -435,7 +434,6 @@ void TLogWorkloadParams::Validate(const ECommandType commandType, int workloadTy
                     
                     break;
                 case TLogGenerator::EType::Select:
-                    
                     break;
             }
             break;

@@ -24,9 +24,9 @@ namespace {
      * Check if a callable is an attribute of some table
      * Currently just return a boolean and cover only basic cases
      */
-    TMaybe<TCoMember> IsAttribute(const TExprBase& input) {
+    std::optional<TString> IsAttribute(const TExprBase& input) {
         if (auto member = input.Maybe<TCoMember>()) {
-            return member.Cast();
+            return TString(member.Cast().Name());
         } else if (auto cast = input.Maybe<TCoSafeCast>()) {
             return IsAttribute(cast.Cast().Value());
         } else if (auto ifPresent = input.Maybe<TCoIfPresent>()) {
@@ -42,9 +42,16 @@ namespace {
         } else if (auto exists = input.Maybe<TCoExists>()) {
             auto child = TExprBase(input.Ptr()->ChildRef(0));
             return IsAttribute(child);
+        } else if (auto argument = input.Maybe<TCoArgument>()) {
+            TString argumentName = TString(argument.Cast().Name());
+            TStringBuf olapApplyMemberPrefix = "members_";
+            if (argumentName.StartsWith(olapApplyMemberPrefix)) {
+                return argumentName.substr(olapApplyMemberPrefix.length(), argumentName.size() - olapApplyMemberPrefix.length());
+            } else {
+                return argumentName;
+            }
         }
-
-        return Nothing();
+        return std::nullopt;
     }
 
     double DefaultSelectivity(const std::shared_ptr<TOptimizerStatistics>& stats, const TString& attributeName) {
@@ -223,12 +230,12 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeInequalitySelectivity(co
         return ComputeInequalitySelectivity(right, left, GetOppositePredicateType(predicate));
     }
 
-    if (auto maybeMember = IsAttribute(left)) {
+    if (auto attribute = IsAttribute(left)) {
         // It seems like this is not possible in current version.
         if (IsAttribute(right)) {
             return 0.3;
         } else if (IsConstantExprWithParams(right.Ptr())) {
-            const TString attributeName = maybeMember.Get()->Name().StringValue();
+            const TString attributeName = attribute.value();
             if (!IsConstantExpr(right.Ptr())) {
                 return DefaultSelectivity(Stats, attributeName);
             }
@@ -259,11 +266,15 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeEqualitySelectivity(cons
         return ComputeEqualitySelectivity(right, left);
     }
 
-    if (auto maybeMember = IsAttribute(left)) {
+    if (auto attribute = IsAttribute(left)) {
         // In case both arguments refer to an attribute, return 0.2
-        if (auto maybeAnotherMember = IsAttribute(right)) {
+        if (IsAttribute(right)) {
             if (CollectMemberEqualities) {
-                MemberEqualities.Add(*maybeMember.Get(), *maybeAnotherMember.Get());
+                auto maybeMember = left.Maybe<TCoMember>();
+                auto maybeAnotherMember = right.Maybe<TCoMember>();
+                if (maybeMember && maybeAnotherMember) {
+                    MemberEqualities.Add(maybeMember.Cast(), maybeAnotherMember.Cast());
+                }
             }
             return 0.3;
         }
@@ -271,14 +282,16 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeEqualitySelectivity(cons
         // Currently, with the basic statistics we just return 1/nRows
 
         else if (IsConstantExprWithParams(right.Ptr())) {
-            TString attributeName = maybeMember.Get()->Name().StringValue();
+            TString attributeName = attribute.value();
             if (!IsConstantExpr(right.Ptr())) {
                 return DefaultSelectivity(Stats, attributeName);
             }
 
             if (Stats == nullptr || Stats->ColumnStatistics == nullptr) {
                 if (CollectColumnsStatUsedMembers) {
-                    ColumnStatsUsedMembers.AddEquality(*maybeMember.Get());
+                    if (auto maybeMember = left.Maybe<TCoMember>()) {
+                        ColumnStatsUsedMembers.AddEquality(maybeMember.Cast());
+                    }
                 }
                 return DefaultSelectivity(Stats, attributeName);
             }

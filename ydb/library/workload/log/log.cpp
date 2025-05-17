@@ -4,6 +4,8 @@
 #include <library/cpp/resource/resource.h>
 #include <util/datetime/base.h>
 #include <util/generic/guid.h>
+#include <util/random/entropy.h>
+#include <util/random/mersenne.h>
 #include <util/random/normal.h>
 #include <util/random/random.h>
 #include <util/string/split.h>
@@ -252,9 +254,18 @@ class TRandomLogGenerator {
         return result.str();
     }
 
+    TInstant UniformInstant(ui64 from, ui64 to) const {
+        TMersenne<ui64> rnd(Seed());
+        return TInstant::FromValue(rnd.Uniform(from, to));
+    }
+
     TInstant RandomInstant() const {
         auto result = TInstant::Now() - TDuration::Seconds(Params.TimestampSubtract);
-        i64 millisecondsDiff = 60 * 1000 * NormalRandom<double>(0., Params.TimestampStandardDeviationMinutes);
+        ui64 timestampStandardDeviationMinutes = 0;
+        if (Params.TimestampStandardDeviationMinutes.Defined()) {
+            timestampStandardDeviationMinutes = *Params.TimestampStandardDeviationMinutes;
+        }
+        i64 millisecondsDiff = 60 * 1000 * NormalRandom<double>(0., timestampStandardDeviationMinutes);
         if (millisecondsDiff >= 0) { // TDuration::MilliSeconds can't be negative for some reason...
             result += TDuration::MilliSeconds(millisecondsDiff);
         } else {
@@ -279,7 +290,7 @@ public:
         for (size_t row = 0; row < count; ++row) {
             result.emplace_back();
             result.back().LogId = CreateGuidAsString().c_str();
-            result.back().Ts = RandomInstant();
+            result.back().Ts = !!Params.TimestampDateFrom && !!Params.TimestampDateTo ? UniformInstant(*Params.TimestampDateFrom, *Params.TimestampDateTo) : RandomInstant();
             result.back().Level = RandomNumber<ui32>(10);
             result.back().ServiceName = RandomWord(false);
             result.back().Component = RandomWord(true);
@@ -360,6 +371,82 @@ TQueryInfoList TLogGenerator::GetWorkload(int type) {
     }
 }
 
+void TLogWorkloadParams::ConfigureOptsColumns(NLastGetopt::TOpts& opts) {
+    opts.AddLongOption("len", "String len")
+        .DefaultValue(StringLen).StoreResult(&StringLen);
+    opts.AddLongOption("int-cols", "Number of int columns")
+        .DefaultValue(IntColumnsCnt).StoreResult(&IntColumnsCnt);
+    opts.AddLongOption("str-cols", "Number of string columns")
+        .DefaultValue(StrColumnsCnt).StoreResult(&StrColumnsCnt);
+    opts.AddLongOption("key-cols", "Number of key columns")
+        .DefaultValue(KeyColumnsCnt).StoreResult(&KeyColumnsCnt);
+}
+
+void TLogWorkloadParams::ConfigureOptsFillData(NLastGetopt::TOpts& opts) {
+    ConfigureOptsColumns(opts);
+    opts.AddLongOption("rows", "Number of rows to upsert")
+        .DefaultValue(RowsCnt).StoreResult(&RowsCnt);
+    opts.AddLongOption("timestamp_deviation", "Standard deviation. For each timestamp, a random variable with a specified standard deviation in minutes is added.")
+        .StoreResult(&TimestampStandardDeviationMinutes);
+    opts.AddLongOption("date-from", "Left boundary of the interval to generate "
+        "timestamp uniformly from specified interval. Presents as seconds since epoch. Once this option passed, 'date-to' "
+        "should be passed as well. This option is mutually exclusive with 'timestamp_deviation'")
+        .StoreResult(&TimestampDateFrom);
+    opts.AddLongOption("date-to", "Right boundary of the interval to generate "
+        "timestamp uniformly from specified interval. Presents as seconds since epoch. Once this option passed, 'date-from' "
+        "should be passed as well. This option is mutually exclusive with 'timestamp_deviation'")
+        .StoreResult(&TimestampDateTo);
+    opts.AddLongOption("timestamp_subtract", "Value in seconds to subtract from timestamp. For each timestamp, this value in seconds is subtracted")
+        .DefaultValue(0).StoreResult(&TimestampSubtract);
+    opts.AddLongOption("null-percent", "Percent of nulls in generated data")
+        .DefaultValue(NullPercent).StoreResult(&NullPercent);
+}
+
+void TLogWorkloadParams::Validate(const ECommandType commandType, int workloadType) {
+    bool timestampDevPassed = !!TimestampStandardDeviationMinutes;
+    const bool dateFromPassed = !!TimestampDateFrom;
+    const bool dateToPassed = !!TimestampDateTo;
+
+    switch (commandType) {
+        case TWorkloadParams::ECommandType::Init:
+            break;
+        case TWorkloadParams::ECommandType::Run:
+            switch (static_cast<TLogGenerator::EType>(workloadType)) {
+                case TLogGenerator::EType::Insert:
+                case TLogGenerator::EType::Upsert:
+                case TLogGenerator::EType::BulkUpsert:
+                    if (!timestampDevPassed && !dateFromPassed && !dateToPassed) {
+                        timestampDevPassed = true;
+                        TimestampStandardDeviationMinutes = 0;
+                    }
+
+                    if (timestampDevPassed && (dateFromPassed || dateToPassed)) {
+                        throw yexception() << "The `timestamp_deviation` and `date-from`, `date-to` are mutually exclusive and shouldn't be provided at once";
+                    }
+
+                    if ((dateFromPassed && !dateToPassed) || (!dateFromPassed && dateToPassed)) {
+                        throw yexception() << "The `date-from` and `date-to` parameters must be provided together to specify the interval for uniform PK generation";
+                    }
+
+                    if (dateFromPassed && dateToPassed && *TimestampDateFrom >= *TimestampDateTo) {
+                        throw yexception() << "Invalid interval [`date-from`, `date-to`)";
+                    }
+                    
+                    break;
+                case TLogGenerator::EType::Select:
+                    break;
+            }
+            break;
+        case TWorkloadParams::ECommandType::Clean:
+            break;
+        case TWorkloadParams::ECommandType::Root:
+            break;
+        case TWorkloadParams::ECommandType::Import:
+          break;
+    }
+    return;
+}
+
 void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
     opts.AddLongOption('p', "path", "Path where benchmark tables are located")
         .Optional()
@@ -379,14 +466,7 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
             .DefaultValue(PartitionSizeMb).StoreResult(&PartitionSizeMb);
         opts.AddLongOption("auto-partition", "Enable auto partitioning by load.")
             .DefaultValue(PartitionsByLoad).StoreResult(&PartitionsByLoad);
-        opts.AddLongOption("len", "String len")
-            .DefaultValue(StringLen).StoreResult(&StringLen);
-        opts.AddLongOption("int-cols", "Number of int columns")
-            .DefaultValue(IntColumnsCnt).StoreResult(&IntColumnsCnt);
-        opts.AddLongOption("str-cols", "Number of string columns")
-            .DefaultValue(StrColumnsCnt).StoreResult(&StrColumnsCnt);
-        opts.AddLongOption("key-cols", "Number of key columns")
-            .DefaultValue(KeyColumnsCnt).StoreResult(&KeyColumnsCnt);
+        ConfigureOptsColumns(opts);
         opts.AddLongOption("ttl", "TTL for timestamp column in minutes")
             .DefaultValue(TimestampTtlMinutes).StoreResult(&TimestampTtlMinutes);
         opts.AddLongOption("store", "Storage type."
@@ -408,42 +488,14 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
         case TLogGenerator::EType::Insert:
         case TLogGenerator::EType::Upsert:
         case TLogGenerator::EType::BulkUpsert:
-            opts.AddLongOption("len", "String len")
-                .DefaultValue(StringLen).StoreResult(&StringLen);
-            opts.AddLongOption("int-cols", "Number of int columns")
-                .DefaultValue(IntColumnsCnt).StoreResult(&IntColumnsCnt);
-            opts.AddLongOption("str-cols", "Number of string columns")
-                .DefaultValue(StrColumnsCnt).StoreResult(&StrColumnsCnt);
-            opts.AddLongOption("key-cols", "Number of key columns")
-                .DefaultValue(KeyColumnsCnt).StoreResult(&KeyColumnsCnt);
-            opts.AddLongOption("rows", "Number of rows to upsert")
-                .DefaultValue(RowsCnt).StoreResult(&RowsCnt);
-            opts.AddLongOption("timestamp_deviation", "Standard deviation. For each timestamp, a random variable with a specified standard deviation in minutes is added.")
-                .DefaultValue(TimestampStandardDeviationMinutes).StoreResult(&TimestampStandardDeviationMinutes);
-            opts.AddLongOption("timestamp_subtract", "Value in seconds to subtract from timestamp. For each timestamp, this value in seconds is subtracted")
-                .DefaultValue(0).StoreResult(&TimestampSubtract);
-            opts.AddLongOption("null-percent", "Percent of nulls in generated data")
-                .DefaultValue(NullPercent).StoreResult(&NullPercent);
+            ConfigureOptsFillData(opts);
             break;
         case TLogGenerator::EType::Select:
         break;
         }
         break;
     case TWorkloadParams::ECommandType::Import:
-        opts.AddLongOption("len", "String len")
-            .DefaultValue(StringLen).StoreResult(&StringLen);
-        opts.AddLongOption("int-cols", "Number of int columns")
-            .DefaultValue(IntColumnsCnt).StoreResult(&IntColumnsCnt);
-        opts.AddLongOption("str-cols", "Number of string columns")
-            .DefaultValue(StrColumnsCnt).StoreResult(&StrColumnsCnt);
-        opts.AddLongOption("key-cols", "Number of key columns")
-            .DefaultValue(KeyColumnsCnt).StoreResult(&KeyColumnsCnt);
-        opts.AddLongOption("rows", "Number of rows to upsert")
-            .DefaultValue(RowsCnt).StoreResult(&RowsCnt);
-        opts.AddLongOption("timestamp_deviation", "Standard deviation. For each timestamp, a random variable with a specified standard deviation in minutes is added.")
-            .DefaultValue(TimestampStandardDeviationMinutes).StoreResult(&TimestampStandardDeviationMinutes);
-        opts.AddLongOption("null-percent", "Percent of nulls in generated data")
-            .DefaultValue(NullPercent).StoreResult(&NullPercent);
+        ConfigureOptsFillData(opts);
         break;
     default:
         break;

@@ -46,7 +46,7 @@ private:
     TSnapshot RequestSnapshot;
     std::optional<TGranuleShardingInfo> RequestShardingInfo;
     std::shared_ptr<IScanCursor> ScanCursor;
-    const ui64 TabletId;
+    ui64 TabletId;
     virtual void DoOnReadFinished(NColumnShard::TColumnShard& /*owner*/) const {
     }
     virtual void DoOnBeforeStartReading(NColumnShard::TColumnShard& /*owner*/) const {
@@ -58,6 +58,7 @@ protected:
     std::shared_ptr<ISnapshotSchema> ResultIndexSchema;
     ui64 TxId = 0;
     std::optional<ui64> LockId;
+    EDeduplicationPolicy DeduplicationPolicy = EDeduplicationPolicy::NO_DUPLICATES;
 
 public:
     using TConstPtr = std::shared_ptr<const TReadMetadataBase>;
@@ -105,6 +106,10 @@ public:
 
     std::optional<ui64> GetLockId() const {
         return LockId;
+    }
+
+    EDeduplicationPolicy GetDeduplicationPolicy() const {
+        return DeduplicationPolicy;
     }
 
     void OnReadFinished(NColumnShard::TColumnShard& owner) const {

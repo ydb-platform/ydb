@@ -157,6 +157,10 @@ public:
         Table->Clear();
     }
 
+    NArrow::TColumnFilter AdaptFullFilter(NArrow::TColumnFilter filter) const {
+        return Table->AdaptFullFilter(std::move(filter));
+    }
+
     void AddFilter(const std::shared_ptr<NArrow::TColumnFilter>& filter) {
         if (!filter) {
             return;
@@ -164,8 +168,9 @@ public:
         return Table->AddFilter(*filter);
     }
 
-    std::shared_ptr<NArrow::TGeneralContainer> ToGeneralContainer() const {
-        return Table->ToGeneralContainer();
+    std::shared_ptr<NArrow::TGeneralContainer> ToGeneralContainer(
+    const NArrow::NSSA::IColumnResolver* resolver = nullptr) const {
+        return Table->ToGeneralContainer(resolver);
     }
 
     void CutFilter(const ui32 recordsCount, const ui32 limit, const bool reverse) {

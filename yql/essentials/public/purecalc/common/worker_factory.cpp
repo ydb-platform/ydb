@@ -302,7 +302,8 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
             CountersProvider_,
             NativeYtTypeFlags_,
             DeterministicTimeProviderSeed_,
-            langver
+            langver,
+            true
         );
 
         with_lock (graph.ScopedAlloc_) {

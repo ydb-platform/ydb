@@ -37,7 +37,7 @@ public:
     YDB_READONLY(EStoreType, StoreType, EStoreType::Row);
     TWorkloadDataInitializer::TList CreateDataInitializers() const override;
 
-    void Validate(int workloadType) const override;
+    void Validate(const ECommandType commandType, int workloadType) const override;
 private:
     void ConfigureOptsFillData(NLastGetopt::TOpts& opts);
     void ConfigureOptsColumns(NLastGetopt::TOpts& opts);

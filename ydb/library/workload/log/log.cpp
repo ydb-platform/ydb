@@ -398,35 +398,54 @@ void TLogWorkloadParams::ConfigureOptsFillData(NLastGetopt::TOpts& opts) {
         .DefaultValue(NullPercent).StoreResult(&NullPercent);
 }
 
-void TLogWorkloadParams::Validate(int workloadType) const {
-    if (static_cast<TLogGenerator::EType>(workloadType) == TLogGenerator::EType::Select) {
-        return;
-    }
-
+void TLogWorkloadParams::Validate(const ECommandType commandType, int workloadType) const {
     const bool timestampDevPassed = TimestampStandardDeviationMinutes;
     const bool dateFromPassed = !!TimestampDateFrom;
     const bool dateToPassed = !!TimestampDateTo;
 
-    Cerr << "TimestampDevPassed: " << timestampDevPassed << "\n";
-    Cerr << "DateFromPassed: " << dateFromPassed << "\n";
-    Cerr << "DateToPassed: " << dateToPassed << "\n";
+    switch (commandType) {
+        case TWorkloadParams::ECommandType::Init:
+            break;
+        case TWorkloadParams::ECommandType::Run:
+            switch (static_cast<TLogGenerator::EType>(workloadType)) {
+                case TLogGenerator::EType::Insert:
+                case TLogGenerator::EType::Upsert:
+                case TLogGenerator::EType::BulkUpsert:
+                    
 
-    if (!timestampDevPassed && (!dateFromPassed || !dateToPassed)) {
-        throw yexception() << "One of parameter should be provided - timestamp_deviation or date-from and date-to";
-    }
+                    Cerr << "TimestampDevPassed: " << timestampDevPassed << "\n";
+                    Cerr << "DateFromPassed: " << dateFromPassed << "\n";
+                    Cerr << "DateToPassed: " << dateToPassed << "\n";
 
-    if (timestampDevPassed && (dateFromPassed || dateToPassed)) {
-        throw yexception() << "The `timestamp_deviation` and `date-from`, `date-to` are mutually exclusive and shouldn't be provided at once";
-    }
+                    if (!timestampDevPassed && (!dateFromPassed || !dateToPassed)) {
+                        throw yexception() << "One of parameter should be provided - timestamp_deviation or date-from and date-to";
+                    }
 
-    if ((dateFromPassed && !dateToPassed) || (!dateFromPassed && dateToPassed)) {
-        throw yexception() << "The `date-from` and `date-to` parameters must be provided together to specify the interval for uniform PK generation";
-    }
+                    if (timestampDevPassed && (dateFromPassed || dateToPassed)) {
+                        throw yexception() << "The `timestamp_deviation` and `date-from`, `date-to` are mutually exclusive and shouldn't be provided at once";
+                    }
 
-    if (dateFromPassed && dateToPassed && *TimestampDateFrom >= *TimestampDateTo) {
-        throw yexception() << "Invalid interval [`date-from`, `date-to`)";
+                    if ((dateFromPassed && !dateToPassed) || (!dateFromPassed && dateToPassed)) {
+                        throw yexception() << "The `date-from` and `date-to` parameters must be provided together to specify the interval for uniform PK generation";
+                    }
+
+                    if (dateFromPassed && dateToPassed && *TimestampDateFrom >= *TimestampDateTo) {
+                        throw yexception() << "Invalid interval [`date-from`, `date-to`)";
+                    }
+                    
+                    break;
+                case TLogGenerator::EType::Select:
+                    
+                    break;
+            }
+            break;
+        case TWorkloadParams::ECommandType::Clean:
+            break;
+        case TWorkloadParams::ECommandType::Root:
+            break;
+        case TWorkloadParams::ECommandType::Import:
+          break;
     }
-    
     return;
 }
 

@@ -351,7 +351,7 @@ int TWorkloadCommandRun::Run(TConfig& config) {
     PrepareForRun(config);
     Params.DbPath = config.Database;
     auto workloadGen = Params.CreateGenerator();
-    Params.Validate(Type);
+    Params.Validate(NYdbWorkload::TWorkloadParams::ECommandType::Run, Type);
     return RunWorkload(*workloadGen, Type);
 }
 

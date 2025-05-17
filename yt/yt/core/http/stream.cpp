@@ -563,7 +563,7 @@ std::optional<TString> THttpInput::TryGetRedirectUrl()
     EnsureHeadersReceived();
     if (IsRedirectCode(GetStatusCode())) {
         if (auto url = Headers_->Find("Location")) {
-            // TODO(babenko): migrate to std::string
+            // TODO(babenko): switch to std::string
             return TString(*url);
         }
     }

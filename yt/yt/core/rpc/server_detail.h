@@ -99,9 +99,9 @@ public:
     NProto::TRequestHeader& RequestHeader() override;
 
     bool IsLoggingEnabled() const override;
-    void SetRawRequestInfo(TString info, bool incremental) override;
+    void SetRawRequestInfo(std::string info, bool incremental) override;
     void SuppressMissingRequestInfoCheck() override;
-    void SetRawResponseInfo(TString info, bool incremental) override;
+    void SetRawResponseInfo(std::string info, bool incremental) override;
 
     const IMemoryUsageTrackerPtr& GetMemoryUsageTracker() const override;
 
@@ -149,8 +149,8 @@ protected:
     std::vector<TSharedRef> ResponseAttachments_;
 
     bool RequestInfoSet_ = false;
-    TCompactVector<TString, 4> RequestInfos_;
-    TCompactVector<TString, 4> ResponseInfos_;
+    TCompactVector<std::string, 4> RequestInfos_;
+    TCompactVector<std::string, 4> ResponseInfos_;
 
     NCompression::ECodec ResponseCodec_ = NCompression::ECodec::None;
     // COMPAT(danilalexeev)
@@ -267,9 +267,9 @@ public:
     NProto::TRequestHeader& RequestHeader() override;
 
     bool IsLoggingEnabled() const override;
-    void SetRawRequestInfo(TString info, bool incremental) override;
+    void SetRawRequestInfo(std::string info, bool incremental) override;
     void SuppressMissingRequestInfoCheck() override;
-    void SetRawResponseInfo(TString info, bool incremental) override;
+    void SetRawResponseInfo(std::string info, bool incremental) override;
 
     const IMemoryUsageTrackerPtr& GetMemoryUsageTracker() const override;
 

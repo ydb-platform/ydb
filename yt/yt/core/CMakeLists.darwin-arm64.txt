@@ -210,6 +210,7 @@ target_sources(yt-yt-core PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/utf8_decoder.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/zerocopy_output_writer.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/configurable_singleton_def.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/memory_usage_tracker.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/net/address.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/net/connection.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/net/config.cpp

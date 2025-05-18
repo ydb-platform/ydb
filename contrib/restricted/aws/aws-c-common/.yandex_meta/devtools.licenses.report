@@ -279,7 +279,7 @@ BELONGS ya.make
         Match type      : TAG
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        generated/include/aws/common/config.h [6:6]
+        generated/include/aws/common/config-linux.h [6:6]
         include/aws/common/allocator.h [5:5]
         include/aws/common/array_list.h [6:6]
         include/aws/common/array_list.inl [6:6]

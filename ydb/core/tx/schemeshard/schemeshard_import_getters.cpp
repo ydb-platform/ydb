@@ -432,7 +432,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         } else if (IsTopic(SchemeKey)) {
             Ydb::Topic::CreateTopicRequest request;
             if (!google::protobuf::TextFormat::ParseFromString(content, &request)) {
-                return Reply(false, "Cannot parse topic scheme");
+                return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse topic scheme");
             }
             item.Topic = request;
         } else if (!google::protobuf::TextFormat::ParseFromString(content, &item.Scheme)) {

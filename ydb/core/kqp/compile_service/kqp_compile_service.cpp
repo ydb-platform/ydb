@@ -319,6 +319,7 @@ private:
         bool enableSnapshotIsolationRW = TableServiceConfig.GetEnableSnapshotIsolationRW();
 
         bool enableSpillingInHashJoinShuffleConnections = TableServiceConfig.GetEnableSpillingInHashJoinShuffleConnections();
+        bool enableOlapScalarApply = TableServiceConfig.GetEnableOlapScalarApply();
 
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
@@ -353,7 +354,9 @@ private:
             TableServiceConfig.GetEnableSnapshotIsolationRW() != enableSnapshotIsolationRW ||
             TableServiceConfig.GetEnableQueryServiceSpilling() != enableSpilling ||
             TableServiceConfig.GetDefaultEnableShuffleElimination() != defaultEnableShuffleElimination ||
-            TableServiceConfig.GetEnableSpillingInHashJoinShuffleConnections() != enableSpillingInHashJoinShuffleConnections)
+            TableServiceConfig.GetEnableSpillingInHashJoinShuffleConnections() != enableSpillingInHashJoinShuffleConnections ||
+            TableServiceConfig.GetEnableOlapScalarApply() != enableOlapScalarApply
+        )
         {
 
             QueryCache->Clear();

@@ -190,6 +190,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool FilterPushdownOverJoinOptionalSide = false;
     THashSet<TString> YqlCoreOptimizerFlags;
     bool EnableSpillingInHashJoinShuffleConnections = false;
+    bool EnableOlapScalarApply = false;
 
     NDq::EHashShuffleFuncType DefaultHashShuffleFuncType = NDq::EHashShuffleFuncType::HashV1;
     NDq::EHashShuffleFuncType DefaultColumnShardHashShuffleFuncType = NDq::EHashShuffleFuncType::ColumnShardHashV1;

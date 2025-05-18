@@ -388,4 +388,5 @@ message TTableServiceConfig {
 
     optional bool EnableSpillingInHashJoinShuffleConnections = 85 [default = false];
 
+    optional bool EnableOlapScalarApply = 86 [default = true];
 };

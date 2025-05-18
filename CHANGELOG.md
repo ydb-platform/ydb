@@ -9,5 +9,13 @@
 * 16269:Fixed the issue of a hanging `Drop Tablet` operation in the PQ tablet, caused by the tablet receiving duplicate TEvPersQueue::TEvProposeTransaction messages from SS, especially during delays in IC operation. [#16269](https://github.com/ydb-platform/ydb/pull/16269) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
 * 16194:Fixed a verification failure that occurred during VDisk compaction. [#16194](https://github.com/ydb-platform/ydb/pull/16194) ([Alexander Rutkovsky](https://github.com/alexvru))
 * 15570:Allow creation of views that use UDFs in their queries. [#15570](https://github.com/ydb-platform/ydb/pull/15570) ([Daniil Demin](https://github.com/jepett0))
-* 15515:Fixed an issue where long-running read sessions incorrectly failed with "too big inflight" errors. [#15233](https://github.com/ydb-platform/ydb/pull/15233) ([FloatingCrowbar](https://github.com/FloatingCrowbar))
 * 15515:Fixed a topic reading hang that occurred when at least one partition had no incoming data but was being read by multiple consumers. [#15515](https://github.com/ydb-platform/ydb/pull/15515) ([FloatingCrowbar](https://github.com/FloatingCrowbar))
+* 18302:Moved changes from #18289
+
+Issue #18290
+
+The TEvReadSet message can be sent again. When it was first sent, it was serialized and stored as a string. It turned out that the serialized message takes up a lot of memory space. For transactions with a large number of participants, this takes up a lot of space.
+
+I changed it so that a copy of the data is stored to create a TEvReadSet when resending. [#18302](https://github.com/ydb-platform/ydb/pull/18302) ([Alek5andr-Kotov](https://github.com/Alek5andr-Kotov))
+* 18270:Fix replication bug #10650 [#18270](https://github.com/ydb-platform/ydb/pull/18270) ([Alexander Rutkovsky](https://github.com/alexvru))
+

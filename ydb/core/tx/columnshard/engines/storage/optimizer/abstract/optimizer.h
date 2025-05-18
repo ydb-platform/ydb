@@ -14,6 +14,7 @@ class TColumnEngineChanges;
 class IStoragesManager;
 class TGranuleMeta;
 class TPortionInfo;
+class TPortionInfoConstructor;
 namespace NDataLocks {
 class TManager;
 }

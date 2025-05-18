@@ -28,6 +28,15 @@ void TerminateHandler() {
     abort();
 }
 
+void IllegalInstructionHandler(int) {
+    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
+
+    Cerr << colors.Red() << "======= illegal instruction call stack ========" << colors.Default() << Endl;
+    FormatBackTrace(&Cerr);
+    Cerr << colors.Red() << "===============================================" << colors.Default() << Endl;
+
+    abort();
+}
 
 void SegmentationFaultHandler(int) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
@@ -250,6 +259,7 @@ TChoices<NActors::NLog::EPriority> GetLogPrioritiesMap(const TString& optionName
 
 void SetupSignalActions() {
     std::set_terminate(&TerminateHandler);
+    signal(SIGILL, &IllegalInstructionHandler);
     signal(SIGSEGV, &SegmentationFaultHandler);
     signal(SIGFPE, &FloatingPointExceptionHandler);
 }

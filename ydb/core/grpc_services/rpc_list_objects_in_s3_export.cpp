@@ -112,6 +112,8 @@ public:
 
         *request->Record.MutableOperationParams() = GetProtoRequest()->operation_params();
         *request->Record.MutableSettings() = GetProtoRequest()->settings();
+        request->Record.SetPageSize(GetProtoRequest()->page_size());
+        request->Record.SetPageToken(GetProtoRequest()->page_token());
 
         NTabletPipe::SendData(this->SelfId(), PipeClient, std::move(request), 0, Span_.GetTraceId());
     }

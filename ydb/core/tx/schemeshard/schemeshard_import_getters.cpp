@@ -1033,8 +1033,30 @@ public:
     }
 
     void Bootstrap() {
-        CreateClient();
-        DownloadSchemaMapping();
+        if (ParseParameters()) {
+            CreateClient();
+            DownloadSchemaMapping();
+        }
+    }
+
+    bool ParseParameters() {
+        const auto& req = Request->Get()->Record;
+        if (req.GetPageSize() < 0) {
+            Reply(Ydb::StatusIds::BAD_REQUEST, "Page size should be greater than or equal to 0");
+            return false;
+        }
+        PageSize = static_cast<size_t>(req.GetPageSize());
+        if (req.GetPageToken()) {
+            if (!TryFromString(req.GetPageToken(), StartPos)) {
+                Reply(Ydb::StatusIds::BAD_REQUEST, "Failed to parse page token");
+                return false;
+            }
+            if (req.GetPageSize() == 0) {
+                Reply(Ydb::StatusIds::BAD_REQUEST, "Page size should be greater than 0");
+                return false;
+            }
+        }
+        return true;
     }
 
     void DownloadSchemaMapping() {
@@ -1212,6 +1234,9 @@ public:
             }
 
             ++pos;
+        }
+        if (NextPos) {
+            Result.set_next_page_token(ToString(NextPos));
         }
         Reply();
     }

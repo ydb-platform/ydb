@@ -133,6 +133,8 @@ message TEvListImportsResponse {
 message TEvListObjectsInS3ExportRequest {
     optional Ydb.Operations.OperationParams OperationParams = 1;
     optional Ydb.Import.ListObjectsInS3ExportSettings Settings = 2;
+    optional int64 PageSize = 3;
+    optional string PageToken = 4;
 }
 
 message TEvListObjectsInS3ExportResponse {

@@ -93,7 +93,7 @@ class TestDML(TestBase):
 
         for offset in range(number_of_columns):
             rows = self.query(f"select {", ".join(selected_columns)} from {table_name} limit 1 OFFSET {offset}")
-            self.assert_type_after_select(offset + 1, 0, rows, all_types, pk_types, index, ttl, dml)
+            self.assert_type_after_select(offset + 1, rows[0], all_types, pk_types, index, ttl, dml)
 
     def create_types_for_all_select(
         self, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str
@@ -274,13 +274,13 @@ class TestDML(TestBase):
     ):
         statements_without = []
         for type_name in all_types.keys():
-            if type_name not in unsuppored_time_types:
+            if type_name in unsuppored_time_types:
                 statements_without.append(f"col_{cleanup_type_name(type_name)}")
         for type_name in pk_types.keys():
-            if type_name not in unsuppored_time_types:
+            if type_name in unsuppored_time_types:
                 statements_without.append(f"pk_{cleanup_type_name(type_name)}")
         for type_name in index.keys():
-            if type_name not in unsuppored_time_types:
+            if type_name in unsuppored_time_types:
                 statements_without.append(f"col_index_{cleanup_type_name(type_name)}")
 
         for type_name in all_types.keys():
@@ -312,21 +312,21 @@ class TestDML(TestBase):
         selected_columns = self.create_types_for_all_select(all_types, pk_types, index, ttl)
         for i in range(1, 100):
             rows = self.query(f"select {", ".join(selected_columns)} from {table_name} TABLESAMPLE SYSTEM({i}.0)")
-            for line in range(len(rows)):
-                numb = rows[line]["pk_Int64"]
-                self.assert_type_after_select(numb, line, rows, all_types, pk_types, index, ttl, dml)
+            for _, row in enumerate(rows):
+                numb = row["pk_Int64"]
+                self.assert_type_after_select(numb, row, all_types, pk_types, index, ttl, dml)
 
             rows = self.query(
                 f"select {", ".join(selected_columns)} from {table_name} TABLESAMPLE BERNOULLI({i}.0) REPEATABLE({i})"
             )
-            for line in range(len(rows)):
-                numb = rows[line]["pk_Int64"]
-                self.assert_type_after_select(numb, line, rows, all_types, pk_types, index, ttl, dml)
+            for _, row in enumerate(rows):
+                numb = row["pk_Int64"]
+                self.assert_type_after_select(numb, row, all_types, pk_types, index, ttl, dml)
 
             rows = self.query(f"select {", ".join(selected_columns)} from {table_name} SAMPLE 1.0 / {i}")
-            for line in range(len(rows)):
-                numb = rows[line]["pk_Int64"]
-                self.assert_type_after_select(numb, line, rows, all_types, pk_types, index, ttl, dml)
+            for _, row in enumerate(rows):
+                numb = row["pk_Int64"]
+                self.assert_type_after_select(numb, row, all_types, pk_types, index, ttl, dml)
 
     def order_by(
         self,
@@ -342,40 +342,43 @@ class TestDML(TestBase):
             if "Json" not in statement and "JsonDocument" not in statement and "Yson" not in statement:
                 rows = self.query(f"select {", ".join(selected_columns)} from {table_name} ORDER BY {statement} ASC")
                 if "String" not in statement and "Utf8" not in statement:
-                    for line in range(len(rows)):
-                        self.assert_type_after_select(line + 1, line, rows, all_types, pk_types, index, ttl, dml)
+                    for i, row in enumerate(rows):
+                        self.assert_type_after_select(i + 1, row, all_types, pk_types, index, ttl, dml)
                 else:
                     line = 0
                     for i in range(len(rows) // 10):
-                        self.assert_type_after_select(i + 1, line, rows, all_types, pk_types, index, ttl, dml)
+                        self.assert_type_after_select(i + 1, rows[line], all_types, pk_types, index, ttl, dml)
                         line += 1
                         for j in range(10):
                             if (i + 1) * 10 + j > len(rows):
                                 break
                             self.assert_type_after_select(
-                                (i + 1) * 10 + j, line, rows, all_types, pk_types, index, ttl, dml
+                                (i + 1) * 10 + j, rows[line], all_types, pk_types, index, ttl, dml
                             )
                             line += 1
 
                 rows = self.query(f"select {", ".join(selected_columns)} from {table_name} ORDER BY {statement} DESC")
 
-                if "String" not in statement and "Utf8" not in statement:
-                    for line in range(len(rows)):
-                        self.assert_type_after_select(
-                            len(rows) - line, line, rows, all_types, pk_types, index, ttl, dml
-                        )
-                else:
-                    line = 0
-                    for i in range(len(rows) // 10, 0):
-                        for j in range(10):
-                            if i * 10 + (9 - j) > len(rows):
-                                break
-                            self.assert_type_after_select(
-                                i * 10 + (9 - j), line, rows, all_types, pk_types, index, ttl, dml
-                            )
+                if "Bool" not in statement:
+                    if "String" not in statement and "Utf8" not in statement:
+                        for line, row in enumerate(rows):
+                            self.assert_type_after_select(len(rows) - line, row, all_types, pk_types, index, ttl, dml)
+                    else:
+                        line = 0
+                        for i in range(len(rows) // 10, 0):
+                            for j in range(10):
+                                if i * 10 + (9 - j) > len(rows):
+                                    break
+                                self.assert_type_after_select(
+                                    i * 10 + (9 - j), rows[line], all_types, pk_types, index, ttl, dml
+                                )
+                                line += 1
+                            self.assert_type_after_select(i, rows[line], all_types, pk_types, index, ttl, dml)
                             line += 1
-                        self.assert_type_after_select(i, line, rows, all_types, pk_types, index, ttl, dml)
-                        line += 1
+                else:
+                    for _, row in enumerate(rows):
+                        numb = row["pk_Int64"]
+                        self.assert_type_after_select(numb, row, all_types, pk_types, index, ttl, dml)
 
     def get_number_of_columns(self, pk_types, all_types, index, ttl):
         number_of_columns = len(pk_types) + len(all_types) + len(index)

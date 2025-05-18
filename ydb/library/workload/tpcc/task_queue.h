@@ -292,7 +292,7 @@ struct TSuspendWithFuture {
     TSuspendWithFuture& operator=(const TSuspendWithFuture&) = delete;
 
     bool await_ready() {
-        return false;
+        return Future.HasValue();
     }
 
     void await_suspend(std::coroutine_handle<> handle) {
@@ -302,9 +302,43 @@ struct TSuspendWithFuture {
         });
     }
 
-    void await_resume() {}
+    T await_resume() {
+        return Future.GetValue();
+    }
 
     NThreading::TFuture<T>& Future;
+    ITaskQueue& TaskQueue;
+    size_t TerminalId;
+};
+
+template <>
+struct TSuspendWithFuture<void> {
+    TSuspendWithFuture(NThreading::TFuture<void>& future, ITaskQueue& taskQueue, size_t terminalId)
+        : Future(future)
+        , TaskQueue(taskQueue)
+        , TerminalId(terminalId)
+    {}
+
+    TSuspendWithFuture() = delete;
+    TSuspendWithFuture(const TSuspendWithFuture&) = delete;
+    TSuspendWithFuture& operator=(const TSuspendWithFuture&) = delete;
+
+    bool await_ready() {
+        return Future.HasValue();
+    }
+
+    void await_suspend(std::coroutine_handle<> handle) {
+        // we use subscribe as async wait and don't handle result here: resumed task will
+        Future.NoexceptSubscribe([this, handle](const NThreading::TFuture<void>&) {
+            TaskQueue.TaskReadyThreadSafe(handle, TerminalId);
+        });
+    }
+
+    void await_resume() {
+        Future.GetValue();
+    }
+
+    NThreading::TFuture<void>& Future;
     ITaskQueue& TaskQueue;
     size_t TerminalId;
 };

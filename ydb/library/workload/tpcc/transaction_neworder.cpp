@@ -58,9 +58,8 @@ TTransactionTask GetNewOrderTask(TTransactionContext& context)
     );
 
     LOG_D("Terminal " << context.TerminalID << " waiting for result");
-    co_await TSuspendWithFuture(clientFuture, context.TaskQueue, context.TerminalID);
+    auto clientResult = co_await TSuspendWithFuture(clientFuture, context.TaskQueue, context.TerminalID);
     LOG_D("Terminal " << context.TerminalID << " got future");
-    auto clientResult = clientFuture.GetValue();
 
     LOG_D("Terminal " << context.TerminalID << " finished NewOrder transaction, success: " << clientResult.IsSuccess());
     co_return TTransactionResult{};

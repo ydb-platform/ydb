@@ -1,7 +1,6 @@
 #include "kqp_opt_phy_rules.h"
 #include "predicate_collector.h"
 
-#include <ydb/core/formats/arrow/ssa_runtime_version.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -407,7 +406,7 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
             return SimplePredicatePushdown(maybePredicate.Cast(), argument, ctx, pos);
         }
 
-        if constexpr (NKikimr::NSsa::RuntimeVersion >= 5U) {
+        if (AppData()->FeatureFlags.GetEnableKqpOlapApply()) {
             return YqlApplyPushdown(node, argument, ctx);
         } else {
             return NullNode;
@@ -777,7 +776,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         pushedPredicates.emplace_back(PredicatePushdown(TExprBase(p.ExprNode), lambdaArg, ctx, node.Pos()));
     }
 
-    if constexpr (NSsa::RuntimeVersion >= 5U) {
+    if (AppData()->FeatureFlags.GetEnableKqpOlapApply()) {
         TVector<TOLAPPredicateNode> remainingAfterApply;
         for(const auto& p: remaining) {
             const auto recoveredOptinalIfForNonPushedDownPredicates = Build<TCoOptionalIf>(ctx, node.Pos())

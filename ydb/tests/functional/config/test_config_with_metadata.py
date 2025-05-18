@@ -51,6 +51,7 @@ class AbstractKiKiMRTest(object):
         grpc_port = cls.cluster.nodes[1].port
         cls.swagger_client = SwaggerClient(host, cls.cluster.nodes[1].mon_port)
         cls.config_client = ConfigClient(host, grpc_port)
+        cls.config_client.set_auth_token('root@builtin')
 
     @classmethod
     def teardown_class(cls):
@@ -143,7 +144,10 @@ class TestKiKiMRStoreConfigDir(AbstractKiKiMRTest):
             separate_node_configs=True,
             extra_grpc_services=['config'],
             metadata_section=cls.metadata_section,
-            additional_log_configs={'BS_NODE': LogLevels.DEBUG},
+            additional_log_configs={'BS_NODE': LogLevels.DEBUG,
+                                    'BS_CONTROLLER': LogLevels.DEBUG},
+            enable_audit_log=True,
+            default_users=dict((i, '') for i in ('root', 'other-user')),
         )
         cls.cluster = KiKiMR(configurator=configurator)
         cls.cluster.start()
@@ -152,6 +156,7 @@ class TestKiKiMRStoreConfigDir(AbstractKiKiMRTest):
         grpc_port = cls.cluster.nodes[1].port
         cls.swagger_client = SwaggerClient(host, cls.cluster.nodes[1].mon_port)
         cls.config_client = ConfigClient(host, grpc_port)
+        cls.config_client.set_auth_token('root@builtin')
 
     def test_cluster_works_with_auto_conf_dir(self):
         table_path = '/Root/mydb/mytable_auto_conf'
@@ -193,7 +198,6 @@ class TestKiKiMRStoreConfigDir(AbstractKiKiMRTest):
 
         for node in self.cluster.nodes.values():
             node_config = node.read_node_config()
-            node_config['metadata']['version'] = get_config_version(yaml.dump(node_config)) + 1
             assert_that(
                 yaml.dump(yaml.safe_load(fetched_config), sort_keys=True) ==
                 yaml.dump(yaml.safe_load(yaml.dump(node_config)), sort_keys=True)

@@ -19,14 +19,8 @@
                           "table":"test\/ds\/store_sales"
                         },
                         {
-                          "op_name":"Union",
-                          "args":
-                            [
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"test\/ds\/date_dim"
-                              }
-                            ]
+                          "op_name":"TableFullScan",
+                          "table":"test\/ds\/date_dim"
                         }
                       ]
                   },
@@ -55,14 +49,8 @@
                       ]
                   },
                   {
-                    "op_name":"Union",
-                    "args":
-                      [
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"test\/ds\/date_dim"
-                        }
-                      ]
+                    "op_name":"TableFullScan",
+                    "table":"test\/ds\/date_dim"
                   }
                 ]
             }
@@ -87,14 +75,8 @@
                 ]
             },
             {
-              "op_name":"Union",
-              "args":
-                [
-                  {
-                    "op_name":"TableFullScan",
-                    "table":"test\/ds\/date_dim"
-                  }
-                ]
+              "op_name":"TableFullScan",
+              "table":"test\/ds\/date_dim"
             }
           ]
       }

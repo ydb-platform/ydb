@@ -163,8 +163,8 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
                 "version", info.GetSchema().GetVersion());
             NOlap::IColumnEngine::TSchemaInitializationData schemaInitializationData(info);
             if (!PrimaryIndex) {
-                PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache, DataAccessorsManager, StoragesManager,
-                    version, preset->Id, schemaInitializationData, PortionsStats);
+                PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache.GetObjectPtrVerified(),
+                    DataAccessorsManager, StoragesManager, version, preset->Id, schemaInitializationData, PortionsStats);
             } else if (PrimaryIndex->GetVersionedIndex().IsEmpty() ||
                        info.GetSchema().GetVersion() > PrimaryIndex->GetVersionedIndex().GetLastSchema()->GetVersion()) {
                 PrimaryIndex->RegisterSchemaVersion(version, preset->Id, schemaInitializationData);
@@ -276,10 +276,11 @@ void TTablesManager::AddSchemaVersion(
         it->second = schema;
     }
 
+    versionInfo.MutableSchema()->SetEngine(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
     Schema::SaveSchemaPresetVersionInfo(db, presetId, version, versionInfo);
     if (!PrimaryIndex) {
-        PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache, DataAccessorsManager, StoragesManager,
-            version, presetId, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo), PortionsStats);
+        PrimaryIndex = std::make_unique<NOlap::TColumnEngineForLogs>(TabletId, SchemaObjectsCache.GetObjectPtrVerified(), DataAccessorsManager,
+            StoragesManager, version, presetId, NOlap::IColumnEngine::TSchemaInitializationData(versionInfo), PortionsStats);
         for (auto&& i : Tables) {
             PrimaryIndex->RegisterTable(i.first);
         }
@@ -338,7 +339,6 @@ TTablesManager::TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& s
     , SchemaObjectsCache(schemaCache)
     , PortionsStats(portionsStats)
     , TabletId(tabletId) {
-    AFL_VERIFY(SchemaObjectsCache);
 }
 
 bool TTablesManager::TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const ui64 pathId) const {

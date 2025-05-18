@@ -1,4 +1,3 @@
-#include <ydb/core/formats/arrow/ssa_runtime_version.h>
 
 #include "helpers/aggregation.h"
 

@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
         {
             auto alterQuery =
                 R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
-                {"levels" : [{"class_name" : "Zero", "expected_blobs_size" : 20000, "portions_size_limit" : 100000, "portions_count_available" : 1},
+                {"levels" : [{"class_name" : "Zero", "expected_blobs_size" : 20000, "portions_size_limit" : 400000, "portions_count_available" : 2},
                              {"class_name" : "Zero", "expected_blobs_size" : 20000, "portions_count_available" : 1, "default_selector_name" : "slice"},
                              {"class_name" : "OneLayer", "expected_portion_size" : 40000, "size_limit_guarantee" : 100000000, "bytes_limit_fraction" : 1}],
                  "selectors" : [{"class_name" : "Transparent", "name" : "default"}, {"class_name" : "Snapshot", "name" : "slice", "interval" : {"finish_seconds_utc" : 0}}]}`);
@@ -76,13 +76,17 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
             auto rows = CollectRows(it);
-            ui32 levelIdx = 0;
-            const std::vector<ui32> maxVal = { 0, 109000, 0 };
+            AFL_VERIFY(rows.size() == 3);
+            AFL_VERIFY(0 == GetUint64(rows[0].at("LEVEL")));
+            AFL_VERIFY(GetUint64(rows[0].at("RECORDS_COUNT")) == 0);
+            AFL_VERIFY(1 == GetUint64(rows[1].at("LEVEL")));
+            AFL_VERIFY(GetUint64(rows[1].at("RECORDS_COUNT")) >= 440000);
+            AFL_VERIFY(GetUint64(rows[1].at("RECORDS_COUNT")) <= 550000);
+            AFL_VERIFY(2 == GetUint64(rows[2].at("LEVEL")));
+            AFL_VERIFY(GetUint64(rows[2].at("RECORDS_COUNT")) == 0);
+
             for (auto&& i : rows) {
-                AFL_VERIFY(levelIdx == GetUint64(i.at("LEVEL")));
-                Cerr << GetUint64(i.at("LEVEL")) << "/" << GetUint64(i.at("BYTES")) << "/" << maxVal[levelIdx] << Endl;
-                AFL_VERIFY(GetUint64(i.at("BYTES")) == maxVal[levelIdx]);
-                ++levelIdx;
+                Cerr << GetUint64(i.at("LEVEL")) << "/" << GetUint64(i.at("RECORDS_COUNT")) << Endl;
             }
         }
 
@@ -143,9 +147,8 @@ Y_UNIT_TEST_SUITE(KqpOlapOptimizer) {
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             auto rows = CollectRows(it);
             for (auto&& i : rows) {
-                Cerr << GetUint64(i.at("LEVEL")) << "/" << GetUint64(i.at("BYTES_DEFAULT")) << "/" << GetUint64(i.at("BYTES_SLICE")) << Endl;
+                Cerr << GetUint64(i.at("LEVEL")) << "/" << GetUint64(i.at("RECORDS_COUNT_DEFAULT")) << "/" << GetUint64(i.at("RECORDS_COUNT_SLICE")) << Endl;
             }
-            const std::vector<ui32> maxVal = { 10, 100000, 2000000000 };
             AFL_VERIFY(0 == GetUint64(rows[0].at("LEVEL")));
             AFL_VERIFY(GetUint64(rows[0].at("RECORDS_COUNT_DEFAULT")) == 0);
             AFL_VERIFY(1 == GetUint64(rows[1].at("LEVEL")));

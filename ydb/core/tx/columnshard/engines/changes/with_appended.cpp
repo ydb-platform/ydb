@@ -80,7 +80,9 @@ void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
     AFL_VERIFY(PortionsToRemove.GetSize() + PortionsToMove.GetSize() + AppendedPortions.size() || NoAppendIsCorrect);
     for (auto&& i : AppendedPortions) {
         i.GetPortionConstructor().MutablePortionConstructor().SetPortionId(context.NextPortionId());
-        i.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetCompactionLevel(PortionsToMove.GetTargetCompactionLevel().value_or(0));
+        i.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetCompactionLevel(
+            GranuleMeta->GetOptimizerPlanner().GetAppropriateLevel(
+                PortionsToMove.GetTargetCompactionLevel().value_or(0), i.GetPortionConstructor().GetPortionConstructor()));
     }
 }
 

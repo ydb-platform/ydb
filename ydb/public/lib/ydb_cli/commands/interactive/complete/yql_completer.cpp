@@ -16,6 +16,21 @@
 
 namespace NYdb::NConsoleClient {
 
+    namespace {
+
+        bool IsQuoted(TStringBuf content) {
+            return content.StartsWith('`') && content.EndsWith('`') && 2 <= content.size();
+        }
+
+        TString Unquoted(TString content) {
+            Y_ENSURE(IsQuoted(content));
+            content.erase(0, 1);
+            content.pop_back();
+            return content;
+        }
+
+    } // namespace
+
     class TYQLCompleter: public IYQLCompleter {
     public:
         using TPtr = THolder<IYQLCompleter>;
@@ -69,13 +84,12 @@ namespace NYdb::NConsoleClient {
             for (auto& candidate : candidates) {
                 auto& content = candidate.Content;
 
-                // TODO(YQL-19747): maybe do it on the sql/v1/complete side.
-                if (content.StartsWith('`') && content.EndsWith('`') && 2 <= content.size()) {
-                    content.erase(0, 1);
-                    content.pop_back();
+                if (IsQuoted(content)) { // TODO(YQL-19747): do it on the sql/v1/complete side.
+                    content = Unquoted(std::move(content));
                     if (AnyOf(content, NSQLComplete::IsWordBoundary)) {
-                        // Replxx does not support moving cursor after completion,
-                        // so user should paste the QUOTE and it will be doubled.
+                        // Replxx does not support moving cursor back after a completion,
+                        // so we really want to suggest such candidates only when
+                        // the cursor is already enclosed by ID_QUOTED
                         continue;
                     }
                 }

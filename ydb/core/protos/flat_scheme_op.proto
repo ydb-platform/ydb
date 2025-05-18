@@ -521,6 +521,7 @@ message TStorageTierConfig {
 
 message TCompactionLevelConstructorContainer {
     optional string ClassName = 1;
+    optional string DefaultSelectorName = 2;
 
     message TZeroLevel {
         optional uint32 PortionsLiveDurationSeconds = 1;

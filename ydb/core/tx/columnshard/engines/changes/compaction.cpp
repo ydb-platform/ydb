@@ -27,8 +27,8 @@ void TCompactColumnEngineChanges::DoCompile(TFinalizationContext& context) {
     for (auto& portionInfo : AppendedPortions) {
         auto& constructor = portionInfo.GetPortionConstructor().MutablePortionConstructor();
         constructor.MutableMeta().UpdateRecordsMeta(producedClassResultCompaction);
-        constructor.MutableMeta().SetCompactionLevel(
-            GranuleMeta->GetOptimizerPlanner().GetAppropriateLevel(GetPortionsToMove().GetTargetCompactionLevel().value_or(0), constructor));
+        constructor.MutableMeta().SetCompactionLevel(GranuleMeta->GetOptimizerPlanner().GetAppropriateLevel(
+            GetPortionsToMove().GetTargetCompactionLevel().value_or(0), portionInfo.GetPortionConstructor()));
     }
 }
 

@@ -14,7 +14,7 @@ class TColumnEngineChanges;
 class IStoragesManager;
 class TGranuleMeta;
 class TPortionInfo;
-class TPortionInfoConstructor;
+class TPortionAccessorConstructor;
 namespace NDataLocks {
 class TManager;
 }
@@ -108,7 +108,7 @@ protected:
     }
 
 public:
-    virtual ui32 GetAppropriateLevel(const ui32 baseLevel, const TPortionInfoConstructor& /*info*/) const {
+    virtual ui32 GetAppropriateLevel(const ui32 baseLevel, const TPortionAccessorConstructor& /*info*/) const {
         return baseLevel;
     }
 
@@ -236,7 +236,7 @@ public:
         TProto selfProto;
         TProto itemProto;
         SerializeToProto(selfProto);
-        SerializeToProto(itemProto);
+        item->SerializeToProto(itemProto);
         return selfProto.SerializeAsString() == itemProto.SerializeAsString();
     }
 

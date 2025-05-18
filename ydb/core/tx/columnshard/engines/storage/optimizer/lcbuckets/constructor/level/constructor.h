@@ -36,13 +36,30 @@ public:
     }
 
     TConclusionStatus DeserializeFromJson(const NJson::TJsonValue& json) {
+        if (json.Has("default_selector_name")) {
+            if (!json["default_selector_name"].IsString()) {
+                return TConclusionStatus::Fail("default_selector_name have to be string");
+            }
+            if (!json["default_selector_name"].GetString()) {
+                return TConclusionStatus::Fail("default_selector_name have to be not empty string");
+            }
+            DefaultSelectorName = json["default_selector_name"].GetString();
+        }
         return DoDeserializeFromJson(json);
     }
 
     bool DeserializeFromProto(const TProto& proto) {
+        if (proto.HasDefaultSelectorName()) {
+            DefaultSelectorName = proto.GetDefaultSelectorName();
+        } else {
+            DefaultSelectorName = "default";
+        }
         return DoDeserializeFromProto(proto);
     }
     void SerializeToProto(NKikimrSchemeOp::TCompactionLevelConstructorContainer& proto) const {
+        if (DefaultSelectorName != "default") {
+            proto.SetDefaultSelectorName(DefaultSelectorName);
+        }
         return DoSerializeToProto(proto);
     }
     NKikimrSchemeOp::TCompactionLevelConstructorContainer SerializeToProto() const {

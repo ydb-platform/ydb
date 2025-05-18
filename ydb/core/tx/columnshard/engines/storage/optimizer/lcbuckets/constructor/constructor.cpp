@@ -4,16 +4,12 @@
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
-NKikimr::TConclusion<std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::IOptimizerPlanner>> TOptimizerPlannerConstructor::DoBuildPlanner(const TBuildContext& context) const {
+TConclusion<std::shared_ptr<IOptimizerPlanner>> TOptimizerPlannerConstructor::DoBuildPlanner(const TBuildContext& context) const {
     return std::make_shared<TOptimizerPlanner>(context.GetPathId(), context.GetStorages(), context.GetPKSchema(), Levels, Selectors);
 }
 
-bool TOptimizerPlannerConstructor::DoApplyToCurrentObject(IOptimizerPlanner& current) const {
-    auto* itemClass = dynamic_cast<TOptimizerPlanner*>(&current);
-    if (!itemClass) {
-        return false;
-    }
-    return true;
+bool TOptimizerPlannerConstructor::DoApplyToCurrentObject(IOptimizerPlanner& /*current*/) const {
+    return false;
 }
 
 void TOptimizerPlannerConstructor::DoSerializeToProto(TProto& proto) const {
@@ -51,6 +47,7 @@ bool TOptimizerPlannerConstructor::DoDeserializeFromProto(const TProto& proto) {
 }
 
 NKikimr::TConclusionStatus TOptimizerPlannerConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
+    std::set<TString> selectorNames;
     if (jsonInfo.Has("selectors")) {
         if (!jsonInfo["selectors"].IsArray()) {
             return TConclusionStatus::Fail("selectors have to been array in json description");
@@ -69,6 +66,9 @@ NKikimr::TConclusionStatus TOptimizerPlannerConstructor::DoDeserializeFromJson(c
                 return TConclusionStatus::Fail("cannot parse portions selector: " + i.GetStringRobust());
             }
             Selectors.emplace_back(TSelectorConstructorContainer(std::shared_ptr<ISelectorConstructor>(selector.Release())));
+            if (!selectorNames.emplace(Selectors.back()->GetName()).second) {
+                return TConclusionStatus::Fail("selector name duplication: '" + Selectors.back()->GetName() + "'");
+            }
         }
     }
     if (!jsonInfo.Has("levels")) {
@@ -92,6 +92,15 @@ NKikimr::TConclusionStatus TOptimizerPlannerConstructor::DoDeserializeFromJson(c
             return TConclusionStatus::Fail("cannot parse level: " + i.GetStringRobust() + "; " + parseConclusion.GetErrorMessage());
         }
         Levels.emplace_back(TLevelConstructorContainer(std::shared_ptr<ILevelConstructor>(level.Release())));
+        if (selectorNames.empty()) {
+            if (Levels.back()->GetDefaultSelectorName() != "default") {
+                return TConclusionStatus::Fail("incorrect default selector name for level: '" + Levels.back()->GetDefaultSelectorName() + "'");
+            }
+        } else {
+            if (!selectorNames.contains(Levels.back()->GetDefaultSelectorName())) {
+                return TConclusionStatus::Fail("unknown default selector name for level: '" + Levels.back()->GetDefaultSelectorName() + "'");
+            }
+        }
     }
     return TConclusionStatus::Success();
 }

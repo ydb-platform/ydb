@@ -9,7 +9,13 @@ std::shared_ptr<IPortionsSelector> TSnapshotSelectorConstructor::DoBuildSelector
 }
 
 TConclusionStatus TSnapshotSelectorConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonValue) {
-    return Interval.DeserializeFromJson(jsonValue);
+    if (jsonValue.Has("interval")) {
+        auto conclusion = Interval.DeserializeFromJson(jsonValue["interval"]);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+    }
+    return TConclusionStatus::Success();
 }
 
 bool TSnapshotSelectorConstructor::DoDeserializeFromProto(const NKikimrSchemeOp::TCompactionSelectorConstructorContainer& proto) {

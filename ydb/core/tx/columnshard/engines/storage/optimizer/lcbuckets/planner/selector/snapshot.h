@@ -30,13 +30,13 @@ public:
             if (!jsonValue["start_seconds_utc"].IsUInteger()) {
                 return TConclusionStatus::Fail("json start_seconds_utc value have to be unsigned int");
             }
-            StartInstant = TInstant::Seconds(jsonValue["start_seconds_utc"].IsUInteger());
+            StartInstant = TInstant::Seconds(jsonValue["start_seconds_utc"].GetUInteger());
         }
         if (jsonValue.Has("finish_seconds_utc")) {
             if (!jsonValue["finish_seconds_utc"].IsUInteger()) {
                 return TConclusionStatus::Fail("json finish_seconds_utc value have to be unsigned int");
             }
-            FinishInstant = TInstant::Seconds(jsonValue["finish_seconds_utc"].IsUInteger());
+            FinishInstant = TInstant::Seconds(jsonValue["finish_seconds_utc"].GetUInteger());
         }
         return TConclusionStatus::Success();
     }

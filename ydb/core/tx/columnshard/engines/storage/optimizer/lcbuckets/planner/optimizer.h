@@ -21,7 +21,7 @@ private:
     const std::shared_ptr<IStoragesManager> StoragesManager;
     const std::shared_ptr<arrow::Schema> PrimaryKeysSchema;
 
-    virtual ui32 GetAppropriateLevel(const ui32 baseLevel, const TPortionInfoConstructor& info) const override {
+    virtual ui32 GetAppropriateLevel(const ui32 baseLevel, const TPortionAccessorConstructor& info) const override {
         ui32 result = baseLevel;
         for (ui32 i = baseLevel; i + 1 < Levels.size(); ++i) {
             if (Levels[i]->IsAppropriatePortionToMove(info) && Levels[i + 1]->IsAppropriatePortionToStore(info)) {

@@ -31,6 +31,15 @@ public:
     }
 
     TConclusionStatus DeserializeFromJson(const NJson::TJsonValue& json) {
+        if (json.Has("name")) {
+            if (json["name"].IsString()) {
+                Name = json["name"].GetStringSafe();
+            } else {
+                return TConclusionStatus::Fail("name field have to be string");
+            }
+        } else {
+            Name = "default";
+        }
         return DoDeserializeFromJson(json);
     }
 

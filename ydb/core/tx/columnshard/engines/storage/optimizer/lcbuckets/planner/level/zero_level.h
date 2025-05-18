@@ -22,11 +22,11 @@ private:
         return std::nullopt;
     }
 
-    virtual bool IsAppropriatePortionToMove(const TPortionInfoConstructor& info) const override {
-        return info.GetMeta().GetTotalBlobBytes() > ExpectedBlobsSize;
+    virtual bool IsAppropriatePortionToMove(const TPortionAccessorConstructor& info) const override {
+        return info.GetTotalBlobsSize() > ExpectedBlobsSize;
     }
 
-    virtual bool IsAppropriatePortionToStore(const TPortionInfoConstructor& /*info*/) const override {
+    virtual bool IsAppropriatePortionToStore(const TPortionAccessorConstructor& /*info*/) const override {
         return true;
     }
 

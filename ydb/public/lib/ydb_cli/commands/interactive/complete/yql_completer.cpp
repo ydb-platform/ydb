@@ -1,5 +1,6 @@
 #include "yql_completer.h"
 
+#include <ydb/public/lib/ydb_cli/commands/interactive/complete/dummy_name_service.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/complete/ydb_schema.h>
 #include <ydb/public/lib/ydb_cli/commands/interactive/highlight/color/schema.h>
 
@@ -162,6 +163,7 @@ namespace NYdb::NConsoleClient {
 
         TVector<NSQLComplete::INameService::TPtr> lighties = {
             statics,
+            MakeDummyNameService(),
         };
 
         return IYQLCompleter::TPtr(new TYQLCompleter(

@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    dummy_name_service.cpp
     ydb_schema.cpp
     yql_completer.cpp
 )

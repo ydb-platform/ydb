@@ -7,6 +7,7 @@
 #include <yql/essentials/sql/v1/complete/name/service/schema/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
 #include <yql/essentials/sql/v1/complete/name/service/union/name_service.h>
+#include <yql/essentials/sql/v1/complete/text/word.h>
 
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_pure_ansi/lexer.h>
@@ -66,6 +67,19 @@ namespace NYdb::NConsoleClient {
             replxx::Replxx::completions_t entries;
             entries.reserve(candidates.size());
             for (auto& candidate : candidates) {
+                auto& content = candidate.Content;
+
+                // TODO(YQL-19747): maybe do it on the sql/v1/complete side.
+                if (content.StartsWith('`') && content.EndsWith('`') && 2 <= content.size()) {
+                    content.erase(0, 1);
+                    content.pop_back();
+                    if (AnyOf(content, NSQLComplete::IsWordBoundary)) {
+                        // Replxx does not support moving cursor after completion,
+                        // so user should paste the QUOTE and it will be doubled.
+                        continue;
+                    }
+                }
+
                 entries.emplace_back(ReplxxCompletionOf(std::move(candidate)));
             }
             return entries;

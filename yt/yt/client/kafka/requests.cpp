@@ -1,4 +1,5 @@
 #include "requests.h"
+#include "protocol.h"
 
 #include <yt/yt/core/misc/error.h>
 
@@ -171,11 +172,11 @@ void TRecord::Deserialize(IKafkaProtocolReader* reader, int version)
             }
         }
 
-        reader->FinishReadBytes();
-
         if (length && reader->GetReadBytesCount() != length) {
             YT_LOG_ERROR("Not all record bytes were read (Expected: %v, Actual: %v)", *length, reader->GetReadBytesCount());
         }
+
+        reader->FinishReadBytes();
     } else if (version == 1 || version == 0) {
         if (version == 1) {
             READ_KAFKA_FIELD(TimestampDelta, ReadInt64)
@@ -609,15 +610,17 @@ void TRspOffsetFetch::Serialize(IKafkaProtocolWriter* writer, int apiVersion) co
 
 void TReqFetchTopicPartition::Deserialize(IKafkaProtocolReader* reader, int /*apiVersion*/)
 {
-    Partition = reader->ReadInt32();
-    FetchOffset = reader->ReadInt64();
-    PartitionMaxBytes = reader->ReadInt32();
+    READ_KAFKA_FIELD(Partition, ReadInt32)
+    READ_KAFKA_FIELD(FetchOffset, ReadInt64)
+    READ_KAFKA_FIELD(PartitionMaxBytes, ReadInt32)
 }
 
 void TReqFetchTopic::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
 {
-    Topic = reader->ReadString();
-    Partitions.resize(reader->ReadInt32());
+    READ_KAFKA_FIELD(Topic, ReadString)
+    i32 PartitionCount;
+    READ_KAFKA_FIELD(PartitionCount, ReadInt32)
+    Partitions.resize(PartitionCount);
     for (auto& partition : Partitions) {
         partition.Deserialize(reader, apiVersion);
     }
@@ -627,13 +630,15 @@ void TReqFetch::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
 {
     ApiVersion = apiVersion;
 
-    ReplicaId = reader->ReadInt32();
-    MaxWaitMs = reader->ReadInt32();
-    MinBytes = reader->ReadInt32();
+    READ_KAFKA_FIELD(ReplicaId, ReadInt32)
+    READ_KAFKA_FIELD(MaxWaitMs, ReadInt32)
+    READ_KAFKA_FIELD(MinBytes, ReadInt32)
     if (apiVersion >= 3) {
-        MaxBytes = reader->ReadInt32();
+        READ_KAFKA_FIELD(MaxBytes, ReadInt32)
     }
-    Topics.resize(reader->ReadInt32());
+    i32 TopicCount;
+    READ_KAFKA_FIELD(TopicCount, ReadInt32)
+    Topics.resize(TopicCount);
     for (auto& topic : Topics) {
         topic.Deserialize(reader, apiVersion);
     }
@@ -889,6 +894,73 @@ void TRspListOffsets::Serialize(IKafkaProtocolWriter* writer, int apiVersion) co
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TReqCreateTopicsTopicConfig::Deserialize(IKafkaProtocolReader* reader, int /*apiVersion*/)
+{
+    READ_KAFKA_FIELD(Name, ReadString)
+    READ_KAFKA_FIELD(Value, ReadNullableString)
+}
 
+void TReqCreateTopicsTopicAssignment::Deserialize(IKafkaProtocolReader* reader, int /*apiVersion*/)
+{
+    READ_KAFKA_FIELD(PartitionIndex, ReadInt32)
+    i32 brokerIdsSize;
+    READ_KAFKA_FIELD(brokerIdsSize, ReadInt32)
+    BrokerIds.resize(brokerIdsSize);
+    for (auto& brokerId : BrokerIds) {
+        READ_KAFKA_FIELD(brokerId, ReadInt32)
+    }
+}
+
+void TReqCreateTopicsTopic::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
+{
+    READ_KAFKA_FIELD(Name, ReadString)
+    READ_KAFKA_FIELD(NumPartitions, ReadInt32)
+    READ_KAFKA_FIELD(ReplicationFactor, ReadInt16)
+
+    i32 assignmentsSize;
+    READ_KAFKA_FIELD(assignmentsSize, ReadInt32)
+    Assignments.resize(assignmentsSize);
+    for (auto& assignment : Assignments) {
+        assignment.Deserialize(reader, apiVersion);
+    }
+
+    i32 configsSize;
+    READ_KAFKA_FIELD(configsSize, ReadInt32)
+    Configs.resize(configsSize);
+    for (auto& config : Configs) {
+        config.Deserialize(reader, apiVersion);
+    }
+}
+
+void TReqCreateTopics::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
+{
+    i32 topicsSize;
+    READ_KAFKA_FIELD(topicsSize, ReadInt32)
+    Topics.resize(topicsSize);
+    for (auto& topic : Topics) {
+        topic.Deserialize(reader, apiVersion);
+    }
+
+    READ_KAFKA_FIELD(TimeoutMs, ReadInt32)
+    READ_KAFKA_FIELD(ValidateOnly, ReadBool)
+}
+
+void TRspCreateTopicsTopic::Serialize(IKafkaProtocolWriter* writer, int /*apiVersion*/) const
+{
+    WRITE_KAFKA_FIELD(writer, WriteString, Name)
+    WRITE_KAFKA_FIELD(writer, WriteErrorCode, ErrorCode)
+    WRITE_KAFKA_FIELD(writer, WriteNullableString, ErrorMessage)
+}
+
+void TRspCreateTopics::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
+{
+    WRITE_KAFKA_FIELD(writer, WriteInt32, ThrottleTimeMs)
+    WRITE_KAFKA_FIELD(writer, WriteInt32, Topics.size())
+    for (const auto& topic : Topics) {
+        topic.Serialize(writer, apiVersion);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NKafka

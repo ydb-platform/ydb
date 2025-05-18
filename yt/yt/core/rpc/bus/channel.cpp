@@ -229,7 +229,7 @@ private:
                 YT_LOG_DEBUG("Created bus (ConnectionType: Client, VerificationMode: %v, EncryptionMode: %v, Endpoint: %v)",
                     attrs.Get<EVerificationMode>("verification_mode"),
                     attrs.Get<EEncryptionMode>("encryption_mode"),
-                    attrs.Get<TString>("address"));
+                    attrs.Get<std::string>("address"));
 
                 session->Initialize(bus);
                 bucket.Sessions.push_back(session);

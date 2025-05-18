@@ -135,7 +135,7 @@ private:
     IClientPtr Client_;
     std::optional<TDuration> ClientTimeout_;
 
-    const TString EndpointAddress_;
+    const std::string EndpointAddress_;
     const IAttributeDictionaryPtr EndpointAttributes_;
     const NConcurrency::IPollerPtr Poller_;
     const IMemoryUsageTrackerPtr MemoryUsageTracker_ = GetNullMemoryUsageTracker();
@@ -231,7 +231,7 @@ private:
         TFuture<IResponsePtr> Response_;
 
         static void OnResponse(
-            const TString& address,
+            const std::string& address,
             TRequestId requestId,
             const std::string& service,
             const std::string& method,
@@ -324,19 +324,19 @@ private:
                 }
 
                 if (credentialsExt.has_session_id() || credentialsExt.has_ssl_session_id()) {
-                    TString cookieString;
+                    std::string cookieString;
 
-                    static const TString SessionIdCookieName("Session_id");
-                    static const TString SessionId2CookieName("sessionid2");
                     if (credentialsExt.has_session_id()) {
-                        cookieString = TString::Join(SessionIdCookieName, "=", credentialsExt.session_id());
+                        static const std::string SessionIdCookieName("Session_id");
+                        cookieString += SessionIdCookieName + "=" + credentialsExt.session_id();
                     }
 
                     if (credentialsExt.has_ssl_session_id()) {
-                        if (credentialsExt.has_session_id()) {
+                        if (!cookieString.empty()) {
                             cookieString += "; ";
                         }
-                        cookieString += TString::Join(SessionId2CookieName, "=", credentialsExt.ssl_session_id());
+                        static const std::string SessionId2CookieName("sessionid2");
+                        cookieString += SessionId2CookieName + "=" + credentialsExt.ssl_session_id();
                     }
 
                     httpHeaders->Add(CookieHeaderName, cookieString);
@@ -349,12 +349,12 @@ private:
 
             if (const auto& user = request->GetUser(); !user.empty()) {
                 // TODO(babenko): switch to std:::string
-                httpHeaders->Add(UserNameHeaderName, TString(user));
+                httpHeaders->Add(UserNameHeaderName, std::string(user));
             }
 
             if (const auto& userTag = request->GetUserTag(); !userTag.empty()) {
                 // TODO(babenko): switch to std:::string
-                httpHeaders->Add(UserTagHeaderName, TString(userTag));
+                httpHeaders->Add(UserTagHeaderName, std::string(userTag));
             }
 
             if (rpcHeader.has_timeout()) {
@@ -372,7 +372,7 @@ private:
             if (rpcHeader.HasExtension(NRpc::NProto::TCustomMetadataExt::custom_metadata_ext)) {
                 const auto& customMetadataExt = rpcHeader.GetExtension(NRpc::NProto::TCustomMetadataExt::custom_metadata_ext);
                 for (const auto& [key, value] : customMetadataExt.entries()) {
-                    httpHeaders->Add(TString::Join("X-", key), value);
+                    httpHeaders->Add("X-" + key, value);
                 }
             }
 

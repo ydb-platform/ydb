@@ -3,7 +3,7 @@ import enum
 import sys
 import argparse
 from datetime import datetime, timezone
-from matplotlib import dates, patches, collections, backends
+from matplotlib import dates, patches, collections
 from importlib import metadata
 from packaging import version
 
@@ -108,10 +108,11 @@ def ParsePortionStatFile(path: str, pk0type: FirstPkColumnType) -> Portions:
 
 
 def GetLevelColours(maxLevel):
-    levelColors = {l: 'blue' for l in range(portions.MaxCompactionLevel + 1)}
+    levelColors = {level: 'blue' for level in range(portions.MaxCompactionLevel + 1)}
     levelColors[maxLevel] = 'green'
     levelColors[0] = 'red'
     return levelColors
+
 
 def GetIntersections(portions):
     points = []
@@ -120,7 +121,7 @@ def GetIntersections(portions):
         points.append((p.PkMax, -1))
 
     points.sort(key=lambda p: p[0])
-    
+
     intersections = []
     prevPk = points[0][0]
     cur = 0
@@ -148,6 +149,7 @@ def get_interactive_backends():
         from matplotlib import backends
         return backends.backend_registry.list_builtin(backends.BackendFilter.INTERACTIVE)
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("""Visualize portions from YDB Column table.
 To get portion info for a table, use ydb cli:
@@ -166,7 +168,6 @@ To get portion info for a table, use ydb cli:
 Or you can run this script in some environment with installed interactive backend, i.e venv
 """)
             sys.exit(1)
-
 
     print(f"Loading file: {inputFile}...")
     portions = ParsePortionStatFile(inputFile, pk0Type)
@@ -191,10 +192,8 @@ Or you can run this script in some environment with installed interactive backen
         dx = xMax - xMin
         ax[i].set_xlim(xMin - 0.05 * dx, xMax + 0.05 * dx)
 
-
     ax[0].set_title("Column table portions")
     ax[0].add_collection(collections.PatchCollection(rectangles, match_original=True))
-
 
     ax[0].set_ylabel("plan_step")
     ax[0].yaxis.set_major_locator(dates.AutoDateLocator())

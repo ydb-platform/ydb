@@ -86,8 +86,6 @@ void TChangesWithAppend::DoCompile(TFinalizationContext& context) {
 
 void TChangesWithAppend::DoOnAfterCompile() {
     for (auto&& i : AppendedPortions) {
-        i.GetPortionConstructor().MutablePortionConstructor().MutableMeta().SetCompactionLevel(
-            PortionsToMove.GetTargetCompactionLevel().value_or(0));
         i.FinalizePortionConstructor();
     }
 }

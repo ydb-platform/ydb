@@ -1,22 +1,12 @@
 #include "zero_level.h"
 
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/zero_level.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/level/zero_level.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
 TConclusionStatus TZeroLevelConstructor::DoDeserializeFromJson(const NJson::TJsonValue& json) {
     if (!json.IsMap()) {
         return TConclusionStatus::Fail("incorrect level description");
-    }
-    if (json.Has("data_snapshot_interval")) {
-        const auto& jsonValue = json["data_snapshot_interval"];
-        if (!jsonValue.IsMap()) {
-            return TConclusionStatus::Fail("incorrect data_snapshot_interval value (have to be map)");
-        }
-        auto conclusion = DataSnapshotInterval.DeserializeFromJson(jsonValue);
-        if (conclusion.IsFail()) {
-            return conclusion;
-        }
     }
     if (json.Has("portions_count_available")) {
         const auto& jsonValue = json["portions_count_available"];
@@ -80,13 +70,6 @@ bool TZeroLevelConstructor::DoDeserializeFromProto(const NKikimrSchemeOp::TCompa
     if (pLevel.HasPortionsSizeLimit()) {
         PortionsSizeLimit = pLevel.GetPortionsSizeLimit();
     }
-    if (pLevel.HasDataSnapshotInterval()) {
-        auto conclusion = DataSnapshotInterval.DeserializeFromProto(pLevel.GetDataSnapshotInterval());
-        if (conclusion.IsFail()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "cannot parse compaction level")("error", conclusion.GetErrorMessage());
-            return false;
-        }
-    }
     return true;
 }
 
@@ -107,17 +90,14 @@ void TZeroLevelConstructor::DoSerializeToProto(NKikimrSchemeOp::TCompactionLevel
     if (PortionsSizeLimit) {
         mLevel.SetPortionsSizeLimit(*PortionsSizeLimit);
     }
-    if (!DataSnapshotInterval.IsEmpty()) {
-        *mLevel.MutableDataSnapshotInterval() = DataSnapshotInterval.SerializeToProto();
-    }
 }
 
 std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::NLCBuckets::IPortionsLevel> TZeroLevelConstructor::DoBuildLevel(
     const std::shared_ptr<IPortionsLevel>& nextLevel, const ui32 indexLevel, const std::shared_ptr<TSimplePortionsGroupInfo>& /*portionsInfo*/,
-    const TLevelCounters& counters) const {
-    return std::make_shared<TZeroLevelPortions>(indexLevel, nextLevel, counters, PortionsLiveDuration.value_or(TDuration::Max()),
-        ExpectedBlobsSize.value_or((ui64)1 << 20), PortionsCountAvailable.value_or(10), PortionsCountLimit, PortionsSizeLimit,
-        DataSnapshotInterval);
+    const TLevelCounters& counters, const std::vector<std::shared_ptr<IPortionsSelector>>& selectors) const {
+    return std::make_shared<TZeroLevelPortions>(indexLevel, nextLevel, counters,
+        std::make_shared<TLimitsOverloadChecker>(PortionsCountLimit, PortionsSizeLimit), PortionsLiveDuration.value_or(TDuration::Max()),
+        ExpectedBlobsSize.value_or((ui64)1 << 20), PortionsCountAvailable.value_or(10), selectors, GetDefaultSelectorName());
 }
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

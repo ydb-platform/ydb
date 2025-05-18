@@ -522,18 +522,12 @@ message TStorageTierConfig {
 message TCompactionLevelConstructorContainer {
     optional string ClassName = 1;
 
-    message TDataSnapshotInterval {
-        optional uint32 StartInstantSecondsUTC = 1;
-        optional uint32 FinishInstantSecondsUTC = 2;
-    }
-
     message TZeroLevel {
         optional uint32 PortionsLiveDurationSeconds = 1;
         optional uint64 ExpectedBlobsSize = 2;
         optional uint64 PortionsCountAvailable = 3;
         optional uint64 PortionsCountLimit = 4;
         optional uint64 PortionsSizeLimit = 5;
-		optional TDataSnapshotInterval DataSnapshotInterval = 6;
     }
 
     message TOneLayer {
@@ -545,6 +539,33 @@ message TCompactionLevelConstructorContainer {
     oneof Implementation {
         TZeroLevel ZeroLevel = 10;
         TOneLayer OneLayer = 11;
+    }
+
+}
+
+message TCompactionSelectorConstructorContainer {
+    optional string ClassName = 1;
+    optional string Name = 2;
+
+    message TTransparentSelector {
+    }
+
+    message TEmptySelector {
+    }
+
+    message TDataSnapshotInterval {
+        optional uint32 StartSecondsUTC = 1;
+        optional uint32 FinishSecondsUTC = 2;
+    }
+
+    message TSnapshotSelector {
+        optional TDataSnapshotInterval Interval = 1;
+    }
+
+    oneof Implementation {
+        TEmptySelector Empty = 10;
+        TTransparentSelector Transparent = 11;
+        TSnapshotSelector Snapshot = 12;
     }
 
 }
@@ -563,6 +584,7 @@ message TCompactionPlannerConstructorContainer {
 
     message TLCOptimizer {
         repeated TCompactionLevelConstructorContainer Levels = 1;
+        repeated TCompactionSelectorConstructorContainer Selectors = 2;
     }
 
     oneof Implementation {

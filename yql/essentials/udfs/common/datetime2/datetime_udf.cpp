@@ -548,6 +548,7 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
             const TUnboxedValuePod* args) const override;
 
         static void DeclareSignature(
+            TStringRef /* name */,
             TType* userType,
             IFunctionTypeInfoBuilder& builder,
             bool typesOnly)
@@ -1823,7 +1824,7 @@ NUdf::TUnboxedValuePod DoAddYears(const NUdf::TUnboxedValuePod& date, i64 years,
     PARSE_SPECIFIC_FORMAT(X509);
 
     SIMPLE_MODULE(TDateTime2Module,
-        TUserDataTypeFuncFactory<true, SplitName, TSplit,
+        TUserDataTypeFuncFactory<true, true, SplitName, TSplit,
             TDate,
             TDatetime,
             TTimestamp,

@@ -23,6 +23,7 @@ target_compile_options(libs-hyperscan-runtime_avx2 PRIVATE
   -mpopcnt
   -DHAVE_POPCOUNT_INSTR
   -mavx
+  -mpclmul
   -DHAVE_AVX
   -mavx2
   -mfma

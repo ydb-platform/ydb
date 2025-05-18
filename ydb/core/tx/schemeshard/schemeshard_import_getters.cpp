@@ -1056,6 +1056,10 @@ public:
                 return false;
             }
         }
+        if (NBackup::NormalizeExportPrefix(Request->Get()->Record.GetSettings().prefix()).empty()) {
+            Reply(Ydb::StatusIds::BAD_REQUEST, "Empty S3 prefix specified");
+            return false;
+        }
         return true;
     }
 

@@ -209,6 +209,23 @@ protected:
         ValidateListObjectInS3Export(paths, MakeListObjectsInS3ExportSettings(exportPrefix));
     }
 
+    void ValidateListObjectPathsInS3Export(const TSet<TString>& paths, const NYdb::NImport::TListObjectsInS3ExportSettings& listSettings) {
+        auto res = YdbImportClient().ListObjectsInS3Export(listSettings).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), "Status: " << res.GetStatus() << ". Issues: " << res.GetIssues().ToString());
+
+        TSet<TString> pathsInResponse;
+        for (const auto& item : res.GetItems()) {
+            bool inserted = pathsInResponse.emplace(item.Path).second;
+            UNIT_ASSERT_C(inserted, "Duplicate item: {" << item.Prefix << ", " << item.Path << "}. Listing result: " << res);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(pathsInResponse, paths, "Listing result: " << res);
+    }
+
+    void ValidateListObjectPathsInS3Export(const TSet<TString>& paths, const TString& exportPrefix) {
+        ValidateListObjectPathsInS3Export(paths, MakeListObjectsInS3ExportSettings(exportPrefix));
+    }
+
     TString DebugListDir(const TString& path) { // Debug listing for specified dir
         auto res = YdbSchemeClient().ListDirectory(path).GetValueSync();
         TStringBuilder l;

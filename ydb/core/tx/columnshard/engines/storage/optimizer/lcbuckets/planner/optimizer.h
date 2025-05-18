@@ -20,6 +20,17 @@ private:
     std::map<ui64, std::shared_ptr<IPortionsLevel>, std::greater<ui64>> LevelsByWeight;
     const std::shared_ptr<IStoragesManager> StoragesManager;
     const std::shared_ptr<arrow::Schema> PrimaryKeysSchema;
+
+    virtual ui32 GetAppropriateLevel(const ui32 baseLevel, const TPortionInfoConstructor& info) const {
+        ui32 result = baseLevel;
+        for (ui32 i = baseLevel; i + 1 < Levels.size(); ++i) {
+            if (Levels[i]->IsAppropriatePortionToMove(info) && Levels[i + 1]->IsAppropriatePortionToStore(info)) {
+                result = i + 1;
+            }
+        }
+        return result;
+    }
+
     virtual bool DoIsOverloaded() const override {
         for (auto&& i : Levels) {
             if (i->IsOverloaded()) {

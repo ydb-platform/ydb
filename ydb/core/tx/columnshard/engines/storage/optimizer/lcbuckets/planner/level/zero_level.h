@@ -22,6 +22,14 @@ private:
         return std::nullopt;
     }
 
+    virtual bool IsAppropriatePortionToMove(const TPortionInfoConstructor& info) const override {
+        return info.GetMeta().GetTotalBlobBytes() > ExpectedBlobsSize;
+    }
+
+    virtual bool IsAppropriatePortionToStore(const TPortionInfoConstructor& /*info*/) const override {
+        return true;
+    }
+
     virtual ui64 DoGetAffectedPortionBytes(const NArrow::TSimpleRow& /*from*/, const NArrow::TSimpleRow& /*to*/) const override {
         return 0;
     }

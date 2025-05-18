@@ -87,6 +87,9 @@ private:
     virtual bool DoIsOverloaded() const {
         return false;
     }
+    virtual ui32 GetAppropriateLevel(const ui32 baseLevel, const TPortionInfoConstructor& /*info*/) const {
+        return baseLevel;
+    }
 
 protected:
     virtual void DoModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add,

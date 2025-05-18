@@ -351,6 +351,14 @@ protected:
     mutable std::optional<TInstant> PredOptimization = TInstant::Now();
 
 public:
+    virtual bool IsAppropriatePortionToMove(const TPortionInfoConstructor& /*info*/) const {
+        return false;
+    }
+
+    virtual bool IsAppropriatePortionToStore(const TPortionInfoConstructor& /*info*/) const {
+        return true;
+    }
+
     const TSimplePortionsGroupInfo& GetPortionsInfo() const {
         AFL_VERIFY(PortionsInfo);
         return *PortionsInfo;

@@ -1,6 +1,5 @@
 #include "predicate_collector.h"
 
-#include <ydb/core/formats/arrow/ssa_runtime_version.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/utils/log/log.h>

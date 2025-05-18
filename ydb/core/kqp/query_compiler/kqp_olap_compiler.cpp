@@ -1,7 +1,6 @@
 #include "kqp_olap_compiler.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/ssa_runtime_version.h>
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
 
 #include <yql/essentials/core/arrow_kernels/request/request.h>
@@ -51,8 +50,6 @@ public:
             YQL_ENSURE(ReadColumns.emplace(columnMeta.Name, columnMeta.Id).second);
             MaxColumnId = std::max(MaxColumnId, columnMeta.Id);
         }
-
-        Program.SetVersion(NKikimr::NSsa::RuntimeVersion);
     }
 
     ui32 GetColumnId(const std::string& name) const {

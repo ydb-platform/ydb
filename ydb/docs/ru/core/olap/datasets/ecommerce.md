@@ -68,6 +68,7 @@ awk 'NR==1 {print "row_id," $0; next} {print NR-1 "," $0}' 2019-Nov.csv > temp.c
       UNIFORM_PARTITIONS = 50
   );'
   ```
+
 {% endlist %}
 
 4. Выполните команду импорта:
@@ -117,7 +118,7 @@ ydb import file csv --header --null-value "" --path ecommerce_table 2019-Nov.csv
 
 Результат:
 
-```
+```raw
 ┌────────────────────────────────────┬────────────┐
 │ category_code                      │ view_count │
 ├────────────────────────────────────┼────────────┤

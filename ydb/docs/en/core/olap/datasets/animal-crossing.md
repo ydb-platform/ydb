@@ -96,6 +96,7 @@ A catalog of items from the popular game Animal Crossing: New Horizons.
           STORE = COLUMN
       );'
       ```
+
     {% endlist %}
 
 5. Execute the import command:
@@ -139,7 +140,7 @@ Identify the top five most popular primary colors of accessories:
 
 Result:
 
-```
+```raw
 ┌──────────┬─────────────┐
 │ Color_1  │ color_count │
 ├──────────┼─────────────┤

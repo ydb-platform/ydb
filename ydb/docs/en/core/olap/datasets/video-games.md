@@ -106,7 +106,7 @@ To identify the publisher with the highest average game sales in North America, 
 
 Result:
 
-```
+```raw
 ┌───────────┬──────────────────┐
 │ Publisher │ average_na_sales │
 ├───────────┼──────────────────┤

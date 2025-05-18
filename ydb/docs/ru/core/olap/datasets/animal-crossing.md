@@ -96,6 +96,7 @@ sed -i '1s/ /_/g' accessories.csv
       STORE = COLUMN
   );'
   ```
+
 {% endlist %}
 
 5. Выполните команду импорта:
@@ -139,7 +140,7 @@ ydb import file csv --header --path accessories accessories.csv
 
 Результат:
 
-```
+```raw
 ┌──────────┬─────────────┐
 │ Color_1  │ color_count │
 ├──────────┼─────────────┤

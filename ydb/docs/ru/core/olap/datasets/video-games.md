@@ -106,7 +106,7 @@ ydb import file csv --header --null-value "" --path vgsales vgsales.csv
 
 Результат:
 
-```
+```bash
 ┌───────────┬──────────────────┐
 │ Publisher │ average_na_sales │
 ├───────────┼──────────────────┤

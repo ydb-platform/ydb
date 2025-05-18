@@ -114,7 +114,7 @@ ydb import file csv --header --null-value "" --path netflix netflix_titles.csv
 
 Результат:
 
-```
+```raw
 ┌─────────────────┬───────┐
 │ country         │ count │
 ├─────────────────┼───────┤

@@ -132,7 +132,7 @@ Run a query to determine the journals with the highest number of publications:
 
 Result:
 
-```
+```raw
 ┌───────────────────────────────────┬───────────────────┐
 │ journal                           │ publication_count │
 ├───────────────────────────────────┼───────────────────┤

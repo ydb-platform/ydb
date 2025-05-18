@@ -18,6 +18,7 @@ ydb import file csv --header --null-value "" --path <table_path> <file>.csv
 ```
 
 Where:
+
 * `--header` indicates that the first row of the file contains the column names, and the actual data starts from the second row;
 * `--null-value ""` specifies that an empty string in the CSV will be interpreted as a null value during data import into the table.
 

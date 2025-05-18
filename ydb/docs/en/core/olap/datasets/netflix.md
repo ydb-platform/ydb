@@ -114,7 +114,7 @@ Identify the top three countries with the most content added to Netflix in 2020:
 
 Result:
 
-```
+```raw
 ┌─────────────────┬───────┐
 │ country         │ count │
 ├─────────────────┼───────┤

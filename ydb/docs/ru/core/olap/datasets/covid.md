@@ -132,7 +132,7 @@ ydb import file csv --header --null-value "" --path covid_research metadata.csv
 
 Результат:
 
-```
+```raw
 ┌───────────────────────────────────┬───────────────────┐
 │ journal                           │ publication_count │
 ├───────────────────────────────────┼───────────────────┤

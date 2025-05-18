@@ -68,6 +68,7 @@ User behavior data from a multi-category online store.
           UNIFORM_PARTITIONS = 50
       );'
       ```
+
     {% endlist %}
 
 4. Execute the import command:
@@ -117,7 +118,7 @@ Identify the most popular product categories on November 1, 2019:
 
 Result:
 
-```
+```raw
 ┌────────────────────────────────────┬────────────┐
 │ category_code                      │ view_count │
 ├────────────────────────────────────┼────────────┤

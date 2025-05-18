@@ -72,6 +72,10 @@ class CreateTenantRequest(AbstractProtobufBuilder):
     def set_attribute(self, name, value):
         self.protobuf.CreateTenantRequest.Request.attributes[name] = value
 
+    def set_options(self, **kwargs):
+        for name, value in kwargs.items():
+            setattr(self.protobuf.CreateTenantRequest.Request.options, name, value)
+
 
 class AlterTenantRequest(AbstractProtobufBuilder):
     """

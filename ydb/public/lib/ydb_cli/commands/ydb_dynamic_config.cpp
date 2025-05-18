@@ -110,7 +110,7 @@ int TCommandConfigFetch::Run(TConfig& config) {
     auto result = client.FetchAllConfigs(settings).GetValueSync();
 
     // if the new Config API is not supported, fallback to the old DynamicConfig API
-    if (result.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED) {
+    if (result.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED || result.GetStatus() == EStatus::UNSUPPORTED) {
         auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
         auto result = client.GetConfig().GetValueSync();
         NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
@@ -129,7 +129,7 @@ int TCommandConfigFetch::Run(TConfig& config) {
         }
 
         if (!OutDir) {
-            Cout << WrapYaml(cfg);
+            Cout << cfg << Endl;
         } else {
             TFsPath dir(OutDir);
             dir.MkDirs();
@@ -164,14 +164,14 @@ int TCommandConfigFetch::Run(TConfig& config) {
         if (!storageConfig.empty() || DedicatedStorageSection) {
             Cerr << "cluster config: " << Endl;
         }
-        Cout << WrapYaml(TString(clusterConfig));
+        Cout << clusterConfig << Endl;
     }
 
     if (!storageConfig.empty()) {
         if (!clusterConfig.empty() || DedicatedClusterSection) {
             Cerr << "storage config:" << Endl;
         }
-        Cout << WrapYaml(TString(storageConfig));
+        Cout << storageConfig << Endl;
     }
 
     if (clusterConfig.empty() && storageConfig.empty()) {
@@ -212,7 +212,7 @@ void TCommandConfigReplace::Parse(TConfig& config) {
         ythrow yexception() << "Must specify non-empty -f (--filename)";
     }
 
-   const auto configStr = Filename == "-" ? Cin.ReadAll() : TFileInput(Filename).ReadAll();
+    const auto configStr = Filename == "-" ? Cin.ReadAll() : TFileInput(Filename).ReadAll();
 
     DynamicConfig = configStr;
 
@@ -244,7 +244,7 @@ int TCommandConfigReplace::Run(TConfig& config) {
 
     auto status = client.ReplaceConfig(DynamicConfig, settings).GetValueSync();
 
-    if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED) {
+    if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED || status.GetStatus() == EStatus::UNSUPPORTED) {
         Cerr << "Warning: Fallback to DynamicConfig API" << Endl;
 
         auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);

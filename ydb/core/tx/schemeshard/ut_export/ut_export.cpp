@@ -35,8 +35,8 @@ namespace {
 
     void Run(TTestBasicRuntime& runtime, TTestEnv& env, const std::variant<TVector<TString>, TTablesWithAttrs>& tablesVar, const TString& request,
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS,
-            const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "", const TString& peerName = "", 
-            const TVector<TString>& cdcStreams = {}) {
+            const TString& dbName = "/MyRoot", bool serverless = false, const TString& userSID = "", const TString& peerName = "",
+            const TVector<TString>& cdcStreams = {}, bool checkAutoDropping = false) {
 
         TTablesWithAttrs tables;
 
@@ -148,6 +148,40 @@ namespace {
 
         const ui64 exportId = txId;
         TestGetExport(runtime, schemeshardId, exportId, dbName, expectedStatus);
+
+        if (!runtime.GetAppData().FeatureFlags.GetEnableExportAutoDropping() && checkAutoDropping) {
+          auto desc = DescribePath(runtime, "/MyRoot");
+          Cerr << "desc: " << desc.GetPathDescription().ChildrenSize()<< Endl;
+          UNIT_ASSERT(desc.GetPathDescription().ChildrenSize() > 1);
+
+          bool foundExportDir = false;
+          bool foundOriginalTable = false;
+
+          for (size_t i = 0; i < desc.GetPathDescription().ChildrenSize(); ++i) {
+              const auto& child = desc.GetPathDescription().GetChildren(i);
+              const auto& name = child.GetName();
+
+              if (name.StartsWith("Table")) {
+                  foundOriginalTable = true;
+              } else if (name.StartsWith("export-")) {
+                  foundExportDir = true;
+                  auto exportDirDesc = DescribePath(runtime, "/MyRoot/" + name);
+                  UNIT_ASSERT(exportDirDesc.GetPathDescription().ChildrenSize() >= 1);
+                  UNIT_ASSERT_EQUAL(exportDirDesc.GetPathDescription().GetChildren(0).GetName(), "0");
+              }
+          } 
+
+          UNIT_ASSERT(foundExportDir);
+          UNIT_ASSERT(foundOriginalTable);
+        } else if (checkAutoDropping) {
+          auto desc = DescribePath(runtime, "/MyRoot");
+          Cerr << "desc: " << desc.GetPathDescription().ChildrenSize()<< Endl;
+          for (size_t i = 0; i < desc.GetPathDescription().ChildrenSize(); ++i) {
+              const auto& child = desc.GetPathDescription().GetChildren(i);
+              const auto& name = child.GetName();
+              UNIT_ASSERT(!name.StartsWith("export-"));
+          }
+        }
 
         TestForgetExport(runtime, schemeshardId, ++txId, dbName, exportId);
         env.TestWaitNotification(runtime, exportId, schemeshardId);
@@ -1119,6 +1153,7 @@ partitioning_settings {
         ui64 txId = 100;
 
         THashSet<ui64> statsCollected;
+        runtime.GetAppData().FeatureFlags.SetEnableExportAutoDropping(true);
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvDataShard::EvPeriodicTableStats) {
                 statsCollected.insert(ev->Get<TEvDataShard::TEvPeriodicTableStats>()->Record.GetDatashardId());
@@ -1179,10 +1214,23 @@ partitioning_settings {
             }
         )", port));
         const ui64 exportId = txId;
+        ::NKikimrSubDomains::TDiskSpaceUsage afterExport;
+
+        TTestActorRuntime::TEventObserver prevObserverFunc;
+        prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
+            if (auto* p = event->CastAsLocal<TEvSchemeShard::TEvModifySchemeTransaction>()) {
+                auto& record = p->Record;
+                if (record.TransactionSize() >= 1 && 
+                    record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpDropTable) {
+                    afterExport = waitForStats(2);
+                }
+            }
+            return prevObserverFunc(event);
+        });
+
         env.TestWaitNotification(runtime, exportId);
 
         TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-        const auto afterExport = waitForStats(2);
         UNIT_ASSERT_STRINGS_EQUAL(expected.DebugString(), afterExport.DebugString());
 
         TestForgetExport(runtime, ++txId, "/MyRoot", exportId);
@@ -1198,12 +1246,23 @@ partitioning_settings {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
+        runtime.GetAppData().FeatureFlags.SetEnableExportAutoDropping(true);
+        TBlockEvents<NKikimr::NWrappers::NExternalStorage::TEvPutObjectRequest> blockPartition01(runtime, [](auto&& ev) {
+            return ev->Get()->Request.GetKey() == "/data_01.csv";
+        });
+
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
-            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 10 } }}}
         )");
+        env.TestWaitNotification(runtime, txId);
+        
+        WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 1, "v1");
+        env.TestWaitNotification(runtime, txId);
+        WriteRow(runtime, ++txId, "/MyRoot/Table", 1, 100, "v100");
         env.TestWaitNotification(runtime, txId);
 
         TPortManager portManager;
@@ -1222,17 +1281,34 @@ partitioning_settings {
               }
             }
         )", port));
+        
+        runtime.WaitFor("put object request from 01 partition", [&]{ return blockPartition01.size() >= 1; });
+        bool isCompleted = false;
+
+        while (!isCompleted) {
+            const auto desc = TestGetExport(runtime, txId, "/MyRoot");
+            const auto entry = desc.GetResponse().GetEntry();
+            const auto& item = entry.GetItemsProgress(0);
+
+            if (item.parts_completed() > 0) {
+                isCompleted = true;
+                UNIT_ASSERT_VALUES_EQUAL(item.parts_total(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(item.parts_completed(), 1);
+                UNIT_ASSERT(item.has_start_time());
+            } else {
+                runtime.SimulateSleep(TDuration::Seconds(1));
+            }
+        }
+
+        blockPartition01.Stop();
+        blockPartition01.Unblock();
+        
         env.TestWaitNotification(runtime, txId);
 
         const auto desc = TestGetExport(runtime, txId, "/MyRoot");
-        const auto& entry = desc.GetResponse().GetEntry();
-        UNIT_ASSERT_VALUES_EQUAL(entry.ItemsProgressSize(), 1);
+        const auto entry = desc.GetResponse().GetEntry();
 
-        const auto& item = entry.GetItemsProgress(0);
-        UNIT_ASSERT_VALUES_EQUAL(item.parts_total(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(item.parts_completed(), 1);
-        UNIT_ASSERT(item.has_start_time());
-        UNIT_ASSERT(item.has_end_time());
+        UNIT_ASSERT_VALUES_EQUAL(entry.ItemsProgressSize(), 1);
     }
 
     Y_UNIT_TEST(ShouldRestartOnScanErrors) {
@@ -2644,5 +2720,72 @@ attributes {
         }, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, "", "", gen.GetChangefeeds());
 
         gen.Check();
+    }
+
+    Y_UNIT_TEST(AutoDropping) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+
+        auto request = Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port);
+
+        runtime.GetAppData().FeatureFlags.SetEnableExportAutoDropping(true);
+
+        Run(runtime, env, TVector<TString>{
+            R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+        }, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, "", "", {}, true);
+    }
+
+    Y_UNIT_TEST(DisableAutoDropping) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        auto request = Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", port);
+        
+        runtime.GetAppData().FeatureFlags.SetEnableExportAutoDropping(false);
+
+        Run(runtime, env, TVector<TString>{
+            R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+        }, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, "", "", {}, true);
     }
 }

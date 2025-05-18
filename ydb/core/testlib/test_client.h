@@ -24,6 +24,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/testlib/mock_transfer_writer_factory.h>
 #include <ydb/core/protos/kesus.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/core/protos/console_tenant.pb.h>
@@ -109,7 +110,6 @@ namespace Tests {
         using TControls = NKikimrConfig::TImmediateControlsConfig;
         using TLoggerInitializer = std::function<void (TTestActorRuntime&)>;
         using TStoragePoolKinds = TDomainsInfo::TDomain::TStoragePoolKinds;
-        using TProxyDSPtr = TIntrusivePtr<NFake::TProxyDS>;
 
         ui16 Port;
         ui16 GrpcPort = 0;
@@ -158,6 +158,8 @@ namespace Tests {
         std::shared_ptr<NKikimr::NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> PersQueueGetReadSessionsInfoWorkerFactory;
         std::shared_ptr<NKikimr::NHttpProxy::IAuthFactory> DataStreamsAuthFactory;
         std::shared_ptr<NKikimr::NPQ::TPersQueueMirrorReaderFactory> PersQueueMirrorReaderFactory = std::make_shared<NKikimr::NPQ::TPersQueueMirrorReaderFactory>();
+        std::shared_ptr<NKikimr::NReplication::NService::ITransferWriterFactory> TransferWriterFactory = std::make_shared<MockTransferWriterFactory>();
+
         bool EnableMetering = false;
         TString MeteringFilePath;
         TString AwsRegion;
@@ -170,7 +172,7 @@ namespace Tests {
         TString ServerCertFilePath;
         bool Verbose = true;
         bool UseSectorMap = false;
-        TVector<TProxyDSPtr> ProxyDSMocks;
+        TVector<TIntrusivePtr<NFake::TProxyDS>> ProxyDSMocks;
 
         std::function<IActor*(const TTicketParserSettings&)> CreateTicketParser = NKikimr::CreateTicketParser;
         std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory;
@@ -261,7 +263,7 @@ namespace Tests {
             return *this;
         }
 
-        TServerSettings& SetProxyDSMocks(const TVector<TProxyDSPtr>& proxyDSMocks) {
+        TServerSettings& SetProxyDSMocks(const TVector<TIntrusivePtr<NFake::TProxyDS>>& proxyDSMocks) {
             ProxyDSMocks = proxyDSMocks;
             return *this;
         }

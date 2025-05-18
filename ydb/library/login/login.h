@@ -212,7 +212,7 @@ public:
     TLoginProvider(const TPasswordComplexity& passwordComplexity, const TAccountLockout::TInitializer& accountLockoutInitializer);
     ~TLoginProvider();
 
-    std::vector<TString> GetGroupsMembership(const TString& member);
+    std::vector<TString> GetGroupsMembership(const TString& member) const;
     static TString GetTokenAudience(const TString& token);
     static std::chrono::system_clock::time_point GetTokenExpiresAt(const TString& token);
     static TString SanitizeJwtToken(const TString& token);

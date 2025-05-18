@@ -256,6 +256,9 @@ public:
         case TReplication::EState::Done:
             state.MutableDone();
             break;
+        case TReplication::EState::Paused:
+            state.MutablePaused();
+            break;
         case TReplication::EState::Error:
             if (auto issue = state.MutableError()->AddIssues()) {
                 issue->set_severity(static_cast<uint32_t>(NYdb::NIssue::ESeverity::Error));

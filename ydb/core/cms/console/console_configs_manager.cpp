@@ -56,7 +56,7 @@ void TConfigsManager::ReplaceMainConfigMetadata(const TString &config, bool forc
     try {
         if (!force) {
             auto metadata = NYamlConfig::GetMainMetadata(config);
-            opCtx.Cluster = metadata.Cluster.value_or(TString("unknown"));
+            opCtx.Cluster = metadata.Cluster.value_or(ClusterName);
             opCtx.Version = metadata.Version.value_or(0);
         } else {
             opCtx.Cluster = ClusterName;
@@ -213,7 +213,7 @@ void TConfigsManager::Bootstrap(const TActorContext &ctx)
                                                          ctx,
                                                          false,
                                                          NKikimrServices::CMS_CONFIGS);
-    ConfigsProvider = ctx.Register(new TConfigsProvider(ctx.SelfID));
+    ConfigsProvider = ctx.Register(new TConfigsProvider(ctx.SelfID, Counters));
 
     ui32 item = (ui32)NKikimrConsole::TConfigItem::AllowEditYamlInUiItem;
     ctx.Send(MakeConfigsDispatcherID(SelfId().NodeId()),

@@ -315,6 +315,10 @@ class DynamicConfigGenerator(object):
 
         if tenant.plan_resolution is not None:
             console_request.CreateTenantRequest.Request.options.plan_resolution = tenant.plan_resolution
+        if tenant.coordinators is not None:
+            console_request.CreateTenantRequest.Request.options.coordinators = tenant.coordinators
+        if tenant.mediators is not None:
+            console_request.CreateTenantRequest.Request.options.mediators = tenant.mediators
 
         return utils.message_to_string(console_request)
 

@@ -109,8 +109,7 @@ Y_UNIT_TEST_SUITE(Login) {
             .MinLowerCaseCount = 2,
             .MinUpperCaseCount = 2,
             .MinNumbersCount = 2,
-            .MinSpecialCharsCount = 2,
-            .SpecialChars = TPasswordComplexity::VALID_SPECIAL_CHARS
+            .MinSpecialCharsCount = 2
         });
 
         provider.UpdatePasswordCheckParameters(passwordComplexity);
@@ -564,7 +563,7 @@ Y_UNIT_TEST_SUITE(Login) {
             UNIT_ASSERT_VALUES_EQUAL(provider.IsLockedOut(provider.Sids[userName]), true);
             auto checkLockoutResponse = provider.CheckLockOutUser({.User = userName});
             UNIT_ASSERT_EQUAL(checkLockoutResponse.Status, TLoginProvider::TCheckLockOutResponse::EStatus::SUCCESS);
-            UNIT_ASSERT_STRING_CONTAINS(checkLockoutResponse.Error, TStringBuilder() << "User " << userName << " is not permitted to log in");
+            UNIT_ASSERT_STRING_CONTAINS(checkLockoutResponse.Error, TStringBuilder() << "User " << userName << " login denied: too many failed password attempts");
         }
 
         {

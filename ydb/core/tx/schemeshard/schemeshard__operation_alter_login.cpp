@@ -5,6 +5,8 @@
 
 #include <ydb/library/security/util.h>
 #include <ydb/core/base/auth.h>
+#include <ydb/core/base/local_user_token.h>
+
 
 #include <ydb/core/protos/auth.pb.h>
 
@@ -293,7 +295,7 @@ public:
 
     NLogin::TLoginProvider::TBasicResponse CanRemoveSid(TOperationContext& context, const TString sid, const TString& sidType) {
         if (!AppData()->FeatureFlags.GetEnableStrictAclCheck()) {
-            return {}; 
+            return {};
         }
 
         auto subTree = context.SS->ListSubTree(context.SS->RootPathId(), context.Ctx);
@@ -316,9 +318,7 @@ public:
     }
 
     void AddIsUserAdmin(const TString& user, NLogin::TLoginProvider& loginProvider, TParts& additionalParts) {
-        const auto providerGroups = loginProvider.GetGroupsMembership(user);
-        const TVector<NACLib::TSID> groups(providerGroups.begin(), providerGroups.end());
-        const auto userToken = NACLib::TUserToken(user, groups);
+        const auto userToken = NKikimr::BuildLocalUserToken(loginProvider, user);
 
         if (IsAdministrator(AppData(), &userToken)) {
             additionalParts.emplace_back("login_user_level", "admin");

@@ -97,13 +97,15 @@ struct TExprScope {
 };
 
 struct TSerializerCtx {
-    TSerializerCtx(TExprContext& exprCtx, const TString& cluster,
+    TSerializerCtx(TExprContext& exprCtx, const TString& database,
+        const TString& cluster,
         const TIntrusivePtr<NYql::TKikimrTablesData> tablesData,
         const TKikimrConfiguration::TPtr config, ui32 txCount,
         TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults,
         TTypeAnnotationContext& typeCtx,
         TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx)
         : ExprCtx(exprCtx)
+        , Database(database)
         , Cluster(cluster)
         , TablesData(tablesData)
         , Config(config)
@@ -121,6 +123,7 @@ struct TSerializerCtx {
     ui32 PlanNodeId = 0;
 
     const TExprContext& ExprCtx;
+    const TString Database;
     const TString& Cluster;
     const TIntrusivePtr<NYql::TKikimrTablesData> TablesData;
     const TKikimrConfiguration::TPtr Config;
@@ -314,7 +317,7 @@ private:
         TMaybe<TString> CteRefName;
         TMap<TString, NJson::TJsonValue> NodeInfo;
         TVector<TOperator> Operators;
-        THashSet<ui32> Plans;
+        TSet<ui32> Plans;
         const NKqpProto::TKqpPhyStage* StageProto;
         TMap<TString, TString> OptEstimates;
     };
@@ -795,7 +798,7 @@ private:
         AddOperator(stagePlanNode, "Source", op);
     }
 
-    void Visit(const TDqSink& sink, TQueryPlanNode& stagePlanNode) {
+    void Visit(const TDqSink& sink, const TDqStageBase& stage, TQueryPlanNode& stagePlanNode) {
         // Federated providers
         TOperator op;
         TCoDataSink dataSink = sink.DataSink().Cast<TCoDataSink>();
@@ -811,7 +814,69 @@ private:
 
         // Common settings that can be overwritten by provider
         op.Properties["SinkType"] = dataSinkCategory;
-        if (auto cluster = TryGetCluster(dataSink)) {
+        if (dataSinkCategory == NYql::KqpTableSinkName) {
+            auto settings = sink.Settings().Cast<TKqpTableSinkSettings>();
+
+            TString tablePath;
+            TTableWrite writeInfo;
+            if (settings.Mode().StringValue() == "replace") {
+                op.Properties["Name"] = "Replace";
+                writeInfo.Type = EPlanTableWriteType::MultiReplace;
+            } else if (settings.Mode().StringValue() == "upsert" || settings.Mode().StringValue().empty()) {
+                op.Properties["Name"] = "Upsert";
+                writeInfo.Type = EPlanTableWriteType::MultiUpsert;
+            } else if (settings.Mode().StringValue() == "insert") {
+                op.Properties["Name"] = "Insert";
+                writeInfo.Type = EPlanTableWriteType::MultiInsert;
+            } else if (settings.Mode().StringValue() == "delete") {
+                op.Properties["Name"] = "Delete";
+                writeInfo.Type = EPlanTableWriteType::MultiErase;
+            } else if (settings.Mode().StringValue() == "update") {
+                op.Properties["Name"] = "Update";
+                writeInfo.Type = EPlanTableWriteType::MultiUpdate;
+            } else if (settings.Mode().StringValue() == "fill_table") {
+                op.Properties["Name"] = "FillTable";
+                writeInfo.Type = EPlanTableWriteType::MultiReplace;
+            } else {
+                YQL_ENSURE(false, "Unsupported sink mode");
+            }
+
+            if (settings.Mode().StringValue() != "fill_table") {
+                tablePath = settings.Table().Path().StringValue();
+                const auto& tableData = SerializerCtx.TablesData->GetTable(SerializerCtx.Cluster, tablePath);
+                op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : tablePath;
+                op.Properties["Path"] = tablePath;
+            } else {
+                const auto originalPathNode = GetSetting(settings.Settings().Ref(), "OriginalPath");
+                AFL_ENSURE(originalPathNode);
+                tablePath = TCoNameValueTuple(originalPathNode).Value().Cast<TCoAtom>().StringValue();
+                op.Properties["Path"] = tablePath;
+
+                TString error;
+                std::pair<TString, TString> pathPair;
+                if (NKikimr::TrySplitPathByDb(tablePath, SerializerCtx.Database, pathPair, error)) {
+                    op.Properties["Table"]= pathPair.second;
+                } else {
+                    op.Properties["Table"] = tablePath;
+                }
+            }
+
+            if (writeInfo.Type != EPlanTableWriteType::MultiErase) {
+                const auto& tupleType = stage.Ref().GetTypeAnn()->Cast<TTupleExprType>();
+                YQL_ENSURE(tupleType);
+                YQL_ENSURE(tupleType->GetSize() == 1);
+                const auto& listType = tupleType->GetItems()[0]->Cast<TListExprType>();
+                YQL_ENSURE(listType);
+                const auto& structType = listType->GetItemType()->Cast<TStructExprType>();
+                YQL_ENSURE(structType);
+                for (const auto& item : structType->GetItems()) {
+                    writeInfo.Columns.push_back(TString(item->GetName()));
+                }
+            }
+
+            SerializerCtx.Tables[tablePath].Writes.push_back(writeInfo);
+            stagePlanNode.NodeInfo["Tables"].AppendValue(op.Properties["Table"]);
+        } else if (auto cluster = TryGetCluster(dataSink)) {
             TString dataSource = RemovePathPrefix(std::move(*cluster));
             op.Properties["ExternalDataSource"] = dataSource;
             op.Properties["Name"] = TStringBuilder() << "Write " << dataSource;
@@ -896,7 +961,7 @@ private:
             if (auto outputs = expr.Cast<TDqStageBase>().Outputs()) {
                 for (auto output : outputs.Cast()) {
                     if (auto sink = output.Maybe<TDqSink>()) {
-                        Visit(sink.Cast(), stagePlanNode);
+                        Visit(sink.Cast(), expr.Cast<TDqStageBase>(), stagePlanNode);
                     }
                 }
             }
@@ -2585,11 +2650,11 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NO
 // TODO(sk): check prepared statements params in read ranges
 // TODO(sk): check params from correlated subqueries // lookup join
 void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQuery& query,
-    TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, TExprContext& ctx, const TString& cluster,
-    const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TKikimrConfiguration::TPtr config,
+    TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, TExprContext& ctx, const TString& database,
+    const TString& cluster, const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TKikimrConfiguration::TPtr config,
     TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx)
 {
-    TSerializerCtx serializerCtx(ctx, cluster, tablesData, config, query.Transactions().Size(), std::move(pureTxResults), typeCtx, optCtx);
+    TSerializerCtx serializerCtx(ctx, database, cluster, tablesData, config, query.Transactions().Size(), std::move(pureTxResults), typeCtx, optCtx);
 
     /* bindingName -> stage */
     auto collectBindings = [&serializerCtx, &query] (auto id, const auto& phase) {

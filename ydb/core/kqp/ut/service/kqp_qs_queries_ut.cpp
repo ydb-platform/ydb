@@ -3420,9 +3420,10 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST(SeveralCTAS) {
+    Y_UNIT_TEST_TWIN(SeveralCTAS, UseSink) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableAstCache(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
@@ -3447,19 +3448,12 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 CREATE TABLE Table3 (
                     PRIMARY KEY (Key)
                 ) AS SELECT * FROM Table2 UNION ALL SELECT * FROM Table1;
-                SELECT * FROM Table1 ORDER BY Key;
-                SELECT * FROM Table2 ORDER BY Key;
-                SELECT * FROM Table3 ORDER BY Key;
             )", TTxControl::NoTx(), TExecuteQuerySettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 3);
-            // Results are empty. Snapshot was taken before tables were created, so we don't see changes after snapshot.
-            // This will be fixed in future, for example, by implicit commit before/after each ddl statement.
-            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
-            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(1)));
-            CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(2)));
+        }
 
-            result = db.ExecuteQuery(R"(
+        {
+            auto result = db.ExecuteQuery(R"(
                 SELECT * FROM Table1 ORDER BY Key;
                 SELECT * FROM Table2 ORDER BY Key;
                 SELECT * FROM Table3 ORDER BY Key;
@@ -4808,6 +4802,47 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(TableSink_OlapUpdate) {
         TUpdateFromTableTester tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
+    class TSinkOrderTester: public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+
+            for (size_t index = 0; index < 100; ++index) {
+                auto session = client.GetSession().GetValueSync().GetSession();
+
+                auto result = session.ExecuteQuery(fmt::format(R"(
+                    UPSERT INTO `/Root/DataShard` (Col1, Col2) VALUES ({}u, 0);
+                )", index), NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW())).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+                auto tx = result.GetTransaction();
+                UNIT_ASSERT(tx);
+
+                result = session.ExecuteQuery(fmt::format(R"(
+                    INSERT INTO `/Root/DataShard` (Col1, Col2) VALUES ({}u, 0);
+                )", index), NYdb::NQuery::TTxControl::Tx(tx->GetId()).CommitTx()).ExtractValueSync();
+                if (GetIsOlap()) {
+                    // https://github.com/ydb-platform/ydb/issues/14383
+                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+                }
+            }
+        }
+    };
+
+    Y_UNIT_TEST(TableSink_OltpOrder) {
+        TSinkOrderTester tester;
+        tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TableSink_OlapOrder) {
+        TSinkOrderTester tester;
         tester.SetIsOlap(true);
         tester.Execute();
     }

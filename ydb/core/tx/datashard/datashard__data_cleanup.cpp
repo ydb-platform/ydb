@@ -26,7 +26,19 @@ public:
             Response = std::make_unique<TEvDataShard::TEvForceDataCleanupResult>(
                 record.GetDataCleanupGeneration(),
                 Self->TabletID(),
-                NKikimrTxDataShard::TEvForceDataCleanupResult::FAILED);
+                NKikimrTxDataShard::TEvForceDataCleanupResult::WRONG_SHARD_STATE);
+            return true;
+        }
+
+        if (Self->Executor()->HasLoanedParts()) {
+            LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
+                "DataCleanup of tablet# " << Self->TabletID()
+                << ": has borrowed parts"
+                << ", requested from " << Ev->Sender);
+            Response = std::make_unique<TEvDataShard::TEvForceDataCleanupResult>(
+                record.GetDataCleanupGeneration(),
+                Self->TabletID(),
+                NKikimrTxDataShard::TEvForceDataCleanupResult::BORROWED);
             return true;
         }
 
@@ -55,6 +67,8 @@ public:
                 "DataCleanup of tablet# " << Self->TabletID()
                 << ": expired snapshots removed");
         }
+        Self->OutReadSets.Cleanup(db, ctx);
+
         Self->Executor()->CleanupData(Ev->Get()->Record.GetDataCleanupGeneration());
         Self->DataCleanupWaiters.insert({Ev->Get()->Record.GetDataCleanupGeneration(), Ev->Sender});
         return true;

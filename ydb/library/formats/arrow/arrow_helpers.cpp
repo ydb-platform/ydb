@@ -83,20 +83,26 @@ bool IsTrivial(const arrow::UInt64Array& permutation, const ui64 originalLength)
 }
 
 std::shared_ptr<arrow::RecordBatch> Reorder(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::UInt64Array>& permutation, const bool canRemove) {
+        const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::UInt64Array>& permutation,
+        const bool canRemove, arrow::MemoryPool* memoryPool) {
     Y_ABORT_UNLESS(permutation->length() == batch->num_rows() || canRemove);
 
-    auto res = IsTrivial(*permutation, batch->num_rows()) ? batch : arrow::compute::Take(batch, permutation);
+    arrow::compute::ExecContext ctx(memoryPool);
+    auto res = IsTrivial(*permutation, batch->num_rows())
+        ? batch
+        : arrow::compute::Take(batch, permutation, arrow::compute::TakeOptions::Defaults(), &ctx);
     Y_ABORT_UNLESS(res.ok());
     return (*res).record_batch();
 }
 
 THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> ShardingSplit(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const THashMap<ui64, std::vector<ui32>>& shardRows) {
+        const std::shared_ptr<arrow::RecordBatch>& batch,
+        const THashMap<ui64, std::vector<ui32>>& shardRows,
+        arrow::MemoryPool* memoryPool) {
     AFL_VERIFY(batch);
     std::shared_ptr<arrow::UInt64Array> permutation;
     {
-        arrow::UInt64Builder builder;
+        arrow::UInt64Builder builder(memoryPool);
         Y_VERIFY_OK(builder.Reserve(batch->num_rows()));
 
         for (auto&& [shardId, rowIdxs] : shardRows) {

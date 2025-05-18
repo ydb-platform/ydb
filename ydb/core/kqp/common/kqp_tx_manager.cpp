@@ -91,7 +91,6 @@ public:
         auto& shardInfo = ShardsInfo.at(shardId);
         if (auto lockPtr = shardInfo.Locks.FindPtr(lock.GetKey()); lockPtr) {
             if (lock.Proto.GetHasWrites()) {
-                AFL_ENSURE(!ReadOnly);
                 lockPtr->Lock.Proto.SetHasWrites(true);
             }
 
@@ -161,6 +160,14 @@ public:
             return iterator->second;
         }
         return nullptr;
+    }
+
+    void AddParticipantNode(const ui32 nodeId) override {
+        ParticipantNodes.insert(nodeId);
+    }
+
+    const THashSet<ui32>& GetParticipantNodes() const override {
+        return ParticipantNodes;
     }
 
     void SetTopicOperations(NTopic::TTopicOperations&& topicOperations) override {
@@ -307,10 +314,15 @@ public:
         return !dontNeedCommit;
     }
 
+    virtual ui64 GetCoordinator() const override {
+        return Coordinator;
+    }
+
     void StartPrepare() override {
         AFL_ENSURE(!CollectOnly);
         AFL_ENSURE(State == ETransactionState::COLLECTING);
         AFL_ENSURE(NeedCommit());
+        AFL_ENSURE(!BrokenLocks());
 
         THashSet<ui64> sendingColumnShardsSet;
         THashSet<ui64> receivingColumnShardsSet;
@@ -325,7 +337,7 @@ public:
                     SendingShards.insert(shardId);
                 }
             }
-            if (!shardInfo.Locks.empty()) {
+            if (!shardInfo.Locks.empty() || (shardInfo.Flags & EAction::READ)) {
                 SendingShards.insert(shardId);
                 if (shardInfo.IsOlap) {
                     sendingColumnShardsSet.insert(shardId);
@@ -417,6 +429,7 @@ public:
                 || (State == ETransactionState::COLLECTING
                     && IsSingleShard()));
         AFL_ENSURE(NeedCommit());
+        AFL_ENSURE(!BrokenLocks());
         State = ETransactionState::EXECUTING;
 
         for (auto& [_, shardInfo] : ShardsInfo) {
@@ -485,7 +498,8 @@ private:
 
     void MakeLocksIssue(const TShardInfo& shardInfo) {
         TStringBuilder message;
-        message << "Transaction locks invalidated. Tables: ";
+        message << "Transaction locks invalidated. ";
+        message << (shardInfo.Pathes.size() == 1 ? "Table: " : "Tables: ");
         bool first = true;
         // TODO: add error by pathid
         for (const auto& path : shardInfo.Pathes) {
@@ -501,6 +515,8 @@ private:
     THashSet<ui64> ShardsIds;
     THashMap<ui64, TShardInfo> ShardsInfo;
     std::unordered_set<TString> TablePathes;
+
+    THashSet<ui32> ParticipantNodes;
 
     THashMap<TTableId, std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>> TablePartitioning;
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/defs.h>
+#include <ydb/core/scheme/scheme_tablecell.h>
 #include <util/generic/bitmap.h>
 #include "flat_page_base.h"
 #include "flat_page_label.h"
@@ -88,6 +89,8 @@ namespace NKikimr::NTable::NPage {
             TRowId RowCount_;
             ui64 DataSize_;
 
+            auto operator<=>(const TShortChild&) const = default;
+
             inline TPageId GetPageId() const noexcept {
                 return PageId_;
             }
@@ -100,7 +103,9 @@ namespace NKikimr::NTable::NPage {
                 return DataSize_;
             }
 
-            auto operator<=>(const TShortChild&) const = default;
+            TString ToString() const {
+                return TStringBuilder() << "PageId: " << GetPageId() << " RowCount: " << GetRowCount() << " DataSize: " << GetDataSize();
+            }
         } Y_PACKED;
 
         static_assert(sizeof(TShortChild) == 20, "Invalid TBtreeIndexNode TShortChild size");
@@ -280,6 +285,23 @@ namespace NKikimr::NTable::NPage {
             explicit operator bool() const noexcept
             {
                 return Count() > 0;
+            }
+
+            void Describe(IOutputStream& out, const TKeyCellDefaults& keyDefaults) const
+            {
+                out << '{';
+
+                auto iter = Iter();
+                for (TPos pos : xrange(iter.Count())) {
+                    if (pos != 0) {
+                        out << ", ";
+                    }
+                    TString value;
+                    DbgPrintValue(value, iter.Next(), keyDefaults.BasicTypes()[pos]);
+                    out << value;
+                }
+
+                out << '}';
             }
 
         private:

@@ -45,9 +45,12 @@ std::shared_ptr<arrow::Table> ToTable(const std::shared_ptr<arrow::RecordBatch>&
 std::shared_ptr<arrow::RecordBatch> ToBatch(const std::shared_ptr<arrow::Table>& combinedTable);
 std::shared_ptr<arrow::RecordBatch> CombineBatches(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches);
 std::shared_ptr<arrow::RecordBatch> MergeColumns(const std::vector<std::shared_ptr<arrow::RecordBatch>>& rb);
-std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<ui32>& sharding, ui32 numShards);
-std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::vector<ui32>>& shardRows, const ui32 numShards);
-THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> ShardingSplit(const std::shared_ptr<arrow::RecordBatch>& batch, const THashMap<ui64, std::vector<ui32>>& shardRows);
+std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(
+    const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<ui32>& sharding, ui32 numShards);
+std::vector<std::shared_ptr<arrow::RecordBatch>> ShardingSplit(
+    const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::vector<ui32>>& shardRows, const ui32 numShards);
+THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> ShardingSplit(
+    const std::shared_ptr<arrow::RecordBatch>& batch, const THashMap<ui64, std::vector<ui32>>& shardRows, arrow::MemoryPool* memoryPool);
 
 std::unique_ptr<arrow::ArrayBuilder> MakeBuilder(
     const std::shared_ptr<arrow::Field>& field, const ui32 reserveItems = 0, const ui32 reserveSize = 0);
@@ -98,8 +101,11 @@ NJson::TJsonValue DebugJson(std::shared_ptr<arrow::Array> array, const ui32 posi
 TString DebugString(std::shared_ptr<arrow::Array> array, const ui32 position);
 NJson::TJsonValue DebugJson(std::shared_ptr<arrow::RecordBatch> array, const ui32 position);
 
-std::shared_ptr<arrow::RecordBatch> Reorder(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                            const std::shared_ptr<arrow::UInt64Array>& permutation, const bool canRemove);
+std::shared_ptr<arrow::RecordBatch> Reorder(
+    const std::shared_ptr<arrow::RecordBatch>& batch,
+    const std::shared_ptr<arrow::UInt64Array>& permutation,
+    const bool canRemove,
+    arrow::MemoryPool* pool = arrow::default_memory_pool());
 
 // Deep-copies all internal arrow::buffers - and makes sure that new buffers don't have any parents.
 std::shared_ptr<arrow::Table> DeepCopy(const std::shared_ptr<arrow::Table>& table, arrow::MemoryPool* pool = arrow::default_memory_pool());

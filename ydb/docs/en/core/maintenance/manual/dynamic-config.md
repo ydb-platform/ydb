@@ -13,7 +13,43 @@ This configuration is uploaded to the cluster, where it is reliably stored and d
 * Change actor system settings on individual nodes or groups of nodes;
 * And more.
 
-### Configuration examples {#example}
+## Preparing to use the dynamic configuration {#preparation}
+
+The following tasks should be performed before using the dynamic configuration in the cluster:
+
+1. Enable [database node authentication and authorization](../../devops/manual/node-authorization.md).
+
+2. Export the current settings from the [CMS](../../concepts/glossary.md#cms) in YAML format using the following command if [CMS-based configuration management](cms.md) has been used in the cluster:
+
+    ```bash
+    ./ydbd -s grpcs://<node1.ydb.tech>:2135 --ca-file ca.crt --token-file ydbd-token \
+         admin console configs dump-yaml > dynconfig.yaml
+    ```
+
+    Before running the command shown above, obtain the authentication token using the `ydb auth get-token` command, as detailed in the [cluster initial deployment procedure](../../devops/manual/initial-deployment.md#initialize-cluster).
+
+3. Prepare the initial dynamic configuration file:
+
+   * If there are non-empty CMS settings exported in the previous step, adjust the YAML file with the exported CMS settings:
+      * Add the `metadata` section based on the [configuration example](#example).
+      * Add the `yaml_config_enabled: true` parameter to the `config` section.
+   * If there are no previous CMS-based settings, use the [minimal configuration example](#example).
+   * For clusters using TLS encryption for [actor system interconnect](../../concepts/glossary.md#actor-system-interconnect), add the [interconnect TLS settings](../../reference/configuration/tls.md#interconnect) to the `config` section.
+
+4. Apply the dynamic configuration settings file to the cluster:
+
+    ```bash
+    # Apply the dynconfig.yaml on the cluster
+    {{ ydb-cli }} admin config replace -f dynconfig.yaml
+    ```
+
+{% note info %}
+
+The legacy configuration management via CMS will become unavailable after enabling dynamic configuration support on the {{ ydb-short-name }} cluster.
+
+{% endnote %}
+
+## Configuration examples {#example}
 
 Example of a minimal dynamic configuration for a single-datacenter cluster:
 

@@ -57,6 +57,29 @@
                                         "PlanNodeId": 7,
                                         "Plans": [
                                             {
+                                                "Node Type": "TableFullScan",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [],
+                                                        "Name": "TableFullScan",
+                                                        "Path": "/Root/postgres_jointest/coalesce-and-join.test_plan/xx",
+                                                        "ReadColumns": [
+                                                            "pkxx"
+                                                        ],
+                                                        "ReadRanges": [
+                                                            "pkxx (-\u221e, +\u221e)"
+                                                        ],
+                                                        "ReadRangesPointPrefixLen": "0",
+                                                        "Scan": "Parallel",
+                                                        "Table": "postgres_jointest/coalesce-and-join.test_plan/xx"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 6,
+                                                "Tables": [
+                                                    "postgres_jointest/coalesce-and-join.test_plan/xx"
+                                                ]
+                                            },
+                                            {
                                                 "Node Type": "Broadcast",
                                                 "PlanNodeId": 5,
                                                 "PlanNodeType": "Connection",
@@ -104,29 +127,6 @@
                                                             }
                                                         ]
                                                     }
-                                                ]
-                                            },
-                                            {
-                                                "Node Type": "TableFullScan",
-                                                "Operators": [
-                                                    {
-                                                        "Inputs": [],
-                                                        "Name": "TableFullScan",
-                                                        "Path": "/Root/postgres_jointest/coalesce-and-join.test_plan/xx",
-                                                        "ReadColumns": [
-                                                            "pkxx"
-                                                        ],
-                                                        "ReadRanges": [
-                                                            "pkxx (-\u221e, +\u221e)"
-                                                        ],
-                                                        "ReadRangesPointPrefixLen": "0",
-                                                        "Scan": "Parallel",
-                                                        "Table": "postgres_jointest/coalesce-and-join.test_plan/xx"
-                                                    }
-                                                ],
-                                                "PlanNodeId": 6,
-                                                "Tables": [
-                                                    "postgres_jointest/coalesce-and-join.test_plan/xx"
                                                 ]
                                             }
                                         ]

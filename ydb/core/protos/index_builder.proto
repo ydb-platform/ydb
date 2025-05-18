@@ -28,7 +28,7 @@ message TIndexBuildSettings {
     optional bool pg_mode = 8 [ default = false];
     optional bool if_not_exist = 9 [ default = false];
 
-    optional uint32 max_batch_rows = 3 [ default = 500 ];
+    optional uint32 max_batch_rows = 3 [ default = 50000 ];
     optional uint64 max_batch_bytes = 4 [ default = 8388608 ];
     optional uint32 max_shards_in_flight = 5 [ default = 32 ];
     optional uint32 max_retries_upload_batch = 6 [ default = 50 ];
@@ -49,6 +49,8 @@ message TEvCreateRequest {
     optional uint64 TxId = 2;
     optional string DatabaseName = 3;
     optional TIndexBuildSettings Settings = 4;
+    // Internal flag is true for system-generated operations and is false for those initiated directly by the user.
+    optional bool Internal = 5 [default = false];
 }
 
 message TEvCreateResponse {

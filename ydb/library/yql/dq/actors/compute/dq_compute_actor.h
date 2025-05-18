@@ -256,6 +256,8 @@ struct TComputeRuntimeSettings {
 
     i64 AsyncInputPushLimit = std::numeric_limits<i64>::max();
 
+    bool WithProgressStats = false;
+
     inline bool CollectNone() const {
         return StatsMode <= NDqProto::DQ_STATS_MODE_NONE;
     }

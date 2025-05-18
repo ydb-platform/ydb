@@ -4,6 +4,7 @@
 #include "secret_resolver.h"
 #include "target_discoverer.h"
 #include "target_table.h"
+#include "target_transfer.h"
 #include "tenant_resolver.h"
 #include "util.h"
 
@@ -169,6 +170,7 @@ public:
 
         switch (State) {
         case EState::Ready:
+        case EState::Paused:
             if (!Targets) {
                 return DiscoverTargets(ctx);
             } else {
@@ -228,6 +230,7 @@ private:
     NKikimrReplication::TReplicationConfig Config;
     EState State = EState::Ready;
     TString Issue;
+    EState DesiredState = EState::Ready;
     ui64 NextTargetId = 1;
     THashMap<ui64, TTarget> Targets;
     THashSet<ui64> PendingAlterTargets;
@@ -329,6 +332,14 @@ const TString& TReplication::GetIssue() const {
     return Impl->Issue;
 }
 
+TReplication::EState TReplication::GetDesiredState() const {
+    return Impl->DesiredState;
+}
+
+void TReplication::SetDesiredState(EState state) {
+    Impl->DesiredState = state;
+}
+
 void TReplication::SetNextTargetId(ui64 value) {
     Impl->NextTargetId = value;
 }
@@ -377,7 +388,7 @@ void TReplication::RemovePendingAlterTarget(ui64 id) {
 }
 
 bool TReplication::CheckAlterDone() const {
-    return Impl->State == EState::Ready && Impl->PendingAlterTargets.empty();
+    return (Impl->State == EState::Ready || Impl->State == EState::Paused) && Impl->PendingAlterTargets.empty();
 }
 
 void TReplication::UpdateLag(ui64 targetId, TDuration lag) {

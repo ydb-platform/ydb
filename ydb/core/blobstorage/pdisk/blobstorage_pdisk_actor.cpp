@@ -642,14 +642,27 @@ public:
             ev->Sender, evYardInit.CutLogID, evYardInit.WhiteboardProxyId, evYardInit.SlotId);
     }
 
-    void InitHandle(NPDisk::TEvYardControl::TPtr &ev) {
+    void OnPDiskStop(TActorId &sender, void *cookie) {
+        if (PDisk) {
+            PDisk->Stop();
+            *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::Stopped;
+            *PDisk->Mon.PDiskBriefState = TPDiskMon::TPDisk::Stopped;
+            *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::StoppedByYardControl;
+        }
+        InitError("Received TEvYardControl::PDiskStop");
+        Send(sender, new NPDisk::TEvYardControlResult(NKikimrProto::OK, cookie, {}));
+    }
 
+    void InitHandle(NPDisk::TEvYardControl::TPtr &ev) {
         const NPDisk::TEvYardControl &evControl = *ev->Get();
         switch (evControl.Action) {
         case TEvYardControl::PDiskStart:
             ControledStartResult = MakeHolder<IEventHandle>(ev->Sender, SelfId(),
                     new TEvYardControlResult(NKikimrProto::OK, evControl.Cookie, {}));
         break;
+        case TEvYardControl::PDiskStop:
+            OnPDiskStop(ev->Sender, evControl.Cookie);
+            break;
         default:
             Send(ev->Sender, new NPDisk::TEvYardControlResult(NKikimrProto::CORRUPTED, evControl.Cookie,
                         "Unexpected control action for pdisk in StateInit"));
@@ -837,10 +850,17 @@ public:
             break;
         }
         default:
+            // Only PDiskStart is allowed in StateError. PDiskStop is not allowed since PDisk in error state should already be stopped
+            // or in the process of being stopped.
             Send(ev->Sender, new NPDisk::TEvYardControlResult(NKikimrProto::CORRUPTED, evControl.Cookie, StateErrorReason));
             PDisk->Mon.YardControl.CountResponse();
             break;
         }
+    }
+
+    void ErrorHandle(TEvReadFormatResult::TPtr &ev) {
+        // Just ignore the event, disk is in error state.
+        Y_UNUSED(ev);
     }
 
     void ErrorHandle(NPDisk::TEvAskForCutLog::TPtr &ev) {
@@ -968,12 +988,7 @@ public:
             Send(ev->Sender, new NPDisk::TEvYardControlResult(NKikimrProto::OK, evControl.Cookie, {}));
             break;
         case TEvYardControl::PDiskStop:
-            PDisk->Stop();
-            *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::Stopped;
-            *PDisk->Mon.PDiskBriefState = TPDiskMon::TPDisk::Stopped;
-            *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::StoppedByYardControl;
-            InitError("Received TEvYardControl::PDiskStop");
-            Send(ev->Sender, new NPDisk::TEvYardControlResult(NKikimrProto::OK, evControl.Cookie, {}));
+            OnPDiskStop(ev->Sender, evControl.Cookie);
             break;
         case TEvYardControl::GetPDiskPointer:
             Y_ABORT_UNLESS(!evControl.Cookie);
@@ -1505,6 +1520,7 @@ public:
             hFunc(NPDisk::TEvChunkForget, ErrorHandle);
             hFunc(NPDisk::TEvYardControl, ErrorHandle);
             hFunc(NPDisk::TEvAskForCutLog, ErrorHandle);
+            hFunc(NPDisk::TEvReadFormatResult, ErrorHandle);
             hFunc(NPDisk::TEvWhiteboardReportResult, Handle);
             hFunc(NPDisk::TEvHttpInfoResult, Handle);
             hFunc(NPDisk::TEvReadLogContinue, Handle);

@@ -49,6 +49,9 @@ items:
     path: faq/toc_p.yaml
 - name: Загрузки
   href: downloads/index.md
+  include:
+    mode: link
+    path: downloads/toc_p.yaml
 - name: Публичные материалы
   include:
     mode: link

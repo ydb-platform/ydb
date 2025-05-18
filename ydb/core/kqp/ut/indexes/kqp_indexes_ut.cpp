@@ -899,10 +899,13 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    void DoUpsertWithoutIndexUpdate(bool uniq) {
+    void DoUpsertWithoutIndexUpdate(bool uniq, bool useSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -945,7 +948,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
             Cerr << stats.DebugString() << Endl;
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(),  uniqExtraStages + 5);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(),  uniqExtraStages + (useSink ? 4 : 5));
 
             // One read from main table
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access().size(), 1);
@@ -953,18 +956,23 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).reads().rows(), 0);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 2).table_access().size(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 3).table_access().size(), 0);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 4).table_access().size(), 2);
+            if (!useSink) {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 3).table_access().size(), 0);
+            }
+
+            const auto finalStage = useSink ? 3 : 4;
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access().size(), 2);
 
             // One update of main table
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 4).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 4).table_access(0).updates().rows(), 1);
-            UNIT_ASSERT(            !stats.query_phases(uniqExtraStages + 4).table_access(0).has_deletes());
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT(            !stats.query_phases(uniqExtraStages + finalStage).table_access(0).has_deletes());
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 4).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 4).table_access(1).updates().rows(), 1);
-            UNIT_ASSERT(            !stats.query_phases(uniqExtraStages + 4).table_access(1).has_deletes());
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(1).updates().rows(), 1);
+            UNIT_ASSERT(            !stats.query_phases(uniqExtraStages + finalStage).table_access(1).has_deletes());
 
             {
                 const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
@@ -989,7 +997,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                           .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), uniqExtraStages + 5);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), uniqExtraStages + (useSink ? 4 : 5));
 
             // One read from main table
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access().size(), 1);
@@ -997,13 +1005,18 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniq + 1).table_access(0).reads().rows(), 1);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 2).table_access().size(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 3).table_access().size(), 0);
+
+            if (!useSink) {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 3).table_access().size(), 0);
+            }
+
+            const auto finalStage = useSink ? 3 : 4;
 
             // One update of main table
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 4).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 4).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + 4).table_access(0).updates().rows(), 1);
-            UNIT_ASSERT(            !stats.query_phases(uniqExtraStages + 4).table_access(0).has_deletes());
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(uniqExtraStages + finalStage).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT(            !stats.query_phases(uniqExtraStages + finalStage).table_access(0).has_deletes());
 
             {
                 const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
@@ -1013,14 +1026,17 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(DoUpsertWithoutIndexUpdate, UniqIndex) {
-        DoUpsertWithoutIndexUpdate(UniqIndex);
+    Y_UNIT_TEST_QUAD(DoUpsertWithoutIndexUpdate, UniqIndex, UseSink) {
+        DoUpsertWithoutIndexUpdate(UniqIndex, UseSink);
     }
 
-    Y_UNIT_TEST(UpsertWithoutExtraNullDelete) {
+    Y_UNIT_TEST_TWIN(UpsertWithoutExtraNullDelete, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -1061,22 +1077,27 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 5);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 4 : 5);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access().size(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access().size(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access().size(), 2);
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(0).updates().rows(), 1);
-            UNIT_ASSERT(            !stats.query_phases(4).table_access(0).has_deletes());
+            if (!UseSink) {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access().size(), 0);
+            }
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(1).updates().rows(), 1);
-            UNIT_ASSERT(            !stats.query_phases(4).table_access(1).has_deletes());
+            const auto finalStage = UseSink ? 3 : 4;
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access().size(), 2);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT(            !stats.query_phases(finalStage).table_access(0).has_deletes());
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(1).updates().rows(), 1);
+            UNIT_ASSERT(            !stats.query_phases(finalStage).table_access(1).has_deletes());
         }
 
         {
@@ -1095,25 +1116,30 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT(result.IsSuccess());
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 5);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 4 : 5);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access().size(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access().size(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access().size(), 2);
+            if (!UseSink) {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access().size(), 0);
+            }
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(0).updates().rows(), 1);
-            UNIT_ASSERT(            !stats.query_phases(4).table_access(0).has_deletes());
+            const auto finalStage = UseSink ? 3 : 4;
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access().size(), 2);
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT(            !stats.query_phases(finalStage).table_access(0).has_deletes());
 
 
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(1).updates().rows(), 1);
-            UNIT_ASSERT(             stats.query_phases(4).table_access(1).has_deletes());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(1).deletes().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(1).name(), "/Root/TestTable/Index/indexImplTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(1).updates().rows(), 1);
+            UNIT_ASSERT(             stats.query_phases(finalStage).table_access(1).has_deletes());
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(1).deletes().rows(), 1);
         }
 
         {
@@ -1132,7 +1158,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                           .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 5);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 4 : 5);
 
             // One read from main table
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
@@ -1140,13 +1166,17 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(2).table_access().size(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access().size(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access().size(), 1);
+
+            const auto finalStage = UseSink ? 3 : 4;
+            if (!UseSink) {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(3).table_access().size(), 0);
+            }
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access().size(), 1);
 
             // One update of main table
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(4).table_access(0).updates().rows(), 1);
-            UNIT_ASSERT(            !stats.query_phases(4).table_access(0).has_deletes());
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(0).name(), "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(finalStage).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT(            !stats.query_phases(finalStage).table_access(0).has_deletes());
 
             {
                 const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
@@ -1171,20 +1201,21 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                           .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 1 : 4);
 
-            int idx = 1;
+            int idx = UseSink ? 0 : 1;
 
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 1);
             // One read of main table
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), UseSink ? 0 : 1);
 
+            
             // One update of index table
-            idx += 2;
+            idx += UseSink ? 0 : 2;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).updates().rows(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).updates().rows(), 1);    
 
             // Thats it, no phase for index table - we remove it on compile time
             {
@@ -1210,17 +1241,24 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
                           .ExtractValueSync();
             UNIT_ASSERT(result.IsSuccess());
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 1 : 2);
 
-            // One read of main table
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
+            if (!UseSink) {
+                // One read of main table
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
 
-            // One update of main table
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().rows(), 1);
+                // One update of main table
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TestTable");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().rows(), 1);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TestTable");
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 1);
+            }
 
             {
                 const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/Index/indexImplTable");
@@ -2873,10 +2911,13 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
-    Y_UNIT_TEST(SecondaryIndexReplace) {
+    Y_UNIT_TEST_TWIN(SecondaryIndexReplace, UseSink) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAppConfig(app);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -2994,10 +3035,13 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST(MultipleSecondaryIndex) {
+    Y_UNIT_TEST_TWIN(MultipleSecondaryIndex, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -3370,10 +3414,13 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
     }
 
 
-    Y_UNIT_TEST(MultipleSecondaryIndexWithSameComulns) {
+    Y_UNIT_TEST_TWIN(MultipleSecondaryIndexWithSameComulns, UseSink) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAppConfig(app);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -3706,10 +3753,13 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST(SecondaryIndexWithPrimaryKeySameComulns) {
+    Y_UNIT_TEST_TWIN(SecondaryIndexWithPrimaryKeySameComulns, UseSink) {
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAppConfig(app);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -4550,10 +4600,13 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
     }
 
-    Y_UNIT_TEST(DuplicateUpsertInterleaveParams) {
+    Y_UNIT_TEST_TWIN(DuplicateUpsertInterleaveParams, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -5262,10 +5315,13 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(UpdateDeletePlan) {
+    Y_UNIT_TEST_TWIN(UpdateDeletePlan, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
 
         auto db = kikimr.GetTableClient();
@@ -5368,10 +5424,13 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         CompareYson(R"([[[2]]])", FormatResultSetYson(result.GetResultSet(2)));
     }
 
-    Y_UNIT_TEST(UpdateIndexSubsetPk) {
+    Y_UNIT_TEST_TWIN(UpdateIndexSubsetPk, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
-            .SetKqpSettings({setting});
+            .SetKqpSettings({setting})
+            .SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
 
         auto db = kikimr.GetTableClient();
@@ -5411,7 +5470,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         AssertTableStats(result, "/Root/TestTable", {
-            .ExpectedReads = 1,
+            .ExpectedReads = UseSink ? 0 : 1,
             .ExpectedUpdates = 1
         });
 
@@ -5749,10 +5808,19 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             });
         }
     }
-    Y_UNIT_TEST(UpdateOnReadColumns) {
+    Y_UNIT_TEST_TWIN(UpdateOnReadColumns, UseSink) {
+        auto getKikimr = []() {
+            NKikimrConfig::TAppConfig appConfig;
+            appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+            auto setting = NKikimrKqp::TKqpSetting();
+            auto serverSettings = TKikimrSettings()
+                .SetKqpSettings({setting})
+                .SetAppConfig(appConfig);
+            return TKikimrRunner(serverSettings);
+        };
         {
             // Check that keys from non involved index are not in read columns
-            TKikimrRunner kikimr;
+            TKikimrRunner kikimr = getKikimr();
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
             CreateSampleTablesWithIndex(session);
@@ -5765,14 +5833,11 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
             auto table = plan["tables"][0];
             UNIT_ASSERT_VALUES_EQUAL(table["name"], "/Root/SecondaryKeys");
-            auto reads = table["reads"].GetArraySafe();
-            UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
-            UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 1);
+            UNIT_ASSERT(UseSink ? !table.Has("reads") : table.Has("reads"));
         }
         {
             // Check that keys from involved index are in read columns
-            TKikimrRunner kikimr;
+            TKikimrRunner kikimr = getKikimr();
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
             CreateSampleTablesWithIndex(session);
@@ -5792,7 +5857,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
         {
             // Check that all keys from involved index are in read columns
-            TKikimrRunner kikimr;
+            TKikimrRunner kikimr = getKikimr();
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
             CreateSampleTablesWithIndex(session);
@@ -5812,7 +5877,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
         {
             // Check that data colomns from involved index are in read columns
-            TKikimrRunner kikimr;
+            TKikimrRunner kikimr = getKikimr();
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
             CreateSampleTablesWithIndex(session);
@@ -5832,7 +5897,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
         {
             // Check that data colomns not from involved index aren't in read columns
-            TKikimrRunner kikimr;
+            TKikimrRunner kikimr = getKikimr();
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
             CreateSampleTablesWithIndex(session);
@@ -5845,10 +5910,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
             NJson::ReadJsonTree(result.GetPlan(), &plan, true);
             auto table = plan["tables"][0];
             UNIT_ASSERT_VALUES_EQUAL(table["name"], "/Root/SecondaryWithDataColumns");
-            auto reads = table["reads"].GetArraySafe();
-            UNIT_ASSERT_VALUES_EQUAL(reads.size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(reads[0]["type"], "Lookup");
-            UNIT_ASSERT_VALUES_EQUAL(reads[0]["columns"].GetArraySafe().size(), 1);
+            UNIT_ASSERT(UseSink ? !table.Has("reads") : table.Has("reads"));
         }
     }
 

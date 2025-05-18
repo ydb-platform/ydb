@@ -30,6 +30,7 @@ DEPENDS(
 PEERDIR(
     contrib/python/pyarrow
     ydb/tests/library
+    ydb/tests/library/fixtures
     ydb/tests/oss/canonical
     ydb/tests/oss/ydb_sdk_import
 )

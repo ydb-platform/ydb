@@ -432,6 +432,18 @@ private:
         Send(Self->TxAllocatorClient, new TEvTxAllocatorClient::TEvAllocate(), 0, exportInfo->Id);
     }
 
+    void PrepareAutoDropping(TSchemeShard* ss, TExportInfo::TPtr exportInfo, NIceDb::TNiceDb& db) {
+        bool isContinued = false;
+        PrepareDropping(ss, exportInfo, db, TExportInfo::EState::AutoDropping, [&](ui64 itemIdx) {
+            exportInfo->PendingDropItems.push_back(itemIdx);
+            isContinued = true;
+            AllocateTxId(exportInfo, itemIdx);
+        });
+        if (!isContinued) {
+            AllocateTxId(exportInfo);
+        }
+    }
+
     void SubscribeTx(TTxId txId) {
         Send(Self->SelfId(), new TEvSchemeShard::TEvNotifyTxCompletion(ui64(txId)));
     }
@@ -617,7 +629,7 @@ private:
                 const auto& item = exportInfo->Items.at(itemIdx);
 
                 if (item.WaitTxId == InvalidTxId) {
-                    if (item.SourcePathType == NKikimrSchemeOp::EPathTypeTable) {
+                    if (item.SourcePathType == NKikimrSchemeOp::EPathTypeTable && item.State <= EState::Transferring) {
                         pendingTables.emplace_back(itemIdx);
                     } else {
                         UploadScheme(exportInfo, itemIdx, ctx);
@@ -665,6 +677,7 @@ private:
             SendNotificationsIfFinished(exportInfo);
             break;
 
+        case EState::AutoDropping:
         case EState::Dropping:
             if (!exportInfo->AllItemsAreDropped()) {
                 for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
@@ -749,6 +762,7 @@ private:
             }
             break;
 
+        case EState::AutoDropping:
         case EState::Dropping:
             if (exportInfo->PendingDropItems) {
                 itemIdx = PopFront(exportInfo->PendingDropItems);
@@ -821,6 +835,7 @@ private:
                 }
                 break;
 
+            case EState::AutoDropping:
             case EState::Dropping:
                 if (isMultipleMods || isNotExist) {
                     if (record.GetPathDropTxId()) {
@@ -925,6 +940,7 @@ private:
             Self->PersistExportItemState(db, exportInfo, itemIdx);
             break;
 
+        case EState::AutoDropping:
         case EState::Dropping:
             if (!exportInfo->AllItemsAreDropped()) {
                 Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
@@ -1011,7 +1027,11 @@ private:
             Self->PersistExportItemState(db, exportInfo, itemIdx);
 
             if (AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                EndExport(exportInfo, EState::Done, db);
+                if (!AppData()->FeatureFlags.GetEnableExportAutoDropping()) {
+                    EndExport(exportInfo, EState::Done, db);
+                } else {
+                    PrepareAutoDropping(Self, exportInfo, db);
+                }
             }
         } else if (exportInfo->State == EState::Cancellation) {
             item.State = EState::Cancelled;
@@ -1140,14 +1160,19 @@ private:
                 }
             }
             if (!itemHasIssues && AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                exportInfo->State = EState::Done;
-                exportInfo->EndTime = TAppData::TimeProvider->Now();
+                if (!AppData()->FeatureFlags.GetEnableExportAutoDropping()) {
+                    exportInfo->State = EState::Done;
+                    exportInfo->EndTime = TAppData::TimeProvider->Now();
+                } else {
+                    PrepareAutoDropping(Self, exportInfo, db);
+                }
             }
 
             Self->PersistExportItemState(db, exportInfo, itemIdx);
             break;
         }
 
+        case EState::AutoDropping:
         case EState::Dropping:
             if (!exportInfo->AllItemsAreDropped()) {
                 Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
@@ -1162,6 +1187,10 @@ private:
                 }
             } else {
                 SendNotificationsIfFinished(exportInfo, true); // for tests
+
+                if (exportInfo->State == EState::AutoDropping) {
+                    return EndExport(exportInfo, EState::Done, db);
+                }
 
                 if (exportInfo->Uid) {
                     Self->ExportsByUid.erase(exportInfo->Uid);

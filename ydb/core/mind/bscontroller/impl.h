@@ -20,6 +20,8 @@ namespace NKikimr {
 
 namespace NBsController {
 
+class TGroupGeometryInfo;
+
 using NTabletFlatExecutor::TTabletExecutedFlat;
 using NTabletFlatExecutor::ITransaction;
 using NTabletFlatExecutor::TTransactionBase;
@@ -284,6 +286,7 @@ public:
             const ui64 allocatedSizeBefore = Metrics.GetAllocatedSize();
             const ui32 prevStatusFlags = Metrics.GetStatusFlags();
             Metrics.MergeFrom(vDiskMetrics);
+            Metrics.DiscardUnknownFields();
             MetricsDirty = true;
             UpdateVDiskMetrics();
             *allocatedSizeIncrementPtr = Metrics.GetAllocatedSize() - allocatedSizeBefore;
@@ -617,6 +620,12 @@ public:
         // also it depends on the Status of underlying PDisks, so every time their status change, group status has to
         // be recalculated too
         void CalculateGroupStatus();
+
+        // group layout status: whether it is positioned correctly
+        bool LayoutCorrect = false;
+
+        void CalculateLayoutStatus(TBlobStorageController *self, TBlobStorageGroupInfo::TTopology *topology,
+            const std::function<TGroupGeometryInfo()>& getGeom);
 
         template<typename T>
         static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
@@ -1512,6 +1521,7 @@ public:
 private:
     TString InstanceId;
     std::shared_ptr<std::atomic_uint64_t> SelfHealUnreassignableGroups = std::make_shared<std::atomic_uint64_t>();
+    std::shared_ptr<std::atomic_uint64_t> GroupLayoutSanitizerInvalidGroups = std::make_shared<std::atomic_uint64_t>();
     TMaybe<TActorId> MigrationId;
     TVSlots VSlots; // ordering is important
     TPDisks PDisks; // ordering is important
@@ -1551,6 +1561,7 @@ private:
     std::optional<TString> StorageYamlConfig; // if separate config is in effect
     ui64 StorageYamlConfigVersion = 0;
     ui64 StorageYamlConfigHash = 0;
+    ui64 ExpectedStorageYamlConfigVersion = 0;
     TBackoffTimer GetBlockBackoff{1, 1000};
 
     THashMap<TPDiskId, std::reference_wrapper<const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk>> StaticPDiskMap;
@@ -1561,6 +1572,7 @@ private:
     bool AllowMultipleRealmsOccupation = true;
     bool StorageConfigObtained = false;
     bool Loaded = false;
+    bool EnableConfigV2 = false;
     std::shared_ptr<TControlWrapper> EnableSelfHealWithDegraded;
 
     struct TLifetimeToken {};
@@ -1788,11 +1800,16 @@ private:
 
     void OnActivateExecutor(const TActorContext&) override;
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    THashSet<TActorId> ConfigLock; // PipeServerId's locking configuration change
+
     void Handle(TEvNodeWardenStorageConfig::TPtr ev);
     void Handle(TEvents::TEvUndelivered::TPtr ev);
     bool HostConfigEquals(const THostConfigInfo& left, const NKikimrBlobStorage::TDefineHostConfig& right) const;
     void ApplyStorageConfig(bool ignoreDistconf = false);
     void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev);
+    void Handle(TEvBlobStorage::TEvControllerDistconfRequest::TPtr ev);
 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) override;
     void ProcessPostQuery(const NActorsProto::TRemoteHttpInfo& query, TActorId sender);
@@ -1970,9 +1987,18 @@ private:
     ITransaction* CreateTxMigrate();
     ITransaction* CreateTxLoadEverything();
     ITransaction* CreateTxUpdateSeenOperational(TVector<TGroupId> groups);
+
+    struct TAuditLogInfo {
+        TString PeerName;
+        const NACLib::TUserToken UserToken;
+    };
+
     ITransaction* CreateTxCommitConfig(std::optional<TYamlConfig>&& yamlConfig,
         std::optional<std::optional<TString>>&& storageYamlConfig,
-        std::optional<NKikimrBlobStorage::TStorageConfig>&& storageConfig);
+        std::optional<NKikimrBlobStorage::TStorageConfig>&& storageConfig,
+        std::optional<ui64> expectedStorageYamlConfigVersion,
+        std::unique_ptr<IEventHandle> handle,
+        std::optional<bool> switchEnableConfigV2, std::optional<TAuditLogInfo>&& auditLogInfo);
 
     struct TVDiskAvailabilityTiming {
         TVSlotId VSlotId;

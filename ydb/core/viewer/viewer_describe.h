@@ -48,6 +48,9 @@ public:
     }
 
     void Bootstrap() override {
+        if (NeedToRedirect()) {
+            return;
+        }
         const auto& params(Event->Get()->Request.GetParams());
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);

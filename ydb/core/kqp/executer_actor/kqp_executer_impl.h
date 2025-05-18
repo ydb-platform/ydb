@@ -70,6 +70,7 @@ using EExecType = TEvKqpExecuter::TEvTxResponse::EExecutionType;
 
 const ui64 MaxTaskSize = 48_MB;
 constexpr ui64 PotentialUnsigned64OverflowLimit = (std::numeric_limits<ui64>::max() >> 1);
+constexpr ui64 PriorityTxShift = 32;
 
 std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo& stageInfo, const TTask& task);
 
@@ -264,6 +265,9 @@ protected:
         for (auto& [shardId, nodeId] : ShardIdToNodeId) {
             ShardsOnNode[nodeId].push_back(shardId);
             ParticipantNodes.emplace(nodeId);
+            if (TxManager) {
+                TxManager->AddParticipantNode(nodeId);
+            }
         }
 
         if (IsDebugLogEnabled()) {
@@ -568,7 +572,6 @@ protected:
         }
 
         if (BufferActorId && Request.LocksOp == ELocksOp::Rollback) {
-            YQL_ENSURE(Request.Transactions.empty());
             static_cast<TDerived*>(this)->Finalize();
             return;
         }
@@ -762,15 +765,22 @@ protected:
     void HandleAbortExecution(TEvKqp::TEvAbortExecution::TPtr& ev) {
         auto& msg = ev->Get()->Record;
         NYql::TIssues issues = ev->Get()->GetIssues();
-        LOG_D("Got EvAbortExecution, status: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
+        HandleAbortExecution(msg.GetStatusCode(), ev->Get()->GetIssues(), ev->Sender != Target);
+    }
+
+    void HandleAbortExecution(
+            NYql::NDqProto::StatusIds::StatusCode statusCode, 
+            const NYql::TIssues& issues,
+            const bool sessionSender) {
+        LOG_D("Got EvAbortExecution, status: " << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode)
             << ", message: " << issues.ToOneLineString());
-        auto statusCode = NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode());
-        if (statusCode == Ydb::StatusIds::INTERNAL_ERROR) {
+        auto ydbStatusCode = NYql::NDq::DqStatusToYdbStatus(statusCode);
+        if (ydbStatusCode == Ydb::StatusIds::INTERNAL_ERROR) {
             InternalError(issues);
-        } else if (statusCode == Ydb::StatusIds::TIMEOUT) {
-            TimeoutError(ev->Sender, issues);
+        } else if (ydbStatusCode == Ydb::StatusIds::TIMEOUT) {
+            TimeoutError(sessionSender, issues);
         } else {
-            RuntimeError(NYql::NDq::DqStatusToYdbStatus(msg.GetStatusCode()), issues);
+            RuntimeError(NYql::NDq::DqStatusToYdbStatus(statusCode), issues);
         }
     }
 
@@ -968,7 +978,7 @@ protected:
             task.Meta.Type = TTaskMeta::TTaskType::Compute;
 
             FillSecureParamsFromStage(task.Meta.SecureParams, stage);
-            BuildSinks(stage, task);
+            BuildSinks(stage, stageInfo, task);
 
             LOG_D("Stage " << stageInfo.Id << " create sysview scan task: " << task.Id);
         }
@@ -992,7 +1002,7 @@ protected:
         output.SinkSettings = extSink.GetSettings();
     }
 
-    void BuildInternalSinks(const NKqpProto::TKqpSink& sink, TKqpTasksGraph::TTaskType& task) {
+    void BuildInternalSinks(const NKqpProto::TKqpSink& sink, const TStageInfo& stageInfo, TKqpTasksGraph::TTaskType& task) {
         const auto& intSink = sink.GetInternalSink();
         auto& output = task.Outputs[sink.GetOutputIndex()];
         output.Type = TTaskOutputType::Sink;
@@ -1000,7 +1010,12 @@ protected:
 
         if (intSink.GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
             NKikimrKqp::TKqpTableSinkSettings settings;
-            YQL_ENSURE(intSink.GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+            if (!stageInfo.Meta.ResolvedSinkSettings) {
+                YQL_ENSURE(intSink.GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+            } else {
+                settings = *stageInfo.Meta.ResolvedSinkSettings;
+            }
+        
             auto& lockTxId = TasksGraph.GetMeta().LockTxId;
             if (lockTxId) {
                 settings.SetLockTxId(*lockTxId);
@@ -1019,6 +1034,8 @@ protected:
                 settings.SetLockMode(*TasksGraph.GetMeta().LockMode);
             }
 
+            settings.SetPriority((task.StageId.TxId << PriorityTxShift) + settings.GetPriority());
+
             output.SinkSettings.ConstructInPlace();
             output.SinkSettings->PackFrom(settings);
         } else {
@@ -1026,14 +1043,14 @@ protected:
         }
     }
 
-    void BuildSinks(const NKqpProto::TKqpPhyStage& stage, TKqpTasksGraph::TTaskType& task) {
+    void BuildSinks(const NKqpProto::TKqpPhyStage& stage, const TStageInfo& stageInfo, TKqpTasksGraph::TTaskType& task) {
         if (stage.SinksSize() > 0) {
             YQL_ENSURE(stage.SinksSize() == 1, "multiple sinks are not supported");
             const auto& sink = stage.GetSinks(0);
             YQL_ENSURE(sink.GetOutputIndex() < task.Outputs.size());
 
             if (sink.HasInternalSink()) {
-                BuildInternalSinks(sink, task);
+                BuildInternalSinks(sink, stageInfo, task);
             } else if (sink.HasExternalSink()) {
                 BuildExternalSinks(sink, task);
             } else {
@@ -1112,7 +1129,7 @@ protected:
 
         // finish building
         for (auto taskId : tasksIds) {
-            BuildSinks(stage, TasksGraph.GetTask(taskId));
+            BuildSinks(stage, stageInfo, TasksGraph.GetTask(taskId));
         }
     }
 
@@ -1363,7 +1380,7 @@ protected:
 
         auto buildSinks = [&]() {
             for (const ui64 taskId : createdTasksIds) {
-                BuildSinks(stage, TasksGraph.GetTask(taskId));
+                BuildSinks(stage, stageInfo, TasksGraph.GetTask(taskId));
             }
         };
 
@@ -1474,7 +1491,7 @@ protected:
             task.Meta.Type = TTaskMeta::TTaskType::Compute;
             task.Meta.ExecuterId = SelfId();
             FillSecureParamsFromStage(task.Meta.SecureParams, stage);
-            BuildSinks(stage, task);
+            BuildSinks(stage, stageInfo, task);
             LOG_D("Stage " << stageInfo.Id << " create compute task: " << task.Id);
         }
     }
@@ -1644,6 +1661,7 @@ protected:
             .UserToken = UserToken,
             .Deadline = Deadline.GetOrElse(TInstant::Zero()),
             .StatsMode = Request.StatsMode,
+            .WithProgressStats = Request.ProgressStatsPeriod != TDuration::Zero(),
             .RlPath = Request.RlPath,
             .ExecuterSpan =  ExecuterSpan,
             .ResourcesSnapshot = std::move(ResourcesSnapshot),
@@ -1727,7 +1745,7 @@ protected:
                         auto& task = TasksGraph.GetTask(taskIdx);
                         task.Meta.SetEnableShardsSequentialScan(readSettings.Sorted);
                         PrepareScanMetaForUsage(task.Meta, keyTypes);
-                        BuildSinks(stage, task);
+                        BuildSinks(stage, stageInfo, task);
                     }
                 }
 
@@ -1756,7 +1774,7 @@ protected:
                         task.Meta.Type = TTaskMeta::TTaskType::Scan;
                         task.SetMetaId(metaGlueingId);
                         FillSecureParamsFromStage(task.Meta.SecureParams, stage);
-                        BuildSinks(stage, task);
+                        BuildSinks(stage, stageInfo, task);
                     }
                 }
             }
@@ -1877,7 +1895,7 @@ protected:
         ReplyErrorAndDie(status, &issues);
     }
 
-    void TimeoutError(TActorId abortSender, NYql::TIssues issues) {
+    void TimeoutError(bool sessionSender, NYql::TIssues issues) {
         if (AlreadyReplied) {
             LOG_E("Timeout when we already replied - not good" << Endl << TBackTrace().PrintToString() << Endl);
             return;
@@ -1901,7 +1919,7 @@ protected:
         NYql::IssuesToMessage(issues, ResponseEv->Record.MutableResponse()->MutableIssues());
 
         // TEvAbortExecution can come from either ComputeActor or SessionActor (== Target).
-        if (abortSender != Target) {
+        if (!sessionSender) {
             auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(status, issues);
             this->Send(Target, abortEv.Release());
         }

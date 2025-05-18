@@ -2668,6 +2668,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         Done = 240,
         Dropping = 241,
         Dropped = 242,
+        AutoDropping = 243,
         Cancellation = 250,
         Cancelled = 251,
     };
@@ -2782,12 +2783,16 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         return State == EState::Dropping;
     }
 
+    bool IsAutoDropping() const {
+        return State == EState::AutoDropping;
+    }
+
     bool IsCancelling() const {
         return State == EState::Cancellation;
     }
 
     bool IsInProgress() const {
-        return IsPreparing() || IsWorking() || IsDropping() || IsCancelling();
+        return IsPreparing() || IsWorking() || IsDropping() || IsAutoDropping() || IsCancelling();
     }
 
     bool IsDone() const {
@@ -2869,7 +2874,6 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         int NextIndexIdx = 0;
         int NextChangefeedIdx = 0;
         TString Issue;
-        int ViewCreationRetries = 0;
         TPathId StreamImplPathId;
 
         TItem() = default;
@@ -2901,6 +2905,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     EState State = EState::Invalid;
     TString Issue;
     TVector<TItem> Items;
+    int WaitingViews = 0;
 
     TSet<TActorId> Subscribers;
 

@@ -382,8 +382,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
         }
     }
 
-    Y_UNIT_TEST(InsertDuplicates) {
+    Y_UNIT_TEST_TWIN(InsertDuplicates, UseSink) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -404,13 +405,14 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
             UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const auto& issue) {
-                return issue.GetMessage().contains("Duplicated keys found.");
+                return issue.GetMessage().contains(UseSink ? "Conflict with existing key." : "Duplicated keys found.");
             }));
         }
     }
 
-    Y_UNIT_TEST(InsertExistingKey) {
+    Y_UNIT_TEST_TWIN(InsertExistingKey, UseSink) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1015,8 +1017,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
         }
     }
 
-    Y_UNIT_TEST(TxWithReadAtTheEnd) {
+    Y_UNIT_TEST_TWIN(TxWithReadAtTheEnd, UseSink) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1058,8 +1061,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(stats.query_phases().size() - 1).table_access().size(), 0);
     }
 
-    Y_UNIT_TEST(InteractiveTxWithReadAtTheEnd) {
+    Y_UNIT_TEST_TWIN(InteractiveTxWithReadAtTheEnd, UseSink) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -1115,13 +1119,15 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
             ])", FormatResultSetYson(result.GetResultSet(0)));
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 4 : 5);
             // check that last (commit) phase is empty
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(stats.query_phases().size() - 1).table_access().size(), 0);
         }
     }
 
-    Y_UNIT_TEST(TxWithWriteAtTheEnd) {
+    Y_UNIT_TEST_TWIN(TxWithWriteAtTheEnd, UseSink) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -2075,8 +2081,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
         }
     }
 
-    Y_UNIT_TEST(ForceImmediateEffectsExecution) {
+    Y_UNIT_TEST_TWIN(ForceImmediateEffectsExecution, UseSink) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig).SetEnableForceImmediateEffectsExecution(true);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -2101,12 +2108,14 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
             // compute phase + effect phase
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 1 : 2);
 
-            const auto& literalPhase = stats.query_phases(0);
-            const auto& effectPhase = stats.query_phases(1);
+            if (!UseSink) {
+                const auto& literalPhase = stats.query_phases(0);
+                UNIT_ASSERT_VALUES_EQUAL(literalPhase.table_access().size(), 0);
+            }
 
-            UNIT_ASSERT_VALUES_EQUAL(literalPhase.table_access().size(), 0);
+            const auto& effectPhase = stats.query_phases(UseSink ? 0 : 1);
             UNIT_ASSERT_VALUES_EQUAL(effectPhase.table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(effectPhase.table_access(0).name(), "/Root/TestImmediateEffects");
             UNIT_ASSERT_VALUES_EQUAL(effectPhase.table_access(0).updates().rows(), 1);
@@ -2122,12 +2131,14 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
 
             auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
             // compute phase + effect phase
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseSink ? 1 : 2);
 
-            const auto& literalPhase = stats.query_phases(0);
-            const auto& effectPhase = stats.query_phases(1);
+            if (!UseSink) {
+                const auto& literalPhase = stats.query_phases(0);
+                UNIT_ASSERT_VALUES_EQUAL(literalPhase.table_access().size(), 0);
+            }
 
-            UNIT_ASSERT_VALUES_EQUAL(literalPhase.table_access().size(), 0);
+            const auto& effectPhase = stats.query_phases(UseSink ? 0 : 1);
             UNIT_ASSERT_VALUES_EQUAL(effectPhase.table_access().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(effectPhase.table_access(0).name(), "/Root/TestImmediateEffects");
             UNIT_ASSERT_VALUES_EQUAL(effectPhase.table_access(0).deletes().rows(), 1);
@@ -2227,6 +2238,160 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
         }
     }
 
+    Y_UNIT_TEST(ManyFlushes) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateTestTable(session);
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects;
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (3u, "Three"),
+                    (4u, "Four");
+
+                SELECT * FROM TestImmediateEffects;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]]
+            ])", FormatResultSetYson(result.GetResultSet(1)));
+        }
+
+        {  // multiple effects
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES (5u, "Five");
+                SELECT * FROM TestImmediateEffects;
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES (6u, "Six");
+                SELECT * FROM TestImmediateEffects;
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES (7u, "Seven");
+                SELECT * FROM TestImmediateEffects;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]];
+                [[5u];["Five"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]];
+                [[5u];["Five"]];
+                [[6u];["Six"]]
+            ])", FormatResultSetYson(result.GetResultSet(1)));
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]];
+                [[5u];["Five"]];
+                [[6u];["Six"]];
+                [[7u];["Seven"]]
+            ])", FormatResultSetYson(result.GetResultSet(2)));
+        }
+    }
+
+     Y_UNIT_TEST(Interactive) {
+        NKikimrConfig::TAppConfig appConfig;
+        auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateTestTable(session);
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects;
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES
+                    (3u, "Three"),
+                    (4u, "Four");
+
+                SELECT * FROM TestImmediateEffects;
+            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]]
+            ])", FormatResultSetYson(result.GetResultSet(1)));
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES (5u, "Five");
+            )", TTxControl::BeginTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto tx = result.GetTransaction();
+
+            result = session.ExecuteDataQuery(R"(
+                --!syntax_v1
+
+                SELECT * FROM TestImmediateEffects;
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES (6u, "Six");
+                SELECT * FROM TestImmediateEffects;
+                UPSERT INTO TestImmediateEffects (Key, Value) VALUES (7u, "Seven");
+                SELECT * FROM TestImmediateEffects;
+            )", TTxControl::Tx(*tx)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]];
+                [[5u];["Five"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]];
+                [[5u];["Five"]];
+                [[6u];["Six"]]
+            ])", FormatResultSetYson(result.GetResultSet(1)));
+            CompareYson(R"([
+                [[1u];["One"]];
+                [[2u];["Two"]];
+                [[3u];["Three"]];
+                [[4u];["Four"]];
+                [[5u];["Five"]];
+                [[6u];["Six"]];
+                [[7u];["Seven"]]
+            ])", FormatResultSetYson(result.GetResultSet(2)));
+
+            auto commitResult = tx->Commit().ExtractValueSync();
+            UNIT_ASSERT(commitResult.IsSuccess());
+        }
+    }
 }
 
 } // namespace NKqp

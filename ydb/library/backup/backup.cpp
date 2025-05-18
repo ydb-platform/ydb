@@ -1476,8 +1476,12 @@ void BackupCluster(const TDriver& driver, TFsPath folderPath) {
 
         BackupClusterRoot(driver, folderPath);
         auto databases = ListDatabases(driver);
+        TDriverConfig dbDriverCfg = driver.GetConfig();
         for (const auto& database : databases.GetPaths()) {
-            BackupDatabaseImpl(driver, TString(database), folderPath.Child("." + database), {
+            dbDriverCfg.SetDatabase(database);
+            TDriver dbDriver(dbDriverCfg);
+
+            BackupDatabaseImpl(dbDriver, TString(database), folderPath.Child("." + database), {
                 .WithRegularUsers = false,
                 .WithContent = false,
             });

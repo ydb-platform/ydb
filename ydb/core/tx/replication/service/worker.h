@@ -20,6 +20,7 @@ struct TEvWorker {
         EvGone,
         EvStatus,
         EvDataEnd,
+        EvCommit,
 
         EvEnd,
     };
@@ -27,24 +28,41 @@ struct TEvWorker {
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_REPLICATION_WORKER));
 
     struct TEvHandshake: public TEventLocal<TEvHandshake, EvHandshake> {};
-    struct TEvPoll: public TEventLocal<TEvPoll, EvPoll> {};
+
+    struct TEvPoll: public TEventLocal<TEvPoll, EvPoll> {
+        bool SkipCommit;
+
+        explicit TEvPoll(bool skipCommit = false);
+        TString ToString() const override;
+    };
+
+    struct TEvCommit: public TEventLocal<TEvCommit, EvCommit> {
+        size_t Offset;
+
+        explicit TEvCommit(size_t offset);
+        TString ToString() const override;
+    };
 
     struct TEvData: public TEventLocal<TEvData, EvData> {
         struct TRecord {
             ui64 Offset;
             TString Data;
             TInstant CreateTime;
+            TString MessageGroupId;
+            TString ProducerId;
+            ui64 SeqNo;
 
-            explicit TRecord(ui64 offset, const TString& data, TInstant createTime = TInstant::Zero());
-            explicit TRecord(ui64 offset, TString&& data, TInstant createTime = TInstant::Zero());
+            explicit TRecord(ui64 offset, const TString& data, TInstant createTime, const TString& messageGroupId, const TString& producerId, ui64 seqNo);
+            explicit TRecord(ui64 offset, TString&& data, TInstant createTime, TString&& messageGroupId, TString&& producerId, ui64 seqNo);
             void Out(IOutputStream& out) const;
         };
 
+        ui32 PartitionId;
         TString Source;
         TVector<TRecord> Records;
 
-        explicit TEvData(const TString& source, const TVector<TRecord>& records);
-        explicit TEvData(const TString& source, TVector<TRecord>&& records);
+        explicit TEvData(ui32 partitionId, const TString& source, const TVector<TRecord>& records);
+        explicit TEvData(ui32 partitionId, const TString& source, TVector<TRecord>&& records);
         TString ToString() const override;
     };
 

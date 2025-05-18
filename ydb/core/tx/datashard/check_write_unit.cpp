@@ -65,7 +65,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
 
         DataShard.IncCounter(COUNTER_WRITE_OUT_OF_SPACE);
 
-        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, err);
+        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OUT_OF_SPACE, err);
         op->Abort(EExecutionUnitKind::FinishProposeWrite);
 
         DataShard.SetOverloadSubscribed(writeOp->GetWriteTx()->GetOverloadSubscribe(), writeOp->GetRecipient(), op->GetTarget(), ERejectReasons::YellowChannels, writeOp->GetWriteResult()->Record);
@@ -115,7 +115,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
         if (!Pipeline.AssignPlanInterval(op)) {
             TString err = TStringBuilder() << "Can't propose tx " << op->GetTxId() << " at blocked shard " << DataShard.TabletID();
 
-            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, err);
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, err);
             op->Abort(EExecutionUnitKind::FinishProposeWrite);
 
             LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);

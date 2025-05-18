@@ -11,6 +11,7 @@ public:
     TTxGracefulShutdown(TNodeBroker *self, TEvNodeBroker::TEvGracefulShutdownRequest::TPtr &ev)
         : TBase(self)
         , Event(ev)
+        , Update(false)
     {
     }
 
@@ -25,16 +26,16 @@ public:
                     "TTxGracefulShutdown Execute. Graceful Shutdown request from " << nodeId << " ");
 
         Response = MakeHolder<TEvNodeBroker::TEvGracefulShutdownResponse>();
-        const auto it = Self->Nodes.find(nodeId);
+        const auto it = Self->Dirty.Nodes.find(nodeId);
 
-        if (it != Self->Nodes.end()) {
+        if (it != Self->Dirty.Nodes.end()) {
             auto& node = it->second;
-            Self->SlotIndexesPools[node.ServicedSubDomain].Release(node.SlotIndex.value());
-            Self->DbReleaseSlotIndex(node, txc);
-            node.SlotIndex.reset();
+            Self->Dirty.DbReleaseSlotIndex(node, txc);
+            Self->Dirty.ReleaseSlotIndex(node);
 
             Response->Record.MutableStatus()->SetCode(TStatus::OK);
 
+            Update = true;
             return true;
         }
 
@@ -47,13 +48,16 @@ public:
     void Complete(const TActorContext &ctx) override
     {
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxGracefulShutdown Complete");
+        if (Update) {
+            Self->Committed.ReleaseSlotIndex(Self->Committed.Nodes.at(Event->Get()->Record.GetNodeId()));
+        }
         ctx.Send(Event->Sender, Response.Release());
-        Self->TxCompleted(this, ctx);
     }
 
 private:
     TEvNodeBroker::TEvGracefulShutdownRequest::TPtr Event;
     THolder<TEvNodeBroker::TEvGracefulShutdownResponse> Response;
+    bool Update;
 };
 
 ITransaction *TNodeBroker::CreateTxGracefulShutdown(TEvNodeBroker::TEvGracefulShutdownRequest::TPtr &ev)

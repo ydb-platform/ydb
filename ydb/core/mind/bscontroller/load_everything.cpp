@@ -1,5 +1,6 @@
 #include "impl.h"
 #include "console_interaction.h"
+#include "group_geometry_info.h"
 
 #include <ydb/library/yaml_config/yaml_config.h>
 
@@ -103,9 +104,13 @@ public:
                     Self->StorageYamlConfigVersion = NYamlConfig::GetStorageMetadata(*Self->StorageYamlConfig).Version.value_or(0);
                     Self->StorageYamlConfigHash = NYaml::GetConfigHash(*Self->StorageYamlConfig);
                 }
+                if (state.HaveValue<T::ExpectedStorageYamlConfigVersion>()) {
+                    Self->ExpectedStorageYamlConfigVersion = state.GetValue<T::ExpectedStorageYamlConfigVersion>();
+                }
                 if (state.HaveValue<T::ShredState>()) {
                     Self->ShredState.OnLoad(state.GetValue<T::ShredState>());
                 }
+                Self->EnableConfigV2 = state.GetValue<T::EnableConfigV2>();
             }
         }
 
@@ -469,14 +474,6 @@ public:
             }
         }
 
-        // primitive garbage collection for obsolete metrics
-        for (const auto& key : pdiskMetricsToDelete) {
-            db.Table<Schema::PDiskMetrics>().Key(key).Delete();
-        }
-        for (const auto& key : vdiskMetricsToDelete) {
-            db.Table<Schema::VDiskMetrics>().Key(key).Delete();
-        }
-
         // apply storage pool stats
         std::unordered_map<TBoxStoragePoolId, ui64> allocatedSizeMap;
         for (const auto& [vslotId, slot] : Self->VSlots) {
@@ -515,9 +512,31 @@ public:
             }
         }
 
+        THashMap<TBoxStoragePoolId, TGroupGeometryInfo> cache;
+
         // calculate group status for all groups
         for (auto& [id, group] : Self->GroupMap) {
             group->CalculateGroupStatus();
+
+            group->CalculateLayoutStatus(Self, group->Topology.get(), [&] {
+                const auto [it, inserted] = cache.try_emplace(group->StoragePoolId);
+                if (inserted) {
+                    if (const auto jt = Self->StoragePools.find(it->first); jt != Self->StoragePools.end()) {
+                        it->second = TGroupGeometryInfo(group->Topology->GType, jt->second.GetGroupGeometry());
+                    } else {
+                        Y_DEBUG_ABORT();
+                    }
+                }
+                return it->second;
+            });
+        }
+
+        // primitive garbage collection for obsolete metrics
+        for (const auto& key : pdiskMetricsToDelete) {
+            db.Table<Schema::PDiskMetrics>().Key(key).Delete();
+        }
+        for (const auto& key : vdiskMetricsToDelete) {
+            db.Table<Schema::VDiskMetrics>().Key(key).Delete();
         }
 
         return true;

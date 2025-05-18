@@ -653,8 +653,11 @@ protected:
         Terminate(State == NDqProto::COMPUTE_STATE_FINISHED, NDqProto::EComputeState_Name(State));
     }
 
-    void InternalError(TIssuesIds::EIssueCode issueCode, const TString& message) {
-        InternalError(NYql::NDqProto::StatusIds::PRECONDITION_FAILED, issueCode, message);
+    void ErrorFromIssue(TIssuesIds::EIssueCode issueCode, const TString& message) {
+        TIssue issue(message);
+        SetIssueCode(issueCode, issue);
+        const auto statusCode = GetDqStatus(issue).GetOrElse(NYql::NDqProto::StatusIds::PRECONDITION_FAILED);
+        InternalError(statusCode, std::move(issue));
     }
 
     void InternalError(NYql::NDqProto::StatusIds::StatusCode statusCode, TIssuesIds::EIssueCode issueCode, const TString& message) {
@@ -1757,7 +1760,7 @@ public:
 
             for (auto& [inputIndex, sourceInfo] : SourcesMap) {
                 if (auto* source = sourceInfo.AsyncInput) {
-                    source->FillExtraStats(protoTask, last, GetMeteringStats());
+                    source->FillExtraStats(protoTask, RuntimeSettings.WithProgressStats || last, GetMeteringStats());
                 }
             }
             FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, RuntimeSettings.GetCollectStatsLevel());
@@ -1873,7 +1876,7 @@ public:
                 }
 
                 if (auto* source = sinkInfo.AsyncOutput) {
-                    source->FillExtraStats(protoTask, last, GetMeteringStats());
+                    source->FillExtraStats(protoTask, RuntimeSettings.WithProgressStats || last, GetMeteringStats());
                 }
             }
 
@@ -1898,7 +1901,7 @@ public:
                 }
 
                 if (auto* transform = transformInfo.AsyncInput) {
-                    transform->FillExtraStats(protoTask, last, GetMeteringStats());
+                    transform->FillExtraStats(protoTask, RuntimeSettings.WithProgressStats || last, GetMeteringStats());
                 }
             }
 
@@ -1961,7 +1964,7 @@ public:
             // TODO: what should happen in this case?
         }
 
-        static_cast<TDerived*>(this)->FillExtraStats(dst, last);
+        static_cast<TDerived*>(this)->FillExtraStats(dst, RuntimeSettings.WithProgressStats || last);
 
         if (last && MemoryQuota) {
             MemoryQuota->ResetProfileStats();

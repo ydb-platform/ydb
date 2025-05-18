@@ -21,6 +21,7 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
+#include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/library/login/password_checker/password_checker.h>
 #include <ydb/library/login/account_lockout/account_lockout.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
@@ -2256,7 +2257,7 @@ void TSchemeShard::PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pa
         }
 
         if (DataErasureManager->Remove(pathId)) {
-            db.Table<Schema::WaitingDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Update<Schema::WaitingDataErasureTenants::Status>(EDataErasureStatus::COMPLETED);
+            db.Table<Schema::WaitingDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
         }
 
         db.Table<Schema::SubDomains>().Key(pathId.LocalPathId).Delete();
@@ -3361,6 +3362,16 @@ void TSchemeShard::PersistTxShardStatus(NIceDb::TNiceDb& db, TOperationId opId, 
         );
 }
 
+NKikimrSchemeOp::TChangefeedUnderlyingTopics ConvertChangefeedUnderlyingTopics(
+    const google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TPathDescription>& changefeedUnderlyingTopics
+) {
+    NKikimrSchemeOp::TChangefeedUnderlyingTopics result;
+    for (const auto& x : changefeedUnderlyingTopics) {
+        *result.AddChangefeedUnderlyingTopics() = x;
+    }
+    return result;
+}
+
 void TSchemeShard::PersistBackupSettings(
         NIceDb::TNiceDb& db,
         TPathId pathId,
@@ -3375,6 +3386,7 @@ void TSchemeShard::PersistBackupSettings(
                 NIceDb::TUpdate<Schema::BackupSettings::ScanSettings>(settings.GetScanSettings().SerializeAsString()), \
                 NIceDb::TUpdate<Schema::BackupSettings::NeedToBill>(settings.GetNeedToBill()), \
                 NIceDb::TUpdate<Schema::BackupSettings::TableDescription>(settings.GetTable().SerializeAsString()), \
+                NIceDb::TUpdate<Schema::BackupSettings::ChangefeedUnderlyingTopics>(ConvertChangefeedUnderlyingTopics(settings.GetChangefeedUnderlyingTopics()).SerializeAsString()), \
                 NIceDb::TUpdate<Schema::BackupSettings::NumberOfRetries>(settings.GetNumberOfRetries()), \
                 NIceDb::TUpdate<Schema::BackupSettings::EnableChecksums>(settings.GetEnableChecksums()), \
                 NIceDb::TUpdate<Schema::BackupSettings::EnablePermissions>(settings.GetEnablePermissions())); \
@@ -3385,6 +3397,7 @@ void TSchemeShard::PersistBackupSettings(
                 NIceDb::TUpdate<Schema::MigratedBackupSettings::ScanSettings>(settings.GetScanSettings().SerializeAsString()), \
                 NIceDb::TUpdate<Schema::MigratedBackupSettings::NeedToBill>(settings.GetNeedToBill()), \
                 NIceDb::TUpdate<Schema::MigratedBackupSettings::TableDescription>(settings.GetTable().SerializeAsString()), \
+                NIceDb::TUpdate<Schema::MigratedBackupSettings::ChangefeedUnderlyingTopics>(ConvertChangefeedUnderlyingTopics(settings.GetChangefeedUnderlyingTopics()).SerializeAsString()), \
                 NIceDb::TUpdate<Schema::MigratedBackupSettings::NumberOfRetries>(settings.GetNumberOfRetries()), \
                 NIceDb::TUpdate<Schema::MigratedBackupSettings::EnableChecksums>(settings.GetEnableChecksums()), \
                 NIceDb::TUpdate<Schema::MigratedBackupSettings::EnablePermissions>(settings.GetEnablePermissions())); \
@@ -3636,8 +3649,12 @@ void TSchemeShard::PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const
 
     TString serialized;
     TString serializedSharding;
-    Y_ABORT_UNLESS(tableInfo.Description.SerializeToString(&serialized));
-    Y_ABORT_UNLESS(tableInfo.Description.GetSharding().SerializeToString(&serializedSharding));
+    auto tableInfoCopy = tableInfo;
+    if (tableInfo.IsStandalone()) {
+        tableInfoCopy.Description.MutableSchema()->SetEngine(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
+    }
+    Y_ABORT_UNLESS(tableInfoCopy.Description.SerializeToString(&serialized));
+    Y_ABORT_UNLESS(tableInfoCopy.Description.GetSharding().SerializeToString(&serializedSharding));
 
     if (isAlter) {
         db.Table<Schema::ColumnTablesAlters>().Key(pathId.LocalPathId).Update(
@@ -4636,20 +4653,18 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableAlterDatabaseCreateHiveFirst = appData->FeatureFlags.GetEnableAlterDatabaseCreateHiveFirst();
     EnablePQConfigTransactionsAtSchemeShard = appData->FeatureFlags.GetEnablePQConfigTransactionsAtSchemeShard();
     EnableStatistics = appData->FeatureFlags.GetEnableStatistics();
-    EnableTablePgTypes = appData->FeatureFlags.GetEnableTablePgTypes();
     EnableServerlessExclusiveDynamicNodes = appData->FeatureFlags.GetEnableServerlessExclusiveDynamicNodes();
     EnableAddColumsWithDefaults = appData->FeatureFlags.GetEnableAddColumsWithDefaults();
     EnableReplaceIfExistsForExternalEntities = appData->FeatureFlags.GetEnableReplaceIfExistsForExternalEntities();
     EnableTempTables = appData->FeatureFlags.GetEnableTempTables();
-    EnableTableDatetime64 = appData->FeatureFlags.GetEnableTableDatetime64();
     EnableVectorIndex = appData->FeatureFlags.GetEnableVectorIndex();
-    EnableParameterizedDecimal = appData->FeatureFlags.GetEnableParameterizedDecimal();
     EnableDataErasure = appData->FeatureFlags.GetEnableDataErasure();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
     ConfigureStatsOperations(appData->SchemeShardConfig, ctx);
     MaxCdcInitialScanShardsInFlight = appData->SchemeShardConfig.GetMaxCdcInitialScanShardsInFlight();
+    MaxRestoreBuildIndexShardsInFlight = appData->SchemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
 
     ConfigureBackgroundCleaningQueue(appData->BackgroundCleaningConfig, ctx);
     ConfigureDataErasureManager(appData->DataErasureConfig);
@@ -4956,6 +4971,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSchemeShard::TEvWakeupToRunDataErasure, DataErasureManager->WakeupToRunDataErasure);
         HFuncTraced(TEvSchemeShard::TEvTenantDataErasureRequest, Handle);
         HFuncTraced(TEvDataShard::TEvForceDataCleanupResult, Handle);
+        HFuncTraced(TEvKeyValue::TEvCleanUpDataResponse, Handle);
         HFuncTraced(TEvSchemeShard::TEvTenantDataErasureResponse, Handle);
         HFuncTraced(TEvSchemeShard::TEvDataErasureInfoRequest, Handle);
         HFuncTraced(TEvSchemeShard::TEvDataErasureManualStartupRequest, Handle);
@@ -7081,32 +7097,27 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
         newPartitioningSet.reserve(newPartitioning.size());
         const auto& oldPartitioning = tableInfo->GetPartitions();
 
+        std::vector<TShardIdx> newDataErasureShards;
         for (const auto& p: newPartitioning) {
             if (!oldPartitioning.empty())
                 newPartitioningSet.insert(p.ShardIdx);
 
             const auto& partitionStats = tableInfo->GetStats().PartitionStats;
             auto it = partitionStats.find(p.ShardIdx);
-            std::vector<TShardIdx> dataErasureShards;
             if (it != partitionStats.end()) {
                 EnqueueBackgroundCompaction(p.ShardIdx, it->second);
                 UpdateShardMetrics(p.ShardIdx, it->second);
-                dataErasureShards.push_back(p.ShardIdx);
-            }
-            if (DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
-                Execute(CreateTxAddEntryToDataErasure(dataErasureShards), this->ActorContext());
+                newDataErasureShards.push_back(p.ShardIdx);
             }
         }
+        if (EnableDataErasure && DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
+            Execute(CreateTxAddEntryToDataErasure(newDataErasureShards), this->ActorContext());
+        }
 
-        std::vector<TShardIdx> cancelDataErasureShards;
         for (const auto& p: oldPartitioning) {
             if (!newPartitioningSet.contains(p.ShardIdx)) {
                 // note that queues might not contain the shard
                 OnShardRemoved(p.ShardIdx);
-                cancelDataErasureShards.push_back(p.ShardIdx);
-            }
-            if (DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
-                Execute(CreateTxCancelDataErasureShards(cancelDataErasureShards), this->ActorContext());
             }
         }
     }
@@ -7223,6 +7234,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         ConfigureStatsBatching(schemeShardConfig, ctx);
         ConfigureStatsOperations(schemeShardConfig, ctx);
         MaxCdcInitialScanShardsInFlight = schemeShardConfig.GetMaxCdcInitialScanShardsInFlight();
+        MaxRestoreBuildIndexShardsInFlight = schemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
     }
 
     if (appConfig.HasTableProfilesConfig()) {
@@ -7275,16 +7287,13 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableAlterDatabaseCreateHiveFirst = featureFlags.GetEnableAlterDatabaseCreateHiveFirst();
     EnablePQConfigTransactionsAtSchemeShard = featureFlags.GetEnablePQConfigTransactionsAtSchemeShard();
     EnableStatistics = featureFlags.GetEnableStatistics();
-    EnableTablePgTypes = featureFlags.GetEnableTablePgTypes();
     EnableServerlessExclusiveDynamicNodes = featureFlags.GetEnableServerlessExclusiveDynamicNodes();
     EnableAddColumsWithDefaults = featureFlags.GetEnableAddColumsWithDefaults();
     EnableTempTables = featureFlags.GetEnableTempTables();
     EnableReplaceIfExistsForExternalEntities = featureFlags.GetEnableReplaceIfExistsForExternalEntities();
-    EnableTableDatetime64 = featureFlags.GetEnableTableDatetime64();
     EnableResourcePoolsOnServerless = featureFlags.GetEnableResourcePoolsOnServerless();
     EnableVectorIndex = featureFlags.GetEnableVectorIndex();
     EnableExternalDataSourcesOnServerless = featureFlags.GetEnableExternalDataSourcesOnServerless();
-    EnableParameterizedDecimal = featureFlags.GetEnableParameterizedDecimal();
     EnableDataErasure = featureFlags.GetEnableDataErasure();
 }
 
@@ -7444,7 +7453,6 @@ void TSchemeShard::ConfigureBackgroundCleaningQueue(
                  << ", InflightLimit# " << cleaningConfig.InflightLimit);
 }
 
-// void TScheme
 void TSchemeShard::ConfigureLoginProvider(
         const ::NKikimrProto::TAuthConfig& config,
         const TActorContext &ctx)
@@ -7456,10 +7464,18 @@ void TSchemeShard::ConfigureLoginProvider(
         .MinUpperCaseCount = passwordComplexityConfig.GetMinUpperCaseCount(),
         .MinNumbersCount = passwordComplexityConfig.GetMinNumbersCount(),
         .MinSpecialCharsCount = passwordComplexityConfig.GetMinSpecialCharsCount(),
-        .SpecialChars = (passwordComplexityConfig.GetSpecialChars().empty() ? NLogin::TPasswordComplexity::VALID_SPECIAL_CHARS : passwordComplexityConfig.GetSpecialChars()),
+        .SpecialChars = passwordComplexityConfig.GetSpecialChars(),
         .CanContainUsername = passwordComplexityConfig.GetCanContainUsername()
     });
     LoginProvider.UpdatePasswordCheckParameters(passwordComplexity);
+
+    auto getSpecialChars = [&passwordComplexity] () {
+        TStringBuilder result;
+        for (const auto& ch : passwordComplexity.SpecialChars) {
+            result << ch;
+        }
+        return result;
+    };
 
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                  "PasswordComplexity for LoginProvider configured: MinLength# " << passwordComplexity.MinLength
@@ -7467,7 +7483,7 @@ void TSchemeShard::ConfigureLoginProvider(
                  << ", MinUpperCaseCount# " << passwordComplexity.MinUpperCaseCount
                  << ", MinNumbersCount# " << passwordComplexity.MinNumbersCount
                  << ", MinSpecialCharsCount# " << passwordComplexity.MinSpecialCharsCount
-                 << ", SpecialChars# " << (passwordComplexityConfig.GetSpecialChars().empty() ? NLogin::TPasswordComplexity::VALID_SPECIAL_CHARS : passwordComplexityConfig.GetSpecialChars())
+                 << ", SpecialChars# " << getSpecialChars()
                  << ", CanContainUsername# " << (passwordComplexity.CanContainUsername ? "true" : "false"));
 }
 
@@ -7650,7 +7666,11 @@ void TSchemeShard::Handle(TEvSchemeShard::TEvTenantDataErasureRequest::TPtr& ev,
 }
 
 void TSchemeShard::Handle(TEvDataShard::TEvForceDataCleanupResult::TPtr& ev, const TActorContext& ctx) {
-    Execute(CreateTxCompleteDataErasureShard(ev), ctx);
+    Execute(CreateTxCompleteDataErasureShard<TEvDataShard::TEvForceDataCleanupResult::TPtr>(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvKeyValue::TEvCleanUpDataResponse::TPtr& ev, const TActorContext& ctx) {
+    Execute(this->CreateTxCompleteDataErasureShard(ev), ctx);
 }
 
 void TSchemeShard::Handle(TEvSchemeShard::TEvTenantDataErasureResponse::TPtr& ev, const TActorContext& ctx) {

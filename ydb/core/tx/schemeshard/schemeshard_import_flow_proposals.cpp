@@ -207,6 +207,9 @@ THolder<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
 
     const TPath dstPath = TPath::Init(item.DstPathId, ss);
     settings.set_source_path(dstPath.PathString());
+    if (ss->MaxRestoreBuildIndexShardsInFlight) {
+        settings.set_max_shards_in_flight(ss->MaxRestoreBuildIndexShardsInFlight);
+    }
 
     Y_ABORT_UNLESS(item.NextIndexIdx < item.Scheme.indexes_size());
     settings.mutable_index()->CopyFrom(item.Scheme.indexes(item.NextIndexIdx));
@@ -217,7 +220,9 @@ THolder<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
 
     const TPath domainPath = TPath::Init(importInfo->DomainPathId, ss);
     auto propose = MakeHolder<TEvIndexBuilder::TEvCreateRequest>(ui64(txId), domainPath.PathString(), std::move(settings));
-    (*propose->Record.MutableOperationParams()->mutable_labels())["uid"] = uid;
+    auto& request = propose->Record;
+    (*request.MutableOperationParams()->mutable_labels())["uid"] = uid;
+    request.SetInternal(true);
 
     return propose;
 }
@@ -234,7 +239,8 @@ THolder<TEvIndexBuilder::TEvCancelRequest> CancelIndexBuildPropose(
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     TSchemeShard* ss,
     TTxId txId,
-    const TImportInfo::TItem& item
+    const TImportInfo::TItem& item,
+    TString& error
 ) {
     Y_ABORT_UNLESS(item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size());
 
@@ -252,22 +258,21 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     modifyScheme.SetWorkingDir(dstPath.Parent().PathString());
     cdcStream.SetTableName(dstPath.LeafName());
 
-    TString error;
-    Ydb::StatusIds::StatusCode status;
-
     auto& cdcStreamDescription = *cdcStream.MutableStreamDescription();
+    Ydb::StatusIds::StatusCode status;
     if (!FillChangefeedDescription(cdcStreamDescription, changefeed, status, error)) {
         return nullptr;
     }
-    
+
     if (topic.has_retention_period()) {
         cdcStream.SetRetentionPeriodSeconds(topic.retention_period().seconds());
     }
-    
+
     if (topic.has_partitioning_settings()) {
         i64 minActivePartitions =
             topic.partitioning_settings().min_active_partitions();
         if (minActivePartitions < 0) {
+            error = "minActivePartitions must be >= 0";
             return nullptr;
         } else if (minActivePartitions == 0) {
             minActivePartitions = 1;
@@ -281,6 +286,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
             i64 maxActivePartitions =
                 topic.partitioning_settings().max_active_partitions();
             if (maxActivePartitions < 0) {
+                error = "maxActivePartitions must be >= 0";
                 return nullptr;
             } else if (maxActivePartitions == 0) {
                 maxActivePartitions = 50;

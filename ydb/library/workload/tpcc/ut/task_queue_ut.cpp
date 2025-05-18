@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE(TTaskQueueTest) {
                 UNIT_ASSERT_EXCEPTION_CONTAINS(
                     queue->TaskReady(tasks.back().Handle, i),
                     std::runtime_error,
-                    "Task queue is full: terminal"
+                    "Task queue is full: internal"
                 );
             }
         }

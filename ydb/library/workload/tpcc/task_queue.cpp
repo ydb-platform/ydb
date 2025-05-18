@@ -23,12 +23,13 @@ struct alignas(64) TPerThreadContext {
     TPerThreadContext() = default;
 
     // thread-safe because accessed by this thread only
-    TBinnedTimerQueue<TTerminalTask::TCoroHandle> SleepingTerminals;
-    TCircularQueue<TTerminalTask::TCoroHandle> ReadyTerminals;
+
+    TBinnedTimerQueue<std::coroutine_handle<>> SleepingTasks;
+    TCircularQueue<std::coroutine_handle<>> ReadyTasksInternal;
 
     // accessed by other threads to add ready coroutine
-    TSpinLock ReadyTransactionsLock;
-    TCircularQueue<TTransactionTask::TCoroHandle> ReadyTransactions;
+    TSpinLock ReadyTasksLock;
+    TCircularQueue<std::coroutine_handle<>> ReadyTasksExternal;
 };
 
 //-----------------------------------------------------------------------------
@@ -49,10 +50,10 @@ public:
     void Run() override;
     void Join() override;
 
-    void TaskReady(TTerminalTask::TCoroHandle handle, size_t terminalId) override;
-    void TaskReady(TTransactionTask::TCoroHandle handle, size_t terminalId) override;
+    void TaskReady(std::coroutine_handle<>, size_t terminalId) override;
+    void AsyncSleep(std::coroutine_handle<> handle, size_t terminalId, std::chrono::milliseconds delay) override;
 
-    void AsyncSleep(TTerminalTask::TCoroHandle handle, size_t terminalId, std::chrono::milliseconds delay) override;
+    void TaskReadyThreadSafe(std::coroutine_handle<> handle, size_t terminalId) override;
 
 private:
     void RunThread(size_t threadId);
@@ -80,7 +81,7 @@ TTaskQueue::TTaskQueue(size_t threadCount,
     , Log(std::move(log))
 {
     if (ThreadCount == 0) {
-        LOG_E("Zero task queue threads");
+        LOG_E("Zero TaskQueue threads");
         throw std::invalid_argument("Thread count must be greater than zero");
     }
 
@@ -91,9 +92,9 @@ TTaskQueue::TTaskQueue(size_t threadCount,
 
     PerThreadContext.resize(ThreadCount);
     for (auto& context: PerThreadContext) {
-        context.SleepingTerminals.Resize(timerBucketCount, timerBucketSize);
-        context.ReadyTerminals.Resize(MaxReadyTerminals);
-        context.ReadyTransactions.Resize(MaxReadyTransactions);
+        context.SleepingTasks.Resize(timerBucketCount, timerBucketSize);
+        context.ReadyTasksInternal.Resize(MaxReadyTerminals);
+        context.ReadyTasksExternal.Resize(MaxReadyTransactions);
     }
 }
 
@@ -125,29 +126,29 @@ void TTaskQueue::HandleQueueFull(const char* queueType) {
     throw std::runtime_error(std::string("Task queue is full: ") + queueType);
 }
 
-void TTaskQueue::TaskReady(TTerminalTask::TCoroHandle handle, size_t terminalId) {
+void TTaskQueue::TaskReady(std::coroutine_handle<> handle, size_t terminalId) {
     auto index = terminalId % PerThreadContext.size();
     auto& context = PerThreadContext[index];
 
-    if (!context.ReadyTerminals.TryPush(std::move(handle))) {
-        HandleQueueFull("terminal");
+    if (!context.ReadyTasksInternal.TryPush(std::move(handle))) {
+        HandleQueueFull("internal");
     }
 }
 
-void TTaskQueue::TaskReady(TTransactionTask::TCoroHandle handle, size_t terminalId) {
+void TTaskQueue::AsyncSleep(std::coroutine_handle<> handle, size_t terminalId, std::chrono::milliseconds delay) {
     auto index = terminalId % PerThreadContext.size();
     auto& context = PerThreadContext[index];
-
-    TGuard guard(context.ReadyTransactionsLock);
-    if (!context.ReadyTransactions.TryPush(std::move(handle))) {
-        HandleQueueFull("transaction");
-    }
+    context.SleepingTasks.Add(delay, std::move(handle));
 }
 
-void TTaskQueue::AsyncSleep(TTerminalTask::TCoroHandle handle, size_t terminalId, std::chrono::milliseconds delay) {
+void TTaskQueue::TaskReadyThreadSafe(std::coroutine_handle<> handle, size_t terminalId) {
     auto index = terminalId % PerThreadContext.size();
     auto& context = PerThreadContext[index];
-    context.SleepingTerminals.Add(delay, std::move(handle));
+
+    TGuard guard(context.ReadyTasksLock);
+    if (!context.ReadyTasksExternal.TryPush(std::move(handle))) {
+        HandleQueueFull("external");
+    }
 }
 
 void TTaskQueue::RunThread(size_t threadId) {
@@ -158,36 +159,36 @@ void TTaskQueue::RunThread(size_t threadId) {
     while (!ThreadsStopSource.stop_requested()) {
         auto now = Clock::now();
 
-        while (context.SleepingTerminals.GetNextDeadline() <= now) {
-            auto handle = context.SleepingTerminals.PopFront().Value;
-            if (!context.ReadyTerminals.TryPush(std::move(handle))) {
-                HandleQueueFull("awakened terminal");
+        while (context.SleepingTasks.GetNextDeadline() <= now) {
+            auto handle = context.SleepingTasks.PopFront().Value;
+            if (!context.ReadyTasksInternal.TryPush(std::move(handle))) {
+                HandleQueueFull("internal (awakened)");
             }
         }
 
         bool hasProgress = false;
-        std::optional<TTransactionTask::TCoroHandle> queryHandle;
+        std::optional<std::coroutine_handle<>> handleExternal;
         {
-            TGuard guard(context.ReadyTransactionsLock);
-            TTransactionTask::TCoroHandle h;
-            if (context.ReadyTransactions.TryPop(h)) {
-                queryHandle = std::move(h);
+            TGuard guard(context.ReadyTasksLock);
+            std::coroutine_handle<> h;
+            if (context.ReadyTasksExternal.TryPop(h)) {
+                handleExternal = std::move(h);
             }
         }
 
-        if (queryHandle && *queryHandle && !queryHandle->done()) {
+        if (handleExternal && *handleExternal && !handleExternal->done()) {
             hasProgress = true;
-            LOG_D("Thread " << threadId << " resumed transaction");
-            queryHandle->resume();
+            LOG_D("Thread " << threadId << " resumed task (external)");
+            handleExternal->resume();
         }
 
         // TODO: limit max number of active terminals (or queries, which is the same)
-        TTerminalTask::TCoroHandle terminalHandle;
-        if (context.ReadyTerminals.TryPop(terminalHandle)) {
+        std::coroutine_handle<> handleInternal;
+        if (context.ReadyTasksInternal.TryPop(handleInternal)) {
             hasProgress = true;
-            if (terminalHandle && !terminalHandle.done()) {
-                LOG_D("Thread " << threadId << " resumed terminal");
-                terminalHandle.resume();
+            if (handleInternal && !handleInternal.done()) {
+                LOG_D("Thread " << threadId << " resumed task (internal)");
+                handleInternal.resume();
             }
         }
 

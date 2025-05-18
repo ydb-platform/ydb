@@ -231,10 +231,14 @@ public:
     virtual void Run() = 0;
     virtual void Join() = 0;
 
-    virtual void TaskReady(TTerminalTask::TCoroHandle handle, size_t terminalId) = 0;
-    virtual void TaskReady(TTransactionTask::TCoroHandle handle, size_t terminalId) = 0;
+    // functions are called from the thread executing the coroutine, no locks needed
 
-    virtual void AsyncSleep(TTerminalTask::TCoroHandle handle, size_t terminalId, std::chrono::milliseconds delay) = 0;
+    virtual void TaskReady(std::coroutine_handle<> handle, size_t terminalId) = 0;
+    virtual void AsyncSleep(std::coroutine_handle<> handle, size_t terminalId, std::chrono::milliseconds delay) = 0;
+
+    // functions called by other threads
+
+    virtual void TaskReadyThreadSafe(std::coroutine_handle<> handle, size_t terminalId) = 0;
 };
 
 std::unique_ptr<ITaskQueue> CreateTaskQueue(
@@ -258,7 +262,7 @@ struct TSuspend {
         return false;
     }
 
-    void await_suspend(TTerminalTask::TCoroHandle handle) {
+    void await_suspend(std::coroutine_handle<> handle) {
         TaskQueue.AsyncSleep(handle, TerminalId, Delay);
     }
 
@@ -291,10 +295,10 @@ struct TSuspendWithFuture {
         return false;
     }
 
-    void await_suspend(TTransactionTask::TCoroHandle handle) {
+    void await_suspend(std::coroutine_handle<> handle) {
         // we use subscribe as async wait and don't handle result here: resumed task will
         Future.NoexceptSubscribe([this, handle](const NThreading::TFuture<T>&) {
-            TaskQueue.TaskReady(handle, TerminalId);
+            TaskQueue.TaskReadyThreadSafe(handle, TerminalId);
         });
     }
 

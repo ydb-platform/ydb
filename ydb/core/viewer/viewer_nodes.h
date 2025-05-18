@@ -1943,163 +1943,161 @@ public:
             ResourceBoardInfoResponse.reset();
         }
 
-        if (!TimeToAskHive()) {
-            return;
-        }
+        if (TimeToAskHive()) {
+            AddEvent("TimeToAskHive");
 
-        AddEvent("TimeToAskHive");
-
-        if (!HivesToAsk.empty()) {
-            AddEvent("HivesTokHive");
-            std::sort(HivesToAsk.begin(), HivesToAsk.end());
-            HivesToAsk.erase(std::unique(HivesToAsk.begin(), HivesToAsk.end()), HivesToAsk.end());
-            for (TTabletId hiveId : HivesToAsk) {
-                auto request = std::make_unique<TEvHive::TEvRequestHiveNodeStats>();
-                request->Record.SetReturnMetrics(true);
-                if (Database) { // it's better to ask hive about tablets only if we're filtering by database
-                    request->Record.SetReturnExtendedTabletInfo(true);
+            if (!HivesToAsk.empty()) {
+                AddEvent("HivesTokHive");
+                std::sort(HivesToAsk.begin(), HivesToAsk.end());
+                HivesToAsk.erase(std::unique(HivesToAsk.begin(), HivesToAsk.end()), HivesToAsk.end());
+                for (TTabletId hiveId : HivesToAsk) {
+                    auto request = std::make_unique<TEvHive::TEvRequestHiveNodeStats>();
+                    request->Record.SetReturnMetrics(true);
+                    if (Database) { // it's better to ask hive about tablets only if we're filtering by database
+                        request->Record.SetReturnExtendedTabletInfo(true);
+                    }
+                    if (AskHiveAboutPaths) {
+                        request->Record.SetFilterTabletsBySchemeShardId(FilterPathId.OwnerId);
+                        request->Record.SetFilterTabletsByPathId(FilterPathId.LocalPathId);
+                    } else if (FilterSubDomainKey) {
+                        request->Record.MutableFilterTabletsByObjectDomain()->CopyFrom(SubDomainKey);
+                    }
+                    HiveNodeStats.emplace(hiveId, MakeRequestHiveNodeStats(hiveId, request.release()));
                 }
-                if (AskHiveAboutPaths) {
-                    request->Record.SetFilterTabletsBySchemeShardId(FilterPathId.OwnerId);
-                    request->Record.SetFilterTabletsByPathId(FilterPathId.LocalPathId);
-                } else if (FilterSubDomainKey) {
-                    request->Record.MutableFilterTabletsByObjectDomain()->CopyFrom(SubDomainKey);
-                }
-                HiveNodeStats.emplace(hiveId, MakeRequestHiveNodeStats(hiveId, request.release()));
+                HivesToAsk.clear();
             }
-            HivesToAsk.clear();
-        }
 
-        if (HiveResponsesDone() && !HiveNodeStatsProcessed) {
-            AddEvent("HiveResponsesDone");
-            for (const auto& [hiveId, nodeStats] : HiveNodeStats) {
-                if (nodeStats.IsDone()) {
-                    if (nodeStats.IsOk()) {
-                        TInstant now = TInstant::Now();
-                        for (const NKikimrHive::THiveNodeStats& nodeStats : nodeStats.Get()->Record.GetNodeStats()) {
-                            ui32 nodeId = nodeStats.GetNodeId();
-                            TNode* node = FindNode(nodeId);
-                            if (node) {
-                                if (Database) { // it's better to ask hive about tablets only if we're filtering by database
-                                    for (const NKikimrHive::THiveDomainStatsStateCount& stateStats : nodeStats.GetStateStats()) {
-                                        NKikimrViewer::TTabletStateInfo& viewerTablet(node->Tablets.emplace_back());
-                                        viewerTablet.SetType(NKikimrTabletBase::TTabletTypes::EType_Name(stateStats.GetTabletType()));
-                                        viewerTablet.SetCount(stateStats.GetCount());
-                                        viewerTablet.SetState(GetFlagFromTabletState(stateStats.GetVolatileState()));
+            if (HiveResponsesDone() && !HiveNodeStatsProcessed) {
+                AddEvent("HiveResponsesDone");
+                for (const auto& [hiveId, nodeStats] : HiveNodeStats) {
+                    if (nodeStats.IsDone()) {
+                        if (nodeStats.IsOk()) {
+                            TInstant now = TInstant::Now();
+                            for (const NKikimrHive::THiveNodeStats& nodeStats : nodeStats.Get()->Record.GetNodeStats()) {
+                                ui32 nodeId = nodeStats.GetNodeId();
+                                TNode* node = FindNode(nodeId);
+                                if (node) {
+                                    if (Database) { // it's better to ask hive about tablets only if we're filtering by database
+                                        for (const NKikimrHive::THiveDomainStatsStateCount& stateStats : nodeStats.GetStateStats()) {
+                                            NKikimrViewer::TTabletStateInfo& viewerTablet(node->Tablets.emplace_back());
+                                            viewerTablet.SetType(NKikimrTabletBase::TTabletTypes::EType_Name(stateStats.GetTabletType()));
+                                            viewerTablet.SetCount(stateStats.GetCount());
+                                            viewerTablet.SetState(GetFlagFromTabletState(stateStats.GetVolatileState()));
+                                        }
+                                        FieldsAvailable.set(+ENodeFields::Tablets);
                                     }
-                                    FieldsAvailable.set(+ENodeFields::Tablets);
-                                }
-                                if (nodeStats.HasLastAliveTimestamp()) {
-                                    node->SystemState.SetDisconnectTime(std::max(node->SystemState.GetDisconnectTime(), nodeStats.GetLastAliveTimestamp())); // milliseconds
-                                    node->CalcUptimeSeconds(now);
-                                    FieldsAvailable.set(+ENodeFields::DisconnectTime);
-                                }
-                                if (nodeStats.HasNodeDomain()) {
-                                    node->SubDomainKey = TSubDomainKey(nodeStats.GetNodeDomain());
-                                    FieldsAvailable.set(+ENodeFields::SubDomainKey);
-                                    if (node->SubDomainKey == SubDomainKey) {
-                                        HasDatabaseNodes = true;
+                                    if (nodeStats.HasLastAliveTimestamp()) {
+                                        node->SystemState.SetDisconnectTime(std::max(node->SystemState.GetDisconnectTime(), nodeStats.GetLastAliveTimestamp())); // milliseconds
+                                        node->CalcUptimeSeconds(now);
+                                        FieldsAvailable.set(+ENodeFields::DisconnectTime);
+                                    }
+                                    if (nodeStats.HasNodeDomain()) {
+                                        node->SubDomainKey = TSubDomainKey(nodeStats.GetNodeDomain());
+                                        FieldsAvailable.set(+ENodeFields::SubDomainKey);
+                                        if (node->SubDomainKey == SubDomainKey) {
+                                            HasDatabaseNodes = true;
+                                        }
                                     }
                                 }
                             }
+                        } else {
+                            AddProblem("hive-no-data");
                         }
-                    } else {
-                        AddProblem("hive-no-data");
                     }
                 }
+                HiveNodeStatsProcessed = true;
             }
-            HiveNodeStatsProcessed = true;
-        }
 
-        if (FilterStorageStage == EFilterStorageStage::Pools && StoragePoolsResponse && StoragePoolsResponse->IsDone()) {
-            if (StoragePoolsResponse->IsOk()) {
-                for (const auto& storagePoolEntry : StoragePoolsResponse->Get()->Record.GetEntries()) {
-                    auto itFilterStoragePool = std::ranges::find(FilterStoragePools, storagePoolEntry.GetInfo().GetName());
-                    if (itFilterStoragePool != FilterStoragePools.end()) {
-                        FilterStoragePoolsIds.emplace_back(std::make_pair(storagePoolEntry.GetKey().GetBoxId(), storagePoolEntry.GetKey().GetStoragePoolId()));
-                        FilterStoragePools.erase(itFilterStoragePool);
-                        if (FilterStoragePools.empty()) {
-                            break;
+            if (FilterStorageStage == EFilterStorageStage::Pools && StoragePoolsResponse && StoragePoolsResponse->IsDone()) {
+                if (StoragePoolsResponse->IsOk()) {
+                    for (const auto& storagePoolEntry : StoragePoolsResponse->Get()->Record.GetEntries()) {
+                        auto itFilterStoragePool = std::ranges::find(FilterStoragePools, storagePoolEntry.GetInfo().GetName());
+                        if (itFilterStoragePool != FilterStoragePools.end()) {
+                            FilterStoragePoolsIds.emplace_back(std::make_pair(storagePoolEntry.GetKey().GetBoxId(), storagePoolEntry.GetKey().GetStoragePoolId()));
+                            FilterStoragePools.erase(itFilterStoragePool);
+                            if (FilterStoragePools.empty()) {
+                                break;
+                            }
                         }
                     }
+                    FilterStorageStage = EFilterStorageStage::Groups;
+                } else {
+                    AddProblem("bsc-storage-pools-no-data");
                 }
-                FilterStorageStage = EFilterStorageStage::Groups;
-            } else {
-                AddProblem("bsc-storage-pools-no-data");
+                StoragePoolsResponse.reset();
             }
-            StoragePoolsResponse.reset();
-        }
-        if (FilterStorageStage == EFilterStorageStage::Groups && GroupsResponse && GroupsResponse->IsDone()) {
-            if (GroupsResponse->IsOk()) {
-                for (const auto& groupEntry : GroupsResponse->Get()->Record.GetEntries()) {
-                    auto itFilterStoragePoolId = std::ranges::find(FilterStoragePoolsIds,
-                        std::pair<ui64, ui64>(groupEntry.GetInfo().GetBoxId(),
-                            groupEntry.GetInfo().GetStoragePoolId()));
-                    if (itFilterStoragePoolId != FilterStoragePoolsIds.end()) {
-                        FilterGroupIds.insert(groupEntry.GetKey().GetGroupId());
-                    }
-                }
-                FilterStorageStage = EFilterStorageStage::VSlots;
-            } else {
-                AddProblem("bsc-storage-groups-no-data");
-            }
-            GroupsResponse.reset();
-        }
-        if ((FilterStorageStage == EFilterStorageStage::VSlots || FilterStorageStage == EFilterStorageStage::None) && VSlotsResponse && VSlotsResponse->IsDone()) {
-            if (VSlotsResponse->IsOk()) {
-                std::unordered_set<TNodeId> prevFilterNodeIds = std::move(FilterNodeIds);
-                std::unordered_map<std::pair<TNodeId, ui32>, std::size_t> slotsPerDisk;
-                for (const auto& slotEntry : VSlotsResponse->Get()->Record.GetEntries()) {
-                    if (FilterGroupIds.count(slotEntry.GetInfo().GetGroupId()) > 0) {
-                        if (prevFilterNodeIds.empty() || prevFilterNodeIds.count(slotEntry.GetKey().GetNodeId()) > 0) {
-                            FilterNodeIds.insert(slotEntry.GetKey().GetNodeId());
+            if (FilterStorageStage == EFilterStorageStage::Groups && GroupsResponse && GroupsResponse->IsDone()) {
+                if (GroupsResponse->IsOk()) {
+                    for (const auto& groupEntry : GroupsResponse->Get()->Record.GetEntries()) {
+                        auto itFilterStoragePoolId = std::ranges::find(FilterStoragePoolsIds,
+                            std::pair<ui64, ui64>(groupEntry.GetInfo().GetBoxId(),
+                                groupEntry.GetInfo().GetStoragePoolId()));
+                        if (itFilterStoragePoolId != FilterStoragePoolsIds.end()) {
+                            FilterGroupIds.insert(groupEntry.GetKey().GetGroupId());
                         }
-                        TNode* node = FindNode(slotEntry.GetKey().GetNodeId());
+                    }
+                    FilterStorageStage = EFilterStorageStage::VSlots;
+                } else {
+                    AddProblem("bsc-storage-groups-no-data");
+                }
+                GroupsResponse.reset();
+            }
+            if ((FilterStorageStage == EFilterStorageStage::VSlots || FilterStorageStage == EFilterStorageStage::None) && VSlotsResponse && VSlotsResponse->IsDone()) {
+                if (VSlotsResponse->IsOk()) {
+                    std::unordered_set<TNodeId> prevFilterNodeIds = std::move(FilterNodeIds);
+                    std::unordered_map<std::pair<TNodeId, ui32>, std::size_t> slotsPerDisk;
+                    for (const auto& slotEntry : VSlotsResponse->Get()->Record.GetEntries()) {
+                        if (FilterGroupIds.count(slotEntry.GetInfo().GetGroupId()) > 0) {
+                            if (prevFilterNodeIds.empty() || prevFilterNodeIds.count(slotEntry.GetKey().GetNodeId()) > 0) {
+                                FilterNodeIds.insert(slotEntry.GetKey().GetNodeId());
+                            }
+                            TNode* node = FindNode(slotEntry.GetKey().GetNodeId());
+                            if (node) {
+                                node->SysViewVDisks.emplace_back(slotEntry);
+                                node->HasDisks = true;
+                            }
+                        } else {
+                            TNode* node = FindNode(slotEntry.GetKey().GetNodeId());
+                            if (node) {
+                                node->HasDisks = true;
+                            }
+                        }
+                        auto& slots = slotsPerDisk[{slotEntry.GetKey().GetNodeId(), slotEntry.GetKey().GetPDiskId()}];
+                        ++slots;
+                        MaximumSlotsPerDisk = std::max(MaximumSlotsPerDisk.value_or(0), slots);
+                    }
+                    FieldsAvailable.set(+ENodeFields::HasDisks);
+                    FilterStorageStage = EFilterStorageStage::None;
+                    ApplyEverything();
+                } else {
+                    AddProblem("bsc-storage-slots-no-data");
+                }
+                VSlotsResponse.reset();
+            }
+            if (PDisksResponse && PDisksResponse->IsDone()) {
+                if (PDisksResponse->IsOk()) {
+                    std::unordered_map<TNodeId, std::size_t> disksPerNode;
+                    for (const auto& pdiskEntry : PDisksResponse->Get()->Record.GetEntries()) {
+                        TNode* node = FindNode(pdiskEntry.GetKey().GetNodeId());
                         if (node) {
-                            node->SysViewVDisks.emplace_back(slotEntry);
+                            node->SysViewPDisks.emplace_back(pdiskEntry);
                             node->HasDisks = true;
                         }
-                    } else {
-                        TNode* node = FindNode(slotEntry.GetKey().GetNodeId());
-                        if (node) {
-                            node->HasDisks = true;
-                        }
+                        auto& disks = disksPerNode[pdiskEntry.GetKey().GetNodeId()];
+                        ++disks;
+                        MaximumDisksPerNode = std::max(MaximumDisksPerNode.value_or(0), disks);
                     }
-                    auto& slots = slotsPerDisk[{slotEntry.GetKey().GetNodeId(), slotEntry.GetKey().GetPDiskId()}];
-                    ++slots;
-                    MaximumSlotsPerDisk = std::max(MaximumSlotsPerDisk.value_or(0), slots);
-                }
-                FieldsAvailable.set(+ENodeFields::HasDisks);
-                FilterStorageStage = EFilterStorageStage::None;
-                ApplyEverything();
-            } else {
-                AddProblem("bsc-storage-slots-no-data");
-            }
-            VSlotsResponse.reset();
-        }
-        if (PDisksResponse && PDisksResponse->IsDone()) {
-            if (PDisksResponse->IsOk()) {
-                std::unordered_map<TNodeId, std::size_t> disksPerNode;
-                for (const auto& pdiskEntry : PDisksResponse->Get()->Record.GetEntries()) {
-                    TNode* node = FindNode(pdiskEntry.GetKey().GetNodeId());
-                    if (node) {
-                        node->SysViewPDisks.emplace_back(pdiskEntry);
-                        node->HasDisks = true;
+                    for (TNode* node : NodeView) {
+                        node->CalcDisks();
                     }
-                    auto& disks = disksPerNode[pdiskEntry.GetKey().GetNodeId()];
-                    ++disks;
-                    MaximumDisksPerNode = std::max(MaximumDisksPerNode.value_or(0), disks);
+                    FieldsAvailable.set(+ENodeFields::HasDisks);
+                    FieldsAvailable.set(+ENodeFields::Missing);
+                    FieldsAvailable.set(+ENodeFields::DiskSpaceUsage);
+                } else {
+                    AddProblem("bsc-pdisks-no-data");
                 }
-                for (TNode* node : NodeView) {
-                    node->CalcDisks();
-                }
-                FieldsAvailable.set(+ENodeFields::HasDisks);
-                FieldsAvailable.set(+ENodeFields::Missing);
-                FieldsAvailable.set(+ENodeFields::DiskSpaceUsage);
-            } else {
-                AddProblem("bsc-pdisks-no-data");
+                PDisksResponse.reset();
             }
-            PDisksResponse.reset();
         }
 
         if (!TimeToAskWhiteboard()) {

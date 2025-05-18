@@ -67,7 +67,7 @@ bool TConstructor::DoDeserializeFromProto(const NKikimrArrowAccessorProto::TCons
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
     const std::shared_ptr<IChunkedArray>& originalData, const TChunkConstructionData& externalInfo) const {
-    auto conclusion = NAccessor::TSubColumnsArray::Make(originalData, Settings, externalInfo);
+    auto conclusion = NAccessor::TSubColumnsArray::Make(originalData, Settings, externalInfo.GetColumnType());
     if (conclusion.IsFail()) {
         return conclusion;
     }

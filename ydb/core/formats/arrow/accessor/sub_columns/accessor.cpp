@@ -17,9 +17,9 @@
 namespace NKikimr::NArrow::NAccessor {
 
 TConclusion<std::shared_ptr<TSubColumnsArray>> TSubColumnsArray::Make(
-    const std::shared_ptr<IChunkedArray>& sourceArray, const NSubColumns::TSettings& settings, const TChunkConstructionData& externalInfo) {
+    const std::shared_ptr<IChunkedArray>& sourceArray, const NSubColumns::TSettings& settings, const std::shared_ptr<arrow::DataType>& columnType) {
     AFL_VERIFY(sourceArray);
-    NSubColumns::TDataBuilder builder(externalInfo.GetColumnType(), settings);
+    NSubColumns::TDataBuilder builder(columnType, settings);
     IChunkedArray::TReader reader(sourceArray);
     std::vector<std::shared_ptr<arrow::Array>> storage;
     for (ui32 i = 0; i < reader.GetRecordsCount();) {

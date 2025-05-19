@@ -3,8 +3,10 @@
 
 #include <ydb/core/tx/columnshard/engines/changes/general_compaction.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/selector/abstract.h>
 
 #include <ydb/library/formats/arrow/replace_key.h>
+#include <ydb/services/bg_tasks/abstract/interface.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
@@ -12,8 +14,6 @@ class TOrderedPortion {
 private:
     TPortionInfo::TConstPtr Portion;
     NArrow::TSimpleRow Start;
-    ui64 PortionId;
-    NArrow::TSimpleRow StartPosition;
 
 public:
     const TPortionInfo::TConstPtr& GetPortion() const {
@@ -25,23 +25,14 @@ public:
         return Start;
     }
 
-    const NArrow::TSimpleRow& GetStartPosition() const {
-        AFL_VERIFY(Portion);
-        return StartPosition;
-    }
-
     TOrderedPortion(const TPortionInfo::TConstPtr& portion)
         : Portion(portion)
-        , Start(portion->IndexKeyStart())
-        , PortionId(portion->GetPortionId())
-        , StartPosition(Portion->IndexKeyStart()) {
+        , Start(portion->IndexKeyStart()) {
     }
 
     TOrderedPortion(const TPortionInfo::TPtr& portion)
         : Portion(portion)
-        , Start(portion->IndexKeyStart())
-        , PortionId(portion->GetPortionId())
-        , StartPosition(Portion->IndexKeyStart()) {
+        , Start(portion->IndexKeyStart()) {
     }
 
     friend bool operator<(const NArrow::TSimpleRow& item, const TOrderedPortion& portion) {
@@ -63,12 +54,18 @@ public:
     }
 
     bool operator<(const TOrderedPortion& item) const {
+        AFL_VERIFY(Portion->GetPathId() == item.Portion->GetPathId());
         auto cmp = Start.CompareNotNull(item.Start);
         if (cmp == std::partial_ordering::equivalent) {
-            return PortionId < item.PortionId;
+            return Portion->GetPortionId() < item.Portion->GetPortionId();
         } else {
             return cmp == std::partial_ordering::less;
         }
+    }
+
+    bool operator==(const TOrderedPortion& item) const {
+        AFL_VERIFY(Portion->GetPathId() == item.Portion->GetPathId());
+        return Portion->GetPortionId() == item.Portion->GetPortionId();
     }
 };
 
@@ -282,6 +279,46 @@ public:
     }
 };
 
+class IOverloadChecker {
+private:
+    virtual bool DoIsOverloaded(const TSimplePortionsGroupInfo& portionsData) const = 0;
+
+public:
+    virtual ~IOverloadChecker() = default;
+
+    bool IsOverloaded(const TSimplePortionsGroupInfo& portionsData) const {
+        return DoIsOverloaded(portionsData);
+    }
+};
+
+class TNoOverloadChecker: public IOverloadChecker {
+private:
+    virtual bool DoIsOverloaded(const TSimplePortionsGroupInfo& /*portionsData*/) const override {
+        return false;
+    }
+};
+
+class TLimitsOverloadChecker: public IOverloadChecker {
+private:
+    const std::optional<ui64> PortionsCountLimit;
+    const std::optional<ui64> PortionBlobsSizeLimit;
+    virtual bool DoIsOverloaded(const TSimplePortionsGroupInfo& portionsData) const override {
+        if (PortionsCountLimit && *PortionsCountLimit < (ui64)portionsData.GetCount()) {
+            return true;
+        }
+        if (PortionBlobsSizeLimit && *PortionBlobsSizeLimit < (ui64)portionsData.GetBlobBytes()) {
+            return true;
+        }
+        return false;
+    }
+
+public:
+    TLimitsOverloadChecker(const std::optional<ui64> portionsCountLimit, const std::optional<ui64> portionBlobsSizeLimit)
+        : PortionsCountLimit(portionsCountLimit)
+        , PortionBlobsSizeLimit(portionBlobsSizeLimit) {
+    }
+};
+
 class IPortionsLevel {
 private:
     virtual void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) = 0;
@@ -301,24 +338,48 @@ private:
     }
 
     YDB_READONLY(ui64, LevelId, 0);
+    std::vector<std::shared_ptr<IPortionsSelector>> Selectors;
+    std::vector<TSimplePortionsGroupInfo> SelectivePortionsInfo;
+
+    TSimplePortionsGroupInfo* PortionsInfo = nullptr;
+    std::shared_ptr<IOverloadChecker> OverloadChecker = std::make_shared<TNoOverloadChecker>();
+    std::shared_ptr<IPortionsSelector> DefaultPortionsSelector;
+    const TLevelCounters LevelCounters;
 
 protected:
     std::shared_ptr<IPortionsLevel> NextLevel;
-    TSimplePortionsGroupInfo PortionsInfo;
     mutable std::optional<TInstant> PredOptimization = TInstant::Now();
 
 public:
-    virtual bool IsOverloaded() const {
+    virtual bool IsAppropriatePortionToMove(const TPortionAccessorConstructor& /*info*/) const {
         return false;
     }
 
+    virtual bool IsAppropriatePortionToStore(const TPortionAccessorConstructor& /*info*/) const {
+        return false;
+    }
+
+    const TSimplePortionsGroupInfo& GetPortionsInfo() const {
+        AFL_VERIFY(PortionsInfo);
+        return *PortionsInfo;
+    }
+
+    TSimplePortionsGroupInfo& MutablePortionsInfo() {
+        AFL_VERIFY(PortionsInfo);
+        return *PortionsInfo;
+    }
+
+    bool IsOverloaded() const {
+        return OverloadChecker->IsOverloaded(GetPortionsInfo());
+    }
+
     bool HasData() const {
-        return PortionsInfo.GetCount();
+        return GetPortionsInfo().GetCount();
     }
 
     virtual std::optional<double> GetPackKff() const {
-        if (PortionsInfo.GetRawBytes()) {
-            return 1.0 * PortionsInfo.GetBlobBytes() / PortionsInfo.GetRawBytes();
+        if (GetPortionsInfo().GetRawBytes()) {
+            return 1.0 * GetPortionsInfo().GetBlobBytes() / GetPortionsInfo().GetRawBytes();
         } else if (!NextLevel) {
             return std::nullopt;
         } else {
@@ -326,18 +387,30 @@ public:
         }
     }
 
-    const TSimplePortionsGroupInfo& GetPortionsInfo() const {
-        return PortionsInfo;
-    }
-
     const std::shared_ptr<IPortionsLevel>& GetNextLevel() const {
         return NextLevel;
     }
 
     virtual ~IPortionsLevel() = default;
-    IPortionsLevel(const ui64 levelId, const std::shared_ptr<IPortionsLevel>& nextLevel)
+    IPortionsLevel(const ui64 levelId, const std::shared_ptr<IPortionsLevel>& nextLevel,
+        const std::shared_ptr<IOverloadChecker>& overloadChecker, const TLevelCounters levelCounters,
+        const std::vector<std::shared_ptr<IPortionsSelector>>& selectors, const TString& defaultSelectorName)
         : LevelId(levelId)
+        , Selectors(selectors)
+        , OverloadChecker(overloadChecker ? overloadChecker : std::make_shared<TNoOverloadChecker>())
+        , LevelCounters(levelCounters)
         , NextLevel(nextLevel) {
+        SelectivePortionsInfo.resize(Selectors.size());
+        ui32 idx = 0;
+        for (auto&& i : selectors) {
+            if (i->GetName() == defaultSelectorName) {
+                AFL_VERIFY(!DefaultPortionsSelector);
+                DefaultPortionsSelector = i;
+                PortionsInfo = &SelectivePortionsInfo[idx];
+            }
+            ++idx;
+        }
+        AFL_VERIFY(DefaultPortionsSelector);
     }
 
     bool CanTakePortion(const TPortionInfo::TConstPtr& portion) const {
@@ -361,8 +434,14 @@ public:
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("level", LevelId);
         result.InsertValue("weight", GetWeight());
-        result.InsertValue("portions", PortionsInfo.SerializeToJson());
         result.InsertValue("details", DoSerializeToJson());
+        auto& selectiveJson = result.InsertValue("selectivity", NJson::JSON_MAP);
+        ui32 idx = 0;
+        for (auto&& i : SelectivePortionsInfo) {
+            selectiveJson.InsertValue(Selectors[idx]->GetName(), i.SerializeToJson());
+            ++idx;
+        }
+
         return result;
     }
 
@@ -379,7 +458,34 @@ public:
     }
 
     void ModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) {
-        return DoModifyPortions(add, remove);
+        std::vector<TPortionInfo::TPtr> addSelective;
+        std::vector<TPortionInfo::TPtr> removeSelective;
+        for (ui32 idx = 0; idx < Selectors.size(); ++idx) {
+            const std::shared_ptr<IPortionsSelector>& selector = Selectors[idx];
+            const bool isDefaultSelector = ((ui64)selector.get() == (ui64)DefaultPortionsSelector.get());
+            for (auto&& i : remove) {
+                if (selector && !selector->IsAppropriate(i)) {
+                    continue;
+                }
+                if (isDefaultSelector) {
+                    removeSelective.emplace_back(i);
+                    LevelCounters.Portions->RemovePortion(i);
+                }
+                SelectivePortionsInfo[idx].RemovePortion(*i);
+            }
+            for (auto&& i : add) {
+                if (selector && !selector->IsAppropriate(i)) {
+                    continue;
+                }
+                if (isDefaultSelector) {
+                    addSelective.emplace_back(i);
+                    LevelCounters.Portions->AddPortion(i);
+                }
+                SelectivePortionsInfo[idx].AddPortion(*i);
+                i->InitRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized, !NextLevel);
+            }
+        }
+        return DoModifyPortions(addSelective, removeSelective);
     }
 
     ui64 GetWeight() const {

@@ -46,10 +46,33 @@ private:
     void DrainCurrentPosition(TBuilder* builder, std::shared_ptr<TSortableScanData>* resultScanData, ui64* resultPosition) {
         Y_ABORT_UNLESS(SortHeap.Size());
         Y_ABORT_UNLESS(!SortHeap.Current().IsControlPoint());
+        CheckSequenceInDebug(SortHeap.Current().GetKeyColumns());
+
+        const ui64 startPosition = SortHeap.Current().GetKeyColumns().GetPosition();
+        const TSortableScanData* startSorting = SortHeap.Current().GetKeyColumns().GetSorting().get();
+        const TSortableScanData* startVersion = SortHeap.Current().GetVersionColumns().GetSorting().get();
+        if (MaxVersion) {
+            bool changed = false;
+            while (SortHeap.Size() && SortHeap.Current().GetVersionColumns().Compare(*MaxVersion) == std::partial_ordering::greater) {
+                if (builder) {
+                    builder->SkipRecord(SortHeap.Current());
+                }
+                SortHeap.Next();
+                changed = true;
+            }
+            if (changed) {
+                if (SortHeap.Empty() ||
+                    SortHeap.Current().GetKeyColumns().Compare(*startSorting, startPosition) != std::partial_ordering::equivalent) {
+                    SortHeap.CleanFinished();
+                    return;
+                }
+            }
+        }
+
         if (!SortHeap.Current().IsDeleted()) {
             //        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("key_add", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
             if (builder) {
-                builder->AddRecord(SortHeap.Current().GetKeyColumns());
+                builder->AddRecord(SortHeap.Current());
             }
             if (resultScanData && resultPosition) {
                 *resultScanData = SortHeap.Current().GetKeyColumns().GetSorting();
@@ -57,29 +80,28 @@ private:
             }
         } else {
             //        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("key_skip", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
-        }
-        CheckSequenceInDebug(SortHeap.Current().GetKeyColumns());
-        const ui64 startPosition = SortHeap.Current().GetKeyColumns().GetPosition();
-        const TSortableScanData* startSorting = SortHeap.Current().GetKeyColumns().GetSorting().get();
-        const TSortableScanData* startVersion = SortHeap.Current().GetVersionColumns().GetSorting().get();
-        bool isFirst = true;
-        while (SortHeap.Size() &&
-               (isFirst || SortHeap.Current().GetKeyColumns().Compare(*startSorting, startPosition) == std::partial_ordering::equivalent)) {
-            if (!isFirst) {
-                //            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("key_skip1", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
-                auto& anotherIterator = SortHeap.Current();
-                if (PossibleSameVersionFlag) {
-                    AFL_VERIFY(anotherIterator.GetVersionColumns().Compare(*startVersion, startPosition) != std::partial_ordering::greater)
-                    ("r", startVersion->BuildCursor(startPosition).DebugJson())("a", anotherIterator.GetVersionColumns().DebugJson())(
-                        "key", startSorting->BuildCursor(startPosition).DebugJson());
-                } else {
-                    AFL_VERIFY(anotherIterator.GetVersionColumns().Compare(*startVersion, startPosition) == std::partial_ordering::less)
-                    ("r", startVersion->BuildCursor(startPosition).DebugJson())("a", anotherIterator.GetVersionColumns().DebugJson())(
-                        "key", startSorting->BuildCursor(startPosition).DebugJson());
-                }
+            if (builder) {
+                builder->SkipRecord(SortHeap.Current());
             }
-            SortHeap.Next();
-            isFirst = false;
+        }
+        SortHeap.Next();
+
+        while (
+            SortHeap.Size() && (SortHeap.Current().GetKeyColumns().Compare(*startSorting, startPosition) == std::partial_ordering::equivalent)) {
+            if (builder) {
+                builder->SkipRecord(SortHeap.Current());
+            }
+            //            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("key_skip1", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
+            auto& anotherIterator = SortHeap.Current();
+            if (PossibleSameVersionFlag) {
+                AFL_VERIFY(anotherIterator.GetVersionColumns().Compare(*startVersion, startPosition) != std::partial_ordering::greater)
+                ("r", startVersion->BuildCursor(startPosition).DebugJson())("a", anotherIterator.GetVersionColumns().DebugJson())(
+                    "key", startSorting->BuildCursor(startPosition).DebugJson());
+            } else {
+                AFL_VERIFY(anotherIterator.GetVersionColumns().Compare(*startVersion, startPosition) == std::partial_ordering::less)
+                ("r", startVersion->BuildCursor(startPosition).DebugJson())("a", anotherIterator.GetVersionColumns().DebugJson())(
+                    "key", startSorting->BuildCursor(startPosition).DebugJson());
+            }
         }
         SortHeap.CleanFinished();
     }
@@ -151,7 +173,6 @@ public:
 
     template <MergeResultBuilder TBuilder>
     void DrainAll(TBuilder& builder) {
-        Y_ABORT_UNLESS((ui32)DataSchema->num_fields() == builder.GetBuildersCount());
         while (SortHeap.Size()) {
             DrainCurrentPosition(&builder, nullptr, nullptr);
         }
@@ -164,7 +185,6 @@ public:
     template <MergeResultBuilder TBuilder>
     bool DrainToControlPoint(TBuilder& builder, const bool includeFinish, std::optional<TCursor>* lastResultPosition = nullptr) {
         AFL_VERIFY(ControlPoints == 1);
-        Y_ABORT_UNLESS((ui32)DataSchema->num_fields() == builder.GetBuildersCount());
         builder.ValidateDataSchema(DataSchema);
         bool cpReachedFlag = false;
         std::shared_ptr<TSortableScanData> resultScanData;

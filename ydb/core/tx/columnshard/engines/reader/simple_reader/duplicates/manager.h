@@ -19,7 +19,7 @@ class IDataSource;
 class TPortionDataSource;
 class TColumnFetchingContext;
 
-class TFilterConstructor {
+class TInternalFilterConstructor: TMoveOnly {
 private:
     class TRowRange {
     private:
@@ -54,6 +54,7 @@ private:
         AFL_VERIFY(!IsDone());
         AFL_VERIFY(IsReady());
         Callback->OnFilterReady(FiltersByRange.begin()->second);
+        Callback.reset();
         AFL_VERIFY(IsDone());
     }
 
@@ -78,23 +79,32 @@ public:
     }
 
     bool IsDone() const {
-        return !!Callback;
+        return !Callback;
     }
 
-    TFilterConstructor(const std::shared_ptr<IFilterSubscriber>& callback, const std::shared_ptr<IDataSource>& source);
+    void Abort(const TString& error) {
+        Callback->OnFailure(error);
+        Callback.reset();
+    }
+
+    TInternalFilterConstructor(const std::shared_ptr<IFilterSubscriber>& callback, const std::shared_ptr<IDataSource>& source);
+
+    ~TInternalFilterConstructor() {
+        AFL_VERIFY(IsDone());
+    }
 };
 
 class TEvConstructFilters: public NActors::TEventLocal<TEvConstructFilters, NColumnShard::TEvPrivate::EvConstructFilters> {
 private:
     using TDataBySource = THashMap<ui64, TSourceCache::TCacheItem>;
     YDB_READONLY_DEF(std::shared_ptr<IDataSource>, Source);
-    YDB_READONLY_DEF(std::shared_ptr<TFilterConstructor>, Callback);
+    YDB_READONLY_DEF(std::shared_ptr<TInternalFilterConstructor>, Callback);
     YDB_READONLY_DEF(TDataBySource, ColumnData);
     TColumnDataSplitter Splitter;
 
 public:
-    TEvConstructFilters(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<TFilterConstructor>& callback, TDataBySource&& data,
-        TColumnDataSplitter&& splitter)
+    TEvConstructFilters(const std::shared_ptr<IDataSource>& source, const std::shared_ptr<TInternalFilterConstructor>& callback,
+        TDataBySource&& data, TColumnDataSplitter&& splitter)
         : Source(source)
         , Callback(callback)
         , ColumnData(std::move(data))
@@ -137,7 +147,7 @@ private:
     private:
         TActorId Owner;
         std::shared_ptr<IDataSource> Source;
-        std::shared_ptr<TFilterConstructor> Callback;
+        std::shared_ptr<TInternalFilterConstructor> Callback;
         TColumnDataSplitter Splitter;
 
         virtual void OnSourcesReady(TSourceCache::TSourcesData&& result) override;
@@ -148,7 +158,7 @@ private:
 
     public:
         TSourceDataSubscriber(const TActorId& owner, const std::shared_ptr<IDataSource>& source,
-            const std::shared_ptr<TFilterConstructor>& callback, TColumnDataSplitter&& splitter)
+            const std::shared_ptr<TInternalFilterConstructor>& callback, TColumnDataSplitter&& splitter)
             : Owner(owner)
             , Source(source)
             , Callback(callback)
@@ -176,9 +186,9 @@ private:
 
 private:
     TSourceCache* SourceCache;
-    const TIntervalTree<TInterval<NArrow::TSimpleRow>, TSourceInfo> Intervals;
+    const TIntervalTree<NArrow::TSimpleRow, TSourceInfo> Intervals;
     TLRUCache<TDuplicateMapInfo, NArrow::TColumnFilter> FiltersCache;
-    THashMap<TDuplicateMapInfo, std::vector<std::shared_ptr<TFilterConstructor>>> BuildingFilters;
+    THashMap<TDuplicateMapInfo, std::vector<std::shared_ptr<TInternalFilterConstructor>>> BuildingFilters;
 
 private:
     STATEFN(StateMain) {
@@ -196,6 +206,13 @@ private:
     void Handle(const TEvConstructFilters::TPtr&);
     void Handle(const TEvFiltersConstructed::TPtr&);
     void Handle(const NActors::TEvents::TEvPoison::TPtr&) {
+        for (auto& [_, constructors] : BuildingFilters) {
+            for (auto& constructor : constructors) {
+                if (!constructor->IsDone()) {
+                    constructor->Abort("aborted by actor system");
+                }
+            }
+        }
         PassAway();
     }
 

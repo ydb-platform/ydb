@@ -12,42 +12,39 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(level)
-add_subdirectory(selector)
-
-add_library(optimizer-lcbuckets-planner INTERFACE)
+add_library(lcbuckets-constructor-selector)
 
 
-target_link_libraries(optimizer-lcbuckets-planner INTERFACE
-  contrib-libs-linux-headers
+target_link_libraries(lcbuckets-constructor-selector PUBLIC
   contrib-libs-cxxsupp
   yutil
   libs-apache-arrow
   ydb-core-protos
   core-formats-arrow
   engines-changes-abstract
-  lcbuckets-planner-level
-  lcbuckets-planner-selector
+)
+
+target_sources(lcbuckets-constructor-selector PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/constructor/selector/constructor.cpp
 )
 
 
-add_global_library_for(optimizer-lcbuckets-planner.global
-  optimizer-lcbuckets-planner)
+add_global_library_for(lcbuckets-constructor-selector.global
+  lcbuckets-constructor-selector)
 
 
-target_link_libraries(optimizer-lcbuckets-planner.global PUBLIC
-  contrib-libs-linux-headers
+target_link_libraries(lcbuckets-constructor-selector.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   libs-apache-arrow
   ydb-core-protos
   core-formats-arrow
   engines-changes-abstract
-  lcbuckets-planner-level
-  lcbuckets-planner-selector
 )
 
-target_sources(optimizer-lcbuckets-planner.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/optimizer.cpp
+target_sources(lcbuckets-constructor-selector.global PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/constructor/selector/empty.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/constructor/selector/transparent.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/constructor/selector/snapshot.cpp
 )
 

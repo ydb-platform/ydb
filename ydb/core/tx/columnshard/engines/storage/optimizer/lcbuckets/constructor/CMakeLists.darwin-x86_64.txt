@@ -12,6 +12,9 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(selector)
+add_subdirectory(level)
+
 add_library(optimizer-lcbuckets-constructor INTERFACE)
 
 
@@ -22,6 +25,8 @@ target_link_libraries(optimizer-lcbuckets-constructor INTERFACE
   ydb-core-protos
   core-formats-arrow
   engines-changes-abstract
+  lcbuckets-constructor-selector
+  lcbuckets-constructor-level
 )
 
 
@@ -36,11 +41,11 @@ target_link_libraries(optimizer-lcbuckets-constructor.global PUBLIC
   ydb-core-protos
   core-formats-arrow
   engines-changes-abstract
+  lcbuckets-constructor-selector
+  lcbuckets-constructor-level
 )
 
 target_sources(optimizer-lcbuckets-constructor.global PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/constructor/constructor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/constructor/zero_level.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/constructor/one_layer.cpp
 )
 

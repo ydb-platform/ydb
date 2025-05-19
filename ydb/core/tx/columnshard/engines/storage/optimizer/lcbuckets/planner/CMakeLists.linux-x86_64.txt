@@ -12,10 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(optimizer-lcbuckets-planner)
+add_subdirectory(level)
+add_subdirectory(selector)
+
+add_library(optimizer-lcbuckets-planner INTERFACE)
 
 
-target_link_libraries(optimizer-lcbuckets-planner PUBLIC
+target_link_libraries(optimizer-lcbuckets-planner INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
@@ -23,13 +26,8 @@ target_link_libraries(optimizer-lcbuckets-planner PUBLIC
   ydb-core-protos
   core-formats-arrow
   engines-changes-abstract
-)
-
-target_sources(optimizer-lcbuckets-planner PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/abstract.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/zero_level.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/common_level.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/counters.cpp
+  lcbuckets-planner-level
+  lcbuckets-planner-selector
 )
 
 
@@ -45,6 +43,8 @@ target_link_libraries(optimizer-lcbuckets-planner.global PUBLIC
   ydb-core-protos
   core-formats-arrow
   engines-changes-abstract
+  lcbuckets-planner-level
+  lcbuckets-planner-selector
 )
 
 target_sources(optimizer-lcbuckets-planner.global PRIVATE

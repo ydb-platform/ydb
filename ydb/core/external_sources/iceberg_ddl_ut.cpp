@@ -20,7 +20,7 @@ public:
 
         auto type = ToString(NYql::EDatabaseType::Iceberg);
         auto factory = NExternalSource::CreateExternalSourceFactory(
-            {}, nullptr, 50000, nullptr, false, false, {type});
+            {}, nullptr, 50000, nullptr, false, false, false, {type});
 
         Source = factory->GetOrCreate(type);
 

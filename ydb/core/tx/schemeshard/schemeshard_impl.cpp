@@ -7609,6 +7609,7 @@ void TSchemeShard::ConfigureExternalSources(
         nullptr,
         EnableExternalSourceSchemaInference,
         config.GetS3().GetAllowLocalFiles(),
+        config.GetAllExternalDataSourcesAreAvailable(),
         std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend())
     );
 

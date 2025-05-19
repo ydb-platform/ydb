@@ -75,18 +75,7 @@ class AddDataInflightExtension(ExtensionPoint):
 
 
 def enable_external_data_sources(qs_config):
-    qs_config['available_external_data_sources'] = []
-    qs_config['available_external_data_sources'].append("ObjectStorage")
-    qs_config['available_external_data_sources'].append("ClickHouse")
-    qs_config['available_external_data_sources'].append("PostgreSQL")
-    qs_config['available_external_data_sources'].append("MySQL")
-    qs_config['available_external_data_sources'].append("Ydb")
-    qs_config['available_external_data_sources'].append("YT")
-    qs_config['available_external_data_sources'].append("Greenplum")
-    qs_config['available_external_data_sources'].append("MsSQLServer")
-    qs_config['available_external_data_sources'].append("Oracle")
-    qs_config['available_external_data_sources'].append("Logging")
-    qs_config['available_external_data_sources'].append("Solomon")
+    qs_config['all_external_data_sources_are_available'] = True
 
 
 class AddFormatSizeLimitExtension(ExtensionPoint):

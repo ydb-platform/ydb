@@ -870,7 +870,6 @@ void TCommandVersionDynamicConfig::Config(TConfig& config) {
         EDataFormat::Json,
         EDataFormat::Csv
     });
-    config.Opts->MutuallyExclusive("list-nodes", "format");
 }
 
 void TCommandVersionDynamicConfig::Parse(TConfig& config) {
@@ -879,12 +878,8 @@ void TCommandVersionDynamicConfig::Parse(TConfig& config) {
 }
 
 int TCommandVersionDynamicConfig::Run(TConfig& config) {
-
     auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
     auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
-    if (OutputFormat != EDataFormat::Default) {
-        ListNodes = true;
-    }
     auto result = client.GetConfigurationVersion(ListNodes).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     auto sortNodes = [&](const auto& list) {
@@ -906,31 +901,41 @@ int TCommandVersionDynamicConfig::Run(TConfig& config) {
             jsonOutput.InsertValue(key, nodesArray);
         };
 
-#define PRINT_NODES_TO_JSON(type, key) \
-        serializeNodesInfo(#key "_nodes_list", [&]() { return result.Get##type##NodesList(); }); \
+#define ADD_INFO_TO_JSON(type, key) \
+        jsonOutput.InsertValue(#key "_nodes_count", result.Get##type##Nodes()); \
+        if (ListNodes) { \
+            serializeNodesInfo(#key "_nodes_list", [&]() { return result.Get##type##NodesList(); }); \
+        }
 
-        PRINT_NODES_TO_JSON(V1, v1)
-        PRINT_NODES_TO_JSON(V2, v2)
-        PRINT_NODES_TO_JSON(Unknown, unknown)
+        ADD_INFO_TO_JSON(V1, v1)
+        ADD_INFO_TO_JSON(V2, v2)
+        ADD_INFO_TO_JSON(Unknown, unknown)
 
         NJson::WriteJson(&Cout, &jsonOutput, true);
         Cout << Endl;
     } else if (OutputFormat == EDataFormat::Csv) {
-        Cout << "config_version,node_id,hostname,port" << Endl;
-        auto printNodesToCsv = [&](const TString& versionString, const auto& listGetter) {
-            for (const auto& node : sortNodes(listGetter())) {
-                TStringBuilder row;
-                row << versionString << "," << node.NodeId << ",\"" << node.Hostname << "\"," << node.Port;
-                Cout << row << Endl;
-            }
-        };
+        if (ListNodes) {
+            Cout << "config_version,node_id,hostname,port" << Endl;
+            auto printNodesToCsv = [&](const TString& versionString, const auto& listGetter) {
+                for (const auto& node : sortNodes(listGetter())) {
+                    TStringBuilder row;
+                    row << versionString << "," << node.NodeId << ",\"" << node.Hostname << "\"," << node.Port;
+                    Cout << row << Endl;
+                }
+            };
 
 #define PRINT_NODES_TO_CSV(type, key) \
-    printNodesToCsv(#key, [&]() { return result.Get##type##NodesList(); }); \
+        printNodesToCsv(#key, [&]() { return result.Get##type##NodesList(); }); \
 
-        PRINT_NODES_TO_CSV(V1, v1)
-        PRINT_NODES_TO_CSV(V2, v2)
-        PRINT_NODES_TO_CSV(Unknown, unknown)
+            PRINT_NODES_TO_CSV(V1, v1)
+            PRINT_NODES_TO_CSV(V2, v2)
+            PRINT_NODES_TO_CSV(Unknown, unknown)
+        } else {
+            Cout << "config_version,nodes_count" << Endl;
+            Cout << "v1," << result.GetV1Nodes() << Endl;
+            Cout << "v2," << result.GetV2Nodes() << Endl;
+            Cout << "unknown," << result.GetUnknownNodes() << Endl;
+        }
     } else {
         auto printNodeList = [&](const TString& header, const auto& listGetter) {
             const auto& nodesVector = sortNodes(listGetter());

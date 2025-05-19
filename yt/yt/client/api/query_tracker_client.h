@@ -99,7 +99,7 @@ struct TListQueriesOptions
     std::optional<TInstant> ToTime;
     std::optional<TInstant> CursorTime;
     EOperationSortDirection CursorDirection = EOperationSortDirection::Past;
-    std::optional<TString> UserFilter;
+    std::optional<std::string> UserFilter;
 
     std::optional<NQueryTrackerClient::EQueryState> StateFilter;
     std::optional<NQueryTrackerClient::EQueryEngine> EngineFilter;
@@ -118,7 +118,7 @@ struct TQuery
     std::optional<TInstant> StartTime;
     std::optional<TInstant> FinishTime;
     NYson::TYsonString Settings;
-    std::optional<TString> User;
+    std::optional<std::string> User;
     std::optional<TString> AccessControlObject; // COMPAT(mpereskokova)
     std::optional<NYson::TYsonString> AccessControlObjects;
     std::optional<NQueryTrackerClient::EQueryState> State;

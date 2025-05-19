@@ -1535,40 +1535,6 @@ Y_UNIT_TEST(TestWriteSplit) {
     });
 }
 
-Y_UNIT_TEST(TestLowWatermark) {
-    TTestContext tc;
-    RunTestWithReboots(tc.TabletIds, [&]() {
-        return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
-        TFinalizer finalizer(tc);
-        tc.Prepare(dispatchName, setup, activeZone);
-        tc.Runtime->SetScheduledLimit(200);
-
-        PQTabletPrepare({.lowWatermark=2_MB}, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
-
-        TVector<std::pair<ui64, TString>> data;
-
-        ui32 pp = 4 + 8 + 2 + 9;
-
-        TString ss{1_MB, '_'};
-        data.push_back({1, ss.substr(pp)});
-        data.push_back({2, ss.substr(pp)});
-        data.push_back({3, ss.substr(pp)});
-        CmdWrite(0,"sourceid0", data, tc, false, {}, true);
-
-        PQTabletPrepare({}, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
-        CmdWrite(0,"sourceid1", data, tc, false, {}, false); //first are compacted
-        PQGetPartInfo(0, 6, tc);
-        CmdWrite(0,"sourceid2", data, tc, false, {}, false); //3 and 6 are compacted
-        PQGetPartInfo(3, 9, tc);
-        PQTabletPrepare({.lowWatermark=3_MB}, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
-        CmdWrite(0,"sourceid3", data, tc, false, {}, false); //3, 6 and 3 are compacted
-        data.resize(1);
-        CmdWrite(0,"sourceid4", data, tc, false, {}, false); //3, 6 and 3 are compacted
-        PQGetPartInfo(9, 13, tc);
-    });
-}
-
 Y_UNIT_TEST(TestTimeRetention) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {

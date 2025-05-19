@@ -15,8 +15,8 @@ public:
     TKqpApplyEffectsConsumer(NUdf::IApplyContext* applyCtx)
         : ApplyCtx(applyCtx) {}
 
-    bool IsFull() const override {
-        return false;
+    TDqFillLevel GetFillLevel() const override {
+        return NoLimit;
     }
 
     void Consume(NUdf::TUnboxedValue&& value) final {

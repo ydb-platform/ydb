@@ -8,6 +8,7 @@ Y_UNIT_TEST_SUITE(Ibv) {
         int numDevices;
         int err;
         ibv_device** deviceList = ibv_get_device_list(&numDevices);
+        UNIT_ASSERT_C(numDevices > 0, "no devices found");
         for (int i = 0; i < numDevices; i++) {
             ibv_device* dev = deviceList[i];
             Cerr << "found: " << dev->dev_name << " " << dev->name << " " << dev->dev_path << Endl; 

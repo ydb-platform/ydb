@@ -19,9 +19,17 @@ public:
     {}
 
     ~TRdmaCtx();
+
+    ibv_context* GetContext() const {
+        return Context;
+    }
+
+    ibv_pd* GetProtDomain() const {
+        return ProtDomain;
+    }
 private:
-    ibv_context* Context;
-    ibv_pd* ProtDomain;
+    ibv_context* const Context;
+    ibv_pd* const ProtDomain;
 };
 
 

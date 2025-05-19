@@ -51,11 +51,21 @@ namespace NInterconnect::NRdma::NLinkMgr {
 static class TRdmaLinkManager {
 public:
     TRdmaCtx* GetCtx(const ibv_gid* gid) {
-        auto it = CtxMap.find(*gid);
-        if (it == CtxMap.end()) {
-            return nullptr;
+        for (const auto& [entry, ctx]: CtxMap) {
+            if (entry.gid.global.interface_id == gid->global.interface_id &&
+                entry.gid.global.subnet_prefix == gid->global.subnet_prefix) {
+                return ctx.get();
+            }
         }
-        return it->second.get();
+        return nullptr;
+    }
+
+    TCtxsMap GetAllCtxs() {
+        TCtxsMap ctxs;
+        for (const auto& [entry, ctx]: CtxMap) {
+            ctxs.emplace_back(entry, ctx.get());
+        }
+        return ctxs;
     }
 
     TRdmaLinkManager() {
@@ -63,7 +73,7 @@ public:
     }
     
 private:
-    std::unordered_map<ibv_gid, std::shared_ptr<NInterconnect::NRdma::TRdmaCtx>> CtxMap;
+    std::vector<std::pair<ibv_gid_entry, std::shared_ptr<NInterconnect::NRdma::TRdmaCtx>>> CtxMap;
     void ScanDevices() {
         int numDevices;
         int err;
@@ -99,22 +109,30 @@ private:
                 continue;
             }
         
-            for (uint8_t port = 1; port <= devAttrs.phys_port_cnt; port++) {
+            for (uint8_t portNum = 1; portNum <= devAttrs.phys_port_cnt; portNum++) {
                 ibv_port_attr portAttrs;
-                err = ibv_query_port(ctx, port, &portAttrs);
+                err = ibv_query_port(ctx, portNum, &portAttrs);
                 if (err == 0) {
                     //Cerr << "port " << (int)port << " speed: " << (int)portAttrs.active_speed << " " << err << "len: " << portAttrs.gid_tbl_len << Endl;
 
-                    for (int gid_id = 0; gid_id < portAttrs.gid_tbl_len; gid_id++ ) {
-                        ibv_gid gid = {{0}};
-                        err = ibv_query_gid(ctx, port, gid_id, &gid);
+                    for (int gidIndex = 0; gidIndex < portAttrs.gid_tbl_len; gidIndex++ ) {
+                        ibv_gid gid;
+                        err = ibv_query_gid(ctx, portNum, gidIndex, &gid);
+                        // ibv_query_gid_ex(ctx, port, gidIndex, &entry, 0);
                         if (err == 0 && gid.global.interface_id) {
-                            CtxMap.emplace(gid, sharedCtx);
 
-                            char str[INET6_ADDRSTRLEN];
-                            inet_ntop(AF_INET6, &(gid), str, INET6_ADDRSTRLEN);
+                            ibv_gid_entry entry{
+                                .gid = gid,
+                                .gid_index = static_cast<ui32>(gidIndex),
+                                .port_num = portNum,
+                            };
+
+                            CtxMap.emplace_back(entry, sharedCtx);
+
+                            // char str[INET6_ADDRSTRLEN];
+                            // inet_ntop(AF_INET6, &(gid), str, INET6_ADDRSTRLEN);
                             
-                            fprintf(stderr, "%s\n", str);
+                            // fprintf(stderr, "%s\n", str);
                         }
                     }
                 }
@@ -135,6 +153,10 @@ void InitLinkManager();
 TRdmaCtx* GetCtx(const in6_addr& ip) {
     const ibv_gid* gid = reinterpret_cast<const ibv_gid*>(&ip);
     return RdmaLinkManager.GetCtx(gid);
+}
+
+TCtxsMap GetAllCtxs() {
+    return RdmaLinkManager.GetAllCtxs();
 }
 
 

@@ -83,7 +83,7 @@ void TDuplicateFilterConstructor::Handle(const TEvConstructFilters::TPtr& ev) {
     const TColumnDataSplitter& splitter = ev->Get()->GetSplitter();
     const TSnapshot maxVersion = mainSource->GetContext()->GetReadMetadata()->GetRequestSnapshot();
 
-    THashMap<ui64, std::vector<TColumnDataSplitter::TSourceSegment>> splitted;
+    THashMap<ui64, std::vector<std::optional<TColumnDataSplitter::TSourceSegment>>> splitted;
     for (const auto& [id, data] : ev->Get()->GetColumnData()) {
         splitted[id] = splitter.SplitPortion(data, id, maxVersion);
     }
@@ -93,16 +93,16 @@ void TDuplicateFilterConstructor::Handle(const TEvConstructFilters::TPtr& ev) {
         const auto& splittedMain = *TValidator::CheckNotNull(splitted.FindPtr(mainSource->GetSourceId()));
         AFL_VERIFY(splittedMain.size() == splitter.NumIntervals());
         for (ui64 i = 0; i < splitter.NumIntervals(); ++i) {
-            if (!splittedMain[i].GetInterval().GetRowsCount()) {
+            if (!splittedMain[i]) {
                 builtIntervals.insert(i);
-            } else if (auto* findBuilding = BuildingFilters.FindPtr(splittedMain[i].GetInterval())) {
+            } else if (auto* findBuilding = BuildingFilters.FindPtr(splittedMain[i]->GetInterval())) {
                 findBuilding->emplace_back(ev->Get()->GetCallback());
                 builtIntervals.insert(i);
-            } else if (auto findCached = FiltersCache.Find(splittedMain[i].GetInterval()); findCached != FiltersCache.End()) {
+            } else if (auto findCached = FiltersCache.Find(splittedMain[i]->GetInterval()); findCached != FiltersCache.End()) {
                 ev->Get()->GetCallback()->AddFilter(findCached.Key(), findCached.Value());
                 builtIntervals.insert(i);
             } else {
-                BuildingFilters[splittedMain[i].GetInterval()].emplace_back(ev->Get()->GetCallback());
+                BuildingFilters[splittedMain[i]->GetInterval()].emplace_back(ev->Get()->GetCallback());
             }
         }
     }
@@ -113,11 +113,10 @@ void TDuplicateFilterConstructor::Handle(const TEvConstructFilters::TPtr& ev) {
     }
 
     std::vector<THashMap<ui64, TColumnDataSplitter::TSourceSegment>> intervals(splitter.NumIntervals());
-    for (const auto& [id, data] : ev->Get()->GetColumnData()) {
-        auto portionIntervals = splitter.SplitPortion(data, id, maxVersion);
+    for (auto&& [source, portionIntervals] : splitted) {
         for (ui64 i = 0; i < portionIntervals.size(); ++i) {
-            if (portionIntervals[i].GetInterval().GetRowsCount()) {
-                intervals[i].emplace(id, std::move(portionIntervals[i]));
+            if (portionIntervals[i]) {
+                intervals[i].emplace(source, std::move(*portionIntervals[i]));
             }
         }
     }

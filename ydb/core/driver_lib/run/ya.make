@@ -36,6 +36,7 @@ PEERDIR(
     library/cpp/string_utils/parse_size
     library/cpp/svnversion
     ydb/core/actorlib_impl
+    ydb/core/actorlib_impl/actor_system_mon
     ydb/core/audit
     ydb/core/backup/controller
     ydb/core/base

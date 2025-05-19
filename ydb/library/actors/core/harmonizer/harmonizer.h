@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include "types.h"
 
 namespace NActors {
     class IExecutorPool;
@@ -30,7 +31,7 @@ namespace NActors {
         float MaxElapsedCpu = 0.0;
         float MinElapsedCpu = 0.0;
         float AvgElapsedCpu = 0.0;
-        i16 PotentialMaxThreadCount = 0;
+        float PotentialMaxThreadCount = 0;
         float SharedCpuQuota = 0.0;
         bool IsNeedy = false;
         bool IsStarved = false;
@@ -54,14 +55,18 @@ namespace NActors {
     // Pool cpu harmonizer
     class IHarmonizer {
     public:
+        using TIterationViewerCallback = std::function<void(const TIterableDoubleRange<THarmonizerIterationState>&)>;
+
         virtual ~IHarmonizer() {}
         virtual void Harmonize(ui64 ts) = 0;
         virtual void DeclareEmergency(ui64 ts) = 0;
-        virtual void AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo = nullptr) = 0;
+        virtual void AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo = nullptr, bool ignoreThreads = false) = 0;
         virtual void Enable(bool enable) = 0;
         virtual TPoolHarmonizerStats GetPoolStats(i16 poolId) const = 0;
         virtual THarmonizerStats GetStats() const = 0;
         virtual void SetSharedPool(ISharedPool* pool) = 0;
+
+        virtual bool InvokeReadHistory(TIterationViewerCallback callback) = 0;
     };
 
     std::unique_ptr<IHarmonizer> MakeHarmonizer(ui64 ts);

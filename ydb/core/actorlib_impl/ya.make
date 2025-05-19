@@ -53,3 +53,7 @@ END()
 RECURSE_FOR_TESTS(
     ut
 )
+
+RECURSE(
+    actor_system_mon
+)

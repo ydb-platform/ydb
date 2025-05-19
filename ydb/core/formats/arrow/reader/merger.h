@@ -53,7 +53,8 @@ private:
         const TSortableScanData* startVersion = SortHeap.Current().GetVersionColumns().GetSorting().get();
         if (MaxVersion) {
             bool changed = false;
-            while (SortHeap.Size() && SortHeap.Current().GetVersionColumns().Compare(*MaxVersion) == std::partial_ordering::greater) {
+            while (SortHeap.Size() && !SortHeap.Current().IsControlPoint() &&
+                   SortHeap.Current().GetVersionColumns().Compare(*MaxVersion) == std::partial_ordering::greater) {
                 if (builder) {
                     builder->SkipRecord(SortHeap.Current());
                 }
@@ -102,6 +103,7 @@ private:
                 ("r", startVersion->BuildCursor(startPosition).DebugJson())("a", anotherIterator.GetVersionColumns().DebugJson())(
                     "key", startSorting->BuildCursor(startPosition).DebugJson());
             }
+            SortHeap.Next();
         }
         SortHeap.CleanFinished();
     }

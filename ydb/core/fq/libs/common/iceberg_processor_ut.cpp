@@ -1,6 +1,5 @@
 #include "iceberg_processor.h"
 
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
 #include <library/cpp/testing/gtest/gtest.h>
 

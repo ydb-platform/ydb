@@ -302,7 +302,6 @@ void TDynamicNameserver::OpenPipe(TActorId& pipe)
     if (!pipe) {
         NTabletPipe::TClientConfig clientConfig;
         clientConfig.RetryPolicy = {
-            .RetryLimitCount = 10,
             .MinRetryTime = TDuration::MilliSeconds(100),
             .MaxRetryTime = TDuration::Seconds(1),
             .DoFirstRetryInstantly = true
@@ -383,8 +382,8 @@ void TDynamicNameserver::ResolveDynamicNode(ui32 nodeId,
     }
 }
 
-void TDynamicNameserver::SendNodesList(const TActorContext &ctx)
-{   
+void TDynamicNameserver::SendNodesList(TActorId recipient, const TActorContext &ctx)
+{
     auto now = ctx.Now();
     if (ListNodesCache->NeedUpdate(now)) {
         auto newNodes = MakeIntrusive<TIntrusiveVector<TEvInterconnect::TNodeInfo>>();
@@ -410,8 +409,13 @@ void TDynamicNameserver::SendNodesList(const TActorContext &ctx)
         ListNodesCache->Update(newNodes, newExpire);
     }
 
+    ctx.Send(recipient, new TEvInterconnect::TEvNodesInfo(ListNodesCache->GetNodes()));
+}
+
+void TDynamicNameserver::SendNodesList(const TActorContext &ctx)
+{
     for (auto &sender : ListNodesQueue) {
-        ctx.Send(sender, new TEvInterconnect::TEvNodesInfo(ListNodesCache->GetNodes()));
+        SendNodesList(sender, ctx);
     }
     ListNodesQueue.clear();
 }
@@ -540,21 +544,28 @@ void TDynamicNameserver::Handle(TEvResolveAddress::TPtr &ev, const TActorContext
 void TDynamicNameserver::Handle(TEvInterconnect::TEvListNodes::TPtr &ev,
                                 const TActorContext &ctx)
 {
-    if (ListNodesQueue.empty()) {
-        auto dinfo = AppData(ctx)->DomainsInfo;
-        if (const auto& d = dinfo->Domain) {
-            ui32 domain = d->DomainUid;
-            if (ProtocolState == EProtocolState::UseEpochProtocol) {
-                TAutoPtr<TEvNodeBroker::TEvListNodes> request = new TEvNodeBroker::TEvListNodes;
-                request->Record.SetCachedVersion(DynamicConfigs[domain]->Epoch.Version);
-                NTabletPipe::SendData(ctx, DynamicConfigs[domain]->NodeBrokerPipe, request.Release());
-            } else if (ProtocolState == EProtocolState::UseDeltaProtocol) {
-                SendSyncRequest(DynamicConfigs[domain]->NodeBrokerPipe, ctx);
+    LOG_D("Handle " << ev->Get()->ToString());
+
+    if (ProtocolState == EProtocolState::Connecting) {
+        SendNodesList(ev->Sender, ctx);
+    } else {
+        if (ListNodesQueue.empty()) {
+            auto dinfo = AppData(ctx)->DomainsInfo;
+            if (const auto& d = dinfo->Domain) {
+                ui32 domain = d->DomainUid;
+                if (ProtocolState == EProtocolState::UseEpochProtocol) {
+                    TAutoPtr<TEvNodeBroker::TEvListNodes> request = new TEvNodeBroker::TEvListNodes;
+                    request->Record.SetCachedVersion(DynamicConfigs[domain]->Epoch.Version);
+                    NTabletPipe::SendData(ctx, DynamicConfigs[domain]->NodeBrokerPipe, request.Release());
+                } else if (ProtocolState == EProtocolState::UseDeltaProtocol) {
+                    SendSyncRequest(DynamicConfigs[domain]->NodeBrokerPipe, ctx);
+                }
+                PendingRequests.Set(domain);
             }
-            PendingRequests.Set(domain);
         }
+        ListNodesQueue.push_back(ev->Sender);
     }
-    ListNodesQueue.push_back(ev->Sender);
+
     if (ev->Get()->SubscribeToStaticNodeChanges) {
         StaticNodeChangeSubscribers.insert(ev->Sender);
     }

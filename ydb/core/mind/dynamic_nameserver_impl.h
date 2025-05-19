@@ -243,6 +243,7 @@ private:
                             const TActorContext &ctx);
     void ResolveStaticNode(ui32 nodeId, TActorId sender, TMonotonic deadline, const TActorContext &ctx);
     void ResolveDynamicNode(ui32 nodeId, TAutoPtr<IEventHandle> ev, TMonotonic deadline, const TActorContext &ctx);
+    void SendNodesList(TActorId recipient, const TActorContext &ctx);
     void SendNodesList(const TActorContext &ctx);
     void PendingRequestAnswered(ui32 domain, const TActorContext &ctx);
     void UpdateState(const NKikimrNodeBroker::TNodesInfo &rec,

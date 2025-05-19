@@ -1172,6 +1172,7 @@ public:
                                                                                  FederatedQuerySetup ? FederatedQuerySetup->CredentialsFactory : nullptr,
                                                                                  Config->FeatureFlags.GetEnableExternalSourceSchemaInference(),
                                                                                  FederatedQuerySetup->S3GatewayConfig.GetAllowLocalFiles(),
+                                                                                 QueryServiceConfig.GetAllExternalDataSourcesAreAvailable(),
                                                                                  std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend()));
         }
     }

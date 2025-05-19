@@ -7287,6 +7287,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
             nullptr,
             appConfig.GetFeatureFlags().GetEnableExternalSourceSchemaInference(),
             appConfig.GetQueryServiceConfig().GetS3().GetAllowLocalFiles(),
+            appConfig.GetQueryServiceConfig().GetAllExternalDataSourcesAreAvailable(),
             std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend())
         );
     }

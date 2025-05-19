@@ -186,6 +186,8 @@ TableServiceConfig {
 }
 
 QueryServiceConfig {
+  AllExternalDataSourcesAreAvailable: true
+
   Generic {
     Connector {
         Endpoint {

@@ -40,6 +40,10 @@ public:
         , Memory(memory) {
         AFL_VERIFY(Memory);
     }
+
+    ui64 GetRawSize() const {
+        return Memory->GetMemory();
+    }
 };
 
 class TEvDuplicateFilterDataFetched

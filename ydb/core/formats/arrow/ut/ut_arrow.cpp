@@ -691,7 +691,8 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batch->schema()->fields());
             const std::vector<std::string> vColumns = {batch->schema()->field(0)->name()};
-            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batch->schema(), false, vColumns);
+            auto merger =
+                std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batch->schema(), false, vColumns, std::nullopt);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr);
             }
@@ -718,7 +719,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batch->schema()->fields());
             const std::vector<std::string> vColumns = {batch->schema()->field(0)->name()};
-            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batch->schema(), true, vColumns);
+            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batch->schema(), true, vColumns, std::nullopt);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr);
             }
@@ -744,7 +745,8 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         {
             NArrow::NMerger::TRecordBatchBuilder builder(batches[0]->schema()->fields());
             const std::vector<std::string> vColumns = {"snap"};
-            auto merger = std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batches[0]->schema(), false, vColumns);
+            auto merger =
+                std::make_shared<NArrow::NMerger::TMergePartialStream>(batch->schema(), batches[0]->schema(), false, vColumns, std::nullopt);
             for (auto&& i : batches) {
                 merger->AddSource(i, nullptr);
             }

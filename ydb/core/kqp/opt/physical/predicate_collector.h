@@ -16,6 +16,11 @@ struct TOLAPPredicateNode {
     }
 };
 
-void CollectPredicates(const NNodes::TExprBase& predicate, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const NNodes::TExprBase& lambdaBody, bool allowOlapApply);
+struct TPushdownOptions {
+    bool AllowOlapApply;
+    bool PushdownSubstring;
+};
+
+void CollectPredicates(const NNodes::TExprBase& predicate, TOLAPPredicateNode& predicateTree, const TExprNode* lambdaArg, const NNodes::TExprBase& lambdaBody, const TPushdownOptions& options);
 
 }

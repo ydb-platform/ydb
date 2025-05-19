@@ -12,5 +12,9 @@ function getApiUrl() {
 
 function formatCpu(cpuData) {
     if (!cpuData) return 'N/A';
-    return `CPU: ${cpuData.cpu?.toFixed(4) ?? 'N/A'} (Last Sec: ${cpuData.lastSecondCpu?.toFixed(4) ?? 'N/A'})`;
+    return rawFormatCpu(cpuData.cpu, cpuData.lastSecondCpu);
 } 
+
+function rawFormatCpu(cpuData, lastSecondCpu) {
+    return `CPU: ${cpuData?.toFixed(4) ?? 'N/A'} (Last Sec: ${lastSecondCpu?.toFixed(4) ?? 'N/A'})`;
+}

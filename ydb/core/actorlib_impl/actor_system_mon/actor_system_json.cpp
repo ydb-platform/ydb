@@ -207,6 +207,16 @@ void GenerateJson(const TIterableDoubleRange<THarmonizerIterationState>& history
             writer.OpenMap();
             
             if (cfg.Level == ELevel::Thread) {
+                writer.WriteKey("threadOwners");
+                writer.OpenArray();
+                if (history[idx].Shared.PersistentState) {
+                    for (size_t threadOwnerIdx = 0; threadOwnerIdx < history[idx].Shared.PersistentState->ThreadOwners.size(); ++threadOwnerIdx) {
+                        const auto& threadOwner = history[idx].Shared.PersistentState->ThreadOwners[threadOwnerIdx];
+                        writer.Write(threadOwner);
+                    }
+                }
+                writer.CloseArray();
+
                 writer.WriteKey("threads");
                 writer.OpenArray();
                 for (size_t threadIdx = 0; threadIdx < history[idx].Shared.Threads.size(); ++threadIdx) {

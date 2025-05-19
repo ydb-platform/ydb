@@ -33,7 +33,7 @@ constexpr float kMinFreeCpuThreshold = 0.1;
 LWTRACE_USING(ACTORLIB_PROVIDER);
 
 
-constexpr size_t SAVED_ITERATION_COUNT = 3600; // 1 hour
+constexpr size_t SAVED_ITERATION_COUNT = 60; // 1 minute
 
 
 class THarmonizer: public IHarmonizer {
@@ -64,6 +64,7 @@ private:
     std::vector<THarmonizerIterationThreadState> IterationThreadState;
     std::vector<THarmonizerPersistentPoolState> PersistentPoolState;
     std::vector<THarmonizerIterationPoolState> IterationPoolState;
+    std::unique_ptr<THarmonizerPersistentSharedPoolState> PersistentSharedPoolState;
     std::vector<THarmonizerIterationSharedThreadState> IterationSharedThreadState;
     std::vector<THarmonizerIterationState> IterationState;
 
@@ -253,6 +254,7 @@ void THarmonizer::ProcessExchange() {
         if (!CpuConsumption.IsNeedyByPool[needyPoolIdx]) {
             continue;
         }
+
         pool.IncreasingThreadsByExchange.fetch_add(1, std::memory_order_relaxed);
         CpuConsumption.IsNeedyByPool[needyPoolIdx] = false;
         takingAwayThreads++;
@@ -326,6 +328,7 @@ void THarmonizer::ProcessHoggishState() {
 
 void THarmonizer::HarmonizeImpl(ui64 ts) {
     ui64 iteration = Iteration.fetch_add(1, std::memory_order_relaxed);
+    HARMONIZER_DEBUG_PRINT("HarmonizeImpl", "Iteration", iteration);
     THarmonizerIterationState& iterationState = GetIterationState(iteration);
     iterationState.Iteration = iteration;
     iterationState.Ts = ts;
@@ -358,9 +361,37 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
             iterationThreadState.ParkedCpu.Cpu = Max<float>(0.0f, 1.0f - iterationThreadState.ElapsedCpu.Cpu);
             iterationThreadState.ParkedCpu.LastSecondCpu = Max<float>(0.0f, 1.0f - iterationThreadState.ElapsedCpu.LastSecondCpu);
         }
+        for (i16 sharedThreadIdx = 0; sharedThreadIdx < static_cast<i16>(pool.SharedInfo.size()); ++sharedThreadIdx) {
+            THarmonizerIterationThreadState& iterationSharedThreadState = iterationState.Shared.Threads[sharedThreadIdx].ByPool[poolIdx];
+            iterationSharedThreadState.UsedCpu.Cpu = pool.SharedInfo[sharedThreadIdx].UsedCpu.GetAvgPart();
+            iterationSharedThreadState.UsedCpu.LastSecondCpu = pool.SharedInfo[sharedThreadIdx].UsedCpu.GetAvgPartForLastSeconds<true>(1);
+            iterationSharedThreadState.ElapsedCpu.Cpu = pool.SharedInfo[sharedThreadIdx].ElapsedCpu.GetAvgPart();
+            iterationSharedThreadState.ElapsedCpu.LastSecondCpu = pool.SharedInfo[sharedThreadIdx].ElapsedCpu.GetAvgPartForLastSeconds<true>(1);
+            iterationSharedThreadState.ParkedCpu.Cpu = 0.0f;
+            iterationSharedThreadState.ParkedCpu.LastSecondCpu = 0.0f;
+        }
+
+        iterationState.Pools[poolIdx].SharedQuota = pool.SharedCpuQuota.load(std::memory_order_relaxed);
     }
 
-    HARMONIZER_DEBUG_PRINT("HarmonizeImpl", "Iteration", iteration);
+    for (size_t sharedThreadIdx = 0; sharedThreadIdx < static_cast<size_t>(Shared ? SharedInfo.ThreadOwners.size() : 0); ++sharedThreadIdx) {
+        HARMONIZER_DEBUG_PRINT("FillParkedCpu", "sharedThreadIdx", sharedThreadIdx);
+        auto &sharedThreadState = iterationState.Shared.Threads[sharedThreadIdx];
+        float parkedCpu = 1.0f;
+        float lastSecondParkedCpu = 1.0f;
+        for (size_t poolIdx = 0; poolIdx < sharedThreadState.ByPool.size(); ++poolIdx) {
+            auto &poolThreadState = sharedThreadState.ByPool[poolIdx];
+            parkedCpu -= poolThreadState.ElapsedCpu.Cpu;
+            lastSecondParkedCpu -= poolThreadState.ElapsedCpu.LastSecondCpu;
+        }
+        i16 poolIdx = SharedInfo.ThreadOwners[sharedThreadIdx];
+        if (poolIdx != -1) {
+            auto &poolSharedThreadState = sharedThreadState.ByPool[poolIdx];
+            poolSharedThreadState.ParkedCpu.Cpu = Max<float>(0.0f, parkedCpu);
+            poolSharedThreadState.ParkedCpu.LastSecondCpu = Max<float>(0.0f, lastSecondParkedCpu);
+        }
+    }
+
 
     ProcessWaitingStats();
 
@@ -400,11 +431,11 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
             float poolSharedElapsedCpu = SharedInfo.CpuConsumption[poolIdx].Elapsed;
             possibleMaxSharedQuota = std::min<float>(poolSharedElapsedCpu + freeSharedCpu, sharedThreads);
         }
-        float threadCount = pool.GetFullThreadCount();
+        float fullThreadCount = pool.GetFullThreadCount();
         float elapsedCpu = pool.ElapsedCpu.GetAvgPart();
-        float parkedCpu = Max<float>(0.0f, threadCount - elapsedCpu);
+        float parkedCpu = Max<float>(0.0f, fullThreadCount - elapsedCpu);
         float budgetWithoutSharedAndParkedCpu = std::max<float>(0.0f, budgetWithoutSharedCpu - parkedCpu);
-        i16 potentialMaxThreadCountWithoutSharedCpu = std::min<float>(pool.MaxThreadCount, threadCount + budgetWithoutSharedAndParkedCpu);
+        i16 potentialMaxThreadCountWithoutSharedCpu = std::min<float>(pool.MaxThreadCount, fullThreadCount + budgetWithoutSharedAndParkedCpu);
         float potentialMaxThreadCount = std::min<float>(pool.MaxThreadCount, potentialMaxThreadCountWithoutSharedCpu + possibleMaxSharedQuota);
 
         pool.PotentialMaxThreadCount.store(potentialMaxThreadCount, std::memory_order_relaxed);
@@ -416,7 +447,7 @@ void THarmonizer::HarmonizeImpl(ui64 ts) {
             "potential max thread count: ", potentialMaxThreadCount,
             "potential max thread count without shared cpu: ", potentialMaxThreadCountWithoutSharedCpu,
             "possible max shared quota: ", possibleMaxSharedQuota,
-            "thread count: ", threadCount,
+            "full thread count: ", fullThreadCount,
             "elapsed cpu: ", elapsedCpu,
             "parked cpu: ", parkedCpu
         );
@@ -460,10 +491,16 @@ void THarmonizer::InitIterationState() {
         PersistentPoolState[poolIdx].MaxLocalQueueSize = Pools[poolIdx]->MaxLocalQueueSize;
     }
 
+    if (Shared) {
+        PersistentSharedPoolState.reset(new THarmonizerPersistentSharedPoolState);
+        Shared->FillThreadOwners(PersistentSharedPoolState->ThreadOwners);
+    }
+
     for (size_t i = 0; i < SAVED_ITERATION_COUNT; ++i) {
         THarmonizerIterationPoolState *poolState = IterationPoolState.data() + i * poolsPerIteration;
         IterationState[i].Pools.Set(poolState, poolState + poolsPerIteration);
         THarmonizerIterationSharedThreadState *sharedThreadState = IterationSharedThreadState.data() + i * sharedThreadsPerIteration;
+        IterationState[i].Shared.PersistentState = PersistentSharedPoolState.get();
         IterationState[i].Shared.Threads.Set(sharedThreadState, sharedThreadState + sharedThreadsPerIteration);
         THarmonizerIterationThreadState *threadState = IterationThreadState.data() + i * threadsPerIteration;
         for (size_t poolIdx = 0; poolIdx < poolsPerIteration; ++poolIdx) {

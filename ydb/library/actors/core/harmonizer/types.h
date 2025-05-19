@@ -307,13 +307,13 @@ struct THarmonizerIterationOperation {
     };
 };
 
-// 16 bytes
+// 8 bytes
 struct TCpuStats {
     float Cpu = 0.0;
     float LastSecondCpu = 0.0;
 };
 
-// 32 bytes
+// 24 bytes
 struct THarmonizerIterationThreadState {
     TCpuStats UsedCpu;
     TCpuStats ElapsedCpu;
@@ -343,6 +343,7 @@ struct THarmonizerIterationPoolState {
     THarmonizerIterationOperation Operation;
     float PotentialMaxThreadCount = 0.0;
     float CurrentThreadCount = 0;
+    float SharedQuota = 0.0;
 
     ui16 LocalQueueSize = 0;
     bool IsNeedy = false;
@@ -354,13 +355,16 @@ struct THarmonizerIterationPoolState {
 
 // 16 bytes + 160 bytes
 struct THarmonizerIterationSharedThreadState {
-
     TIterableRange<THarmonizerIterationThreadState> ByPool; // x5
+};
+
+struct THarmonizerPersistentSharedPoolState {
+    std::vector<i16> ThreadOwners; // x4
 };
 
 // 16 bytes + 800 bytes
 struct THarmonizerIterationSharedPoolState {
-
+    THarmonizerPersistentSharedPoolState* PersistentState = nullptr;
     TIterableRange<THarmonizerIterationSharedThreadState> Threads; // x5
 };
 

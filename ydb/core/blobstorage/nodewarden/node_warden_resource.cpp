@@ -165,13 +165,13 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
     }
 
     // apply updates for the state storage proxy
-#define FETCH_CONFIG(PART, PREFIX, PROTO) \
+#define FETCH_CONFIG(PART, PROTO) \
     Y_ABORT_UNLESS(StorageConfig.Has##PROTO##Config()); \
-    TIntrusivePtr<TStateStorageInfo> PART##Info = BuildStateStorageInfo(PREFIX, StorageConfig.Get##PROTO##Config());
+    TIntrusivePtr<TStateStorageInfo> PART##Info = Build##PROTO##Info(StorageConfig.Get##PROTO##Config());
 
-    FETCH_CONFIG(stateStorage, STATE_STORAGE_REPLICA_PREFIX, StateStorage)
-    FETCH_CONFIG(board, STATE_STORAGE_BOARD_REPLICA_PREFIX, StateStorageBoard)
-    FETCH_CONFIG(schemeBoard, SCHEME_BOARD_REPLICA_PREFIX, SchemeBoard)
+    FETCH_CONFIG(stateStorage, StateStorage)
+    FETCH_CONFIG(board, StateStorageBoard)
+    FETCH_CONFIG(schemeBoard, SchemeBoard)
     
     STLOG(PRI_DEBUG, BS_NODE, NW52, "ApplyStateStorageConfig",
         (StateStorageConfig, StorageConfig.GetStateStorageConfig()),

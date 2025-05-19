@@ -29,7 +29,7 @@ namespace NKikimr::NStorage {
             FinishWithError(TResult::ERROR, TStringBuilder() << "New configuration is not defined");
             return;   
         }
-        auto process = [&](const char *name, const char *prefix, auto hasFunc, auto func, auto configHasFunc, auto configMutableFunc) {
+        auto process = [&](const char *name, auto buildInfo, auto hasFunc, auto func, auto configHasFunc, auto configMutableFunc) {
             if (!(cmd.*hasFunc)()) {
                 return true;
             } 
@@ -66,6 +66,10 @@ namespace NKikimr::NStorage {
                         FinishWithError(TResult::ERROR, TStringBuilder() << name << " too deep nested ring declaration");
                         return false;  
                     }
+                    if(ring.HasRingGroupActorIdOffset()) {
+                        FinishWithError(TResult::ERROR, TStringBuilder() << name << " RingGroupActorIdOffset should be used in ring group level, not ring");
+                        return false;                       
+                    }
                     if (ring.NodeSize() < 1) {
                         FinishWithError(TResult::ERROR, TStringBuilder() << name << " empty ring");
                         return false;
@@ -75,10 +79,22 @@ namespace NKikimr::NStorage {
             try {
                 TIntrusivePtr<TStateStorageInfo> newSSInfo;
                 TIntrusivePtr<TStateStorageInfo> oldSSInfo;
-                newSSInfo = BuildStateStorageInfo(prefix, newSSConfig);
-                oldSSInfo = BuildStateStorageInfo(prefix, *(config.*configMutableFunc)());
+                newSSInfo = (*buildInfo)(newSSConfig);
+                oldSSInfo = (*buildInfo)(*(config.*configMutableFunc)());
+                THashSet<TActorId> replicas;
+                for (auto& ringGroup : newSSInfo->RingGroups) {
+                    for(auto& ring : ringGroup.Rings) {
+                        for(auto& node : ring.Replicas) {
+                            if(!replicas.insert(node).second) {
+                                FinishWithError(TResult::ERROR, TStringBuilder() << name << " replicas ActorId intersection, specify RingGroupActorIdOffset if you run multiple replicas on one node");
+                                return false;
+                            }
+                        }
+                    }
+                }
 
                 bool found = false;
+                Y_ABORT_UNLESS(newSSInfo->RingGroups.size() > 0 && oldSSInfo->RingGroups.size() > 0);
                 auto& firstGroup = newSSInfo->RingGroups[0];
                 for (auto& rg : oldSSInfo->RingGroups) {
                     if (firstGroup == rg) {
@@ -105,17 +121,17 @@ namespace NKikimr::NStorage {
             return true;
         };
         
-#define PROCESS(NAME, PREFIX) \
-        if (!process(#NAME, PREFIX, \
+#define PROCESS(NAME) \
+        if (!process(#NAME, &NKikimr::Build##NAME##Info, \
                 &NKikimrBlobStorage::TStateStorageConfig::Has##NAME##Config, \
                 &NKikimrBlobStorage::TStateStorageConfig::Get##NAME##Config, \
                 &NKikimrBlobStorage::TStorageConfig::Has##NAME##Config, \
                 &NKikimrBlobStorage::TStorageConfig::Mutable##NAME##Config)) { \
             return; \
         }
-        PROCESS(StateStorage, STATE_STORAGE_REPLICA_PREFIX)
-        PROCESS(StateStorageBoard, STATE_STORAGE_BOARD_REPLICA_PREFIX)
-        PROCESS(SchemeBoard, SCHEME_BOARD_REPLICA_PREFIX)
+        PROCESS(StateStorage)
+        PROCESS(StateStorageBoard)
+        PROCESS(SchemeBoard)
         config.SetGeneration(config.GetGeneration() + 1);
         StartProposition(&config);
     }

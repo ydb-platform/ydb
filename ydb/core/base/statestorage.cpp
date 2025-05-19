@@ -260,7 +260,8 @@ static void CopyStateStorageRingInfo(
     const NKikimrConfig::TDomainsConfig::TStateStorage::TRing &source,
     TStateStorageInfo::TRingGroup& ringGroup,
     char *serviceId,
-    ui32 depth
+    ui32 depth,
+    ui32 ringGroupActorIdOffset
 ) {
 
     const bool hasRings = source.RingSize() > 0;
@@ -280,7 +281,7 @@ static void CopyStateStorageRingInfo(
 
             if (ring.GetUseSingleNodeActorId()) {
                 Y_ABORT_UNLESS(ring.NodeSize() == 1);
-
+                serviceId[depth + 1] = ringGroupActorIdOffset;
                 const TActorId replicaActorID = TActorId(ring.GetNode(0), TStringBuf(serviceId, serviceId + 12));
                 ringGroup.Rings[iring].Replicas.push_back(replicaActorID);
             }
@@ -288,7 +289,7 @@ static void CopyStateStorageRingInfo(
                Y_ABORT_UNLESS(ring.NodeSize() > 0);
 
                for (ui32 inode = 0, enode = ring.NodeSize(); inode != enode; ++inode) {
-                    serviceId[depth + 1] = (inode + 1);
+                    serviceId[depth + 1] = (ringGroupActorIdOffset + inode + 1);
                     const TActorId replicaActorID = TActorId(ring.GetNode(inode), TStringBuf(serviceId, serviceId + 12));
                     ringGroup.Rings[iring].Replicas.push_back(replicaActorID);
                }
@@ -307,7 +308,7 @@ static void CopyStateStorageRingInfo(
 
         ringGroup.Rings.resize(source.NodeSize());
         for (ui32 inode = 0, enode = source.NodeSize(); inode != enode; ++inode) {
-            serviceId[depth] = (inode + 1);
+            serviceId[depth] = (ringGroupActorIdOffset + inode + 1);
 
             const TActorId replicaActorID = TActorId(source.GetNode(inode), TStringBuf(serviceId, serviceId + 12));
             ringGroup.Rings[inode].Replicas.push_back(replicaActorID);
@@ -320,7 +321,7 @@ static void CopyStateStorageRingInfo(
     Y_ABORT("must have rings or legacy node config");
 }
 
-TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(const char* namePrefix, 
+TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfoImpl(const char* namePrefix, 
         const NKikimrConfig::TDomainsConfig::TStateStorage& config) {
     char name[TActorId::MaxServiceIDLength];
     strcpy(name, namePrefix);
@@ -342,25 +343,37 @@ TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(const char* namePrefix,
     for (size_t i = 0; i < config.RingGroupsSize(); i++) {
         auto& ringGroup = config.GetRingGroups(i);
         info->RingGroups.push_back({ringGroup.GetWriteOnly(), ringGroup.GetNToSelect(), {}});
-        CopyStateStorageRingInfo(ringGroup, info->RingGroups.back(), name, offset);
+        CopyStateStorageRingInfo(ringGroup, info->RingGroups.back(), name, offset, ringGroup.GetRingGroupActorIdOffset());
         memset(name + offset, 0, TActorId::MaxServiceIDLength - offset);
     }
     if (config.HasRing()) {
         auto& ring = config.GetRing();
         info->RingGroups.push_back({false, ring.GetNToSelect(), {}});
-        CopyStateStorageRingInfo(ring, info->RingGroups.back(), name, offset);
+        CopyStateStorageRingInfo(ring, info->RingGroups.back(), name, offset, 0);
     }
     return info;
 }
+
+TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(const NKikimrConfig::TDomainsConfig::TStateStorage& config) {
+    return BuildStateStorageInfoImpl("ssr", config);
+} 
+
+TIntrusivePtr<TStateStorageInfo> BuildStateStorageBoardInfo(const NKikimrConfig::TDomainsConfig::TStateStorage& config) {
+    return BuildStateStorageInfoImpl("ssb", config);
+} 
+
+TIntrusivePtr<TStateStorageInfo> BuildSchemeBoardInfo(const NKikimrConfig::TDomainsConfig::TStateStorage& config) {
+    return BuildStateStorageInfoImpl("sbr", config);
+} 
 
 void BuildStateStorageInfos(const NKikimrConfig::TDomainsConfig::TStateStorage& config,
     TIntrusivePtr<TStateStorageInfo> &stateStorageInfo,
     TIntrusivePtr<TStateStorageInfo> &boardInfo,
     TIntrusivePtr<TStateStorageInfo> &schemeBoardInfo)
 {
-    stateStorageInfo = BuildStateStorageInfo(STATE_STORAGE_REPLICA_PREFIX, config);
-    boardInfo = BuildStateStorageInfo(STATE_STORAGE_BOARD_REPLICA_PREFIX, config);
-    schemeBoardInfo = BuildStateStorageInfo(SCHEME_BOARD_REPLICA_PREFIX, config);
+    stateStorageInfo = BuildStateStorageInfo(config);
+    boardInfo = BuildStateStorageBoardInfo(config);
+    schemeBoardInfo = BuildSchemeBoardInfo(config);
 }
 
 }

@@ -1510,8 +1510,8 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
 
             auto updateConfig = [&](bool needMerge, auto *to, const auto& from, const char *entity) {
                 if (needMerge) {
-                    auto toInfo = BuildStateStorageInfo("", *to);
-                    auto fromInfo = BuildStateStorageInfo("", from);
+                    auto toInfo = BuildStateStorageInfo(*to);
+                    auto fromInfo = BuildStateStorageInfo(from);
                     if (toInfo->RingGroups != fromInfo->RingGroups) {
                         *errorReason = TStringBuilder() << entity << " NToSelect/rings differs"
                             << " from# " << SingleLineProto(from)

@@ -502,10 +502,6 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         }
     }
 
-    void HandleUpdateConfig(TEvStateStorage::TEvReplicaUpdateConfig::TPtr /*ev*/) {
-        SendResolveRequest(TDuration::Zero(), false);
-    }
-
     void Handle(TEvPrivate::TEvReplicaMissing::TPtr &ev) {
         auto* msg = ev->Get();
 
@@ -613,7 +609,6 @@ public:
             hFunc(TEvPrivate::TEvReplicaMissing, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison);
             cFunc(TEvTablet::TEvTabletDead::EventType, HandlePoison);
-            hFunc(TEvStateStorage::TEvReplicaUpdateConfig, HandleUpdateConfig);
         }
     }
 
@@ -627,7 +622,6 @@ public:
             hFunc(TEvPrivate::TEvReplicaMissing, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison);
             cFunc(TEvTablet::TEvTabletDead::EventType, HandlePoison);
-            hFunc(TEvStateStorage::TEvReplicaUpdateConfig, HandleUpdateConfig);
         }
     }
 };

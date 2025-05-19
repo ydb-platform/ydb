@@ -410,17 +410,6 @@ class TStateStorageReplica : public TActorBootstrapped<TStateStorageReplica> {
         Info = ev->Get()->GroupConfig;
         Y_ABORT_UNLESS(!ev->Get()->BoardConfig);
         Y_ABORT_UNLESS(!ev->Get()->SchemeBoardConfig);
-
-        for (auto &xpair : Tablets) {
-            const auto &entry = xpair.second;
-            if (entry.CurrentGuardian)
-                Send(entry.CurrentGuardian, new TEvStateStorage::TEvReplicaUpdateConfig());
-
-            for (auto &spair : entry.Followers) {
-                const TActorId followerGuardian = spair.first;
-                Send(followerGuardian, new TEvStateStorage::TEvReplicaUpdateConfig());
-            }
-        }
     }
 
 public:

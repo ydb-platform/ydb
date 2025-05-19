@@ -915,6 +915,7 @@ void TClusterInfo::MigrateOldInfo(TClusterInfoPtr old)
 
 void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> info) {
     StateStorageInfoReceived = true;
+    Y_ABORT_UNLESS(info->RingGroups.size() > 0);
     auto& groupInfo = info->RingGroups[0];
     for (ui32 ringId = 0; ringId < groupInfo.Rings.size(); ++ringId) {
         auto &ring = groupInfo.Rings[ringId];

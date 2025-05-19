@@ -10,10 +10,6 @@
 
 namespace NKikimr {
 
-#define STATE_STORAGE_REPLICA_PREFIX "ssr"
-#define STATE_STORAGE_BOARD_REPLICA_PREFIX "ssb"
-#define SCHEME_BOARD_REPLICA_PREFIX "sbr"
-
 struct TEvStateStorage {
     enum EEv {
         // requests (local, to proxy)
@@ -588,7 +584,9 @@ struct TBoardRetrySettings {
     TDuration MaxDelayMs = TDuration::MilliSeconds(5000);
 };
 
-TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(const char* namePrefix, const NKikimrConfig::TDomainsConfig::TStateStorage& config);
+TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(const NKikimrConfig::TDomainsConfig::TStateStorage& config);
+TIntrusivePtr<TStateStorageInfo> BuildStateStorageBoardInfo(const NKikimrConfig::TDomainsConfig::TStateStorage& config);
+TIntrusivePtr<TStateStorageInfo> BuildSchemeBoardInfo(const NKikimrConfig::TDomainsConfig::TStateStorage& config);
 void BuildStateStorageInfos(const NKikimrConfig::TDomainsConfig::TStateStorage& config,
     TIntrusivePtr<TStateStorageInfo> &stateStorageInfo,
     TIntrusivePtr<TStateStorageInfo> &boardInfo,

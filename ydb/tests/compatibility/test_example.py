@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import pytest
-from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture, RollingUpdateFixture, MixedClusterFixture
+from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture, RollingUpgradeAndDowngradeFixture, MixedClusterFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
@@ -69,7 +69,7 @@ class TestExampleRestartToAnotherVersion(RestartToAnotherVersionFixture):
             assert result_sets[0].rows[0]["value"] == value
 
 
-class TestExampleRollingUpdate(RollingUpdateFixture):
+class TestExampleRollingUpdate(RollingUpgradeAndDowngradeFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
         yield from self.setup_cluster()

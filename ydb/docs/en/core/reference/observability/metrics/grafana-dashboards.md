@@ -130,4 +130,4 @@ The dashboard includes the following filters:
 | Versions | Versions of {{ ydb-short-name }} running on cluster nodes. |
 | Hive node | Node where the database Hive is running. |
 
-Download the [datashard.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/database-hive-detailed.json) file with the **Database Hive** dashboard.
+Download the [database-hive-detailed.json](https://raw.githubusercontent.com/ydb-platform/ydb/refs/heads/main/ydb/deploy/helm/ydb-prometheus/dashboards/database-hive-detailed.json) file with the **Database Hive** dashboard.

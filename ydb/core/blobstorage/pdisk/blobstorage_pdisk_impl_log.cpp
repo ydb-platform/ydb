@@ -784,7 +784,7 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
         << Endl);
 
     ui32 ownersSizeUnitsIntSize = sizeof(ownersSizeUnitsInt[0]) * ownersSizeUnitsInt.size();
-    Y_ASSERT(sizeof(ownersSizeUnitsInt[0]) == 2);
+    static_assert(sizeof(ownersSizeUnitsInt[0]) == 2);
 
     ui32 recordSize = sizeof(TSysLogRecord) + chunkOwnersSize + sizeof(TSysLogFirstNoncesToKeep)
         + sizeof(ui64) + chunkIsTrimmedSize + sizeof(ui32) + sizeof(ui32) + compatibilityInfoSize

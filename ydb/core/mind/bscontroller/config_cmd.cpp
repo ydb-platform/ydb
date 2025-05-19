@@ -232,7 +232,6 @@ namespace NKikimr::NBsController {
                             MAP_TIMING(QueryBaseConfig, QUERY_BASE_CONFIG)
                             MAP_TIMING(MergeBoxes, MERGE_BOXES)
                             MAP_TIMING(MoveGroups, MOVE_GROUPS)
-                            MAP_TIMING(ResizeGroups, RESIZE_GROUPS)
                             MAP_TIMING(AddMigrationPlan, ADD_MIGRATION_PLAN)
                             MAP_TIMING(DeleteMigrationPlan, DELETE_MIGRATION_PLAN)
                             MAP_TIMING(DeclareIntent, DECLARE_INTENT)
@@ -244,6 +243,7 @@ namespace NKikimr::NBsController {
                             MAP_TIMING(WipeVDisk, WIPE_VDISK)
                             MAP_TIMING(SanitizeGroup, SANITIZE_GROUP)
                             MAP_TIMING(CancelVirtualGroup, CANCEL_VIRTUAL_GROUP)
+                            MAP_TIMING(ResizeGroups, RESIZE_GROUPS)
 
                             default:
                                 break;

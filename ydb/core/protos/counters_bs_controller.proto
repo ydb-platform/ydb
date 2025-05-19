@@ -88,6 +88,8 @@ enum ECumulativeCounters {
     COUNTER_GROUP_LAYOUT_SANITIZER_BSC_REQUESTS = 45 [(CounterOpts) = {Name: "GroupLayoutSanitizerBscRequests"}];
     COUNTER_GROUP_LAYOUT_SANITIZER_BSC_OK = 46 [(CounterOpts) = {Name: "GroupLayoutSanitizerBscOk"}];
     COUNTER_GROUP_LAYOUT_SANITIZER_BSC_ERR = 47 [(CounterOpts) = {Name: "GroupLayoutSanitizerBscErr"}];
+    
+    COUNTER_CONFIGCMD_RESIZE_GROUPS_USEC = 48 [(CounterOpts) = {Name: "ResizeGroups"}];
 }
 
 enum EPercentileCounters {

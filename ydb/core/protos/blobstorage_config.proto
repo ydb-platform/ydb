@@ -132,10 +132,6 @@ message TPDiskFilter {
             bool SharedWithOs = 2; // require certain SharedWithOs property
             bool ReadCentric = 3; // require certain ReadCentric property
             uint64 Kind = 4; // require certain kind
-
-            // TODO
-            // require certain PDiskSlotSizeUnits preventing suboptimal fitting cases
-            // NKikimrBlobStorage.TPDiskSlotSizeUnits SlotSizeUnits = 5;
         }
     }
     repeated TRequiredProperty Property = 1; // conjunction of required properties; the same properties must not repeat
@@ -156,7 +152,7 @@ message TDefineStoragePool {
     string Kind = 8; // kind of storage pool (user-defined)
     uint32 NumGroups = 9; // explicit number of groups to create
     repeated bytes UserId = 10; // allowed users
-    repeated TPDiskFilter PDiskFilter = 11; // matching PDisks
+    repeated TPDiskFilter PDiskFilter = 11; // matching PDisks (disjunction, i.e. multiple filters are logically ORed)
     TExistingGroups ExistingGroups = 12; // existing groups (used while migrating from old-style configuration)
     NActorsInterconnect.TScopeId ScopeId = 13; // scope id for the pool clients
     bool RandomizeGroupMapping = 14; // minimize correlation of groups and drives

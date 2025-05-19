@@ -8,6 +8,7 @@ ELSE()
 ENDIF()
 
 SRCS(
+    allocator_ut.cpp
     ibv_ut.cpp
     rdma_link_manager_ut.cpp
 )

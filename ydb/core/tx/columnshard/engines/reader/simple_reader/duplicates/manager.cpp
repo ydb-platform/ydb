@@ -13,7 +13,8 @@ namespace NKikimr::NOlap::NReader::NSimple {
 #define LOCAL_LOG_TRACE \
     AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("self", TActivationContext::AsActorContext().SelfID)
 
-TFilterConstructor::TFilterConstructor(const std::shared_ptr<IFilterSubscriber>& callback, const std::shared_ptr<IDataSource>& source)
+TInternalFilterConstructor::TInternalFilterConstructor(
+    const std::shared_ptr<IFilterSubscriber>& callback, const std::shared_ptr<IDataSource>& source)
     : Callback(callback)
     , RowsCount(source->GetRecordsCount()) {
     AFL_VERIFY(!!Callback);
@@ -28,13 +29,11 @@ TDuplicateFilterConstructor::TDuplicateFilterConstructor(const TSpecialReadConte
         return cache;
     }())
     , Intervals([&context]() {
+        std::remove_const_t<decltype(TDuplicateFilterConstructor::Intervals)> intervals;
         const auto& portions = context.GetReadMetadata()->SelectInfo->Portions;
-        std::remove_const_t<decltype(TDuplicateFilterConstructor::Intervals)> intervals(
-            portions.front()->IndexKeyStart()   // TODO: change tree implementation, don't require default value/constructor
-        );
         for (ui64 i = 0; i < portions.size(); ++i) {
             const auto& portion = portions[i];
-            intervals.insert({ portion->IndexKeyStart(), portion->IndexKeyEnd() }, TSourceInfo(i, portion));
+            intervals.Insert({ portion->IndexKeyStart(), portion->IndexKeyEnd() }, TSourceInfo(i, portion));
         }
         return intervals;
     }())
@@ -56,16 +55,14 @@ void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
             borders.emplace(
                 source->GetSourceId(), NArrow::TFirstLastSpecialKeys(source->GetPortionInfo().IndexKeyStart(),
                                            source->GetPortionInfo().IndexKeyEnd(), source->GetPortionInfo().IndexKeyStart().GetSchema()));
-            return true;
         };
-        Intervals.find(
-            TInterval<NArrow::TSimpleRow>(source->GetPortionInfo().IndexKeyStart(), source->GetPortionInfo().IndexKeyEnd()), collector);
+        Intervals.FindIntersections(source->GetPortionInfo().IndexKeyStart(), source->GetPortionInfo().IndexKeyEnd(), collector);
     }
 
     AFL_VERIFY(sourcesToFetch.size());
     if (sourcesToFetch.size() == 1) {
         AFL_VERIFY(sourcesToFetch.front()->GetSourceId() == source->GetSourceId());
-        auto filter  = NArrow::TColumnFilter::BuildAllowFilter();
+        auto filter = NArrow::TColumnFilter::BuildAllowFilter();
         filter.Add(true, sourcesToFetch.front()->GetRecordsCount());
         ev->Get()->GetSubscriber()->OnFilterReady(std::move(filter));
         return;
@@ -76,7 +73,7 @@ void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
 
     SourceCache->GetSourcesData(std::move((std::vector<std::shared_ptr<IDataSource>>)sourcesToFetch), ev->Get()->GetSource()->GetGroupGuard(),
         std::make_unique<TSourceDataSubscriber>(
-            SelfId(), source, std::make_shared<TFilterConstructor>(ev->Get()->GetSubscriber(), source), std::move(splitter)));
+            SelfId(), source, std::make_shared<TInternalFilterConstructor>(ev->Get()->GetSubscriber(), source), std::move(splitter)));
 }
 
 void TDuplicateFilterConstructor::Handle(const TEvConstructFilters::TPtr& ev) {
@@ -96,19 +93,15 @@ void TDuplicateFilterConstructor::Handle(const TEvConstructFilters::TPtr& ev) {
         for (ui64 i = 0; i < splitter.NumIntervals(); ++i) {
             if (!splittedMain[i].GetInterval().GetRowsCount()) {
                 builtIntervals.insert(i);
-                continue;
-            }
-            if (auto* findBuilding = BuildingFilters.FindPtr(splittedMain[i].GetInterval())) {
+            } else if (auto* findBuilding = BuildingFilters.FindPtr(splittedMain[i].GetInterval())) {
                 findBuilding->emplace_back(ev->Get()->GetCallback());
                 builtIntervals.insert(i);
-                continue;
-            }
-            if (auto findCached = FiltersCache.Find(splittedMain[i].GetInterval()); findCached != FiltersCache.End()) {
+            } else if (auto findCached = FiltersCache.Find(splittedMain[i].GetInterval()); findCached != FiltersCache.End()) {
                 ev->Get()->GetCallback()->AddFilter(findCached.Key(), findCached.Value());
                 builtIntervals.insert(i);
-                continue;
+            } else {
+                BuildingFilters[splittedMain[i].GetInterval()].emplace_back(ev->Get()->GetCallback());
             }
-            BuildingFilters[splittedMain[i].GetInterval()].emplace_back(ev->Get()->GetCallback());
         }
     }
     if (ev->Get()->GetCallback()->IsDone()) {
@@ -153,7 +146,7 @@ void TDuplicateFilterConstructor::Handle(const TEvConstructFilters::TPtr& ev) {
             for (auto&& [source, segment] : segments) {
                 task->AddSource(std::make_shared<NArrow::TGeneralContainer>(segment.ExtractData()),
                     std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter()), source);
-                Y_UNUSED(BuildingFilters.emplace(segment.GetInterval(), std::vector<std::shared_ptr<TFilterConstructor>>()).second);
+                Y_UNUSED(BuildingFilters.emplace(segment.GetInterval(), std::vector<std::shared_ptr<TInternalFilterConstructor>>()).second);
             }
             NConveyor::TScanServiceOperator::SendTaskToExecute(task, mainSource->GetContext()->GetCommonContext()->GetConveyorProcessId());
         }

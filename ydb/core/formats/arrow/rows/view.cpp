@@ -13,6 +13,10 @@ std::partial_ordering TSimpleRow::operator<=>(const TSimpleRow& item) const {
     return TSimpleRowViewV0(Data).Compare(TSimpleRowViewV0(item.Data), Schema).GetResult();
 }
 
+bool TSimpleRow::operator==(const TSimpleRow& item) const {
+    return (*this <=> item) == std::partial_ordering::equivalent;
+}
+
 std::shared_ptr<arrow::RecordBatch> TSimpleRow::ToBatch() const {
     auto builders = NArrow::MakeBuilders(Schema);
     AddToBuilders(builders).Validate();

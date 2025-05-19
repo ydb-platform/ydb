@@ -76,7 +76,7 @@ private:
             return TBorder(false, std::move(key));
         }
         static TBorder Last(NArrow::TSimpleRow&& key) {
-            return TBorder(false, std::move(key));
+            return TBorder(true, std::move(key));
         }
 
         std::partial_ordering operator<=>(const TBorder& other) const {
@@ -109,6 +109,8 @@ public:
 
         std::sort(Borders.begin(), Borders.end());
         Borders.erase(std::unique(Borders.begin(), Borders.end()), Borders.end());
+
+        AFL_VERIFY(NumIntervals());
     }
 
     ui64 NumIntervals() const {
@@ -127,18 +129,20 @@ public:
 
         for (const auto& border : Borders) {
             const auto borderPosition = NArrow::NMerger::TSortableBatchPosition(border.GetKey().ToBatch(), 0, sortingFields, {}, false);
-            if (border.GetIsLast()) {
-                const auto findBound = position.FindBound(position, offset, data->GetData()->GetRecordsCount() - 1, borderPosition, true);
-                if (!findBound) {
-                    offset = data->GetData()->GetRecordsCount();
-                } else if (findBound->GetPosition() == 0) {
-                    offset = 0;
+            if (offset != data->GetData()->GetRecordsCount()) {
+                if (border.GetIsLast()) {
+                    const auto findBound = position.FindBound(position, offset, data->GetData()->GetRecordsCount() - 1, borderPosition, true);
+                    if (!findBound) {
+                        offset = data->GetData()->GetRecordsCount();
+                    } else if (findBound->GetPosition() == 0) {
+                        offset = 0;
+                    } else {
+                        offset = findBound->GetPosition() - 1;
+                    }
                 } else {
-                    offset = findBound->GetPosition() - 1;
+                    const auto findBound = position.FindBound(position, offset, data->GetData()->GetRecordsCount() - 1, borderPosition, false);
+                    offset = findBound ? findBound->GetPosition() : data->GetData()->GetRecordsCount();
                 }
-            } else {
-                const auto findBound = position.FindBound(position, offset, data->GetData()->GetRecordsCount() - 1, borderPosition, false);
-                offset = findBound ? findBound->GetPosition() : data->GetData()->GetRecordsCount();
             }
             borderOffsets.emplace_back(offset);
         }

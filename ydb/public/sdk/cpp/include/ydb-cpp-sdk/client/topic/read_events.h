@@ -49,9 +49,9 @@ protected:
     std::string TopicPath;
     std::string ReadSessionId;
     uint64_t PartitionId;
-    TMaybe<TPartitionLocation> Location;
-    /*TDirectReadId*/ i64 NextDirectReadId = 1;
-    TMaybe</*TDirectReadId*/ i64> LastDirectReadId;
+    std::optional<TPartitionLocation> Location;
+    /*TDirectReadId*/ std::int64_t NextDirectReadId = 1;
+    std::optional</*TDirectReadId*/ std::int64_t> LastDirectReadId;
 };
 
 template<>

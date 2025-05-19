@@ -376,9 +376,8 @@ class TestDML(TestBase):
                             self.assert_type_after_select(i, rows[line], all_types, pk_types, index, ttl, dml)
                             line += 1
                 else:
-                    for _, row in enumerate(rows):
-                        numb = row["pk_Int64"]
-                        self.assert_type_after_select(numb, row, all_types, pk_types, index, ttl, dml)
+                    for i, row in enumerate(rows):
+                        self.assert_type_after_select(i + 1, row, all_types, pk_types, index, ttl, dml)
 
     def get_number_of_columns(self, pk_types, all_types, index, ttl):
         number_of_columns = len(pk_types) + len(all_types) + len(index)

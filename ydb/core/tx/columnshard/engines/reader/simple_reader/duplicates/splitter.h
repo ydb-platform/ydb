@@ -118,7 +118,7 @@ public:
         return Borders.size() - 1;
     }
 
-    std::vector<TSourceSegment> SplitPortion(const std::shared_ptr<TColumnsData>& data, const ui64 sourceId, const TSnapshot& maxVersion) const {
+    std::vector<std::optional<TSourceSegment>> SplitPortion(const std::shared_ptr<TColumnsData>& data, const ui64 sourceId, const TSnapshot& maxVersion) const {
         AFL_VERIFY(!Borders.empty());
 
         std::vector<ui64> borderOffsets;
@@ -139,11 +139,13 @@ public:
             borderOffsets.emplace_back(offset);
         }
 
-        std::vector<TSourceSegment> segments;
+        std::vector<std::optional<TSourceSegment>> segments;
         for (ui64 i = 1; i < borderOffsets.size(); ++i) {
             TDuplicateMapInfo interval(maxVersion, borderOffsets[i - 1], borderOffsets[i] - borderOffsets[i - 1], sourceId);
             // FIXME don't copy data for slicing
-            segments.emplace_back(TSourceSegment(interval, data->GetData()->Slice(interval.GetOffset(), interval.GetRowsCount())));
+            segments.emplace_back(interval.GetRowsCount()
+                                      ? TSourceSegment(interval, data->GetData()->Slice(interval.GetOffset(), interval.GetRowsCount()))
+                                      : std::optional<TSourceSegment>());
         }
 
         return segments;

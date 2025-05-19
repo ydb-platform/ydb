@@ -30,7 +30,7 @@ private:
     class TSizeProvider {
     public:
         size_t operator()(const TCacheItem& item) const {
-            return item->GetData()->GetRawSizeVerified();
+            return item->GetRawSize();
         }
     };
 

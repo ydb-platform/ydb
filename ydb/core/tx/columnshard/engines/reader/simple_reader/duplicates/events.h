@@ -57,6 +57,10 @@ public:
     TFilters&& ExtractResult() {
         return Result.DetachResult();
     }
+
+    ui64 GetRawSize() const {
+        return Memory->GetMemory();
+    }
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

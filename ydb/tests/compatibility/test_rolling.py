@@ -6,10 +6,10 @@ import pytest
 
 import yatest
 
-from ydb.tests.library.compatibility.fixtures import RollingUpdateFixture
+from ydb.tests.library.compatibility.fixtures import RollingUpgradeAndDowngradeFixture
 
 
-class TestRolling(RollingUpdateFixture):
+class TestRolling(RollingUpgradeAndDowngradeFixture):
     @pytest.fixture(autouse=True)
     def setup(self):
         output_path = yatest.common.test_output_path()

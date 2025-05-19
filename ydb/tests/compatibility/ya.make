@@ -8,6 +8,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(10)
 
 TEST_SRCS(
+    test_example.py
     test_export_s3.py
     test_followers.py
     test_compatibility.py

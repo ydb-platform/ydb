@@ -389,7 +389,7 @@ private:
     bool DecrementOffset_ = false;
 
     std::vector<TPartitionInfo> DoCollectPartitions(
-        const TString& selectQuery,
+        const std::string& selectQuery,
         bool withLastConsumeTime) const
     {
         std::vector<TPartitionInfo> result;

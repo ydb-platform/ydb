@@ -3,6 +3,7 @@
 import os
 import requests
 import threading
+import zlib
 import json
 import time
 
@@ -33,13 +34,15 @@ class NopHostsInformationProvider(HostsInformationProvider):
         pass
 
     def get_rack(self, hostname):
-        raise RuntimeError(f"failed to get rack info for {hostname}. Specify one way: walle provider, k8s provider or explicit host.location.rack")
+        return hostname
 
     def get_datacenter(self, hostname):
-        raise RuntimeError(f"failed to get datacenter info for {hostname}. Specify one way: walle provider, k8s provider or explicit host.location.datacenter")
+        # Keep DC name short, because of
+        # BAD_REQUEST (nameservice validator: node 1 has data center in Wall-E location longer than 4 symbols)
+        return "FAKE"
 
     def get_body(self, hostname):
-        raise RuntimeError(f"failed to get body info for {hostname}. Specify one way: walle provider, k8s provider or explicit host.location.body")
+        return zlib.crc32(hostname.encode())
 
 
 class WalleHostsInformationProvider(HostsInformationProvider):

@@ -188,7 +188,7 @@ private:
             IDirectReadProcessor::TReadCallback ReadCallback;
         };
 
-        TMaybe<TRead> Read;
+        std::optional<TRead> Read;
 
         struct TScheduledCallback {
             std::function<void(bool)> Callback;
@@ -196,8 +196,8 @@ private:
             TSingleClusterReadSessionContextPtr ContextPtr;
         };
 
-        TMaybe<TScheduledCallback> ScheduledCallback;
-        TMaybe<std::function<void()>> Callback;
+        std::optional<TScheduledCallback> ScheduledCallback;
+        std::optional<std::function<void()>> Callback;
     } DirectReadActions;
 
     // Executor tasks.
@@ -638,7 +638,7 @@ public:
                          i64 partitionId,
                          i64 assignId,
                          i64 readOffset,
-                         TMaybe<TPartitionLocation> location,
+                         std::optional<TPartitionLocation> location,
                          TCallbackContextPtr<UseMigrationProtocol> cbContext)
         : Key{.Topic = topicPath, .Cluster = "", .Partition = static_cast<ui64>(partitionId)}
         , AssignId(static_cast<ui64>(assignId))

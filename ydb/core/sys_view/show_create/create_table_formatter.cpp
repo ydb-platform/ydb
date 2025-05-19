@@ -1245,7 +1245,13 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
     }
 
     if (schema.HasOptions()) {
-        FormatUpsertOptions(fullPath, schema.GetOptions());
+        try {
+            FormatUpsertOptions(fullPath, schema.GetOptions());
+        } catch (const TFormatFail& ex) {
+            return TFormatResult(ex.Status, ex.Error);
+        } catch (const yexception& e) {
+            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
+        }
     }
 
     TString statement = Stream.Str();

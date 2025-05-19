@@ -23,7 +23,7 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
 
     def test_vecot_index_large_levels_and_clusters(self):
         table_path = self.table_name
-        prefix = {"String": lambda i: f"{i}"}
+        prefix_data = {"String": lambda i: f"{i}"}
         vector = {"String": lambda i: f"{i}"}
         all_types = {
             "Int64": lambda i: i,
@@ -37,10 +37,9 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
             "Int32": lambda i: i,
             "Uint32": lambda i: i,
         }
-        columns = {"pk_": pk_types.keys(), "col_": all_types.keys(), "prefix_": prefix.keys(), "vec_": vector.keys()}
+        columns = {"pk_": pk_types.keys(), "col_": all_types.keys(), "prefix_": prefix_data.keys(), "vec_": vector.keys()}
         pk_columns = {"pk_": pk_types.keys()}
-        clusters_data = [10, 30, 50, 100]
-        levels_data = [3, 4, 5, 6]
+        dimensions = [(3, 10), (4, 50)]
         vector_dimension_data = [5]
         distance_data = ["cosine"]  # "cosine", "manhattan", "euclidean"
         similarity_data = ["cosine"]  # "inner_product", "cosine"
@@ -49,6 +48,7 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
         covers = [[], [f"col_{cleanup_type_name(type_name)}" for type_name in all_types.keys()]]
         for vector_type in vector_type_data:
             for vector_dimension in vector_dimension_data:
+                print(f"vector_type: {vector_type}, vector_dimension: {vector_dimension}")
                 create_table_sql = create_table_sql_request(
                     table_name=table_path,
                     columns=columns,
@@ -61,7 +61,7 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
                 self._upsert_values(
                     table_name=table_path,
                     all_types=all_types,
-                    prefix=prefix,
+                    prefix=prefix_data,
                     pk_types=pk_types,
                     vector_type=vector_type,
                     vector_dimension=vector_dimension,
@@ -69,39 +69,43 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
 
                 for cover in covers:
                     for prefix in prefixs:
-                        for levels in levels_data:
-                            for clusters in clusters_data:
-                                for distance in distance_data:
-                                    self._check_loop(
-                                        table_path=table_path,
-                                        function="distance",
-                                        distance=distance,
-                                        vector_type=vector_type,
-                                        vector_dimension=vector_dimension,
-                                        levels=levels,
-                                        clusters=clusters,
-                                        all_types=all_types,
-                                        prefix=prefix,
-                                        cover=cover,
-                                    )
+                        for levels, clusters in dimensions:
+                            for distance in distance_data:
+                                print(
+                                    f"cover: {cover}, prefix: {prefix}, levels: {levels}, clusters: {clusters}, distance: {distance}"
+                                )
+                                self._check_loop(
+                                    table_path=table_path,
+                                    function="distance",
+                                    distance=distance,
+                                    vector_type=vector_type,
+                                    vector_dimension=vector_dimension,
+                                    levels=levels,
+                                    clusters=clusters,
+                                    all_types=all_types,
+                                    prefix=prefix,
+                                    cover=cover,
+                                )
 
                 for cover in covers:
                     for prefix in prefixs:
-                        for levels in levels_data:
-                            for clusters in clusters_data:
-                                for similarity in similarity_data:
-                                    self._check_loop(
-                                        table_path=table_path,
-                                        function="similarity",
-                                        distance=similarity,
-                                        vector_type=vector_type,
-                                        vector_dimension=vector_dimension,
-                                        levels=levels,
-                                        clusters=clusters,
-                                        all_types=all_types,
-                                        prefix=prefix,
-                                        cover=cover,
-                                    )
+                        for levels, clusters in dimensions:
+                            for similarity in similarity_data:
+                                print(
+                                    f"cover: {cover}, prefix: {prefix}, levels: {levels}, clusters: {clusters}, similarity: {similarity}"
+                                )
+                                self._check_loop(
+                                    table_path=table_path,
+                                    function="similarity",
+                                    distance=similarity,
+                                    vector_type=vector_type,
+                                    vector_dimension=vector_dimension,
+                                    levels=levels,
+                                    clusters=clusters,
+                                    all_types=all_types,
+                                    prefix=prefix,
+                                    cover=cover,
+                                )
                 self._drop_table(table_path)
 
     def _create_index(

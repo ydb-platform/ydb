@@ -66,16 +66,29 @@ PEERDIR(
     ydb/tests/tools/fq_runner
     ydb/public/api/protos
     contrib/python/pytest
+    contrib/python/boto3
+    contrib/python/moto
+)
+
+DATA(
+    arcadia/ydb/tests/fq/generic/analytics
+)
+
+PY_SRCS(
+    conftest.py
+    s3_helpers.py
 )
 
 TEST_SRCS(
-    conftest.py
     test_clickhouse.py
     test_greenplum.py
     test_join.py
     test_mysql.py
     test_postgresql.py
     test_ydb.py
+)
+DEPENDS(
+    contrib/python/moto/bin
 )
 
 END()

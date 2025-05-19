@@ -52,9 +52,7 @@ DICT_OF_PROCESSES = {
                 echo "Running"
             else
                 echo "Stopped"
-            fi""",
-        'start_command' : "do /Berkanavt/nemesis/bin/olap_workload --database /Root/db1",
-        'stop_command' : ""
+            fi"""
     },
     'oltp_workload' : {
         'status' : """
@@ -63,8 +61,6 @@ DICT_OF_PROCESSES = {
             else
                 echo "Stopped"
             fi""",
-        'start_command' : "/Berkanavt/nemesis/bin/oltp_workload --database /Root/db1 --path oltp_workload",
-        'stop_command' : ""
     },
     'simple_queue_column' : {
         'status' : """
@@ -72,9 +68,7 @@ DICT_OF_PROCESSES = {
                 echo "Running"
             else
                 echo "Stopped"
-            fi""",
-        'start_command' : "/Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode column",
-        'stop_command' : ""
+            fi"""
     },
     'simple_queue_row' : {
         'status' : """
@@ -82,9 +76,7 @@ DICT_OF_PROCESSES = {
                 echo "Running"
             else
                 echo "Stopped"
-            fi""",
-        'start_command' : "/Berkanavt/nemesis/bin/simple_queue --database /Root/db1 --mode row",
-        'stop_command' : ""
+            fi"""
     },
     'workload_log_column' : {
         'status' : """
@@ -92,9 +84,7 @@ DICT_OF_PROCESSES = {
                 echo "Running"
             else
                 echo "Stopped"
-            fi""",
-        'start_command' : "",
-        'stop_command' : ""
+            fi"""
     },
     'workload_log_row' : {
         'status' : """
@@ -102,9 +92,7 @@ DICT_OF_PROCESSES = {
                 echo "Running"
             else
                 echo "Stopped"
-            fi""",
-        'start_command' : "",
-        'stop_command' : ""
+            fi"""
     },
     'workload_log_column_select' : {
         'status' : """
@@ -112,9 +100,7 @@ DICT_OF_PROCESSES = {
                 echo "Running"
             else
                 echo "Stopped"
-            fi""",
-        'start_command' : "",
-        'stop_command' : ""
+            fi"""
     },
     'workload_log_row_select' : {
         'status' : """
@@ -122,9 +108,7 @@ DICT_OF_PROCESSES = {
                 echo "Running"
             else
                 echo "Stopped"
-            fi""",
-        'start_command' : "",
-        'stop_command' : ""
+            fi"""
     }
 }
 
@@ -615,7 +599,7 @@ class StabilityCluster:
                 if not screen.strip() or 'Socket' in screen:  # Skip socket directory line
                     continue
 
-                # Пропускаем мертвые сессии и выводим предупреждение
+                # Пропускаем мертвые сессии
                 if 'Dead' in screen:
                     continue
 
@@ -665,7 +649,7 @@ class StabilityCluster:
                                     if line.strip():  # Skip empty lines
                                         if 'FATAL' in line or 'exit.*status' in line:
                                             print(f"{bcolors.BOLD}{bcolors.FAIL}{line}{bcolors.ENDC}")
-                                        elif 'ERROR' in line:
+                                        elif 'ERROR' in line.capitalize():
                                             print(f"{bcolors.FAIL}{line}{bcolors.ENDC}")
                                         elif 'WARN' in line or 'WARNING' in line:
                                             print(f"{bcolors.WARNING}{line}{bcolors.ENDC}")
@@ -908,6 +892,7 @@ done
             command: Command to run (without TZ=UTC prefix)
             log_file: Optional custom log file path
         """
+        print(f"{bcolors.BOLD}{bcolors.HEADER}=== Запуск {workload_name} ==={bcolors.ENDC}")
         if log_file is None:
             log_file = f'/tmp/{workload_name}.out.log'
 
@@ -1263,7 +1248,6 @@ def main():
             first_node = stability_cluster.kikimr_cluster.nodes[1]
             stability_cluster.stop_workload('oltp_workload')
 
-            print(f"{bcolors.BOLD}{bcolors.HEADER}=== Запуск OLTP workload ==={bcolors.ENDC}")
             stability_cluster._clean_and_start_workload(
                 first_node,
                 'oltp_workload',

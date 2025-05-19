@@ -12,33 +12,27 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(abstract)
-add_subdirectory(clickbench)
-add_subdirectory(benchmark_base)
-add_subdirectory(kv)
-add_subdirectory(log)
-add_subdirectory(mixed)
-add_subdirectory(stock)
-add_subdirectory(tpcds)
-add_subdirectory(tpc_base)
-add_subdirectory(tpch)
-add_subdirectory(query)
-add_subdirectory(tpcc)
+add_subdirectory(ut)
 
-add_library(ydb-library-workload INTERFACE)
+add_library(library-workload-tpcc)
 
 
-target_link_libraries(ydb-library-workload INTERFACE
-  contrib-libs-linux-headers
+target_link_libraries(library-workload-tpcc PUBLIC
   contrib-libs-cxxsupp
   yutil
-  library-workload-abstract
-  library-workload-clickbench
-  library-workload-kv
-  library-workload-log
-  library-workload-mixed
-  library-workload-stock
-  library-workload-tpcds
-  library-workload-tpch
+  api-grpc
+  api-protos
+  src-client-driver
+  src-client-proto
+  src-client-query
+  cpp-histogram-hdr
+)
+
+target_sources(library-workload-tpcc PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/common_queries.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/runner.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/task_queue.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/terminal.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/workload/tpcc/transaction_neworder.cpp
 )
 

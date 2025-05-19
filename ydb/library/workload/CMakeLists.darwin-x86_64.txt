@@ -23,6 +23,7 @@ add_subdirectory(tpcds)
 add_subdirectory(tpc_base)
 add_subdirectory(tpch)
 add_subdirectory(query)
+add_subdirectory(tpcc)
 
 add_library(ydb-library-workload INTERFACE)
 

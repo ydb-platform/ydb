@@ -8,6 +8,7 @@ FORK_SUBTESTS()
 SPLIT_FACTOR(10)
 
 TEST_SRCS(
+    test_example.py
     test_export_s3.py
     test_followers.py
     test_compatibility.py
@@ -19,11 +20,11 @@ SIZE(LARGE)
 REQUIREMENTS(cpu:all)
 REQUIREMENTS(ram:all)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
+# INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 
 DEPENDS(
     ydb/apps/ydb
-    ydb/apps/ydbd
+    # ydb/apps/ydbd
     ydb/tests/library/compatibility/binaries
 )
 

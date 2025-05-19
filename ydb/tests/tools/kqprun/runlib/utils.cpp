@@ -28,32 +28,12 @@ void TerminateHandler() {
     abort();
 }
 
-void IllegalInstructionHandler(int) {
+void BackTraceSignalHandler(int signal) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
 
-    Cerr << colors.Red() << "======= illegal instruction call stack ========" << colors.Default() << Endl;
+    Cerr << colors.Red() << "======= " << strsignal(signal) << " call stack ========" << colors.Default() << Endl;
     FormatBackTrace(&Cerr);
     Cerr << colors.Red() << "===============================================" << colors.Default() << Endl;
-
-    abort();
-}
-
-void SegmentationFaultHandler(int) {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
-
-    Cerr << colors.Red() << "======= segmentation fault call stack ========" << colors.Default() << Endl;
-    FormatBackTrace(&Cerr);
-    Cerr << colors.Red() << "==============================================" << colors.Default() << Endl;
-
-    abort();
-}
-
-void FloatingPointExceptionHandler(int) {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
-
-    Cerr << colors.Red() << "======= floating point exception call stack ========" << colors.Default() << Endl;
-    FormatBackTrace(&Cerr);
-    Cerr << colors.Red() << "====================================================" << colors.Default() << Endl;
 
     abort();
 }
@@ -259,9 +239,9 @@ TChoices<NActors::NLog::EPriority> GetLogPrioritiesMap(const TString& optionName
 
 void SetupSignalActions() {
     std::set_terminate(&TerminateHandler);
-    signal(SIGILL, &IllegalInstructionHandler);
-    signal(SIGSEGV, &SegmentationFaultHandler);
-    signal(SIGFPE, &FloatingPointExceptionHandler);
+    for (auto sig : {SIGFPE, SIGILL, SIGSEGV}) {
+        signal(sig, &BackTraceSignalHandler);
+    }
 }
 
 void PrintResultSet(EResultOutputFormat format, IOutputStream& output, const Ydb::ResultSet& resultSet) {

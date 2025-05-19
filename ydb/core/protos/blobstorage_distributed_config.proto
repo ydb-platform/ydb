@@ -2,6 +2,7 @@ syntax = "proto3";
 
 import "ydb/core/protos/config.proto";
 import "ydb/core/protos/blobstorage_disk.proto";
+import "ydb/core/protos/bridge.proto";
 import "ydb/library/actors/protos/interconnect.proto";
 
 package NKikimrBlobStorage;
@@ -11,6 +12,7 @@ message TNodeIdentifier {
     uint32 Port = 2;
     uint32 NodeId = 3;
     NActorsInterconnect.TNodeLocation Location = 4;
+    optional uint32 BridgePileId = 5;
 }
 
 message TStorageConfigMeta {
@@ -33,6 +35,7 @@ message TStorageConfig { // contents of storage metadata
     TStorageConfig PrevConfig = 100; // previous version of StorageConfig (if any)
     optional bytes CompressedStorageYaml = 14; // compressed storage YAML config (if dual-config is enabled)
     optional uint64 ExpectedStorageYamlVersion = 15;
+    NKikimrBridge.TClusterState ClusterState = 16; // for bridged clusters; not set for ordinary ones
 }
 
 message TPDiskMetadataRecord {

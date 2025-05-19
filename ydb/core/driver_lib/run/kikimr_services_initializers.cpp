@@ -953,6 +953,9 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
     if (Config.HasSelfManagementConfig()) {
         nodeWardenConfig->SelfManagementConfig.emplace(Config.GetSelfManagementConfig());
     }
+    if (Config.HasBridgeConfig()) {
+        nodeWardenConfig->BridgeConfig.emplace(Config.GetBridgeConfig());
+    }
 
     if (Config.HasConfigDirPath()) {
         nodeWardenConfig->ConfigDirPath = Config.GetConfigDirPath();

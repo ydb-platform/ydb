@@ -719,6 +719,11 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
         }
     }
 
+    // parse bridge mode fields
+    for (const auto& groupId : group.GetBridgeGroupIds()) {
+        res->BridgeGroupIds.push_back(TGroupId::FromValue(groupId));
+    }
+
     // store original group protobuf it was parsed from
     res->Group.emplace(group);
     return res;
@@ -759,6 +764,7 @@ bool TBlobStorageGroupInfo::DecryptGroupKey(TBlobStorageGroupInfo::EEncryptionMo
 }
 
 const TBlobStorageGroupInfo::IQuorumChecker& TBlobStorageGroupInfo::GetQuorumChecker() const {
+    Y_ABORT_UNLESS(!IsBridged());
     return Topology->GetQuorumChecker();
 }
 

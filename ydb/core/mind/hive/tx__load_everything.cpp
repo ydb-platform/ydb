@@ -326,6 +326,9 @@ public:
                     // That was not persisted to avoid issues with downgrades
                     node.Down = true;
                 }
+                if (node.Down) {
+                    Self->UpdateCounterNodesDown(+1);
+                }
                 if (nodeRowset.HaveValue<Schema::Node::Location>()) {
                     auto location = nodeRowset.GetValue<Schema::Node::Location>();
                     if (location.HasDataCenter()) {

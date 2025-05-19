@@ -5,7 +5,7 @@ import random
 import string
 
 import six
-from google.protobuf import text_format
+from google.protobuf import text_format, json_format
 from google.protobuf.pyext._message import FieldDescriptor
 
 from library.python import resource
@@ -152,3 +152,44 @@ def apply_config_changes(target, changes, fix_names=None):
 def random_int(low, high, *seed):
     random.seed(''.join(map(str, seed)))
     return random.randint(low, high)
+
+
+def wrap_parse_dict(dictionary, proto):
+    def get_camel_case_string(snake_str):
+        components = snake_str.split('_')
+        camelCased = ''.join(x.capitalize() for x in components)
+        abbreviations = {
+            'Uuid': 'UUID',
+            'Pdisk': 'PDisk',
+            'Vdisk': 'VDisk',
+            'NtoSelect': 'NToSelect',
+            'Ssid': 'SSId',
+            'Sids': 'SIDs',
+            'GroupId': 'GroupID',
+            'NodeId': 'NodeID',
+            'DiskId': 'DiskID',
+            'SlotId': 'SlotID',
+        }
+        for k, v in abbreviations.items():
+            camelCased = camelCased.replace(k, v)
+        return camelCased
+
+    def convert_keys(data):
+        if isinstance(data, dict):
+            return {get_camel_case_string(k): convert_keys(v) for k, v in data.items()}
+        elif isinstance(data, list):
+            return [convert_keys(item) for item in data]
+        else:
+            return data
+
+    json_format.ParseDict(convert_keys(dictionary), proto)
+
+
+def need_generate_bs_config(template_bs_config):
+    # We need to generate blob_storage_config if template file does not contain static group:
+    # blob_storage_config.service_set.groups
+    if template_bs_config is None:
+
+        return True
+
+    return template_bs_config.get("service_set", {}).get("groups") is None

@@ -20,12 +20,12 @@ class TSingleClusterReadSessionImpl;
 
 using TSingleClusterReadSessionContextPtr = std::shared_ptr<TCallbackContext<TSingleClusterReadSessionImpl<false>>>;
 
-using TNodeId = i32;
-using TGeneration = i64;
-using TPartitionId = i64;
-using TPartitionSessionId = ui64;
+using TNodeId = std::int32_t;
+using TGeneration = std::int64_t;
+using TPartitionId = std::int64_t;
+using TPartitionSessionId = std::uint64_t;
 using TReadSessionId = std::string;
-using TDirectReadId = i64;
+using TDirectReadId = std::int64_t;
 
 using TDirectReadServerMessage = Ydb::Topic::StreamDirectReadMessage::FromServer;
 using TDirectReadClientMessage = Ydb::Topic::StreamDirectReadMessage::FromClient;
@@ -87,7 +87,7 @@ public:
 
     // If the control session sends StopPartitionSessionRequest(graceful=true, last_direct_read_id),
     // we need to remember the Id, read up to it, and then kill the partition session (and its direct session if it becomes empty).
-    TMaybe<TDirectReadId> LastDirectReadId = Nothing();
+    std::optional<TDirectReadId> LastDirectReadId = std::nullopt;
 
     TDirectReadClientMessage MakeStartRequest() const;
     bool TransitionTo(EState);
@@ -120,7 +120,7 @@ public:
 
     struct TDirectReadIds {
         TDirectReadId NextDirectReadId;
-        TMaybe<TDirectReadId> LastDirectReadId;
+        std::optional<TDirectReadId> LastDirectReadId;
     };
     TDirectReadIds GetDirectReadIds(TPartitionSessionId) const;
 
@@ -204,7 +204,7 @@ private:
     IDirectReadSessionControlCallbacks::TPtr ControlCallbacks;
     IDirectReadProcessor::TPtr Processor;
     std::shared_ptr<TDirectReadServerMessage> ServerMessage;
-    THashMap<TPartitionSessionId, TDirectReadPartitionSession> PartitionSessions;
+    std::unordered_map<TPartitionSessionId, TDirectReadPartitionSession> PartitionSessions;
     IRetryPolicy::IRetryState::TPtr RetryState = {};
     size_t ConnectionAttemptsDone = 0;
     EState State;

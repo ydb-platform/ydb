@@ -408,7 +408,7 @@ TPartitionLocation::TPartitionLocation(const Ydb::Topic::PartitionLocation& part
 {
 }
 
-TPartitionLocation::TPartitionLocation(i32 nodeId, i64 generation)
+TPartitionLocation::TPartitionLocation(std::int32_t nodeId, std::int64_t generation)
     : NodeId_(nodeId)
     , Generation_(generation)
 {

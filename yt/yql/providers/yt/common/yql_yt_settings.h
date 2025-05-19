@@ -89,11 +89,14 @@ struct TYtSettings {
 
     // static per-cluster
     NCommon::TConfSetting<TGUID, false, true> ExternalTx;
+    NCommon::TConfSetting<TString, false, true> TmpFolder;
+    NCommon::TConfSetting<TString, false, true> TablesTmpFolder;
+    NCommon::TConfSetting<TString, false, true> BinaryTmpFolder;
+    NCommon::TConfSetting<TString, false, true> StaticPool;
+    NCommon::TConfSetting<TString, false, true> CoreDumpPath;
 
     // static global
     NCommon::TConfSetting<TString, false> Auth;
-    NCommon::TConfSetting<TString, false> TmpFolder;
-    NCommon::TConfSetting<TString, false> TablesTmpFolder;
     NCommon::TConfSetting<TDuration, false> TempTablesTtl;
     NCommon::TConfSetting<bool, false> KeepTempTables;
     NCommon::TConfSetting<ui32, false> InflightTempTablesLimit;
@@ -113,10 +116,7 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, false> QueryCacheUseExpirationTimeout;
     NCommon::TConfSetting<bool, false> QueryCacheUseForCalc;
     NCommon::TConfSetting<ui32, false> DefaultMaxJobFails;
-    NCommon::TConfSetting<TString, false> CoreDumpPath;
     NCommon::TConfSetting<TString, false> DefaultCluster;
-    NCommon::TConfSetting<TString, false> StaticPool;
-    NCommon::TConfSetting<TString, false> BinaryTmpFolder;
     NCommon::TConfSetting<TDuration, false> BinaryExpirationInterval;
     NCommon::TConfSetting<bool, false> IgnoreTypeV3;
     NCommon::TConfSetting<bool, false> _UseMultisetAttributes;
@@ -129,6 +129,7 @@ struct TYtSettings {
     NCommon::TConfSetting<TString, false> DefaultRuntimeCluster;
     NCommon::TConfSetting<bool, false> _ForbidSensitiveDataInOperationSpec;
     NCommon::TConfSetting<NSize::TSize, false> _LocalTableContentLimit;
+    NCommon::TConfSetting<bool, false> EnableDynamicStoreReadInDQ;
 
     // Job runtime
     NCommon::TConfSetting<TString, true> Pool;
@@ -218,7 +219,6 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, true> _UseKeyBoundApi;
     NCommon::TConfSetting<TString, true> NetworkProject;
     NCommon::TConfSetting<bool, true> _EnableYtPartitioning;
-    NCommon::TConfSetting<bool, false> EnableDynamicStoreReadInDQ;
     NCommon::TConfSetting<bool, true> ForceJobSizeAdjuster;
     NCommon::TConfSetting<bool, true> EnforceJobUtc;
     NCommon::TConfSetting<bool, true> UseRPCReaderInDQ;
@@ -229,9 +229,9 @@ struct TYtSettings {
     NCommon::TConfSetting<TString, true> _BinaryCacheFolder;
     NCommon::TConfSetting<TString, true> RuntimeCluster;
     NCommon::TConfSetting<bool, true> _AllowRemoteClusterInput;
-
-    // Optimizers
     NCommon::TConfSetting<bool, true> _EnableDq;
+
+    // Optimizers (static global)
     NCommon::TConfSetting<ui32, false> ExtendTableLimit; // Deprecated. Use MaxInputTables instead
     NCommon::TConfSetting<NSize::TSize, false> CommonJoinCoreLimit;
     NCommon::TConfSetting<NSize::TSize, false> CombineCoreLimit;
@@ -329,8 +329,8 @@ struct TYtSettings {
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);
 EJoinCollectColumnarStatisticsMode GetJoinCollectColumnarStatisticsMode(const TYtSettings& settings);
-inline TString GetTablesTmpFolder(const TYtSettings& settings) {
-    return settings.TablesTmpFolder.Get().GetOrElse(settings.TmpFolder.Get().GetOrElse({}));
+inline TString GetTablesTmpFolder(const TYtSettings& settings, const TString& cluster) {
+    return settings.TablesTmpFolder.Get(cluster).GetOrElse(settings.TmpFolder.Get(cluster).GetOrElse({}));
 }
 
 struct TYtConfiguration : public TYtSettings, public NCommon::TSettingDispatcher {

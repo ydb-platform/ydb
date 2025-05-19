@@ -54,12 +54,12 @@ public:
     TBatchIterator(std::shared_ptr<TDataContainer> batch, std::shared_ptr<NArrow::TColumnFilter> filter,
         const std::vector<std::string>& keyColumns, const std::vector<std::string>& dataColumns, const bool reverseSort,
         const std::vector<std::string>& versionColumnNames, const ui64 sourceId)
-        : SourceId(sourceId)
-        , ControlPointFlag(false)
+        : ControlPointFlag(false)
         , KeyColumns(batch, 0, keyColumns, dataColumns, reverseSort)
         , VersionColumns(batch, 0, versionColumnNames, {}, false)
         , RecordsCount(batch->num_rows())
         , ReverseSortKff(reverseSort ? -1 : 1)
+        , SourceId(sourceId)
         , Filter(filter) {
         Y_ABORT_UNLESS(KeyColumns.InitPosition(GetFirstPosition()));
         Y_ABORT_UNLESS(VersionColumns.InitPosition(GetFirstPosition()));

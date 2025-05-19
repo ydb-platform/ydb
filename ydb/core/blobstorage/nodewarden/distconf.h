@@ -365,14 +365,15 @@ namespace NKikimr::NStorage {
 
         std::optional<TString> GenerateFirstConfig(NKikimrBlobStorage::TStorageConfig *config, const TString& selfAssemblyUUID);
 
-        void AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config, ui32 groupId, ui32 groupGeneration,
+        void AllocateStaticGroup(NKikimrBlobStorage::TStorageConfig *config, TGroupId groupId, ui32 groupGeneration,
             TBlobStorageGroupType gtype, const NKikimrBlobStorage::TGroupGeometry& geometry,
             const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TPDiskFilter>& pdiskFilters,
             std::optional<NKikimrBlobStorage::EPDiskType> pdiskType,
             THashMap<TVDiskIdShort, NBsController::TPDiskId> replacedDisks,
             const NBsController::TGroupMapper::TForbiddenPDisks& forbid,
             i64 requiredSpace, NKikimrBlobStorage::TBaseConfig *baseConfig,
-            bool convertToDonor, bool ignoreVSlotQuotaCheck, bool isSelfHealReasonDecommit);
+            bool convertToDonor, bool ignoreVSlotQuotaCheck, bool isSelfHealReasonDecommit,
+            std::optional<TBridgePileId> bridgePileId);
 
         void GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
             const NKikimrBlobStorage::TStorageConfig& baseConfig);
@@ -721,6 +722,9 @@ namespace NKikimr::NStorage {
 
         // scan all groups and find ones without quorum
         for (const auto& [groupId, group] : groups) {
+            if (group.Info->IsBridged()) {
+                continue;
+            }
             if (const auto& checker = group.Info->GetQuorumChecker(); !checker.CheckQuorumForGroup(group.Confirmed)) {
                 return false;
             }

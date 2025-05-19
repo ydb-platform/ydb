@@ -452,7 +452,7 @@ public:
         return UseFilter ? nullptr : Filter;
     }
 
-    TColumnFilter AdaptFullFilter(TColumnFilter filter) const {
+    TColumnFilter FullToDataFilter(TColumnFilter filter) const {
         if (!UseFilter || Filter->IsTotalAllowFilter()) {
             return filter;
         } else {

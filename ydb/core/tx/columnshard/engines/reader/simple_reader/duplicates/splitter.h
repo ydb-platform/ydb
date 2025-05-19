@@ -129,21 +129,13 @@ public:
 
         for (const auto& border : Borders) {
             const auto borderPosition = NArrow::NMerger::TSortableBatchPosition(border.GetKey().ToBatch(), 0, sortingFields, {}, false);
-            if (offset != data->GetData()->GetRecordsCount()) {
-                if (border.GetIsLast()) {
-                    const auto findBound = position.FindBound(position, offset, data->GetData()->GetRecordsCount() - 1, borderPosition, true);
-                    if (!findBound) {
-                        offset = data->GetData()->GetRecordsCount();
-                    } else if (findBound->GetPosition() == 0) {
-                        offset = 0;
-                    } else {
-                        offset = findBound->GetPosition() - 1;
-                    }
-                } else {
-                    const auto findBound = position.FindBound(position, offset, data->GetData()->GetRecordsCount() - 1, borderPosition, false);
-                    offset = findBound ? findBound->GetPosition() : data->GetData()->GetRecordsCount();
-                }
+            if (offset == data->GetData()->GetRecordsCount()) {
+                borderOffsets.emplace_back(offset);
+                continue;
             }
+            const auto findBound =
+                position.FindBound(position, offset, data->GetData()->GetRecordsCount() - 1, borderPosition, border.GetIsLast());
+            offset = findBound ? findBound->GetPosition() : data->GetData()->GetRecordsCount();
             borderOffsets.emplace_back(offset);
         }
 

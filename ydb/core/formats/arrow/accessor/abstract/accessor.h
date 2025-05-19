@@ -367,7 +367,7 @@ public:
         for (ui32 currentIndex = 0; currentIndex < arr->GetRecordsCount();) {
             arrCurrent = arr->GetArray(arrCurrent, currentIndex, arr);
             auto result = actor(arrCurrent->GetArray());
-            if (!!result) {
+            if (result) {
                 return result;
             }
             currentIndex = currentIndex + arrCurrent->GetArray()->GetRecordsCount();

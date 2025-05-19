@@ -17,16 +17,11 @@ private:
     std::optional<ui64> PortionsSizeLimit;
 
     virtual std::shared_ptr<IPortionsLevel> DoBuildLevel(const std::shared_ptr<IPortionsLevel>& nextLevel, const ui32 indexLevel,
-        const std::shared_ptr<TSimplePortionsGroupInfo>& portionsInfo, const TLevelCounters& counters) const override;
+        const std::shared_ptr<TSimplePortionsGroupInfo>& portionsInfo, const TLevelCounters& counters,
+        const std::vector<std::shared_ptr<IPortionsSelector>>& selectors) const override;
     virtual TConclusionStatus DoDeserializeFromJson(const NJson::TJsonValue& json) override;
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TCompactionLevelConstructorContainer& proto) override;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TCompactionLevelConstructorContainer& proto) const override;
-    virtual bool IsEqualToSameClass(const ILevelConstructor& item) const override {
-        const auto& itemCast = dynamic_cast<const TZeroLevelConstructor&>(item);
-        return PortionsLiveDuration == itemCast.PortionsLiveDuration && ExpectedBlobsSize == itemCast.ExpectedBlobsSize &&
-               PortionsCountAvailable == itemCast.PortionsCountAvailable && PortionsCountLimit == itemCast.PortionsCountLimit &&
-               PortionsSizeLimit == itemCast.PortionsSizeLimit;
-    }
 
     static const inline TFactory::TRegistrator<TZeroLevelConstructor> Registrator =
         TFactory::TRegistrator<TZeroLevelConstructor>(GetClassNameStatic());

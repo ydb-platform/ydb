@@ -164,14 +164,6 @@
             ]
         },
         {
-            "Name": "TKqlLookupIndexBase",
-            "Base": "TKqlLookupTableBase",
-            "Match": {"Type": "CallableBase"},
-            "Children": [
-                {"Index": 3, "Name": "Index", "Type": "TCoAtom"}
-            ]
-        },
-        {
             "Name": "TKqpLookupTable",
             "Base": "TKqlLookupTableBase",
             "Match": {"Type": "Callable", "Name": "KqpLookupTable"}
@@ -197,15 +189,11 @@
             ]
         },
         {
-            "Name": "TKqlLookupIndex",
-            "Base": "TKqlLookupIndexBase",
-            "Match": {"Type": "Callable", "Name": "KqlLookupIndex"}
-        },
-        {
             "Name": "TKqlStreamLookupIndex",
-            "Base": "TKqlLookupIndexBase",
+            "Base": "TKqlLookupTableBase",
             "Match": {"Type": "Callable", "Name": "KqlStreamLookupIndex"},
             "Children": [
+                {"Index": 3, "Name": "Index", "Type": "TCoAtom"},
                 {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
@@ -748,7 +736,7 @@
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"},
                 {"Index": 1, "Name": "Variable", "Type": "TCoAtom"},
                 {"Index": 2, "Name": "Lambda", "Type": "TCoLambda"}
-            ]         
+            ]
         },
         {
             "Name": "TKqpOpElementList",

@@ -1585,6 +1585,8 @@ Y_UNIT_TEST(TestStorageRetention) {
 
         tc.Runtime->SetScheduledLimit(100);
 
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
+
         TVector<std::pair<ui64, TString>> data;
         activeZone = PlainOrSoSlow(true, false);
 

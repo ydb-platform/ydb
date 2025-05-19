@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import copy
 import pytest
 import yatest
 import time
@@ -33,10 +34,14 @@ class RestartToAnotherVersionFixture:
         self.all_binary_paths = request.param
 
     def setup_cluster(self, **kwargs):
+        extra_feature_flags = kwargs.get("extra_feature_flags", {})
+        extra_feature_flags = copy.copy(extra_feature_flags)
+        extra_feature_flags["suppress_compatibility_check"] = True
         self.config = KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,
             binary_paths=self.all_binary_paths[self.current_binary_paths_index],
             use_in_memory_pdisks=False,
+            extra_feature_flags=extra_feature_flags,
             **kwargs,
         )
 

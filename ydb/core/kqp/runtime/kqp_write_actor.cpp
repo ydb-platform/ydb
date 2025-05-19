@@ -1869,7 +1869,7 @@ public:
             token = *ev->Get()->Token;
         }
 
-        auto& queue = DataQueues[token.TableId];
+        auto& queue = RequestQueues[token.TableId];
         queue.emplace();
         auto& message = queue.back();
 
@@ -1883,10 +1883,8 @@ public:
 
     bool Process() {
         ProcessRequestQueue();
-        if (!ProcessLookup()) {
-            return false;
-        }
-        if (!ProcessWrite()) {
+        // TODO: process lookup result queue
+        if (!ProcessFlush()) {
             return false;
         }
         ProcessAckQueue();
@@ -1904,7 +1902,7 @@ public:
     }
 
     void ProcessRequestQueue() {
-        for (auto& [tableId, queue] : DataQueues) {
+        for (auto& [tableId, queue] : RequestQueues) {
             auto& writeInfo = WriteInfos.at(tableId);
 
             if (!writeInfo.Actor.Ptr->IsReady()) {
@@ -1915,7 +1913,9 @@ public:
             while (!queue.empty()) {
                 auto& message = queue.front();
 
+                // if lookup isn't needed
                 if (message.Data) {
+                    // TODO: indexes <- filtered message.Data
                     writeInfo.Actor.Ptr->Write(message.Token.Cookie, std::move(message.Data));
                 }
 
@@ -1948,7 +1948,7 @@ public:
         }
     }
 
-    bool ProcessWrite() {
+    bool ProcessFlush() {
         const bool outOfMemory = GetTotalFreeSpace() <= 0;
         const bool needToFlush = outOfMemory
             || State == EState::FLUSHING
@@ -1979,10 +1979,6 @@ public:
         return true;
     }
 
-    bool ProcessLookup() {
-        return true;
-    }
-
     bool Flush(NWilson::TTraceId traceId) {
         Counters->BufferActorFlushes->Inc();
         UpdateTracingState("Flush", std::move(traceId));
@@ -1991,9 +1987,7 @@ public:
         CA_LOG_D("Start flush");
         YQL_ENSURE(State == EState::WRITING);
         State = EState::FLUSHING;
-        for (auto& [_, queue] : DataQueues) {
-            YQL_ENSURE(queue.empty());
-        }
+        CheckQueuesEmpty();
         return Process();
     }
 
@@ -2004,9 +1998,7 @@ public:
         CA_LOG_D("Start prepare for distributed commit");
         YQL_ENSURE(State == EState::WRITING);
         State = EState::PREPARING;
-        for (auto& [_, queue] : DataQueues) {
-            YQL_ENSURE(queue.empty());
-        }
+        CheckQueuesEmpty();
         TxId = txId;
         for (auto& [_, info] : WriteInfos) {
             info.Actor.Ptr->SetPrepare(txId);
@@ -2029,9 +2021,7 @@ public:
         YQL_ENSURE(State == EState::WRITING);
         State = EState::COMMITTING;
         IsImmediateCommit = true;
-        for (auto& [_, queue] : DataQueues) {
-            YQL_ENSURE(queue.empty());
-        }
+        CheckQueuesEmpty();
         for (auto& [_, info] : WriteInfos) {
             info.Actor.Ptr->SetImmediateCommit();
         }
@@ -2050,9 +2040,7 @@ public:
         CA_LOG_D("Start distributed commit with TxId=" << *TxId);
         YQL_ENSURE(State == EState::PREPARING);
         State = EState::COMMITTING;
-        for (auto& [_, queue] : DataQueues) {
-            YQL_ENSURE(queue.empty());
-        }
+        CheckQueuesEmpty();
         for (auto& [_, info] : WriteInfos) {
             info.Actor.Ptr->SetDistributedCommit();
         }
@@ -2066,6 +2054,12 @@ public:
         CA_LOG_D("Start rollback");
         State = EState::ROLLINGBACK;
         SendToExternalShards(true);
+    }
+
+    void CheckQueuesEmpty() {
+        for (const auto& [_, queue] : RequestQueues) {
+            AFL_ENSURE(queue.empty());
+        }
     }
 
     void SendToExternalShards(bool isRollback) {
@@ -2254,7 +2248,7 @@ public:
 
     void PassAway() override {
         Counters->BufferActorsCount->Dec();
-        for (auto& [_, queue] : DataQueues) {
+        for (auto& [_, queue] : RequestQueues) {
             while (!queue.empty()) {
                 queue.pop();
             }
@@ -2970,7 +2964,7 @@ private:
 
     EState State;
     bool HasError = false;
-    THashMap<TTableId, std::queue<TBufferWriteMessage>> DataQueues;
+    THashMap<TTableId, std::queue<TBufferWriteMessage>> RequestQueues;
 
     struct TAckMessage {
         TActorId ForwardActorId;

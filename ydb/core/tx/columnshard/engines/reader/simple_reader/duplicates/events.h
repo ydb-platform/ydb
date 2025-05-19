@@ -30,6 +30,10 @@ public:
     TSnapshot GetMaxVersion() const {
         return MaxVersion;
     }
+
+    ui64 GetRawSize() const {
+        return Memory->GetMemory();
+    }
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple::NDuplicateFiltering

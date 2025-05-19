@@ -44,13 +44,13 @@ bool UseBlocksSink(TStringBuf format, const TExprNode::TListType& keys, const TS
         }
         if (unpackedType->GetKind() != ETypeAnnotationKind::Data) {
             if (useblockSink) {
-                error = TStringBuilder() << "Field '" << item->GetName() << "' does not supported for block sink type " << FormatType(item->GetItemType()) << ", allowed only data or optional of data types";
+                error = TStringBuilder() << "Field '" << item->GetName() << "' has type " << FormatType(item->GetItemType()) << ", it does not supported for block sink, allowed only data or optional of data types";
             }
             return false;
         }
         if (std::shared_ptr<arrow::DataType> arrowType; !NDq::S3ConvertArrowOutputType(unpackedType->Cast<TDataExprType>()->GetSlot(), arrowType)) {
             if (useblockSink) {
-                error = TStringBuilder() << "Field '" << item->GetName() << "' does not supported for block sink data type " << FormatType(unpackedType);
+                error = TStringBuilder() << "Field '" << item->GetName() << "' has data type " << FormatType(unpackedType) << ", it does not supported for block sink";
             }
             return false;
         }

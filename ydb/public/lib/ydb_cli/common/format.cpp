@@ -232,18 +232,21 @@ void TCommandWithOutput::AddDeprecatedJsonOption(TClientCommand::TConfig& config
 void TCommandWithOutput::AddOutputFormats(TClientCommand::TConfig& config,
                                     const TVector<EDataFormat>& allowedFormats, EDataFormat defaultFormat) {
     TStringStream description;
-    description << "Output format. Available options: ";
+    description << "Output format";
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     Y_ABORT_UNLESS(std::find(allowedFormats.begin(), allowedFormats.end(), defaultFormat) != allowedFormats.end(),
         "Couldn't find default output format %s in allowed formats", (TStringBuilder() << defaultFormat).c_str());
-    for (const auto& format : allowedFormats) {
-        auto findResult = FormatDescriptions.find(format);
-        Y_ABORT_UNLESS(findResult != FormatDescriptions.end(),
-            "Couldn't find description for %s output format", (TStringBuilder() << format).c_str());
-        description << "\n  " << colors.BoldColor() << format << colors.OldColor()
-            << "\n    " << findResult->second;
+    if (config.HelpCommandVerbosiltyLevel >= 2) {
+        description << ". Available options: ";
+        for (const auto& format : allowedFormats) {
+            auto findResult = FormatDescriptions.find(format);
+            Y_ABORT_UNLESS(findResult != FormatDescriptions.end(),
+                "Couldn't find description for %s output format", (TStringBuilder() << format).c_str());
+            description << "\n  " << colors.BoldColor() << format << colors.OldColor()
+                << "\n    " << findResult->second;
+        }
+        description << "\nDefault: " << colors.CyanColor() << "\"" << defaultFormat << "\"" << colors.OldColor() << ".";
     }
-    description << "\nDefault: " << colors.CyanColor() << "\"" << defaultFormat << "\"" << colors.OldColor() << ".";
     config.Opts->AddLongOption("format", description.Str())
         .RequiredArgument("STRING").StoreResult(&OutputFormat);
     AllowedFormats = allowedFormats;

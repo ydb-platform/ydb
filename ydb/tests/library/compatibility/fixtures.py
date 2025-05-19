@@ -109,3 +109,47 @@ class MixedClusterFixture:
         self.driver.wait()
         yield
         self.cluster.stop()
+
+
+class RollingUpdateFixture:
+    @pytest.fixture(autouse=True)
+    def base_setup(self):
+        self.all_binary_paths = [last_stable_binary_path]
+
+    def setup_cluster(self, **kwargs):
+        self.config = KikimrConfigGenerator(
+            erasure=Erasure.MIRROR_3_DC,
+            binary_paths=self.all_binary_paths,
+            **kwargs,
+        )
+
+        self.cluster = KiKiMR(self.config)
+        self.cluster.start()
+        self.endpoint = "grpc://%s:%s" % ('localhost', self.cluster.nodes[1].port)
+
+        self.driver = ydb.Driver(
+            ydb.DriverConfig(
+                database='/Root',
+                endpoint=self.endpoint
+            )
+        )
+        self.driver.wait()
+        yield
+        self.cluster.stop()
+
+    def roll(self):
+        # from old to new
+        for node_id, node in self.cluster.nodes.items():
+            node.stop()
+            node.binary_path = current_binary_path
+            node.start()
+            yield
+
+        # from new to old
+        for node_id, node in self.cluster.nodes.items():
+            node.stop()
+            node.binary_path = last_stable_binary_path
+            node.start()
+            yield
+
+        yield

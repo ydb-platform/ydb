@@ -145,15 +145,12 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
 
 size_t TPartition::GetBodyKeysCountLimit() const
 {
-    // Settings will be made later.
-    return 300;
+    return AppData()->PQConfig.GetCompactionConfig().GetBlobsCount();
 }
 
 ui64 TPartition::GetCumulativeSizeLimit() const
 {
-    // Settings will be made later.
-    return MaxBlobSize;
-    //return 6_MB;
+    return AppData()->PQConfig.GetCompactionConfig().GetBlobsSize();
 }
 
 void TPartition::TryRunCompaction()
@@ -168,45 +165,16 @@ void TPartition::TryRunCompaction()
         return;
     }
 
-#if 1
     const ui64 cumulativeSize = BlobEncoder.BodySize;
-    ////for (size_t i = 0; i < CompactionBlobEncoder.HeadKeys.size(); ++i) {
-    ////    const auto& k = CompactionBlobEncoder.HeadKeys[i];
-
-    ////    cumulativeSize += k.Size;
-    ////}
-    ////PQ_LOG_D("cumulativeSize=" << cumulativeSize);
-    ////Y_ABORT_UNLESS(cumulativeSize <= MaxBlobSize,
-    ////               "cumulativeSize=%" PRIu64,
-    ////               cumulativeSize);
-    //ui64 requestSize = 0;
-    //for (size_t i = 0; (i < BlobEncoder.DataKeysBody.size()) && (cumulativeSize < GetCumulativeSizeLimit()); ++i) {
-    //    const auto& k = BlobEncoder.DataKeysBody[i];
-
-    //    cumulativeSize += k.Size;
-    //    if (cumulativeSize > GetCumulativeSizeLimit()) {
-    //        cumulativeSize -= k.Size;
-    //        break;
-    //    }
-    //    requestSize += k.Size;
-    //}
-    //PQ_LOG_D("cumulativeSize=" << cumulativeSize << ", requestSize=" << requestSize);
-#else
-    ui64 cumulativeSize = BlobEncoder.DataKeysBody.back().CumulativeSize;
-    cumulativeSize -= BlobEncoder.DataKeysBody.front().CumulativeSize;
-
-    if (!CompactionBlobEncoder.HeadKeys.empty()) {
-        cumulativeSize += CompactionBlobEncoder.HeadKeys.back().CumulativeSize;
-        cumulativeSize -= CompactionBlobEncoder.HeadKeys.front().CumulativeSize;
-    }
-#endif
 
     if ((cumulativeSize < GetCumulativeSizeLimit()) &&
         (BlobEncoder.DataKeysBody.size() < GetBodyKeysCountLimit())) {
         PQ_LOG_D("need more data for compaction. " <<
                  //"cumulativeSize=" << cumulativeSize << ", requestSize=" << requestSize <<
                  "cumulativeSize=" << cumulativeSize <<
-                 ", count=" << BlobEncoder.DataKeysBody.size());
+                 ", count=" << BlobEncoder.DataKeysBody.size() <<
+                 ", cumulativeSizeLimit=" << GetCumulativeSizeLimit() <<
+                 ", bodyKeysCountLimit=" << GetBodyKeysCountLimit());
         return;
     }
 

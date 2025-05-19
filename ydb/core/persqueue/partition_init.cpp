@@ -536,18 +536,26 @@ THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TR
             if (lastKey.GetOffset() == candidate.GetOffset()) {
                 if (lastKey.GetPartNo() == candidate.GetPartNo()) {
                     // candidate содержит lastKey
-                    Y_ABORT_UNLESS(lastKey.GetCount() < candidate.GetCount());
-                    filtered.back() = std::move(k);
-                    lastKey = candidate;
+                    Y_ABORT_UNLESS(lastKey.GetCount() <= candidate.GetCount(),
+                                   "lastKey=%s, candidate=%s",
+                                   lastKey.ToString().data(), candidate.ToString().data());
+                    if (lastKey.GetCount() < candidate.GetCount()) {
+                        filtered.back() = std::move(k);
+                        lastKey = candidate;
+                    }
                 } else {
                     // candidate после lastKey
-                    Y_ABORT_UNLESS(lastKey.GetPartNo() + lastKey.GetInternalPartsCount() == candidate.GetPartNo());
+                    Y_ABORT_UNLESS(lastKey.GetPartNo() + lastKey.GetInternalPartsCount() == candidate.GetPartNo(),
+                                   "lastKey=%s, candidate=%s",
+                                   lastKey.ToString().data(), candidate.ToString().data());
                     filtered.push_back(std::move(k));
                     lastKey = candidate;
                 }
             } else {
                 // выше мы отсортировали ключи. поэтому здесь
-                Y_ABORT_UNLESS(lastKey.GetOffset() < candidate.GetOffset());
+                Y_ABORT_UNLESS(lastKey.GetOffset() < candidate.GetOffset(),
+                               "lastKey=%s, candidate=%s",
+                               lastKey.ToString().data(), candidate.ToString().data());
 
                 if (const ui64 nextOffset = lastKey.GetOffset() + lastKey.GetCount(); nextOffset > candidate.GetOffset()) {
                     // lastKey содержит candidate

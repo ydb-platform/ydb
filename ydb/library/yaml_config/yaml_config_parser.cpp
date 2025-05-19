@@ -338,6 +338,29 @@ namespace NKikimr::NYaml {
         }
     }
 
+    TString GetDiskTypeFromShorthand(NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
+        TString diskType;
+        for (const auto& hostConfig : ephemeralConfig.GetHostConfigs()) {
+            bool hasRot = hostConfig.RotSize() > 0;
+            bool hasSsd = hostConfig.SsdSize() > 0;
+            bool hasNvme = hostConfig.NvmeSize() > 0;
+            int typesCount = (hasRot ? 1 : 0) + (hasSsd ? 1 : 0) + (hasNvme ? 1 : 0);
+
+            if (typesCount > 1) {
+                return TString();
+            }
+            if (typesCount == 1) {
+                TString currentDiskType = hasRot ? "ROT" : (hasSsd ? "SSD" : "NVME");
+                if (diskType.empty()) { 
+                    diskType = currentDiskType;
+                } else if (diskType != currentDiskType) {
+                    return TString();
+                }
+            }
+        }
+        return diskType; 
+    }
+
     void PrepareActorSystemConfig(NKikimrConfig::TAppConfig& config) {
         if (!config.HasActorSystemConfig()) {
             return;
@@ -661,18 +684,43 @@ namespace NKikimr::NYaml {
         std::optional<TString> diskTypeLower;
         std::optional<TString> drivePath;
 
-        if (ephemeralConfig.HostConfigsSize() && ephemeralConfig.GetHostConfigs(0).DriveSize()) {
-            const auto& drive = ephemeralConfig.GetHostConfigs(0).GetDrive(0);
-            diskType = drive.GetType();
-            diskTypeLower = diskType;
+        if (ephemeralConfig.HostConfigsSize() > 0 && ephemeralConfig.GetHostConfigs(0).DriveSize() > 0) {
+            const auto& driveProto = ephemeralConfig.GetHostConfigs(0).GetDrive(0);
+            if (driveProto.HasType()) {
+                diskType = driveProto.GetType();
+            }
+            if (driveProto.HasPath()) {
+                drivePath = driveProto.GetPath();
+            }
+        }
+
+        if (!diskType.has_value() && ephemeralConfig.HostConfigsSize() > 0) {
+            TString shorthandDiskTypeStr = GetDiskTypeFromShorthand(ephemeralConfig);
+            if (!shorthandDiskTypeStr.empty()) {
+                diskType = shorthandDiskTypeStr;
+            }
+            if (diskType.has_value()) {
+                const auto& hostConfigZero = ephemeralConfig.GetHostConfigs(0);
+                const TString& determinedType = diskType.value();
+
+                if (determinedType == "NVME") {
+                    drivePath = hostConfigZero.nvme(0);
+                } else if (determinedType == "SSD") {
+                    drivePath = hostConfigZero.ssd(0);
+                } else if (determinedType == "ROT") {
+                    drivePath = hostConfigZero.rot(0);
+                }
+            }
+        }
+
+        if (diskType.has_value()) {
+            diskTypeLower = diskType.value();
             diskTypeLower->to_lower();
-            drivePath = drive.GetPath();
         }
 
         if (!ephemeralConfig.HasStaticErasure()) {
             ephemeralConfig.SetStaticErasure(erasureName);
         }
-
         auto& domainsConfig = *config.MutableDomainsConfig();
 
         if (!domainsConfig.DomainSize()) {
@@ -684,8 +732,10 @@ namespace NKikimr::NYaml {
 
         if (!domain.StoragePoolTypesSize()) {
             NKikimrBlobStorage::EPDiskType dtEnum;
+            Y_ENSURE_BT(diskType.has_value(), "Disk type for single node defaults could not be determined.");
             Y_ENSURE_BT(TryFromString<NKikimrBlobStorage::EPDiskType>(diskType.value(), dtEnum), "incorrect enum: " << diskType.value());
             auto& storagePoolType =  *domain.AddStoragePoolTypes();
+            Y_ENSURE_BT(diskTypeLower.has_value(), "Disk type (lower) for single node defaults could not be determined.");
             storagePoolType.SetKind(diskTypeLower.value());
             auto& poolConfig = *storagePoolType.MutablePoolConfig();
             poolConfig.SetBoxId(1);
@@ -715,7 +765,7 @@ namespace NKikimr::NYaml {
             auto& vdiskLoc = ctx.CombinedDiskInfo[TCombinedDiskInfoKey{}];
 
             vdiskLoc.SetNodeID("1");
-            if (drivePath && diskType) {
+            if (drivePath.has_value() && diskType.has_value()) {
                 vdiskLoc.SetPath(drivePath.value());
                 vdiskLoc.SetPDiskCategory(diskType.value());
             }
@@ -728,10 +778,24 @@ namespace NKikimr::NYaml {
                 auto& channel = *channelProfile.AddChannel();
                 channel.SetErasureSpecies(erasureName);
                 channel.SetPDiskCategory(1);
-                if (diskTypeLower) {
+                if (diskTypeLower.has_value()) {
                     channel.SetStoragePoolKind(diskTypeLower.value());
                 }
             };
+        }
+
+        // If diskType was determined from shorthand, and drivePath wasn't set from Drive(0).Path
+        if (diskType.has_value() && !drivePath.has_value()) {
+            const auto& hostConfigZero = ephemeralConfig.GetHostConfigs(0);
+            const TString& determinedType = diskType.value();
+
+            if (determinedType == "NVME") {
+                drivePath = hostConfigZero.nvme(0);
+            } else if (determinedType == "SSD") {
+                drivePath = hostConfigZero.ssd(0);
+            } else if (determinedType == "ROT") {
+                drivePath = hostConfigZero.rot(0);
+            }
         }
     }
 
@@ -756,7 +820,7 @@ namespace NKikimr::NYaml {
                         defaultDiskType = drive.GetType();
                         isFirst = false;
                     }
-                    else if (*defaultDiskType != drive.GetType()) {
+                    else if (defaultDiskType.Defined() && *defaultDiskType != drive.GetType()) {
                         defaultDiskType.Clear();
                         goto endDiskTypeCheck;
                     }
@@ -765,18 +829,23 @@ namespace NKikimr::NYaml {
         }
 endDiskTypeCheck:   ;
 
-        if (defaultDiskType) {
-            Y_ENSURE_BT(NKikimrBlobStorage::EPDiskType_Parse(*defaultDiskType, &dtEnum.ConstructInPlace()),
-                "incorrect enum: " << defaultDiskType);
-            defaultDiskTypeLower = *defaultDiskType.Get();
-            defaultDiskTypeLower.Get()->to_lower();
+        if (!defaultDiskType.Defined() && ephemeralConfig.HostConfigsSize() > 0) {
+            TString shorthandDiskTypeStr = GetDiskTypeFromShorthand(ephemeralConfig);
+            if (!shorthandDiskTypeStr.empty()) {
+                defaultDiskType = shorthandDiskTypeStr;
+            }
         }
 
-        if (erasureName && !ephemeralConfig.HasStaticErasure()) {
+        if (defaultDiskType.Defined()) {
+            Y_ENSURE_BT(NKikimrBlobStorage::EPDiskType_Parse(defaultDiskType.GetRef(), &dtEnum.ConstructInPlace()),
+                "incorrect enum: " << defaultDiskType.GetRef());
+            defaultDiskTypeLower = defaultDiskType.GetRef();
+            defaultDiskTypeLower->to_lower();
+        }
+
+        if (erasureName.Defined() && !ephemeralConfig.HasStaticErasure()) {
             ephemeralConfig.SetStaticErasure(*erasureName);
         }
-
-        Y_ENSURE_BT(ephemeralConfig.HasStaticErasure(), "Erasure is not specified");
 
         if (!config.HasDomainsConfig() || !config.GetDomainsConfig().DomainSize()) {
             auto& domainsConfig = *config.MutableDomainsConfig();
@@ -1140,6 +1209,8 @@ endDiskTypeCheck:   ;
             Y_ENSURE_BT(smConfig->HasEnabled(), "Enabled field is mandatory");
             if (smConfig->GetEnabled()) {
                 if (!smConfig->HasErasureSpecies()) {
+                    Y_ENSURE_BT(ephemeralConfig.HasStaticErasure(),
+                               "erasure_species for self_management_config is not set, and global static_erasure is not provided.");
                     smConfig->SetErasureSpecies(ephemeralConfig.GetStaticErasure());
                 }
                 if (!smConfig->PDiskFilterSize()) {
@@ -1350,6 +1421,7 @@ endDiskTypeCheck:   ;
     }
 
     static NProtoBuf::RepeatedPtrField<NKikimrTabletBase::TTabletChannelInfo> BuildDefaultChannels(NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
+        Y_ENSURE_BT(ephemeralConfig.HasStaticErasure(), "Cannot build default tablet channels: static_erasure is not provided.");
         const TString& erasureName = ephemeralConfig.GetStaticErasure();
         NProtoBuf::RepeatedPtrField<NKikimrTabletBase::TTabletChannelInfo> channelsInfo;
 
@@ -1446,6 +1518,11 @@ endDiskTypeCheck:   ;
                 ctx.DisableBuiltinAccess = securityConfig.GetDisableBuiltinAccess();
             }
         }
+
+        if (config.HasSelfManagementConfig() && config.GetSelfManagementConfig().HasErasureSpecies()) {
+            ephemeralConfig.SetStaticErasure(config.GetSelfManagementConfig().GetErasureSpecies());
+        }
+
         if (ephemeralConfig.StoragePoolTypesSize() > 0) {
             Y_ENSURE_BT(!config.HasDomainsConfig(), "domains_config is not allowed to be set with storage_pool_types");
             auto& domainsConfig = *config.MutableDomainsConfig();

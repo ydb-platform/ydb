@@ -164,6 +164,12 @@
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_/disk.yaml.result.json"
         },
         {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_/disk-type-short.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_/disk-type-short-single.yaml.result.json"
+        },
+        {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_/block-4-2.yaml.result.json"
         }
     ],
@@ -197,6 +203,12 @@
         },
         {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_ds_init_/disk.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_ds_init_/disk-type-short.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_ds_init_/disk-type-short-single.yaml.result.json"
         },
         {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_simplified_dump_ds_init_/block-4-2.yaml.result.json"

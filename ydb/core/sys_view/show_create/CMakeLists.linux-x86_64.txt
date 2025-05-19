@@ -24,6 +24,7 @@ target_link_libraries(core-sys_view-show_create PUBLIC
   contrib-libs-cxxsupp
   yutil
   ydb-core-base
+  formats-arrow-serializer
   core-kqp-runtime
   ydb-core-protos
   core-sys_view-common

@@ -695,6 +695,10 @@ void TOrderingsStateMachine::TNFSM::ApplyFDs(
                     return;
                 }
 
+                // if (fd.ConsequentItem == 14 && (Nodes[nodeIdx].Ordering.Items[0] == 12 || Nodes[nodeIdx].Ordering.Items[0] == 17)) {
+                //     Cout << "huet" << Endl;
+                // }
+
                 if (fd.IsConstant() && Nodes[nodeIdx].Ordering.Items.size() > 1) {
                     std::vector<std::size_t> newOrdering = Nodes[nodeIdx].Ordering.Items;
                     auto it = std::find(newOrdering.begin(), newOrdering.end(), fd.ConsequentItem);

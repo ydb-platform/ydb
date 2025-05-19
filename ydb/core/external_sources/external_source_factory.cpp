@@ -17,8 +17,10 @@ namespace {
 struct TExternalSourceFactory : public IExternalSourceFactory {
     TExternalSourceFactory(
         const TMap<TString, IExternalSource::TPtr>& sources,
+        bool allExternalDataSourcesAreAvailable,
         const std::set<TString>& availableExternalDataSources)
         : Sources(sources)
+        , AllExternalDataSourcesAreAvailable(allExternalDataSourcesAreAvailable)
         , AvailableExternalDataSources(availableExternalDataSources)
     {}
 
@@ -27,7 +29,7 @@ struct TExternalSourceFactory : public IExternalSourceFactory {
         if (it == Sources.end()) {
             throw TExternalSourceException() << "External source with type " << type << " was not found";
         }
-        if (!AvailableExternalDataSources.contains(type)) {
+        if (!AllExternalDataSourcesAreAvailable && !AvailableExternalDataSources.contains(type)) {
             throw TExternalSourceException() << "External source with type " << type << " is disabled. Please contact your system administrator to enable it";
         }
         return it->second;
@@ -35,6 +37,7 @@ struct TExternalSourceFactory : public IExternalSourceFactory {
 
 private:
     const TMap<TString, IExternalSource::TPtr> Sources;
+    bool AllExternalDataSourcesAreAvailable;
     const std::set<TString> AvailableExternalDataSources;
 };
 
@@ -90,6 +93,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
                                                          std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> credentialsFactory,
                                                          bool enableInfer,
                                                          bool allowLocalFiles,
+                                                         bool allExternalDataSourcesAreAvailable,
                                                          const std::set<TString>& availableExternalDataSources) {
     std::vector<TRegExMatch> hostnamePatternsRegEx(hostnamePatterns.begin(), hostnamePatterns.end());
     return MakeIntrusive<TExternalSourceFactory>(TMap<TString, IExternalSource::TPtr>{
@@ -154,6 +158,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
             CreateExternalDataSource(TString{NYql::GenericProviderName}, {"BASIC"}, {"database_name", "use_tls", "reading_mode", "unexpected_type_display_mode", "unsupported_type_display_mode"}, hostnamePatternsRegEx)
         }
     },
+    allExternalDataSourcesAreAvailable,
     availableExternalDataSources); 
 }
 

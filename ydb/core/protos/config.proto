@@ -330,6 +330,8 @@ message TBlobStorageConfig {
     // filled in by config parser, not by user; required for correct distconf operation
     repeated NKikimrBlobStorage.TDefineHostConfig DefineHostConfig = 10;
     optional NKikimrBlobStorage.TDefineBox DefineBox = 11;
+
+    optional NKikimrBlobStorage.TUpdateSettings BscSettings = 12;
  }
 
 message TSelfManagementConfig {
@@ -1111,7 +1113,8 @@ message TQueryServiceConfig {
     optional uint64 ProgressStatsPeriodMs = 14 [default = 0]; // 0 = disabled
     optional uint32 QueryTimeoutDefaultSeconds = 19 [default = 1800];
     optional bool EnableMatchRecognize = 20 [default = false];
-    repeated string AvailableExternalDataSources = 22;
+    repeated string AvailableExternalDataSources = 22;                  // Ignored if AllExternalDataSourcesAreAvailable is true
+    optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];   
 }
 
 // Config describes immediate controls and allows

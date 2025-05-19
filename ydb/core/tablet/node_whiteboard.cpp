@@ -1217,6 +1217,12 @@ template<typename TMessage>
     return defaultFields;
 }
 
+template google::protobuf::RepeatedField<int>
+GetDefaultWhiteboardFields<NKikimrWhiteboard::TSystemStateInfo>();
+
+template google::protobuf::RepeatedField<int>
+GetDefaultWhiteboardFields<NKikimrWhiteboard::TNodeStateInfo>();
+
 IActor* CreateNodeWhiteboardService() {
     return new TNodeWhiteboardService();
 }

@@ -74,6 +74,13 @@ private:
     ui32 NumberOfRetries = 10;
     TString Compression;
     bool UseVirtualAddressing = true;
+    TString CommonSourcePath;
+    TString CommonDestinationPrefix;
+
+    // Encryption params
+    TString EncryptionAlgorithm;
+    TString EncryptionKey;
+    TString EncryptionKeyFile;
 };
 
 }

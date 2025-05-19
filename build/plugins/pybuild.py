@@ -223,7 +223,7 @@ def py_program(unit, py3):
     unit.onpeerdir(peers)
 
     # DEVTOOLSSUPPORT-53161
-    if os.name == 'nt':
+    if unit.get('OS_WINDOWS') == 'yes':
         unit.onwindows_long_path_manifest()
 
     if unit.get('MODULE_TYPE') == 'PROGRAM':  # can not check DLL

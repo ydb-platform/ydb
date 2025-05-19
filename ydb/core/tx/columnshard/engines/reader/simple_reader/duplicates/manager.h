@@ -39,6 +39,10 @@ private:
         bool operator==(const TRowRange& other) const {
             return (*this <=> other) == std::partial_ordering::equivalent;
         }
+
+        ui64 NumRows() const {
+            return End - Begin;
+        }
     };
 
 private:
@@ -47,7 +51,7 @@ private:
     std::map<TRowRange, NArrow::TColumnFilter> FiltersByRange;
 
     bool IsReady() const {
-        return !FiltersByRange.empty() && FiltersByRange.begin()->first.GetEnd() >= RowsCount;
+        return !FiltersByRange.empty() && FiltersByRange.begin()->first.GetBegin() == 0 && FiltersByRange.begin()->first.GetEnd() == RowsCount;
     }
 
     void Complete() {
@@ -59,17 +63,23 @@ private:
     }
 
 public:
-    void AddFilter(const TDuplicateMapInfo& info, const NArrow::TColumnFilter& filter) {
-        FiltersByRange.emplace(TRowRange(info.GetOffset(), info.GetOffset() + info.GetRowsCount()), filter);
+    void AddFilter(const TDuplicateMapInfo& info, const NArrow::TColumnFilter& filterExt) {
+        AFL_VERIFY(!IsDone());
+        AFL_VERIFY(filterExt.GetRecordsCountVerified() == info.GetRowsCount())("filter", filterExt.GetRecordsCountVerified())(
+                                                              "info", info.GetRowsCount());
+        FiltersByRange.emplace(TRowRange(info.GetOffset(), info.GetOffset() + info.GetRowsCount()), filterExt);
 
         while (FiltersByRange.size() > 1 && FiltersByRange.begin()->first.GetEnd() >= std::next(FiltersByRange.begin())->first.GetBegin()) {
             auto l = FiltersByRange.begin();
             auto r = std::next(FiltersByRange.begin());
+            AFL_VERIFY(l->first.GetEnd() == r->first.GetBegin());
             TRowRange range = TRowRange(l->first.GetBegin(), r->first.GetEnd());
             NArrow::TColumnFilter filter = l->second;
-            filter.Append(r->second.Slice(r->first.GetBegin() - l->first.GetEnd(), r->first.GetEnd() - l->first.GetEnd()));
+            filter.Append(r->second);
             FiltersByRange.erase(FiltersByRange.begin());
             FiltersByRange.erase(FiltersByRange.begin());
+            AFL_VERIFY(filter.GetRecordsCountVerified() == range.NumRows())("filter", filter.GetRecordsCountVerified())(
+                                                               "range", range.NumRows());
             FiltersByRange.emplace(range, std::move(filter));
         }
 

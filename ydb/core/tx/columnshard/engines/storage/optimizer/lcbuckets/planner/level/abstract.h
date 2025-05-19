@@ -370,7 +370,7 @@ public:
     }
 
     bool IsOverloaded() const {
-        return OverloadChecker->IsOverloaded(GetPortionsInfo());
+        return NextLevel && OverloadChecker->IsOverloaded(GetPortionsInfo());
     }
 
     bool HasData() const {

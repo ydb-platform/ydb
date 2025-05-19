@@ -104,6 +104,9 @@ bool IsGoodTypeForArithmeticPushdown(const TTypeAnnotationNode& type, bool allow
 
 bool IsGoodTypeForComparsionPushdown(const TTypeAnnotationNode& type, bool allowOlapApply) {
     const auto features = NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
+    if (features & NUdf::EDataTypeFeatures::DecimalType) {
+        return false;
+    }
     return (NUdf::EDataTypeFeatures::CanCompare  & features)
         && (((NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::StringType) & features) ||
             (allowOlapApply && ((NUdf::EDataTypeFeatures::ExtDateType |
@@ -225,7 +228,7 @@ bool IsGoodTypesForPushdownCompare(const TTypeAnnotationNode& typeOne, const TTy
     const auto& rawOne = RemoveOptionality(typeOne);
     const auto& rawTwo = RemoveOptionality(typeTwo);
     if (IsSameAnnotation(rawOne, rawTwo))
-        return true;
+        return IsGoodTypeForComparsionPushdown(rawOne, options.AllowOlapApply);
 
     const auto kindOne = rawOne.GetKind();
     const auto kindTwo = rawTwo.GetKind();

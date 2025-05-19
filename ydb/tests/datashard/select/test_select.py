@@ -337,6 +337,11 @@ class TestDML(TestBase):
         ttl: str,
         dml: DMLOperations,
     ):
+        count_rows = len(all_types) + len(pk_types) + len(index)
+        if ttl != "":
+            count_rows += 1
+        string_order = [(pk_types["String"](i), i) for i in range(1, count_rows + 1)]
+        string_order = sorted(string_order)
         selected_columns = self.create_types_for_all_select(all_types, pk_types, index, ttl)
         for statement in selected_columns:
             if "Json" not in statement and "JsonDocument" not in statement and "Yson" not in statement:
@@ -345,39 +350,22 @@ class TestDML(TestBase):
                     for i, row in enumerate(rows):
                         self.assert_type_after_select(i + 1, row, all_types, pk_types, index, ttl, dml)
                 else:
-                    line = 0
-                    for i in range(len(rows) // 10):
-                        self.assert_type_after_select(i + 1, rows[line], all_types, pk_types, index, ttl, dml)
-                        line += 1
-                        for j in range(10):
-                            if (i + 1) * 10 + j > len(rows):
-                                break
-                            self.assert_type_after_select(
-                                (i + 1) * 10 + j, rows[line], all_types, pk_types, index, ttl, dml
-                            )
-                            line += 1
+                    for i, row in enumerate(rows):
+                        self.assert_type_after_select(string_order[i][1], row, all_types, pk_types, index, ttl, dml)
 
                 rows = self.query(f"select {", ".join(selected_columns)} from {table_name} ORDER BY {statement} DESC")
-
+                string_order.reverse()
                 if "Bool" not in statement:
                     if "String" not in statement and "Utf8" not in statement:
                         for line, row in enumerate(rows):
                             self.assert_type_after_select(len(rows) - line, row, all_types, pk_types, index, ttl, dml)
                     else:
-                        line = 0
-                        for i in range(len(rows) // 10, 0):
-                            for j in range(10):
-                                if i * 10 + (9 - j) > len(rows):
-                                    break
-                                self.assert_type_after_select(
-                                    i * 10 + (9 - j), rows[line], all_types, pk_types, index, ttl, dml
-                                )
-                                line += 1
-                            self.assert_type_after_select(i, rows[line], all_types, pk_types, index, ttl, dml)
-                            line += 1
+                        for i, row in enumerate(rows):
+                            self.assert_type_after_select(string_order[i][1], row, all_types, pk_types, index, ttl, dml)
                 else:
                     for i, row in enumerate(rows):
                         self.assert_type_after_select(i + 1, row, all_types, pk_types, index, ttl, dml)
+                string_order.reverse()
 
     def get_number_of_columns(self, pk_types, all_types, index, ttl):
         number_of_columns = len(pk_types) + len(all_types) + len(index)

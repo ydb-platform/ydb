@@ -91,7 +91,6 @@ private:
         DictionaryByteSize_ = 0;
         DirectBuffer_ = std::make_unique<TChunkedOutputStream>(
             GetRefCountedTypeCookie<TConverterTag>(),
-            GetNullMemoryUsageTracker(),
             256_KB,
             1_MB);
 

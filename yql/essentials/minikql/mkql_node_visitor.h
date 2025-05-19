@@ -168,8 +168,12 @@ public:
     void Visit(TBlockType& node) override;
     void Visit(TMultiType& node) override;
 
-    void Walk(TNode* root, const TTypeEnvironment& env, const std::vector<TNode*>& terminalNodes = std::vector<TNode*>(),
+    void Walk(TNode* root, std::vector<TNode*>& nodeStack, const std::vector<TNode*>& terminalNodes = std::vector<TNode*>(),
         bool buildConsumersMap = false, size_t nodesCountHint = 0);
+    // Deprecated. Should be removed after YDB sync.
+    void Walk(TNode* root, const TTypeEnvironment& env, const std::vector<TNode*>& terminalNodes = std::vector<TNode*>(),
+              bool buildConsumersMap = false, size_t nodesCountHint = 0);
+
     const std::vector<TNode*>& GetNodes();
     const TNodesVec& GetConsumerNodes(TNode& node);
     void Clear();

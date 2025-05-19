@@ -186,6 +186,8 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool FilterPushdownOverJoinOptionalSide = false;
     THashSet<TString> YqlCoreOptimizerFlags;
     bool EnableNewRBO = false;
+    bool EnableSpillingInHashJoinShuffleConnections = false;
+    bool EnableOlapScalarApply = false;
 
     void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;

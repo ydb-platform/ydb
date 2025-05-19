@@ -1025,17 +1025,7 @@ void NSchemeShardUT_Private::TTestEnv::BootTxAllocator(NActors::TTestActorRuntim
 NKikimrConfig::TAppConfig NSchemeShardUT_Private::TTestEnv::GetAppConfig() const {
     NKikimrConfig::TAppConfig appConfig;
     auto* queryServiceConfig = appConfig.MutableQueryServiceConfig();
-    queryServiceConfig->AddAvailableExternalDataSources("ObjectStorage");
-    queryServiceConfig->AddAvailableExternalDataSources("ClickHouse");
-    queryServiceConfig->AddAvailableExternalDataSources("PostgreSQL");
-    queryServiceConfig->AddAvailableExternalDataSources("MySQL");
-    queryServiceConfig->AddAvailableExternalDataSources("Ydb");
-    queryServiceConfig->AddAvailableExternalDataSources("YT");
-    queryServiceConfig->AddAvailableExternalDataSources("Greenplum");
-    queryServiceConfig->AddAvailableExternalDataSources("MsSQLServer");
-    queryServiceConfig->AddAvailableExternalDataSources("Oracle");
-    queryServiceConfig->AddAvailableExternalDataSources("Logging");
-    queryServiceConfig->AddAvailableExternalDataSources("Solomon");
+    queryServiceConfig->SetAllExternalDataSourcesAreAvailable(true);
     return appConfig;
 }
 

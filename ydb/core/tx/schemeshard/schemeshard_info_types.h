@@ -37,6 +37,7 @@
 #include <ydb/core/protos/filestore_config.pb.h>
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/protos/yql_translation_settings.pb.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
@@ -2885,6 +2886,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TString SrcPrefix;
         TString SrcPath; // Src path from schema mapping
         Ydb::Table::CreateTableRequest Scheme;
+        TMaybe<Ydb::Topic::CreateTopicRequest> Topic;
         TString CreationQuery;
         TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
@@ -3098,6 +3100,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     TIndexBuildId Id;
     TString Uid;
+    TMaybe<TString> UserSID;
 
     TPathId DomainPathId;
     TPathId TablePathId;
@@ -3321,6 +3324,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
     EState State = EState::Invalid;
     TString Issue;
+    TInstant StartTime = TInstant::Zero();
+    TInstant EndTime = TInstant::Zero();
 
     TSet<TActorId> Subscribers;
 
@@ -3594,6 +3599,11 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             row.template GetValueOrDefault<Schema::IndexBuild::Issue>();
         indexInfo->CancelRequested =
             row.template GetValueOrDefault<Schema::IndexBuild::CancelRequest>(false);
+        if (row.template HaveValue<Schema::IndexBuild::UserSID>()) {
+            indexInfo->UserSID = row.template GetValue<Schema::IndexBuild::UserSID>();
+        }
+        indexInfo->StartTime = TInstant::Seconds(row.template GetValueOrDefault<Schema::IndexBuild::StartTime>());
+        indexInfo->EndTime = TInstant::Seconds(row.template GetValueOrDefault<Schema::IndexBuild::EndTime>());
 
         indexInfo->LockTxId =
             row.template GetValueOrDefault<Schema::IndexBuild::LockTxId>(
@@ -3861,6 +3871,13 @@ struct TBackupCollectionInfo : TSimpleRefCount<TBackupCollectionInfo> {
     NKikimrSchemeOp::TBackupCollectionDescription Description;
 };
 
+struct TSysViewInfo : TSimpleRefCount<TSysViewInfo> {
+    using TPtr = TIntrusivePtr<TSysViewInfo>;
+
+    ui64 AlterVersion = 0;
+    NKikimrSysView::ESysViewType Type;
+};
+
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
     const THashMap<ui32, TTableInfo::TColumn>& sourceColumns,
     const THashMap<ui32, TTableInfo::TColumn>& alterColumns,
@@ -3871,6 +3888,8 @@ TConclusion<TDuration> GetExpireAfter(const NKikimrSchemeOp::TTTLSettings::TEnab
 
 std::optional<std::pair<i64, i64>> ValidateSequenceType(const TString& sequenceName, const TString& dataType,
     const NKikimr::NScheme::TTypeRegistry& typeRegistry, bool pgTypesEnabled, TString& errStr);
+
+NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec);
 
 }
 

@@ -1,0 +1,8 @@
+--- a/pnglibconf.h
++++ b/pnglibconf.h
+@@ -200,1 +2001 @@
+-#define PNG_USER_CHUNK_CACHE_MAX 1000
++#define PNG_USER_CHUNK_CACHE_MAX 32765
+@@ -209,1 +209,1 @@
+-#define PNG_ZLIB_VERNUM 0x1310
++#define PNG_ZLIB_VERNUM ZLIB_VERNUM

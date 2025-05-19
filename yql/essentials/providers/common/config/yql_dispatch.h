@@ -77,12 +77,22 @@ YQL_PRIMITIVE_SETTING_PARSER_TYPES(YQL_DECLARE_SETTING_PARSER)
 YQL_CONTAINER_SETTING_PARSER_TYPES(YQL_DECLARE_SETTING_PARSER)
 
 template<typename TType>
-TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, true>& setting, const TString& cluster) {
+TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, true, false>& setting, const TString& cluster) {
     return setting.Get(cluster);
 }
 
 template<typename TType>
-TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, false>& setting, const TString& cluster) {
+TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, true, true>& setting, const TString& cluster) {
+    return setting.Get(cluster);
+}
+
+template<typename TType>
+TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, false, true>& setting, const TString& cluster) {
+    return setting.Get(cluster);
+}
+
+template<typename TType>
+TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, false, false>& setting, const TString& cluster) {
     Y_UNUSED(cluster);
     return setting.Get();
 }
@@ -125,7 +135,7 @@ public:
         TString Name_;
     };
 
-    template <typename TType, bool RUNTIME>
+    template <typename TType, bool RUNTIME, bool PERCLUSTER>
     class TSettingHandlerImpl: public TSettingHandler {
     public:
         using TValueCallback = std::function<void(const TString&, TType)>;
@@ -133,7 +143,7 @@ public:
     private:
         friend class TSettingDispatcher;
 
-        TSettingHandlerImpl(const TString& name, TConfSetting<TType, RUNTIME>& setting)
+        TSettingHandlerImpl(const TString& name, TConfSetting<TType, RUNTIME, PERCLUSTER>& setting)
             : TSettingHandler(name)
             , Setting_(setting)
             , Parser_(::NYql::NPrivate::GetDefaultParser<TType>())
@@ -312,8 +322,8 @@ public:
         }
 
     private:
-        TConfSetting<TType, RUNTIME>& Setting_;
-        TMaybe<TConfSetting<TType, RUNTIME>> Defaul_;
+        TConfSetting<TType, RUNTIME, PERCLUSTER>& Setting_;
+        TMaybe<TConfSetting<TType, RUNTIME, PERCLUSTER>> Defaul_;
         ::NYql::NPrivate::TParser<TType> Parser_;
         TValueCallback ValueSetter_;
         TVector<TValueCallback> Validators_;
@@ -339,9 +349,9 @@ public:
         ValidClusters.insert(cluster);
     }
 
-    template <typename TType, bool RUNTIME>
-    TSettingHandlerImpl<TType, RUNTIME>& AddSetting(const TString& name, TConfSetting<TType, RUNTIME>& setting) {
-        TIntrusivePtr<TSettingHandlerImpl<TType, RUNTIME>> handler = new TSettingHandlerImpl<TType, RUNTIME>(name, setting);
+    template <typename TType, bool RUNTIME, bool PERCLUSTER>
+    TSettingHandlerImpl<TType, RUNTIME, PERCLUSTER>& AddSetting(const TString& name, TConfSetting<TType, RUNTIME, PERCLUSTER>& setting) {
+        TIntrusivePtr<TSettingHandlerImpl<TType, RUNTIME, PERCLUSTER>> handler = new TSettingHandlerImpl<TType, RUNTIME, PERCLUSTER>(name, setting);
         if (!Handlers.insert({NormalizeName(name), handler}).second) {
             ythrow yexception() << "Duplicate configuration setting name " << name.Quote();
         }

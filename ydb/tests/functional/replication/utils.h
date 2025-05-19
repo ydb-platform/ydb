@@ -172,8 +172,9 @@ struct MainTestCase {
         return config;
     }
 
-    MainTestCase(std::optional<std::string> user = std::nullopt)
-        : Id(RandomNumber<size_t>())
+    MainTestCase(const std::optional<std::string> user = std::nullopt, std::string tableType = "COLUMN")
+        : TableType(std::move(tableType))
+        , Id(RandomNumber<size_t>())
         , ConnectionString(GetEnv("YDB_ENDPOINT") + "/?database=" + GetEnv("YDB_DATABASE"))
         , TopicName(TStringBuilder() << "Topic_" << Id)
         , SourceTableName(TStringBuilder() << "SourceTable_" << Id)
@@ -256,7 +257,7 @@ struct MainTestCase {
     }
 
     void CreateTable(const std::string& tableDDL) {
-        ExecuteDDL(Sprintf(tableDDL.data(), TableName.data()));
+        ExecuteDDL(Sprintf(tableDDL.data(), TableName.data(), TableType.data()));
     }
 
     void DropTable() {
@@ -613,12 +614,14 @@ struct MainTestCase {
                     }
                 }
 
-                break;
+                return;
             }
 
-            UNIT_ASSERT_C(attempt, "Unable to wait transfer result");
             Sleep(TDuration::Seconds(1));
         }
+
+        CheckTransferState(TReplicationDescription::EState::Running);
+        UNIT_ASSERT_C(false, "Unable to wait transfer result");
     }
 
     TReplicationDescription CheckTransferState(TReplicationDescription::EState expected) {
@@ -633,7 +636,8 @@ struct MainTestCase {
                 issues = result.GetErrorState().GetIssues().ToOneLineString();
             }
     
-            UNIT_ASSERT_C(i, "Unable to wait transfer state. Expected: " << expected << ", actual: " << result.GetState() << ", " << issues);            Sleep(TDuration::Seconds(1));
+            UNIT_ASSERT_C(i, "Unable to wait transfer state. Expected: " << expected << ", actual: " << result.GetState() << ", " << issues);
+            Sleep(TDuration::Seconds(1));
         }
 
         Y_UNREACHABLE();
@@ -681,15 +685,16 @@ struct MainTestCase {
         DropTopic();
     }
 
+    const std::string TableType;
     const size_t Id;
-    const TString ConnectionString;
+    const std::string ConnectionString;
 
-    const TString TopicName;
-    const TString SourceTableName;
-    const TString ChangefeedName;
-    const TString TableName;
-    const TString ReplicationName;
-    const TString TransferName;
+    const std::string TopicName;
+    const std::string SourceTableName;
+    const std::string ChangefeedName;
+    const std::string TableName;
+    const std::string ReplicationName;
+    const std::string TransferName;
 
     TDriver Driver;
     TQueryClient TableClient;

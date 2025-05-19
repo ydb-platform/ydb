@@ -1,0 +1,56 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "key";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "DataType";
+                                    "Bool"
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        "MixAsciiAndUnicode";
+                        %true
+                    ];
+                    [
+                        "Empty";
+                        %true
+                    ];
+                    [
+                        "Ascii";
+                        %true
+                    ];
+                    [
+                        "Unicode";
+                        %true
+                    ];
+                    [
+                        "Hex";
+                        %true
+                    ];
+                    [
+                        "SingleChar";
+                        %true
+                    ]
+                ]
+            }
+        ]
+    }
+]

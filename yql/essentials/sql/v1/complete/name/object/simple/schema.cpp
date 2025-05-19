@@ -54,13 +54,7 @@ namespace NSQLComplete {
 
             NThreading::TFuture<TListResponse> List(const TListRequest& request) const override {
                 auto [path, name] = Simple_->Split(request.Path);
-
-                TString pathStr(path);
-                if (!pathStr.StartsWith('/')) {
-                    pathStr.prepend('/');
-                }
-
-                return Simple_->List(std::move(pathStr))
+                return Simple_->List(request.Cluster, TString(path))
                     .Apply(FilterByName(TString(name)))
                     .Apply(FilterByTypes(std::move(request.Filter.Types)))
                     .Apply(Crop(request.Limit))
@@ -72,6 +66,16 @@ namespace NSQLComplete {
         };
 
     } // namespace
+
+    NThreading::TFuture<TVector<TFolderEntry>>
+    ISimpleSchema::List(TString folder) const {
+        return List(/* cluster = */ "", folder);
+    }
+
+    NThreading::TFuture<TVector<TFolderEntry>>
+    ISimpleSchema::List(TString /* cluster */, TString folder) const {
+        return List(folder);
+    }
 
     ISchema::TPtr MakeSimpleSchema(ISimpleSchema::TPtr simple) {
         return ISchema::TPtr(new TSimpleSchema(std::move(simple)));

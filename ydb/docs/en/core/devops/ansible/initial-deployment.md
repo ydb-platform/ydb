@@ -138,7 +138,7 @@ The values of the `system_timezone` and `system_ntp_servers` variables depend on
 - Yandex Cloud
 
   * `system_timezone`: Europe/Moscow
-  * `system_ntp_servers`: [0.ru.pool.ntp.org, 1.ru.pool.ntp.org, ntp0.NL.net, ntp2.vniiftri.ru, ntp.ix.ru, ntps1-1.cs.tu-berlin.de] [Learn more](https://cloud.yandex.ru/en/docs/tutorials/infrastructure-management/ntp) about Yandex Cloud NTP server settings.
+  * `system_ntp_servers`: [0.ru.pool.ntp.org, 1.ru.pool.ntp.org, ntp0.NL.net, ntp2.vniiftri.ru, ntp.ix.ru, ntps1-1.cs.tu-berlin.de] [Learn more](https://yandex.cloud/en/docs/tutorials/infrastructure-management/ntp) about Yandex Cloud NTP server settings.
 
 {% endlist %}
 

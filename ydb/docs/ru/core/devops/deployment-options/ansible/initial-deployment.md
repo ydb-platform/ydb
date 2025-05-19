@@ -86,7 +86,7 @@ all:
 
 #### Установка fq-connector-go
 
-Для запуска [федеративных запросов](../../concepts/federated_query/index.md) может потребоваться установка [коннектора](../../concepts/federated_query/architecture.md#connectors). Плейбук поддерживает развертывание коннектора [fq-connector-go](../manual/federated-queries/connector-deployment.md#fq-connector-go) на хостах с динамическими нодами. Используйте следующие настройки:
+Для запуска [федеративных запросов](../../../concepts/federated_query/index.md) может потребоваться установка [коннектора](../../../concepts/federated_query/architecture.md#connectors). Плейбук поддерживает развертывание коннектора [fq-connector-go](../manual/federated-queries/connector-deployment.md#fq-connector-go) на хостах с динамическими нодами. Используйте следующие настройки:
 
 * `ydb_install_fq_connector` - установите в `true`, если необходимо установить коннектор.
 * Выберите один из доступных вариантов развёртывания исполняемых файлов fq-connector-go:

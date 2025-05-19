@@ -340,6 +340,10 @@ class StaticConfigGenerator(object):
         return self.__cluster_details.get_service("column_shard_config")
 
     @property
+    def data_shard_config(self):
+        return self.__cluster_details.get_service("data_shard_config")
+
+    @property
     def hive_config(self):
         return self.__proto_config("hive", config_pb2.THiveConfig, self.__cluster_details.get_service("hive_config"))
 
@@ -494,6 +498,9 @@ class StaticConfigGenerator(object):
 
         if self.column_shard_config:
             normalized_config["column_shard_config"] = self.column_shard_config
+
+        if self.data_shard_config:
+            normalized_config["data_shard_config"] = self.data_shard_config
 
         if self.__cluster_details.client_certificate_authorization is not None:
             normalized_config["client_certificate_authorization"] = self.__cluster_details.client_certificate_authorization

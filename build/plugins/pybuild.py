@@ -1,11 +1,19 @@
 import collections
 import json
 import os
-import six
 from hashlib import md5
 
 import ymake
-from _common import stripext, rootrel_arc_src, listid, pathid, lazy, get_no_lint_value, ugly_conftest_exception
+from _common import (
+    stripext,
+    rootrel_arc_src,
+    listid,
+    pathid,
+    lazy,
+    get_no_lint_value,
+    ugly_conftest_exception,
+    resolve_common_const,
+)
 
 
 PY_NAMESPACE_PREFIX = 'py/namespace'
@@ -55,9 +63,9 @@ def uniq_suffix(path, unit):
     return '.{}'.format(pathid(upath)[:4])
 
 
-def pb2_arg(suf, path, mod, unit):
+def pb2_arg(suf, path, mod, py_ver, unit):
     return '{path}__int{py_ver}__{suf}={mod}{modsuf}'.format(
-        path=stripext(to_build_root(path, unit)), suf=suf, mod=mod, modsuf=stripext(suf), py_ver=unit.get('_PYTHON_VER')
+        path=stripext(to_build_root(path, unit)), suf=suf, mod=mod, modsuf=stripext(suf), py_ver=py_ver
     )
 
 
@@ -73,8 +81,8 @@ def ev_cc_arg(path, unit):
     return '{}.ev.pb.cc'.format(stripext(to_build_root(path, unit)))
 
 
-def ev_arg(path, mod, unit):
-    return '{}__int{}___ev_pb2.py={}_ev_pb2'.format(stripext(to_build_root(path, unit)), unit.get('_PYTHON_VER'), mod)
+def ev_arg(path, mod, py_ver, unit):
+    return '{}__int{}___ev_pb2.py={}_ev_pb2'.format(stripext(to_build_root(path, unit)), py_ver, mod)
 
 
 def mangle(name):
@@ -99,7 +107,7 @@ def parse_pyx_includes(filename, path, source_root, seen=None):
 
     with open(abs_path, 'rb') as f:
         # Don't parse cimports and etc - irrelevant for cython, it's linker work
-        includes = [six.ensure_str(x) for x in ymake.parse_cython_includes(f.read())]
+        includes = [x.decode('utf-8') for x in ymake.parse_cython_includes(f.read())]
 
     abs_dirname = os.path.dirname(abs_path)
     # All includes are relative to the file which include
@@ -150,9 +158,13 @@ def add_python_lint_checks(unit, py_ver, files):
     def get_resolved_files():
         resolved_files = []
         for path in files:
-            resolved = unit.resolve_arc_path([path])
-            if resolved.startswith('$S'):  # path was resolved as source file.
+            resolved = resolve_common_const(path)  # files can come from glob (ALL_PY_EXTRA_LINT_FILES macro)
+            if resolved.startswith('$S'):
                 resolved_files.append(resolved)
+            else:
+                resolved = unit.resolve_arc_path([path])
+                if resolved.startswith('$S'):  # path was resolved as source file.
+                    resolved_files.append(resolved)
         return resolved_files
 
     upath = unit.path()[3:]
@@ -189,7 +201,7 @@ def add_python_lint_checks(unit, py_ver, files):
 
 
 def is_py3(unit):
-    return unit.get("PYTHON3") == "yes"
+    return unit.get("PYTHON2") != "yes"
 
 
 def on_py_program(unit, *args):
@@ -248,6 +260,14 @@ def onpy_srcs(unit, *args):
 
     upath = unit.path()[3:]
     py3 = is_py3(unit)
+
+    py_ver = unit.get('_PYTHON_VER') or 'unset'
+    if py_ver == 'unset':
+        ymake.report_configure_error(
+            "[[alt1]]PY_SRCS[[rst]]: Unknown Python version, select it using [[alt1]]USE_PYTHONx[[rst]] macro"
+        )
+        py_ver = 'py3' if py3 else 'py2'
+
     py_main_only = unit.get('PROCESS_PY_MAIN_ONLY')
     with_py = not unit.get('PYBUILD_NO_PY')
     with_pyc = not unit.get('PYBUILD_NO_PYC')
@@ -513,8 +533,7 @@ def onpy_srcs(unit, *args):
             data = ['DONT_COMPRESS']
             prefix = 'resfs/cython/include'
             for line in sorted(
-                '{}/{}={}'.format(prefix, filename, ':'.join(sorted(files)))
-                for filename, files in six.iteritems(include_map)
+                '{}/{}={}'.format(prefix, filename, ':'.join(sorted(files))) for filename, files in include_map.items()
             ):
                 data += ['-', line]
             unit.onresource(data)
@@ -545,7 +564,7 @@ def onpy_srcs(unit, *args):
             resfs_mocks = []
 
             for path, mod in pys:
-                mod_list_md5.update(six.ensure_binary(mod))
+                mod_list_md5.update(mod.encode('utf-8'))
                 dest = 'py/' + mod.replace('.', '/') + '.py'
                 # In external_py_files mode we want to build python binaries without embedded python files.
                 # The application will still be able to load them from the file system.
@@ -637,7 +656,7 @@ def onpy_srcs(unit, *args):
         unit.on_generate_py_protos_internal(proto_paths)
         unit.onpy_srcs(
             [
-                pb2_arg(py_suf, path, mod, unit)
+                pb2_arg(py_suf, path, mod, py_ver, unit)
                 for path, mod in protos
                 for py_suf in unit.get("PY_PROTO_SUFFIXES").split()
             ]
@@ -649,7 +668,7 @@ def onpy_srcs(unit, *args):
     if evs:
         unit.onpeerdir([cpp_runtime_path])
         unit.on_generate_py_evs_internal([path for path, mod in evs])
-        unit.onpy_srcs([ev_arg(path, mod, unit) for path, mod in evs])
+        unit.onpy_srcs([ev_arg(path, mod, py_ver, unit) for path, mod in evs])
 
     if fbss:
         unit.onpeerdir(unit.get('_PY_FBS_DEPS').split())
@@ -715,6 +734,12 @@ def onpy_register(unit, *args):
     Documentation: https://wiki.yandex-team.ru/arcadia/python/pysrcs/#makrospyregister
     """
 
+    py_ver = unit.get('_PYTHON_VER') or 'unset'
+    if py_ver == 'unset':
+        ymake.report_configure_error(
+            "[[alt1]]PY_REGISTER[[rst]]: Unknown Python version, select it using [[alt1]]USE_PYTHONx[[rst]] macro"
+        )
+
     py3 = is_py3(unit)
 
     for name in args:
@@ -747,6 +772,11 @@ def onpy_main(unit, arg):
 
     Documentation: https://wiki.yandex-team.ru/arcadia/python/pysrcs/#modulipyprogrampy3programimakrospymain
     """
+    py_ver = unit.get('_PYTHON_VER') or 'unset'
+    if py_ver == 'unset':
+        ymake.report_configure_error(
+            "[[alt1]]PY_MAIN[[rst]]: Unknown Python version, select it using [[alt1]]USE_PYTHONx[[rst]] macro"
+        )
 
     arg = arg.replace('/', '.')
 

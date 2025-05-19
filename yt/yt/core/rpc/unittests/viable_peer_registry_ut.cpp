@@ -35,7 +35,7 @@ const NLogging::TLogger Logger{"ViablePeerRegistryUnitTest"};
 
 TEST(TIndexedHashMapTest, Simple)
 {
-    TIndexedHashMap<TString, int> test;
+    TIndexedHashMap<std::string, int> test;
 
     EXPECT_EQ(test.Size(), 0);
 
@@ -54,7 +54,7 @@ TEST(TIndexedHashMapTest, Simple)
     EXPECT_TRUE(test.Set("c", 42));
     EXPECT_EQ(test.Size(), 3);
 
-    TIndexedHashMap<TString, int>::TUnderlyingStorage data;
+    TIndexedHashMap<std::string, int>::TUnderlyingStorage data;
     for (int i = 0; i < test.Size(); ++i) {
         data.push_back(test[i]);
     }
@@ -336,7 +336,7 @@ TEST_P(TParametrizedViablePeerRegistryTest, GetChannelBasic)
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("d"));
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("e"));
 
-    TString retrievedPeer;
+    std::string retrievedPeer;
     {
         auto channel = viablePeerRegistry->PickRandomChannel(CreateRequest(), /*hedgingOptions*/ {});
         retrievedPeer = channel->GetEndpointDescription();
@@ -399,7 +399,7 @@ TEST_P(TParametrizedViablePeerRegistryTest, GetStickyChannel)
 
     EXPECT_EQ(retrievedAddresses.size(), 1u);
 
-    THashMap<IClientRequestPtr, TString> requestToPeer;
+    THashMap<IClientRequestPtr, std::string> requestToPeer;
     for (int iter = 0; iter < 1000; ++iter) {
         auto request = CreateRequest(/*enableStickiness*/ true);
         auto channel = viablePeerRegistry->PickStickyChannel(request);

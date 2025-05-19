@@ -59,5 +59,13 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
     TImportInfo::TItem& item
 );
 
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTopicPropose(
+    TSchemeShard* ss,
+    TTxId txId,
+    TImportInfo::TPtr importInfo,
+    ui32 itemIdx,
+    TString& error
+);
+
 } // NSchemeShard
 } // NKikimr

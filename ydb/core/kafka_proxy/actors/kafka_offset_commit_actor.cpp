@@ -112,6 +112,9 @@ void TKafkaOffsetCommitActor::Handle(NGRpcProxy::V1::TEvPQProxy::TEvAuthResultOk
             commit->SetClientId(Message->GroupId.value());
             commit->SetOffset(partitionRequest.CommittedOffset);
             commit->SetStrict(true);
+            if (partitionRequest.CommittedMetadata.has_value()) {
+                commit->SetCommittedMetadata(*partitionRequest.CommittedMetadata);
+            }
 
             PendingResponses++;
             KAFKA_LOG_D("Send commit request for group# " << Message->GroupId.value() <<

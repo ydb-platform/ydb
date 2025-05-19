@@ -840,24 +840,28 @@ namespace {
                 }
                 auto& userDataBlock = (Types.UserDataStorageCrutches[TUserDataKey::File(TStringBuf("/home/geodata6.bin"))] = TUserDataBlock{EUserDataType::URL, {}, TString(args[0]), {}, {}});
                 userDataBlock.Usage.Set(EUserDataBlockUsage::Path);
-            }
-            else if (name == "JsonQueryReturnsJsonDocument" || name == "DisableJsonQueryReturnsJsonDocument") {
+            } else if (name == "JsonQueryReturnsJsonDocument" || name == "DisableJsonQueryReturnsJsonDocument") {
                 if (args.size() != 0) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                     return false;
                 }
 
                 Types.JsonQueryReturnsJsonDocument = (name == "JsonQueryReturnsJsonDocument");
-            }
-            else if (name == "OrderedColumns" || name == "DisableOrderedColumns") {
+            } else if (name == "OrderedColumns" || name == "DisableOrderedColumns") {
+                if (args.size() != 0) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                    return false;
+                }
+                Types.DeriveColumnOrder = (name == "OrderedColumns");
+                Types.OrderedColumns = (name == "OrderedColumns");
+            } else if (name == "DeriveColumnOrder" || name == "DisableDeriveColumnOrder") {
                 if (args.size() != 0) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
                     return false;
                 }
 
-                Types.OrderedColumns = (name == "OrderedColumns");
-            }
-            else if (name == "FolderSubDirsLimit") {
+                Types.DeriveColumnOrder = (name == "DeriveColumnOrder");
+            } else if (name == "FolderSubDirsLimit") {
                 if (args.size() != 1) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
                     return false;

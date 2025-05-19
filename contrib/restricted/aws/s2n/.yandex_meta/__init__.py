@@ -4,15 +4,11 @@ from devtools.yamaker.project import CMakeNinjaNixProject
 
 def post_install(self):
     with self.yamakes["."] as m:
-        pclmul_srcs = []
         avx2_srcs = []
         avx2_asm_srcs = []
         avx512_srcs = []
         for src in sorted(m.SRCS):
-            if src.endswith("_pclmul.c"):
-                m.SRCS.remove(src)
-                pclmul_srcs.append(src)
-            elif src.endswith("_avx2.c"):
+            if src.endswith("_avx2.c"):
                 m.SRCS.remove(src)
                 avx2_srcs.append(src)
             elif src.endswith("_avx2.S"):
@@ -33,9 +29,6 @@ def post_install(self):
             CFLAGS=x86_flags,
             SRCS=avx2_asm_srcs,
         )
-
-        for src in pclmul_srcs:
-            x86_only_section.after("SRCS", f"SRC_C_PCLMUL({src})")
 
         for src in avx2_srcs:
             x86_only_section.after("SRCS", f"SRC_C_AVX2({src})")

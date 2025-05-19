@@ -24,6 +24,8 @@ namespace NSQLComplete {
         RULE(Keyword_hint_uncompat),
         RULE(Keyword_as_compat),
         RULE(Keyword_compat),
+        RULE(Type_id),
+
         RULE(An_id_or_type),
         RULE(An_id),
         RULE(Id_expr),

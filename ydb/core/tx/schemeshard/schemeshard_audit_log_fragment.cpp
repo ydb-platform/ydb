@@ -272,6 +272,11 @@ TString DefineUserOperationName(const NKikimrSchemeOp::TModifyScheme& tx) {
         return "BACKUP INCREMENTAL";
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         return "RESTORE";
+    // system view
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView:
+        return "CREATE SYSTEM VIEW";
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView:
+        return "DROP SYSTEM VIEW";
     }
     Y_ABORT("switch should cover all operation types");
 }
@@ -608,6 +613,12 @@ TVector<TString> ExtractChangingPaths(const NKikimrSchemeOp::TModifyScheme& tx) 
         break;
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetRestoreBackupCollection().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetCreateSysView().GetName()}));
+        break;
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView:
+        result.emplace_back(NKikimr::JoinPath({tx.GetWorkingDir(), tx.GetDrop().GetName()}));
         break;
     }
 

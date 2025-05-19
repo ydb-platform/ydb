@@ -229,7 +229,7 @@ TString TKernelRequestBuilder::Serialize() {
     const auto kernelTuple = Items_.empty() ? Pb_.AsScalar(Pb_.NewEmptyTuple()) : Pb_.BlockAsTuple(Items_);
     const auto argsTuple = ArgsItems_.empty() ? Pb_.AsScalar(Pb_.NewEmptyTuple()) : Pb_.BlockAsTuple(ArgsItems_);
     const auto tuple = Pb_.BlockAsTuple( { argsTuple, kernelTuple });
-    return SerializeRuntimeNode(tuple, Env_);
+    return SerializeRuntimeNode(tuple, Env_.GetNodeStack());
 }
 
 TRuntimeNode TKernelRequestBuilder::MakeArg(const TTypeAnnotationNode* type) {

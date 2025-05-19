@@ -46,7 +46,7 @@ eviction_time = valueof(ttl_column) + evict_after_seconds
   * `Uint64`;
   * `DyNumber`.
 
-* Значение TTL-колонки с числовым типом (`Uint32`, `Uint64`, `DyNumber`) интерпретируется как величина от [Unix-эпохи]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Unix_time){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Unix-время){% endif %}. Поддерживаемые единицы измерения (задаются в настройках TTL):
+* Значение TTL-колонки с числовым типом (`Uint32`, `Uint64`, `DyNumber`) интерпретируется как величина от [Unix-эпохи](https://ru.wikipedia.org/wiki/Unix-время). Поддерживаемые единицы измерения (задаются в настройках TTL):
 
   * секунды;
   * миллисекунды;

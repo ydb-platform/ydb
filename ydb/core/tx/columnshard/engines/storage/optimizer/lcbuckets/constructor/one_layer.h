@@ -12,6 +12,7 @@ public:
 private:
     std::optional<double> BytesLimitFraction;
     std::optional<ui64> ExpectedPortionSize;
+    ui64 SizeLimitGuarantee = 0;
 
     virtual std::shared_ptr<IPortionsLevel> DoBuildLevel(const std::shared_ptr<IPortionsLevel>& nextLevel, const ui32 indexLevel,
         const std::shared_ptr<TSimplePortionsGroupInfo>& portionsInfo, const TLevelCounters& counters) const override;

@@ -1,6 +1,6 @@
 # Download Ansible Playbooks for {{ ydb-short-name }}
 
-A set of automated playbooks for installing and maintaining the server side of [open-source {{ ydb-short-name }}](ydb-oss-server.md) or [Yandex Enterprise Database](yandex-enterprise-database.md) using [Ansible](https://docs.ansible.com/) is available for download via the links below. Their source code is published [on GitHub](https://github.com/ydb-platform/ydb-ansible) under Apache 2.0 license.
+A set of automated playbooks for installing and maintaining the server side of [open-source {{ ydb-short-name }}](ydb-open-source-database.md) or [Yandex Enterprise Database](yandex-enterprise-database.md) using [Ansible](https://docs.ansible.com/) is available for download via the links below. Their source code is published [on GitHub](https://github.com/ydb-platform/ydb-ansible) under Apache 2.0 license.
 
 | Version | Release date | Download | Checksums |
 | ------ | ------------ | ------- | ----------------- |

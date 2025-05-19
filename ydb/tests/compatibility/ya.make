@@ -14,6 +14,7 @@ TEST_SRCS(
     test_compatibility.py
     test_stress.py
     test_rolling.py
+    test_datetime2.py
 )
 
 SIZE(LARGE)

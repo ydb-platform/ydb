@@ -16,7 +16,7 @@ Y_UNIT_TEST_SUITE(THarmonizerIterationTests) {
         UNIT_ASSERT(harmonizer != nullptr);
         harmonizer->InvokeReadHistory([](const TIterableDoubleRange<THarmonizerIterationState>& history) {
             ui16 count = 0;
-            for (const auto& _ : history) {
+            for (auto& _ : history) {
                 ++count;
             }
             UNIT_ASSERT_VALUES_EQUAL(count, 0);
@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(THarmonizerIterationTests) {
         harmonizer->Harmonize(currentTs);
         harmonizer->InvokeReadHistory([](const TIterableDoubleRange<THarmonizerIterationState>& history) {
             ui16 count = 0;
-            for (const auto& _ : history) {
+            for (auto& _ : history) {
                 ++count;
             }
             UNIT_ASSERT_VALUES_EQUAL(count, 1);
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(THarmonizerIterationTests) {
         harmonizer->Harmonize(currentTs);
         harmonizer->InvokeReadHistory([](const TIterableDoubleRange<THarmonizerIterationState>& history) {
             ui16 count = 0;
-            for (const auto& _ : history) {
+            for (auto& _ : history) {
                 ++count;
             }
             UNIT_ASSERT_VALUES_EQUAL(count, 1);

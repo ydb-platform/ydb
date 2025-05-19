@@ -523,6 +523,7 @@ namespace NActors {
     }
 
     void TSharedExecutorPool::SetForeignThreadSlots(i16 poolId, i16 slots) {
+        Y_ABORT_UNLESS(static_cast<ui64>(poolId) < Pools.size());
         i16 current = ForeignThreadsAllowedByPool[poolId].load(std::memory_order_acquire);
         if (current == slots) {
             return;

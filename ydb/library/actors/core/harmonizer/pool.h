@@ -26,7 +26,8 @@ struct TPoolInfo {
     ISharedPool* Shared = nullptr;
     IExecutorPool* Pool = nullptr;
     TBasicExecutorPool* BasicPool = nullptr;
-
+    
+    i16 CpuQuota = 0;
     i16 DefaultFullThreadCount = 0;
     i16 MinFullThreadCount = 0;
     i16 MaxFullThreadCount = 0;
@@ -56,7 +57,7 @@ struct TPoolInfo {
     std::atomic<ui64> DecreasingThreadsByStarvedState = 0;
     std::atomic<ui64> DecreasingThreadsByHoggishState = 0;
     std::atomic<ui64> DecreasingThreadsByExchange = 0;
-    std::atomic<i16> PotentialMaxThreadCount = 0;
+    std::atomic<float> PotentialMaxThreadCount = 0;
     std::atomic<ui64> IncreaseForeignSlotsInSharedPool = 0;
     std::atomic<ui64> DecreaseForeignSlotsInSharedPool = 0;
     bool IsNeedy = false;

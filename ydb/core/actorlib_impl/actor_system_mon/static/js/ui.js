@@ -108,13 +108,15 @@ function renderData(data) {
                         <div class="card-header pool-card-header d-flex justify-content-between align-items-center">
                             <span>
                                 Pool: <strong>${pool.name || 'Unknown'}</strong>
-                                <small class="text-muted ms-2">Op: ${pool.operation || 'N/A'}</small>
+                                Op: <strong>${pool.operation || 'N/A'}</strong>
+                                Elapsed: <strong>${totalElapsedCpu.toFixed(2)}</strong>
+                                Threads: <strong>${pool.currentThreadCount ?? 'N/A'} / ${pool.potentialMaxThreadCount ?? 'N/A'} (Max ${pool.maxThreadCount ?? 'N/A'})</strong>
                             </span>
-                            <button class="btn btn-sm btn-outline-secondary pool-toggle-button" data-bs-target="#${poolBodyId}" aria-expanded="true">
-                                -
+                            <button class="btn btn-sm btn-outline-secondary pool-toggle-button" data-bs-target="#${poolBodyId}" aria-expanded="false">
+                                +
                             </button>
                         </div>
-                        <div class="card-body pool-card-body collapse show" id="${poolBodyId}">
+                        <div class="card-body pool-card-body collapse" id="${poolBodyId}">
                             <div class="row">
                                 <div class="col-md-6">
                                     <p><strong>Threads:</strong> ${pool.currentThreadCount ?? 'N/A'} / ${pool.potentialMaxThreadCount ?? 'N/A'} (Pot. Max)</p>
@@ -126,7 +128,7 @@ function renderData(data) {
                                     ${pool.minLocalQueueSize !== undefined ? `
                                     <p><strong>Queue Limits:</strong> ${pool.minLocalQueueSize}-${pool.maxLocalQueueSize} (Min-Max)</p>
                                     ` : ''}
-                                    <p><strong>Total Elapsed CPU:</strong> ${totalElapsedCpu.toFixed(5)}</p> 
+                                    <p><strong>Total Elapsed CPU:</strong> ${totalElapsedCpu.toFixed(2)}</p> 
                                 </div>
                                 <div class="col-md-6">
                                     <p><strong>Avg Ping (us):</strong> ${pool.avgPingUs ?? 'N/A'} (Small Window: ${pool.avgPingUsWithSmallWindow ?? 'N/A'}, Max: ${pool.maxAvgPingUs ?? 'N/A'})</p>
@@ -148,14 +150,17 @@ function renderData(data) {
                 if (pool.threads && pool.threads.length > 0) {
                     poolCard.find('.threads-container').append('<h6>Threads</h6>').append(renderThreads(pool.threads));
                 }
+                if (item.shared && item.shared.threads) {
+                    poolCard.find('.threads-container').append('<h6>Shared Threads</h6>').append(renderPoolSharedThreads(item.shared, poolIdx));
+                }
 
                 poolsContainer.append(poolCard);
             });
         }
 
-        if (item.shared && item.shared.threads && levelSelect.val() === 'thread') {
+        if (item.shared && item.shared.threads) {
             sharedPoolContainer.append('<h5>Shared Pool Threads</h5>');
-            sharedPoolContainer.append(renderSharedThreads(item.shared.threads));
+            sharedPoolContainer.append(renderSharedThreads(item.shared));
         }
 
         dataContainer.append(iterationCard);

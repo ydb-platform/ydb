@@ -62,7 +62,7 @@ namespace {
 } // namespace
 
 
-void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo>> &pools, const TSharedInfo&) {
+void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo>> &pools, const TSharedInfo& sharedInfo) {
     NeedyPools.clear();
     HoggishPools.clear();
     IsNeedyByPool.clear();
@@ -78,7 +78,7 @@ void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo
     LastSecondCpu = 0.0;
     for (size_t poolIdx = 0; poolIdx < pools.size(); ++poolIdx) {
         TPoolInfo& pool = *pools[poolIdx];
-        TotalCores += pool.DefaultThreadCount;
+        TotalCores += pool.CpuQuota;
 
         AdditionalThreads += Max(0, pool.GetFullThreadCount() - pool.DefaultFullThreadCount);
         float currentThreadCount = pool.GetThreadCount();
@@ -141,6 +141,7 @@ void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo
     HARMONIZER_DEBUG_PRINT("NeedyPools", NeedyPools.size(), "HoggishPools", HoggishPools.size());
 
     Budget = TotalCores - Elapsed;
+    BudgetWithoutSharedCpu = Budget - sharedInfo.FreeCpu;
     Overbooked = -Budget;
     LostCpu = Max<float>(0.0f, Elapsed - Cpu);
     BudgetInt = static_cast<i16>(Max(Budget, 0.0f));

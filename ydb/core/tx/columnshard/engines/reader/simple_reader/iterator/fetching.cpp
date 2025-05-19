@@ -206,10 +206,11 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDa
 
 void TDuplicateFilter::TFilterSubscriber::OnFilterReady(const NArrow::TColumnFilter& filter) {
     if (auto source = Source.lock()) {
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "fetch_filter")("source", source->GetSourceId())("filter", filter.DebugString());
         if (source->GetContext()->IsAborted()) {
             return;
         }
-        source->MutableStageData().AddFilter(source->GetStageData().AdaptFullFilter(filter));
+        source->MutableStageData().AddFilter(source->GetStageData().FullToDataFilter(filter));
         Step.Next();
         auto task = std::make_shared<TStepAction>(source, std::move(Step), source->GetContext()->GetCommonContext()->GetScanActorId(), false);
         NConveyor::TScanServiceOperator::SendTaskToExecute(task, source->GetContext()->GetCommonContext()->GetConveyorProcessId());

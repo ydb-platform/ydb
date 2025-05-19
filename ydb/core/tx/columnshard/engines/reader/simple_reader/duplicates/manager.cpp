@@ -59,8 +59,10 @@ void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
         Intervals.FindIntersections(source->GetPortionInfo().IndexKeyStart(), source->GetPortionInfo().IndexKeyEnd(), collector);
     }
 
+    LOCAL_LOG_TRACE("event", "request_filter")("source", source->GetSourceId())("fetching_sources", sourcesToFetch.size());
     AFL_VERIFY(sourcesToFetch.size());
     if (sourcesToFetch.size() == 1) {
+        // FIXME: if only filtration by snapshot not needed
         AFL_VERIFY(sourcesToFetch.front()->GetSourceId() == source->GetSourceId());
         auto filter = NArrow::TColumnFilter::BuildAllowFilter();
         filter.Add(true, sourcesToFetch.front()->GetRecordsCount());
@@ -104,6 +106,8 @@ void TDuplicateFilterConstructor::Handle(const TEvConstructFilters::TPtr& ev) {
             }
         }
     }
+    LOCAL_LOG_TRACE("event", "construct_filters")
+    ("source", mainSource->GetSourceId())("built_intervals", builtIntervals.size())("intervals", splitter.NumIntervals());
     if (ev->Get()->GetCallback()->IsDone()) {
         return;
     }
@@ -129,6 +133,7 @@ void TDuplicateFilterConstructor::Handle(const TEvConstructFilters::TPtr& ev) {
         if (segments.empty() || builtIntervals.contains(i)) {
             // Do nothing
         } else if (segments.size() == 1) {
+            // FIXME: if only filtration by snapshot not needed
             const auto mapInfo = segments.begin()->second.GetInterval();
             NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
             filter.Add(true, mapInfo.GetRowsCount());

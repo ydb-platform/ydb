@@ -21,7 +21,7 @@ namespace NYT::NConcurrency {
 
 using namespace NProfiling;
 
-static constexpr auto& Logger = ConcurrencyLogger;
+constinit const auto Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 

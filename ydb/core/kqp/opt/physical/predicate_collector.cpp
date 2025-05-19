@@ -179,12 +179,12 @@ bool AbstractTreeCanBePushed(const TExprBase& expr, const TExprNode*, bool pushd
     return true;
 }
 
-bool IfPresentCanBePushed(const TCoIfPresent& ifPresent, const TExprNode* lambdaArg, bool allowOlapApply) {
+bool IfPresentCanBePushed(const TCoIfPresent& ifPresent, const TExprNode* lambdaArg, bool) {
 
     Y_UNUSED(ifPresent);
     Y_UNUSED(lambdaArg);
 
-    return allowOlapApply;
+    return false; // Temporary disabled
 }
 
 bool CheckExpressionNodeForPushdown(const TExprBase& node, const TExprNode* lambdaArg, const TPushdownOptions& options) {
@@ -433,7 +433,7 @@ void CollectPredicates(const TExprBase& predicate, TOLAPPredicateNode& predicate
         predicateTree.CanBePushedApply = CoalesceCanBePushed(maybeCoalesce.Cast(), lambdaArg, lambdaBody, {true, options.PushdownSubstring});
     } else if (const auto maybeCompare = predicate.Maybe<TCoCompare>()) {
         predicateTree.CanBePushed = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody, {false, options.PushdownSubstring});
-        predicateTree.CanBePushedApply = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody, {false, options.PushdownSubstring});
+        predicateTree.CanBePushedApply = CompareCanBePushed(maybeCompare.Cast(), lambdaArg, lambdaBody, {true, options.PushdownSubstring});
     } else if (const auto maybeExists = predicate.Maybe<TCoExists>()) {
         predicateTree.CanBePushed = ExistsCanBePushed(maybeExists.Cast(), lambdaArg);
         predicateTree.CanBePushedApply = predicateTree.CanBePushed;

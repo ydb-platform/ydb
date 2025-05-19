@@ -29,7 +29,7 @@ class TestClickbench(LoadSuiteBase):
                         query_name=query_name,
                         iterations=1,
                         workload_type=cls.workload_type,
-                        timeout=cls._get_query_settings(query_num).timeout,
+                        timeout=cls._get_query_settings(query_num=query_name).timeout,
                         check_canonical=CheckCanonicalPolicy.ERROR
                     )
                     cls.process_query_result(result=result, query_name=query_name, upload=False)

@@ -2243,6 +2243,58 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     Y_UNIT_TEST(RestoreReplicationThatDoesNotUseSecret) {
         TestReplicationBackupRestore(false);
     }
+
+    Y_UNIT_TEST(ReplicasAreNotBackedUp) {
+        TKikimrWithGrpcAndRootSchema server;
+
+        const auto endpoint = Sprintf("localhost:%u", server.GetPort());
+        auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetAuthToken("root@builtin"));
+
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TReplicationClient replicationClient(driver);
+
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        ExecuteQuery(session, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
+        ExecuteQuery(session, "CREATE TABLE `/Root/table` (k Uint32, v Utf8, PRIMARY KEY (k));", true);
+        ExecuteQuery(session, Sprintf(R"(
+            CREATE ASYNC REPLICATION `/Root/replication` FOR
+                `/Root/table` AS `/Root/replica`
+            WITH (
+                CONNECTION_STRING = 'grpc://%s/?database=/Root',
+                TOKEN_SECRET_NAME = 'secret'
+            );)", endpoint.c_str()), true
+        );
+        WaitReplicationInit(replicationClient, "/Root/replication");
+
+        NDump::TClient backupClient(driver);
+        {
+            const auto result = backupClient.Dump("/Root", pathToBackup, NDump::TDumpSettings().Database("/Root"));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            {
+                TVector<TString> children;
+                pathToBackup.ListNames(children);
+
+                UNIT_ASSERT_C(FindPtr(children, "table"), JoinSeq(", ", children));
+                UNIT_ASSERT_C(FindPtr(children, "replication"), JoinSeq(", ", children));
+                UNIT_ASSERT_C(!FindPtr(children, "replica"), JoinSeq(", ", children));
+            }
+
+            {
+                auto source = pathToBackup.Child("table");
+                TVector<TFsPath> children;
+                source.List(children);
+
+                for (const auto& child : children) {
+                    UNIT_ASSERT(!child.IsDirectory());
+                }
+            }
+        }
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(BackupRestoreS3) {

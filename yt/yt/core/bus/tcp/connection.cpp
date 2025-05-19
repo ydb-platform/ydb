@@ -7,6 +7,7 @@
 #include "ssl_helpers.h"
 
 #include <yt/yt/core/misc/fs.h>
+#include <yt/yt/core/misc/memory_usage_tracker.h>
 #include <yt/yt/core/misc/proc.h>
 
 #include <yt/yt/core/net/socket.h>

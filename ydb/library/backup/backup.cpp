@@ -63,6 +63,8 @@ namespace NYdb::NBackup {
 static constexpr size_t IO_BUFFER_SIZE = 2 << 20; // 2 MiB
 static constexpr i64 FILE_SPLIT_THRESHOLD = 128 << 20; // 128 MiB
 static constexpr i64 READ_TABLE_RETRIES = 100;
+static const std::string ATTR_ASYNC_REPLICATION = "__async_replication";
+static const std::string ATTR_ASYNC_REPLICA = "__async_replica";
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -528,10 +530,12 @@ NTopic::TTopicDescription DescribeTopic(TDriver driver, const TString& path) {
     return result.GetTopicDescription();
 }
 
-void BackupChangefeeds(TDriver driver, const TString& tablePath, const TFsPath& folderPath) {
-    auto desc = DescribeTable(driver, tablePath);
-
+void BackupChangefeeds(TDriver driver, const TString& tablePath, const TFsPath& folderPath, const NTable::TTableDescription& desc) {
     for (const auto& changefeedDesc : desc.GetChangefeedDescriptions()) {
+        if (changefeedDesc.GetAttributes().contains(ATTR_ASYNC_REPLICATION)) {
+            // this changefeed is managed by ASYNC REPLICATION and does not need backing up separately
+            continue;
+        }
         TFsPath changefeedDirPath = CreateDirectory(folderPath, TString{changefeedDesc.GetName()});
 
         auto protoChangeFeedDesc = ProtoFromChangefeedDesc(changefeedDesc);
@@ -551,16 +555,39 @@ void BackupTable(TDriver driver, const TString& dbPrefix, const TString& backupP
     Y_ENSURE(!path.empty());
     Y_ENSURE(path.back() != '/', path.Quote() << " path contains / in the end");
 
-    const auto fullPath = JoinDatabasePath(schemaOnly ? dbPrefix : backupPrefix, path);
+    const auto originalTablePath = JoinDatabasePath(dbPrefix, path);
+    const auto originalTableDesc = DescribeTable(driver, originalTablePath);
+    if (auto replicaAttribute = originalTableDesc.GetAttributes().find(ATTR_ASYNC_REPLICA);
+        replicaAttribute != originalTableDesc.GetAttributes().end()
+        && replicaAttribute->second == "true"
+    ) {
+        LOG_D("Skip table " << originalTablePath.Quote() << ", because it is a replica table");
+        // remove the backup folder
+        TVector<TString> children;
+        folderPath.ListNames(children);
+        if (children.size() == 1 && children.front() == NDump::NFiles::Incomplete().FileName) {
+            // to do: stop blindly creating the folder path in the first place
+            folderPath.ForceDelete();
+        }
+        return;
+    }
+
+    const auto copyTablePath = JoinDatabasePath(backupPrefix, path);
+    TMaybe<NTable::TTableDescription> copyTableDesc;
+    if (!schemaOnly) {
+        copyTableDesc = DescribeTable(driver, copyTablePath);
+    }
+
+    const auto& fullPath = schemaOnly ? originalTablePath : copyTablePath;
+    const auto& desc = schemaOnly ? originalTableDesc : *copyTableDesc;
 
     LOG_I("Backup table " << fullPath.Quote() << " to " << folderPath.GetPath().Quote());
 
-    auto desc = DescribeTable(driver, fullPath);
     auto proto = ProtoFromTableDescription(desc, preservePoolKinds);
     WriteProtoToFile(proto, folderPath, NDump::NFiles::TableScheme());
 
-    BackupChangefeeds(driver, JoinDatabasePath(dbPrefix, path), folderPath);
-    BackupPermissions(driver, dbPrefix, path, folderPath);
+    BackupChangefeeds(driver, originalTablePath, folderPath, originalTableDesc);
+    BackupPermissions(driver, originalTablePath, folderPath);
 
     if (!schemaOnly) {
         ReadTable(driver, desc, fullPath, folderPath, ordered);

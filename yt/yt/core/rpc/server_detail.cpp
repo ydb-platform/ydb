@@ -339,7 +339,7 @@ const IAttributeDictionary& TServiceContextBase::GetEndpointAttributes() const
 
 const std::string& TServiceContextBase::GetEndpointDescription() const
 {
-    static const TString EmptyEndpointDescription;
+    static const std::string EmptyEndpointDescription;
     return EmptyEndpointDescription;
 }
 
@@ -440,7 +440,7 @@ bool TServiceContextBase::IsLoggingEnabled() const
     return LoggingEnabled_;
 }
 
-void TServiceContextBase::SetRawRequestInfo(TString info, bool incremental)
+void TServiceContextBase::SetRawRequestInfo(std::string info, bool incremental)
 {
     YT_ASSERT(!Replied_);
 
@@ -465,7 +465,7 @@ void TServiceContextBase::SuppressMissingRequestInfoCheck()
     RequestInfoSet_ = true;
 }
 
-void TServiceContextBase::SetRawResponseInfo(TString info, bool incremental)
+void TServiceContextBase::SetRawResponseInfo(std::string info, bool incremental)
 {
     YT_ASSERT(!Replied_);
 
@@ -755,7 +755,7 @@ bool TServiceContextWrapper::IsLoggingEnabled() const
     return UnderlyingContext_->IsLoggingEnabled();
 }
 
-void TServiceContextWrapper::SetRawRequestInfo(TString info, bool incremental)
+void TServiceContextWrapper::SetRawRequestInfo(std::string info, bool incremental)
 {
     UnderlyingContext_->SetRawRequestInfo(std::move(info), incremental);
 }
@@ -765,7 +765,7 @@ void TServiceContextWrapper::SuppressMissingRequestInfoCheck()
     UnderlyingContext_->SuppressMissingRequestInfoCheck();
 }
 
-void TServiceContextWrapper::SetRawResponseInfo(TString info, bool incremental)
+void TServiceContextWrapper::SetRawResponseInfo(std::string info, bool incremental)
 {
     UnderlyingContext_->SetRawResponseInfo(std::move(info), incremental);
 }

@@ -225,7 +225,7 @@ void TDuplicateFilter::TFilterSubscriber::OnFailure(const TString& reason) {
 TDuplicateFilter::TFilterSubscriber::TFilterSubscriber(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step)
     : Source(source)
     , Step(step)
-    , TaskGuard(source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard()) {
+    , TaskGuard(source->GetContext()->GetCommonContext()->GetCounters().GetFilterFetchingGuard()) {
 }
 
 TConclusion<bool> TDuplicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {

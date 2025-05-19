@@ -32,14 +32,14 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
         };
 
     {
-        AFL_VERIFY(guard.InitSortingPosition(posStart));
+        AFL_VERIFY(guard.InitSortingPosition(posStart))("start", posStart)("finish", posFinish);
         auto cmp = position.Compare(forFound);
         if (cond(cmp)) {
             return TFoundPosition(posStart, cmp);
         }
     }
     {
-        AFL_VERIFY(guard.InitSortingPosition(posFinish));
+        AFL_VERIFY(guard.InitSortingPosition(posFinish))("start", posStart)("finish", posFinish);
         auto cmp = position.Compare(forFound);
         if (!cond(cmp)) {
             return std::nullopt;

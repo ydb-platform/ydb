@@ -52,10 +52,10 @@ The `entry` field contains an array of objects with the following structure:
 
 | Parameter | Type | Description |
 | --- | --- | --- |
-| `component` | string | Component name (must be base64-encoded when specified in YAML). |
-| `level` | uint32 | Log level for this component. |
-| `sampling_level` | uint32 | Sampling level for this component. |
-| `sampling_rate` | uint32 | Sampling rate for this component. |
+| `component` | string | Component name. See the full list of available components [on GitHub](https://github.com/ydb-platform/ydb/blob/main/ydb/library/services/services.proto#L6). |
+| `level` | uint32 | [Log level](#log-levels) for this component. |
+| `sampling_level` | uint32 | Sampling level for this component. Works similarly to `default_sampling_level`. |
+| `sampling_rate` | uint32 | Sampling rate for this component.  Works similarly to `default_sampling_rate`. |
 
 ### UAClientConfig Object {#uaclient-config}
 
@@ -130,9 +130,9 @@ This configuration sends logs to syslog with the service name "ydb".
 log_config:
   default_level: 5  # NOTICE
   entry:
-    - component: U0NIRU1FU0hBUkQ=  # Base64 for "SCHEMESHARD"
+    - component: "SCHEMESHARD"
       level: 7  # DEBUG
-    - component: VEFCTEVUX01BSU4=  # Base64 for "TABLET_MAIN"
+    - component: "TABLET_MAIN"
       level: 6  # INFO
   backend_file_name: "/var/log/ydb/ydb.log"
 ```
@@ -145,12 +145,12 @@ log_config:
   default_sampling_level: 7  # DEBUG
   default_sampling_rate: 10  # Log every 10th message between NOTICE and DEBUG
   entry:
-    - component: QkxPQlNUT1JBR0U=  # Base64 for "BLOBSTORAGE"
+    - component: "BLOBSTORAGE"
       sampling_level: 8  # TRACE
       sampling_rate: 100  # Log every 100th message between NOTICE and TRACE
 ```
 
-This configuration sets up sampling for logs. With default settings, every 10th message with priority between `NOTICE` and `DEBUG` will be logged. For the BLOBSTORAGE component, every 100th message with priority between `NOTICE` and `TRACE` will be logged.
+This configuration sets up sampling for logs. With default settings, every 10th message with priority between `NOTICE` and `DEBUG` will be logged. For the `BLOBSTORAGE` component, every 100th message with priority between `NOTICE` and `TRACE` will be logged.
 
 ### JSON Format Configuration
 
@@ -169,7 +169,6 @@ This configuration outputs logs in JSON format and sends them to Unified Agent.
 
 ## Notes
 
-- When specifying component names in the `entry` array, component names must be base64-encoded.
 - Log levels are specified in the configuration as numeric values, not strings. Use the [table above](#log-levels) to map between numeric values and their meanings.
 - If the `backend_file_name` parameter is specified, logs are written to this file. If the `sys_log` parameter is true, logs are sent to the system logger.
 - The `format` parameter determines how log entries are formatted. The "full" format includes all available information, "short" provides a more compact format, and "json" outputs logs in JSON format, which is convenient for parsing by logging services.

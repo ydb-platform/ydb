@@ -52,10 +52,10 @@
 
 | Параметр | Тип | Описание |
 | --- | --- | --- |
-| `component` | string | Имя компонента (должно быть закодировано в base64 при указании в YAML). |
-| `level` | uint32 | Уровень логирования для этого компонента. |
-| `sampling_level` | uint32 | Уровень семплирования для этого компонента. |
-| `sampling_rate` | uint32 | Частота семплирования для этого компонента. |
+| `component` | string | Имя компонента. C полным списком доступных компонентов можно ознакомиться [на GitHub](https://github.com/ydb-platform/ydb/blob/main/ydb/library/services/services.proto#L6). |
+| `level` | uint32 | [Уровень логирования](#log-levels) для этого компонента. |
+| `sampling_level` | uint32 | Уровень семплирования для этого компонента. Работает аналогично `default_sampling_level`. |
+| `sampling_rate` | uint32 | Частота семплирования для этого компонента. Работает аналогично `default_sampling_rate`.|
 
 ### Объект UAClientConfig {#uaclient-config}
 
@@ -130,9 +130,9 @@ log_config:
 log_config:
   default_level: 5  # NOTICE
   entry:
-    - component: U0NIRU1FU0hBUkQ=  # Base64 для "SCHEMESHARD"
+    - component: "SCHEMESHARD"
       level: 7  # DEBUG
-    - component: VEFCTEVUX01BSU4=  # Base64 для "TABLET_MAIN"
+    - component: "TABLET_MAIN"
       level: 6  # INFO
   backend_file_name: "/var/log/ydb/ydb.log"
 ```
@@ -145,12 +145,12 @@ log_config:
   default_sampling_level: 7  # DEBUG
   default_sampling_rate: 10  # Логировать каждое 10-е сообщение между NOTICE и DEBUG
   entry:
-    - component: QkxPQlNUT1JBR0U=  # Base64 для "BLOBSTORAGE"
+    - component: "BLOBSTORAGE"
       sampling_level: 8  # TRACE
       sampling_rate: 100  # Логировать каждое 100-е сообщение между NOTICE и TRACE
 ```
 
-Эта конфигурация настраивает семплирование логов. При настройках по умолчанию каждое 10-е сообщение с приоритетом между `NOTICE` и `DEBUG` будет записано в лог. Для компонента BLOBSTORAGE каждое 100-е сообщение с приоритетом между `NOTICE` и `TRACE` будет записано в лог.
+Эта конфигурация настраивает семплирование логов. При настройках по умолчанию каждое 10-е сообщение с приоритетом между `NOTICE` и `DEBUG` будет записано в лог. Для компонента `BLOBSTORAGE` каждое 100-е сообщение с приоритетом между `NOTICE` и `TRACE` будет записано в лог.
 
 ### Конфигурация формата JSON
 
@@ -169,7 +169,6 @@ log_config:
 
 ## Примечания
 
-- При указании имён компонентов в массиве `entry` имена компонентов должны быть закодированы в base64.
 - Уровни логирования указываются в конфигурации как числовые значения, а не строки. Используйте [таблицу выше](#log-levels) для сопоставления между числовыми значениями и их значениями.
 - Если указан параметр `backend_file_name`, логи записываются в этот файл. Если параметр `sys_log` имеет значение true, логи отправляются в системный регистратор.
 - Параметр `format` определяет, как форматируются записи логов. Формат "full" включает всю доступную информацию, "short" предоставляет более компактный формат, а "json" выводит логи в формате JSON, который удобен для парсинга сервисами логирования.

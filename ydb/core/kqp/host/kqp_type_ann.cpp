@@ -461,7 +461,7 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
         return TStatus::Error;
     }
 
-    if (!isStreamLookup && !EnsureArgsCount(*node, TKqlLookupIndexBase::Match(node.Get()) ? 4 : 3, ctx)) {
+    if (!isStreamLookup && !EnsureArgsCount(*node, 3, ctx)) {
         return TStatus::Error;
     }
 
@@ -560,8 +560,8 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
     YQL_ENSURE(structType);
 
     ui32 keyColumnsCount = 0;
-    if (TKqlLookupIndexBase::Match(node.Get())) {
-        auto index = node->Child(TKqlLookupIndexBase::idx_Index);
+    if (TKqlStreamLookupIndex::Match(node.Get())) {
+        auto index = node->Child(TKqlStreamLookupIndex::idx_Index);
         if (!EnsureAtom(*index, ctx)) {
             return TStatus::Error;
         }

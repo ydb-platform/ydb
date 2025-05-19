@@ -499,6 +499,15 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM "), expected);
         }
         {
+            TString input = "SELECT * FROM pr";
+            TVector<TCandidate> expected = {
+                {FolderName, "`prod/`"},
+            };
+            TCompletion actual = engine->Complete(SharpedInput(input));
+            UNIT_ASSERT_VALUES_EQUAL(actual.Candidates, expected);
+            UNIT_ASSERT_VALUES_EQUAL(actual.CompletedToken.Content, "pr");
+        }
+        {
             TVector<TCandidate> expected = {};
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM `#"), expected);
         }

@@ -110,6 +110,7 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/blockstore_config.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/bootstrap.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/bootstrapper.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/protos/bridge.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/change_exchange.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/channel_purpose.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/cms.proto
@@ -300,6 +301,9 @@ target_sources(ydb-core-protos PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/core/protos/bootstrapper.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/bootstrapper.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/bootstrapper.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/bridge.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/bridge.deps.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/bridge.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/change_exchange.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/change_exchange.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/change_exchange.grpc.pb.h

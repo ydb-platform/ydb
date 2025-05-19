@@ -12,6 +12,7 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(bridge)
 add_subdirectory(mock)
 add_subdirectory(ut)
 add_subdirectory(ut_fat)
@@ -32,6 +33,7 @@ target_link_libraries(core-blobstorage-dsproxy PUBLIC
   core-blobstorage-common
   core-blobstorage-groupinfo
   core-blobstorage-storagepoolmon
+  blobstorage-vdisk-common
   blobstorage-vdisk-ingress
   core-control-lib
   ydb-core-util

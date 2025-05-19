@@ -27,6 +27,7 @@ target_link_libraries(core-blobstorage-nodewarden PUBLIC
   core-blob_depot-agent
   core-blobstorage-common
   core-blobstorage-crypto
+  blobstorage-dsproxy-bridge
   core-blobstorage-groupinfo
   core-blobstorage-pdisk
   core-control-lib

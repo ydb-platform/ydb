@@ -1,6 +1,6 @@
 #include "one_layer.h"
 
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/common_level.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/level/common_level.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
@@ -65,9 +65,9 @@ void TOneLayerConstructor::DoSerializeToProto(NKikimrSchemeOp::TCompactionLevelC
 
 std::shared_ptr<NStorageOptimizer::NLCBuckets::IPortionsLevel> TOneLayerConstructor::DoBuildLevel(
     const std::shared_ptr<IPortionsLevel>& nextLevel, const ui32 indexLevel, const std::shared_ptr<TSimplePortionsGroupInfo>& portionsInfo,
-    const TLevelCounters& counters) const {
+    const TLevelCounters& counters, const std::vector<std::shared_ptr<IPortionsSelector>>& selectors) const {
     return std::make_shared<TOneLayerPortions>(indexLevel, BytesLimitFraction.value_or(1), ExpectedPortionSize.value_or(2 << 20), nextLevel,
-        portionsInfo, counters, SizeLimitGuarantee);
+        portionsInfo, counters, SizeLimitGuarantee, selectors, GetDefaultSelectorName());
 }
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

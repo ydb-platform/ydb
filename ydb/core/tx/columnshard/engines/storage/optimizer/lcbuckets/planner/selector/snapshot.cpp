@@ -1,4 +1,4 @@
-#include "accumulation_level.h"
+#include "snapshot.h"
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 

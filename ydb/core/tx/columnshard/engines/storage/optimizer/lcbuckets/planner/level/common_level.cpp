@@ -7,17 +7,13 @@ void TOneLayerPortions::DoModifyPortions(const std::vector<TPortionInfo::TPtr>& 
         auto it = Portions.find(TOrderedPortion(i));
         AFL_VERIFY(it != Portions.end());
         AFL_VERIFY(it->GetPortion()->GetPortionId() == i->GetPortionId());
-        PortionsInfo.RemovePortion(i);
         Portions.erase(it);
-        LevelCounters.Portions->RemovePortion(i);
     }
     TStringBuilder sb;
     for (auto&& i : add) {
         sb << i->GetPortionId() << ",";
         auto info = Portions.emplace(i);
-        i->AddRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized);
         AFL_VERIFY(info.second);
-        PortionsInfo.AddPortion(i);
         if (StrictOneLayer) {
             {
                 auto it = info.first;
@@ -41,7 +37,6 @@ void TOneLayerPortions::DoModifyPortions(const std::vector<TPortionInfo::TPtr>& 
                 }
             }
         }
-        LevelCounters.Portions->AddPortion(i);
     }
 }
 
@@ -55,7 +50,7 @@ TCompactionTaskData TOneLayerPortions::DoGetOptimizationTask() const {
     if (itFwd != Portions.begin()) {
         --itBkwd;
     }
-    while (GetLevelBlobBytesLimit() * 0.5 + compactedData < (ui64)PortionsInfo.GetBlobBytes() &&
+    while (GetLevelBlobBytesLimit() * 0.5 + compactedData < (ui64)GetPortionsInfo().GetBlobBytes() &&
            (itBkwd != Portions.begin() || itFwd != Portions.end()) && result.CanTakeMore()) {
         if (itFwd != Portions.end() &&
             (itBkwd == Portions.begin() || itBkwd->GetPortion()->GetTotalBlobBytes() <= itFwd->GetPortion()->GetTotalBlobBytes())) {

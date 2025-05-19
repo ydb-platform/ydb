@@ -26,7 +26,7 @@ ui64 TZeroLevelPortions::DoGetWeight() const {
         return 0;
     }
     if (PredOptimization && TInstant::Now() - *PredOptimization < DurationToDrop) {
-        if (PortionsInfo.PredictPackedBlobBytes(GetPackKff()) < ExpectedBlobsSize) {
+        if (GetPortionsInfo().PredictPackedBlobBytes(GetPackKff()) < ExpectedBlobsSize) {
             return 0;
         }
     }
@@ -57,8 +57,8 @@ ui64 TZeroLevelPortions::DoGetWeight() const {
     }
 */
 
-    const ui64 mb = (affectedRawBytes + PortionsInfo.GetRawBytes()) / 1000000 + 1;
-    return 1000.0 * PortionsInfo.GetCount() * PortionsInfo.GetCount() / mb;
+    const ui64 mb = (affectedRawBytes + GetPortionsInfo().GetRawBytes()) / 1000000 + 1;
+    return 1000.0 * GetPortionsInfo().GetCount() * GetPortionsInfo().GetCount() / mb;
 }
 
 TInstant TZeroLevelPortions::DoGetWeightExpirationInstant() const {
@@ -69,15 +69,13 @@ TInstant TZeroLevelPortions::DoGetWeightExpirationInstant() const {
 }
 
 TZeroLevelPortions::TZeroLevelPortions(const ui32 levelIdx, const std::shared_ptr<IPortionsLevel>& nextLevel,
-    const TLevelCounters& levelCounters, const TDuration durationToDrop, const ui64 expectedBlobsSize, const ui64 portionsCountAvailable,
-    const std::optional<ui64> portionsCountLimit, const std::optional<ui64> portionsSizeLimit)
-    : TBase(levelIdx, nextLevel)
-    , LevelCounters(levelCounters)
+    const TLevelCounters& levelCounters, const std::shared_ptr<IOverloadChecker>& overloadChecker, const TDuration durationToDrop,
+    const ui64 expectedBlobsSize, const ui64 portionsCountAvailable, const std::vector<std::shared_ptr<IPortionsSelector>>& selectors,
+    const TString& defaultSelectorName)
+    : TBase(levelIdx, nextLevel, overloadChecker, levelCounters, selectors, defaultSelectorName)
     , DurationToDrop(durationToDrop)
     , ExpectedBlobsSize(expectedBlobsSize)
-    , PortionsCountAvailable(portionsCountAvailable)
-    , PortionsCountLimit(portionsCountLimit)
-    , PortionsSizeLimit(portionsSizeLimit) {
+    , PortionsCountAvailable(portionsCountAvailable) {
     if (DurationToDrop != TDuration::Max() && PredOptimization) {
         *PredOptimization -= TDuration::Seconds(RandomNumber<ui32>(DurationToDrop.Seconds()));
     }

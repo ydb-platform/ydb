@@ -1,7 +1,9 @@
-#include "accumulation_level.h"
-#include "common_level.h"
 #include "optimizer.h"
-#include "zero_level.h"
+
+#include "level/common_level.h"
+#include "level/zero_level.h"
+#include "selector/snapshot.h"
+#include "selector/transparent.h"
 
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/constructor/constructor.h>
 
@@ -10,11 +12,22 @@
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
 TOptimizerPlanner::TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
-    const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::vector<TLevelConstructorContainer>& levelConstructors)
+    const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::vector<TLevelConstructorContainer>& levelConstructors,
+    const std::vector<TSelectorConstructorContainer>& selectors)
     : TBase(pathId)
     , Counters(std::make_shared<TCounters>())
     , StoragesManager(storagesManager)
     , PrimaryKeysSchema(primaryKeysSchema) {
+    {
+        std::set<TString> selectorNames;
+        for (auto&& i : selectors) {
+            AFL_VERIFY(selectorNames.emplace(i->GetName()).second);
+            Selectors.emplace_back(i->BuildSelector());
+        }
+        if (Selectors.empty()) {
+            Selectors = { std::make_shared<TTransparentPortionsSelector>("default") };
+        }
+    }
     std::shared_ptr<IPortionsLevel> nextLevel;
     /*
     const ui64 maxPortionBlobBytes = (ui64)1 << 20;
@@ -26,17 +39,16 @@ TOptimizerPlanner::TOptimizerPlanner(const TInternalPathId pathId, const std::sh
         ui32 idx = levelConstructors.size();
         for (auto it = levelConstructors.rbegin(); it != levelConstructors.rend(); ++it) {
             --idx;
-            Levels.emplace_back((*it)->BuildLevel(nextLevel, idx, PortionsInfo, Counters->GetLevelCounters(idx)));
+            Levels.emplace_back((*it)->BuildLevel(nextLevel, idx, PortionsInfo, Counters->GetLevelCounters(idx), Selectors));
             nextLevel = Levels.back();
         }
     } else {
         Levels.emplace_back(std::make_shared<TZeroLevelPortions>(
-            2, nullptr, Counters->GetLevelCounters(2), TDuration::Max(), 1 << 20, 10, std::nullopt, std::nullopt));
-        Levels.emplace_back(
-            std::make_shared<TZeroLevelPortions>(
-            1, Levels.back(), Counters->GetLevelCounters(1), TDuration::Max(), 1 << 20, 10, std::nullopt, std::nullopt));
+            2, nullptr, Counters->GetLevelCounters(2), nullptr, TDuration::Max(), 1 << 20, 10, Selectors, "default"));
         Levels.emplace_back(std::make_shared<TZeroLevelPortions>(
-            0, Levels.back(), Counters->GetLevelCounters(0), TDuration::Seconds(180), 1 << 20, 10, std::nullopt, std::nullopt));
+            1, Levels.back(), Counters->GetLevelCounters(1), nullptr, TDuration::Max(), 1 << 20, 10, Selectors, "default"));
+        Levels.emplace_back(std::make_shared<TZeroLevelPortions>(
+            0, Levels.back(), Counters->GetLevelCounters(0), nullptr, TDuration::Seconds(180), 1 << 20, 10, Selectors, "default"));
     }
     std::reverse(Levels.begin(), Levels.end());
     RefreshWeights();

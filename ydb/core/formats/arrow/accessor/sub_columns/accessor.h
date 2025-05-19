@@ -101,8 +101,8 @@ public:
     TSubColumnsArray(NSubColumns::TColumnsData&& columns, NSubColumns::TOthersData&& others, const std::shared_ptr<arrow::DataType>& type,
         const ui32 recordsCount, const NSubColumns::TSettings& settings);
 
-    static TConclusion<std::shared_ptr<TSubColumnsArray>> Make(
-        const std::shared_ptr<IChunkedArray>& sourceArray, const NSubColumns::TSettings& settings);
+    static TConclusion<std::shared_ptr<TSubColumnsArray>> Make(const std::shared_ptr<IChunkedArray>& sourceArray,
+        const NSubColumns::TSettings& settings, const std::shared_ptr<arrow::DataType>& columnType);
 
     TSubColumnsArray(const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount, const NSubColumns::TSettings& settings);
 

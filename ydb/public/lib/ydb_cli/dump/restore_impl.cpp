@@ -995,7 +995,7 @@ namespace {
             || rhs == ESchemeEntryType::SubDomain && lhs == ESchemeEntryType::Directory;
     }
 
-    TStatus GetExternalTablesReferencingTheSource(TTableClient& client, const TString& path, TVector<TString>& references) {
+    TStatus GetExternalTablesReferencingSource(TTableClient& client, const TString& path, TVector<TString>& references) {
         references.clear();
 
         Ydb::Table::DescribeExternalDataSourceResult description;
@@ -1119,7 +1119,7 @@ TRestoreResult TRestoreClient::DropAndRestoreExternals(const TVector<TFsBackupEn
     for (size_t i : externalDataSources) {
         const auto& [fsPath, dbPath, type] = backupEntries[i];
         TVector<TString> references;
-        if (auto status = GetExternalTablesReferencingTheSource(TableClient, dbPath, references); !status.IsSuccess()) {
+        if (auto status = GetExternalTablesReferencingSource(TableClient, dbPath, references); !status.IsSuccess()) {
             return Result<TRestoreResult>(fsPath, std::move(status));
         }
         if (!AllOf(references, [&externalTables](const TString& dbPath) {

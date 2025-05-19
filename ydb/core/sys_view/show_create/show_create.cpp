@@ -313,7 +313,7 @@ private:
                         }
 
                         TCreateTableFormatter formatter;
-                        auto formatterResult = formatter.Format(tablePath, columnTableDesc, temporary);
+                        auto formatterResult = formatter.Format(tablePath, Path, columnTableDesc, temporary);
                         if (formatterResult.IsSuccess()) {
                             path = tablePath;
                             statement = formatterResult.ExtractOut();

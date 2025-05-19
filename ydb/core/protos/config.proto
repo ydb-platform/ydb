@@ -161,6 +161,8 @@ message TStaticNameserviceConfig {
         repeated TEndpoint Endpoint = 7;
 
         optional NActorsInterconnect.TNodeLocation WalleLocation = 8 [deprecated=true];
+
+        optional string BridgePileName = 9; // realm name for bridged installations (starting from 0)
     }
 
     repeated TNode Node = 1;
@@ -2262,6 +2264,13 @@ message TShutdownConfig {
     optional uint32 MinDelayBeforeShutdownSeconds = 1;
 }
 
+message TBridgeConfig {
+    message TPile {
+        optional string Name = 1; // name (to be matched with node's BridgePileName)
+    }
+    repeated TPile Piles = 1; // order of realms must not change during config updates
+}
+
 message TLabel {
     optional string Name = 1;
     optional string Value = 2;
@@ -2353,6 +2362,7 @@ message TAppConfig {
     optional TDataErasureConfig DataErasureConfig = 88;
     optional THealthCheckConfig HealthCheckConfig = 89;
     optional TWorkloadManagerConfig WorkloadManagerConfig = 90;
+    optional TBridgeConfig BridgeConfig = 91;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

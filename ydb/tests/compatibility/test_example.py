@@ -93,8 +93,8 @@ class TestExampleRollingUpdate(RollingUpdateFixture):
 
         for _ in self.roll():
             with ydb.QuerySessionPool(self.driver) as session_pool:
-                print("tick")
-                import time 
-                time.sleep(3)
-                query = f"""SELECT CAST(DateTime::Format('%%Y-%%m-%%d')(ts) AS String)  FROM `{table_name}`"""
-                session_pool.execute_with_retries(query)
+                query = f"""SELECT id, value FROM `{table_name}` WHERE id = 1;"""
+                result_sets = session_pool.execute_with_retries(query)
+
+                assert result_sets[0].rows[0]["id"] == 1
+                assert result_sets[0].rows[0]["value"] == value

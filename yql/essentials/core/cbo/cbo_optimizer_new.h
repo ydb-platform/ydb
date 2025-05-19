@@ -35,6 +35,12 @@ struct IBaseOptimizerNode {
     EOptimizerNodeKind Kind;
     TOptimizerStatistics Stats;
 
+    // for interesting orderings framework
+
+    NDq::TOrderingsStateMachine::TLogicalOrderings LogicalOrderings;
+
+    //
+
     IBaseOptimizerNode(EOptimizerNodeKind k) : Kind(k) {}
     IBaseOptimizerNode(EOptimizerNodeKind k, TOptimizerStatistics s) :
         Kind(k), Stats(std::move(s)) {}

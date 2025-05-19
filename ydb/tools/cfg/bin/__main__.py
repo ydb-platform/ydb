@@ -64,6 +64,9 @@ def cfg_generate(args):
     if walle_enabled and k8s_enabled:
         raise RuntimeError("you specified 'use_walle: True' and 'k8s_settings.use: True', please select a single host info provider")
 
+    if not walle_enabled and not k8s_enabled:
+        logger.warning("you didn't specify any host info provider (neither walle nor k8s). Make sure you know what you are doing")
+
     generator = cfg_cls(cluster_template, args.binary_path, args.output_dir, host_info_provider=host_info_provider, **kwargs)
 
     all_configs = generator.get_all_configs()

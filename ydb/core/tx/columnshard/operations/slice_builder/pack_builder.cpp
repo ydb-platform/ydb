@@ -157,8 +157,8 @@ public:
             if (!dataSchema) {
                 dataSchema = indexInfo.GetColumnsSchemaByOrderedIndexes(indexes);
             }
-            NArrow::NMerger::TMergePartialStream stream(
-                context.GetActualSchema()->GetIndexInfo().GetReplaceKey(), dataSchema, false, { IIndexInfo::GetWriteIdField()->name() });
+            NArrow::NMerger::TMergePartialStream stream(context.GetActualSchema()->GetIndexInfo().GetReplaceKey(), dataSchema, false,
+                { IIndexInfo::GetWriteIdField()->name() }, std::nullopt);
             for (auto&& i : containers) {
                 stream.AddSource(i, nullptr);
             }

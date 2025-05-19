@@ -64,16 +64,16 @@ class TestAlterCompression(ColumnFamilyTestBase):
             f"{test_dir}/lz4_compression",
             f"{test_dir}/zstd_compression",
         ]
-        add_defaut_family: Callable[[str], str] = lambda settings: self.add_family_in_create(name='default', settings=settings)
+        add_default_family: Callable[[str], str] = lambda settings: self.add_family_in_create(name='default', settings=settings)
         tables_family: list[str] = [
-            add_defaut_family('COMPRESSION = "off"'),
-            add_defaut_family('COMPRESSION = "lz4"'),
-            add_defaut_family('COMPRESSION = "zstd"'),
+            add_default_family('COMPRESSION = "off"'),
+            add_default_family('COMPRESSION = "lz4"'),
+            add_default_family('COMPRESSION = "zstd"'),
         ]
 
         for i in range(2, 22):
             tables_path.append(f"{test_dir}/zstd_{i}_compression")
-            tables_family.append(add_defaut_family(f'COMPRESSION = "zstd", COMPRESSION_LEVEL = {i}'))
+            tables_family.append(add_default_family(f'COMPRESSION = "zstd", COMPRESSION_LEVEL = {i}'))
 
         assert len(tables_path) == len(tables_family)
 
@@ -101,10 +101,13 @@ class TestAlterCompression(ColumnFamilyTestBase):
 
         tasks.start_and_wait_all()
 
+        expected_raw = upsert_count * single_upsert_rows_count * 8
         volumes_without_compression: tuple[int, int] = tables[0].get_volumes_column("value")
+
         for table in tables:
-            assert table.get_portion_stat_by_tier()['__DEFAULT']['Rows'] == single_upsert_rows_count * upsert_count
-            assert upsert_count * single_upsert_rows_count * 8 == volumes_without_compression[0]
+            volumes = table.get_volumes_column("value")
+            assert volumes[0] == expected_raw
+            assert table.get_portion_stat_by_tier()['__DEFAULT']['Rows'] == expected_raw // 8
 
         for i in range(1, len(tables_path)):
             volumes: tuple[int, int] = tables[i].get_volumes_column("value")

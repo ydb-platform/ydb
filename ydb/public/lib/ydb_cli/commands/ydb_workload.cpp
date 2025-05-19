@@ -279,6 +279,7 @@ int TWorkloadCommand::RunWorkload(NYdbWorkload::IWorkloadQueryGenerator& workloa
     StopTime = StartTime + TDuration::Seconds(TotalSec);
 
     NPar::LocalExecutor().RunAdditionalThreads(Threads);
+
     auto futures = NPar::LocalExecutor().ExecRangeWithFutures([this, &workloadGen, type](int id) {
         try {
             WorkerFn(id, workloadGen, type);
@@ -351,6 +352,7 @@ int TWorkloadCommandRun::Run(TConfig& config) {
     PrepareForRun(config);
     Params.DbPath = config.Database;
     auto workloadGen = Params.CreateGenerator();
+    Params.Validate(NYdbWorkload::TWorkloadParams::ECommandType::Run, Type);
     return RunWorkload(*workloadGen, Type);
 }
 

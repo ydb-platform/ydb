@@ -678,6 +678,8 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void UpdateCounterTabletsStarting(i64 tabletsStartingDiff);
     void UpdateCounterPingQueueSize();
     void UpdateCounterTabletChannelHistorySize();
+    void UpdateCounterNodesDown(i64 nodesDownDiff);
+    void UpdateCounterNodesFrozen(i64 nodesFrozenDiff);
     void RecordTabletMove(const TTabletMoveInfo& info);
     bool DomainHasNodes(const TSubDomainKey &domainKey) const;
     void ProcessBootQueue();

@@ -13,9 +13,12 @@ TString ScriptExecutionOperationFromExecutionId(const TString& executionId) {
     return NOperationId::ProtoToString(operationId);
 }
 
-TMaybe<TString> ScriptExecutionIdFromOperation(const TString& operationId, TString& error) {
+TMaybe<TString> ScriptExecutionIdFromOperation(const TString& operationId, TString& error) try {
     NOperationId::TOperationId operation(operationId);
     return ScriptExecutionIdFromOperation(operation, error);
+} catch (const std::exception& ex) {
+    error = TStringBuilder() << "Invalid operation id: " << ex.what();
+    return Nothing();
 }
 
 TMaybe<TString> ScriptExecutionIdFromOperation(const NOperationId::TOperationId& operationId, TString& error) try {

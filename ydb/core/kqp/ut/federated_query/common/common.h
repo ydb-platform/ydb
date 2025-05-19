@@ -20,5 +20,6 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         NYql::IDatabaseAsyncResolver::TPtr databaseAsyncResolver = nullptr,
         std::optional<NKikimrConfig::TAppConfig> appConfig = std::nullopt,
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory = nullptr,
-        const TString& domainRoot = "Root");
-}
+        const TString& domainRoot = "Root",
+        NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr);
+} // namespace NKikimr::NKqp::NFederatedQueryTest

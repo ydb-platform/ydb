@@ -59,7 +59,7 @@ private:
     std::stop_source TerminalsStopSource;
     std::stop_source ThreadsStopSource;
 
-    std::atomic<bool> StopWarmap{false};
+    std::atomic<bool> StopWarmup{false};
     std::vector<TTerminal> Terminals;
 
     std::unique_ptr<ITaskQueue> TaskQueue;
@@ -122,7 +122,7 @@ TPCCRunner::TPCCRunner(const TRunConfig& config)
             *TaskQueue,
             drivers[i % drivers.size()],
             TerminalsStopSource.get_token(),
-            StopWarmap,
+            StopWarmup,
             Log);
     }
 }
@@ -163,7 +163,7 @@ void TPCCRunner::RunSync() {
     //while (!StopByInterrupt.stop_requested()) {
     //}
 
-    StopWarmap.store(true, std::memory_order_relaxed);
+    StopWarmup.store(true, std::memory_order_relaxed);
 
     // TODO: convert to minutes
     LOG_I("Measuring during " << Config.RunSeconds << " seconds");

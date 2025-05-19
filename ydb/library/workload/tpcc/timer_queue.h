@@ -95,8 +95,8 @@ public:
 
         Buckets.resize(std::max(size_t(2UL), bucketCount));
         BucketSoftLimit = std::max(size_t(1UL), bucketSoftLimit);
-        for (auto& vec: Buckets) {
-            vec.Items.reserve(BucketSoftLimit * 2);
+        for (auto& bucket: Buckets) {
+            bucket.Items.reserve(BucketSoftLimit * 2);
         }
     }
 

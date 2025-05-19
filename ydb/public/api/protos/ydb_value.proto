@@ -195,7 +195,7 @@ message ResultSet {
     Type type = 4;
 
     // Settings for an arrow type of result
-    optional Ydb.Formats.ArrowBatchSettings arrow_batch_settings = 5;
+    Ydb.Formats.ArrowBatchSettings arrow_batch_settings = 5;
 
     // Data for byte formats of result data
     bytes data = 1000;

@@ -1187,6 +1187,8 @@ Y_UNIT_TEST(TestWritePQCompact) {
         activeZone = false;
         tc.Runtime->SetScheduledLimit(200);
 
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
+
         // No important clients <-> lifetimeseconds=0 - delete all right now, but last datablob
         PQTabletPrepare({.lowWatermark=(8_MB - 512_KB)}, {}, tc);
 

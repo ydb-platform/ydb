@@ -678,6 +678,7 @@ void TInitDataRangeStep::FormHeadAndProceed() {
 
     auto kb = SplitBodyHeadAndFastWrite(keys);
 
+    // Compaction Body
     for (size_t k = 0; k < kb.Head; ++k) {
         cz.BodySize += keys[k].Size;
         keys[k].CumulativeSize = cz.DataKeysBody.empty() ? 0 : (cz.DataKeysBody.back().CumulativeSize + cz.DataKeysBody.back().Size);
@@ -689,15 +690,19 @@ void TInitDataRangeStep::FormHeadAndProceed() {
         cz.Head.PartNo = 0;
     }
 
+    // Compaction Head
     for (size_t k = kb.Head; k < kb.FastWrite; ++k) {
         cz.HeadKeys.push_back(std::move(keys[k]));
+    }
 
-        const auto& headKey = cz.HeadKeys.back().Key;
+    if (!cz.HeadKeys.empty()) {
+        const auto& headKey = cz.HeadKeys.front().Key;
 
         cz.Head.Offset = headKey.GetOffset();
         cz.Head.PartNo = headKey.GetPartNo();
     }
 
+    // FastWrite Body
     for (size_t k = kb.FastWrite; k < keys.size(); ++k) {
         fwz.BodySize += keys[k].Size;
         keys[k].CumulativeSize = fwz.DataKeysBody.empty() ? 0 : (fwz.DataKeysBody.back().CumulativeSize + fwz.DataKeysBody.back().Size);

@@ -19,6 +19,7 @@ target_compile_options(restricted-aws-aws-checksums PRIVATE
   -DAWS_CHECKSUMS_USE_IMPORT_EXPORT
   -DAWS_COMMON_USE_IMPORT_EXPORT
   -DHAVE_SYSCONF
+  -DINTEL_NO_ITTNOTIFY_API
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 
@@ -31,8 +32,21 @@ target_link_libraries(restricted-aws-aws-checksums PUBLIC
 )
 
 target_sources(restricted-aws-aws-checksums PRIVATE
-  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-checksums/source/crc.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-checksums/source/arm/crc32c_arm.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-checksums/source/checksums.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-checksums/source/crc32.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-checksums/source/crc64.c
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-checksums/source/crc64_sw.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-checksums/source/crc_sw.c
   ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-checksums/source/intel/asm/crc32c_sse42_asm.c
 )
 
+
+set_property(
+  SOURCE
+  ${PROJECT_SOURCE_DIR}/contrib/restricted/aws/aws-checksums/source/arm/crc32c_arm.c
+  APPEND
+  PROPERTY
+  COMPILE_OPTIONS
+  -mcrc
+)

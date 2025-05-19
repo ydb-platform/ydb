@@ -293,6 +293,15 @@ void TGranuleMeta::InsertPortionOnComplete(const TPortionDataAccessor& portion, 
     DataAccessorsManager->AddPortion(portion);
 }
 
+void TGranuleMeta::CommitPortionOnExecute(
+    NTabletFlatExecutor::TTransactionContext& txc, const TInsertWriteId insertWriteId, const TSnapshot& snapshot) const {
+    auto it = InsertedPortions.find(insertWriteId);
+    AFL_VERIFY(it != InsertedPortions.end());
+    it->second->SetCommitSnapshot(snapshot);
+    TDbWrapper wrapper(txc.DB, nullptr);
+    wrapper.WritePortion(*it->second);
+}
+
 void TGranuleMeta::CommitPortionOnComplete(const TInsertWriteId insertWriteId, IColumnEngine& engine) {
     auto it = InsertedPortions.find(insertWriteId);
     AFL_VERIFY(it != InsertedPortions.end());

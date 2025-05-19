@@ -4,13 +4,13 @@ namespace NYT::NSecurityClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TString RootAccountName("root");
+const std::string RootAccountName("root");
 const NYPath::TYPath RootAccountCypressPath("//sys/account_tree");
-const TString TmpAccountName("tmp");
-const TString SysAccountName("sys");
-const TString IntermediateAccountName("intermediate");
-const TString ChunkWiseAccountingMigrationAccountName("chunk_wise_accounting_migration");
-const TString SequoiaAccountName("sequoia");
+const std::string TmpAccountName("tmp");
+const std::string SysAccountName("sys");
+const std::string IntermediateAccountName("intermediate");
+const std::string ChunkWiseAccountingMigrationAccountName("chunk_wise_accounting_migration");
+const std::string SequoiaAccountName("sequoia");
 
 const TString GuestUserName("guest");
 const TString JobUserName("job");

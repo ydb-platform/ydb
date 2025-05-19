@@ -350,6 +350,9 @@ public:
     //! For ordered tables, prepends the current schema with |(tablet_index)| key column.
     TTableSchemaPtr WithTabletIndex() const;
 
+    //! Prepends the current schema without |(tablet_index, row_index)| columns.
+    TTableSchemaPtr ToCreate() const;
+
     //! Returns the current schema as-is.
     //! For ordered tables, prepends the current schema with |(tablet_index)| key column.
     TTableSchemaPtr ToVersionedWrite() const;

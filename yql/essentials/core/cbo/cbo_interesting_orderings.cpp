@@ -222,8 +222,8 @@ std::size_t TFDStorage::AddFD(
     TTableAliasMap* tableAliases
 ) {
     auto fd = TFunctionalDependency{
-        .AntecedentItems = {GetIdxByColumn(antecedentColumn, true, tableAliases)},
-        .ConsequentItem = GetIdxByColumn(consequentColumn, true, tableAliases),
+        .AntecedentItems = {static_cast<std::size_t>(GetIdxByColumn(antecedentColumn, true, tableAliases))},
+        .ConsequentItem = static_cast<std::size_t>(GetIdxByColumn(consequentColumn, true, tableAliases)),
         .Type = type,
         .AlwaysActive = alwaysActive
     };
@@ -397,7 +397,7 @@ std::vector<std::size_t> TFDStorage::ConvertColumnIntoIndexes(
     return items;
 }
 
-std::size_t TFDStorage::GetIdxByColumn(
+i64 TFDStorage::GetIdxByColumn(
     const TJoinColumn& column,
     bool createIfNotExists,
     TTableAliasMap* tableAliases

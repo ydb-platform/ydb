@@ -1421,10 +1421,12 @@ struct TEvBlobStorage {
         TString ErrorReason;
 
         enum EPlacementStatus {
-            PS_OK = 1,      // blob parts are placed according to fail model
-            PS_ERROR = 2,   // blob parts are definitely placed incorrectly or there are missing parts for sure
-            PS_UNKNOWN = 3, // status is unknown because of missing disks or network problems
-            PS_NOT_YET = 4, // there are missing parts but status may become OK after replication
+            PS_OK = 1,          // blob parts are placed according to fail model
+            PS_ERROR = 2,       // blob is lost/unrecoverable
+            PS_UNKNOWN = 3,     // status is unknown because of missing disks or network problems
+            PS_NOT_YET = 4,     // there are missing parts but status may become OK after replication
+            PS_RECOVERABLE = 5, // blob parts are definitely placed incorrectly or there are missing parts
+                                // but blob may be recovered
         };
         EPlacementStatus PlacementStatus;
 

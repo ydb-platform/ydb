@@ -30,6 +30,8 @@ class TMockClient
     : public IClient
 {
 public:
+    using TRange = std::pair<int, int>;
+
     const NTabletClient::ITableMountCachePtr& GetTableMountCache() override;
     void SetTableMountCache(NTabletClient::ITableMountCachePtr value);
 
@@ -486,7 +488,7 @@ public:
         (override));
 
     MOCK_METHOD(TFuture<std::vector<NTabletClient::TTabletActionId>>, BalanceTabletCells, (
-        const TString& tabletCellBundle,
+        const std::string& tabletCellBundle,
         const std::vector<NYPath::TYPath>& movableTables,
         const TBalanceTabletCellsOptions& options),
         (override));
@@ -543,6 +545,10 @@ public:
         const TPutFileToCacheOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<TGetCurrentUserResultPtr>, GetCurrentUser, (
+        const TGetCurrentUserOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<void>, AddMember, (
         const TString& group,
         const TString& member,
@@ -570,8 +576,8 @@ public:
         (override));
 
     MOCK_METHOD(TFuture<void>, TransferAccountResources, (
-        const TString& srcAccount,
-        const TString& dstAccount,
+        const std::string& srcAccount,
+        const std::string& dstAccount,
         NYTree::INodePtr resourceDelta,
         const TTransferAccountResourcesOptions& options),
         (override));
@@ -803,11 +809,11 @@ public:
         (override));
 
     MOCK_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (
-        const TString& bundleName,
+        const std::string& bundleName,
         const NBundleControllerClient::TGetBundleConfigOptions& options), (override));
 
     MOCK_METHOD(TFuture<void>, SetBundleConfig, (
-        const TString& bundleName,
+        const std::string& bundleName,
         const NBundleControllerClient::TBundleTargetConfigPtr& bundleConfig,
         const NBundleControllerClient::TSetBundleConfigOptions& options), (override));
 
@@ -891,13 +897,15 @@ public:
     MOCK_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (
         const TShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
-        const NTableClient::TTableReaderConfigPtr& config),
+        std::optional<TRange> writerIndexRange,
+        const TShuffleReaderOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (
         const TShuffleHandlePtr& shuffleHandle,
         const std::string& partitionColumn,
-        const NTableClient::TTableWriterConfigPtr& config),
+        std::optional<int> writerIndex,
+        const TShuffleWriterOptions& options),
         (override));
 
 private:

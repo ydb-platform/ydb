@@ -254,14 +254,6 @@ public:
     }
 
     void AddIndex(const TIndexChunk& chunk) {
-        ui32 chunkIdx = 0;
-        for (auto&& i : Indexes) {
-            if (i.GetIndexId() == chunk.GetIndexId()) {
-                AFL_VERIFY(chunkIdx == i.GetChunkIdx())("index_id", chunk.GetIndexId())("expected", chunkIdx)("real", i.GetChunkIdx());
-                ++chunkIdx;
-            }
-        }
-        AFL_VERIFY(chunkIdx == chunk.GetChunkIdx())("index_id", chunk.GetIndexId())("expected", chunkIdx)("real", chunk.GetChunkIdx());
         Indexes.emplace_back(chunk);
     }
 };

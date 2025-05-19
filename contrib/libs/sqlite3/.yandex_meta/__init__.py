@@ -25,6 +25,7 @@ sqlite3 = GNUMakeNixProject(
     disable_includes=[
         "sqlite3rtree.h",
         "sqlite_tcl.h",
+        "sys/cygwin.h",
         # if defined(SQLITE_ENABLE_ICU)
         "unicode/",
         "vxWorks.h",

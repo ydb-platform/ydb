@@ -12,6 +12,7 @@ TEST_SRCS(
     test_followers.py
     test_compatibility.py
     test_stress.py
+    test_rolling.py
 )
 
 SIZE(LARGE)
@@ -23,13 +24,14 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/s3_recipe/recipe.inc)
 DEPENDS(
     ydb/apps/ydb
     ydb/apps/ydbd
-    ydb/tests/library/compatibility
+    ydb/tests/library/compatibility/binaries
 )
 
 PEERDIR(
     contrib/python/boto3
     ydb/tests/library
     ydb/tests/stress/simple_queue/workload
+    ydb/tests/library/compatibility
 )
 
 END()

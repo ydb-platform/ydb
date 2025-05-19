@@ -86,8 +86,12 @@ struct TYtSettings {
     using TConstPtr = std::shared_ptr<const TYtSettings>;
 
     // should be static, because are used on earlier stages
+
+    // static per-cluster
+    NCommon::TConfSetting<TGUID, false, true> ExternalTx;
+
+    // static global
     NCommon::TConfSetting<TString, false> Auth;
-    NCommon::TConfSetting<TGUID, false> ExternalTx;
     NCommon::TConfSetting<TString, false> TmpFolder;
     NCommon::TConfSetting<TString, false> TablesTmpFolder;
     NCommon::TConfSetting<TDuration, false> TempTablesTtl;
@@ -124,6 +128,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ERuntimeClusterSelectionMode, false> RuntimeClusterSelection;
     NCommon::TConfSetting<TString, false> DefaultRuntimeCluster;
     NCommon::TConfSetting<bool, false> _ForbidSensitiveDataInOperationSpec;
+    NCommon::TConfSetting<NSize::TSize, false> _LocalTableContentLimit;
 
     // Job runtime
     NCommon::TConfSetting<TString, true> Pool;

@@ -433,11 +433,11 @@ TTransactionCache::TEntry::TPtr TTransactionCache::TryGetEntry(const TString& se
     return {};
 }
 
-TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TString& server, const TString& token,
+TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TString& cluster, const TString& server, const TString& token,
     const TMaybe<TString>& impersonationUser, const TSpecProvider& specProvider, const TYtSettings::TConstPtr& config, IMetricsRegistryPtr metrics)
 {
     TEntry::TPtr createdEntry = nullptr;
-    NYT::TTransactionId externalTx = config->ExternalTx.Get().GetOrElse(TGUID());
+    NYT::TTransactionId externalTx = config->ExternalTx.Get(cluster).GetOrElse(TGUID());
     with_lock(Lock_) {
         auto it = TxMap_.find(server);
         if (it != TxMap_.end()) {
@@ -447,6 +447,7 @@ TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TStrin
         TString tmpFolder = GetTablesTmpFolder(*config);
 
         createdEntry = MakeIntrusive<TEntry>();
+        createdEntry->Cluster = cluster;
         createdEntry->Server = server;
         auto createClientOptions = TCreateClientOptions().Token(token);
         if (impersonationUser) {
@@ -485,9 +486,9 @@ TTransactionCache::TEntry::TPtr TTransactionCache::GetOrCreateEntry(const TStrin
         TxMap_.emplace(server, createdEntry);
     }
     if (externalTx) {
-        YQL_CLOG(INFO, ProviderYt) << "Attached to external tx " << GetGuidAsString(externalTx);
+        YQL_CLOG(INFO, ProviderYt) << "Attached to external tx " << GetGuidAsString(externalTx) << " on cluster " << cluster;
     }
-    YQL_CLOG(INFO, ProviderYt) << "Created tx " << GetGuidAsString(createdEntry->Tx->GetId()) << " on " << server;
+    YQL_CLOG(INFO, ProviderYt) << "Created tx " << GetGuidAsString(createdEntry->Tx->GetId()) << " on " << server << " cluster " << cluster;
     return createdEntry;
 }
 

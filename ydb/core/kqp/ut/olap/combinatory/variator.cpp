@@ -7,34 +7,41 @@
 
 namespace NKikimr::NKqp {
 
-std::shared_ptr<ICommand> TScriptVariator::BuildCommand(TString command) {
-    if (command.StartsWith("BULK_UPSERT:")) {
-        command = command.substr(12);
-        auto result = std::make_shared<TBulkUpsertCommand>();
-        AFL_VERIFY(result->DeserializeFromString(command));
-        return result;
-    } else if (command.StartsWith("SCHEMA:")) {
-        command = command.substr(7);
-        return std::make_shared<TSchemaCommand>(command);
-    } else if (command.StartsWith("DATA:")) {
-        command = command.substr(5);
-        return std::make_shared<TDataCommand>(command);
-    } else if (command.StartsWith("READ:")) {
-        auto result = std::make_shared<TSelectCommand>();
-        AFL_VERIFY(result->DeserializeFromString(command));
-        return result;
-    } else if (command.StartsWith("WAIT_COMPACTION")) {
-        return std::make_shared<TWaitCompactionCommand>();
-    } else if (command.StartsWith("STOP_COMPACTION")) {
-        return std::make_shared<TStopCompactionCommand>();
-    } else if (command.StartsWith("ONE_COMPACTION")) {
-        return std::make_shared<TOneCompactionCommand>();
-    } else if (command.StartsWith("ONE_ACTUALIZATION")) {
-        return std::make_shared<TOneActualizationCommand>();
+std::shared_ptr<ICommand> TScriptVariator::BuildCommand(const TString command) {
+    std::shared_ptr<ICommand> result;
+    size_t pos = command.find(":");
+    if (pos == TString::npos) {
+        pos = command.find("\n");
+    }
+    if (pos == TString::npos) {
+        pos = command.size();
+    }
+    const TString name = Strip(command.substr(0, pos));
+    if (name == "BULK_UPSERT") {
+        result = std::make_shared<TBulkUpsertCommand>();
+    } else if (name == "SCHEMA") {
+        result = std::make_shared<TSchemaCommand>();
+    } else if (name == "DATA") {
+        result = std::make_shared<TDataCommand>();
+    } else if (name == "READ") {
+        result = std::make_shared<TSelectCommand>();
+    } else if (name == "WAIT_COMPACTION") {
+        result = std::make_shared<TWaitCompactionCommand>();
+    } else if (name == "STOP_COMPACTION") {
+        result = std::make_shared<TStopCompactionCommand>();
+    } else if (name == "ONE_COMPACTION") {
+        result = std::make_shared<TOneCompactionCommand>();
+    } else if (name == "ONE_ACTUALIZATION") {
+        result = std::make_shared<TOneActualizationCommand>();
     } else {
         AFL_VERIFY(false)("command", command);
         return nullptr;
     }
+    if (pos != command.size()) {
+        const TString arguments = Strip(command.substr(pos + 1));
+        result->DeserializeFromString(arguments).Validate();
+    }
+    return result;
 }
 
 void TScriptVariator::BuildScripts(const std::vector<std::vector<std::shared_ptr<ICommand>>>& commands, const ui32 currentLayer,

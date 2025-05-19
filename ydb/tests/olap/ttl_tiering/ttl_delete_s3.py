@@ -275,9 +275,7 @@ class TestDeleteS3Ttl(TllDeleteBase):
         logger.info(stmt)
         self.ydb_client.query(stmt)
 
-        if not self.wait_for(lambda: self.data_deleted_from_buckets('cold_delete', 'frozen_delete'), 300):
-            # raise Exception("not all data deleted") TODO FIXME after https://github.com/ydb-platform/ydb/issues/13594
-            pass
+        assert self.wait_for(lambda: self.data_deleted_from_buckets('cold_delete', 'frozen_delete'), 200), "not all data deleted"
 
 
 class TestDeleteTtl(TllDeleteBase):
@@ -400,5 +398,4 @@ class TestDeleteTtl(TllDeleteBase):
             # So we wait until some data appears in any bucket
             return cold_bucket_stat[0] != 0 or frozen_bucket_stat[0] != 0
 
-        if not self.wait_for(lambda: data_distributes_across_tiers(), 600):
-            raise Exception("Data eviction has not been started")
+        assert self.wait_for(lambda: data_distributes_across_tiers(), 200), "Data eviction has not been started"

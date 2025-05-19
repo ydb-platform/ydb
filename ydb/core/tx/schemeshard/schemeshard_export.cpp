@@ -73,22 +73,22 @@ namespace {
 
 } // anonymous
 
-void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportInfo::TPtr exportInfo) {
-    exprt.SetId(exportInfo->Id);
+void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportInfo& exportInfo) {
+    exprt.SetId(exportInfo.Id);
     exprt.SetStatus(Ydb::StatusIds::SUCCESS);
 
-    if (exportInfo->StartTime != TInstant::Zero()) {
-        *exprt.MutableStartTime() = SecondsToProtoTimeStamp(exportInfo->StartTime.Seconds());
+    if (exportInfo.StartTime != TInstant::Zero()) {
+        *exprt.MutableStartTime() = SecondsToProtoTimeStamp(exportInfo.StartTime.Seconds());
     }
-    if (exportInfo->EndTime != TInstant::Zero()) {
-        *exprt.MutableEndTime() = SecondsToProtoTimeStamp(exportInfo->EndTime.Seconds());
-    }
-
-    if (exportInfo->UserSID) {
-        exprt.SetUserSID(*exportInfo->UserSID);
+    if (exportInfo.EndTime != TInstant::Zero()) {
+        *exprt.MutableEndTime() = SecondsToProtoTimeStamp(exportInfo.EndTime.Seconds());
     }
 
-    switch (exportInfo->State) {
+    if (exportInfo.UserSID) {
+        exprt.SetUserSID(*exportInfo.UserSID);
+    }
+
+    switch (exportInfo.State) {
     case TExportInfo::EState::CreateExportDir:
     case TExportInfo::EState::CopyTables:
     case TExportInfo::EState::UploadExportMetadata:
@@ -98,10 +98,10 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
     case TExportInfo::EState::AutoDropping:
     case TExportInfo::EState::Transferring:
     case TExportInfo::EState::Done:
-        for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
-            FillItemProgress(this, *exportInfo, itemIdx, *exprt.AddItemsProgress());
+        for (ui32 itemIdx : xrange(exportInfo.Items.size())) {
+            FillItemProgress(this, exportInfo, itemIdx, *exprt.AddItemsProgress());
         }
-        exprt.SetProgress(exportInfo->IsDone()
+        exprt.SetProgress(exportInfo.IsDone()
             ? Ydb::Export::ExportProgress::PROGRESS_DONE
             : Ydb::Export::ExportProgress::PROGRESS_TRANSFER_DATA);
         break;
@@ -111,13 +111,13 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
         break;
 
     case TExportInfo::EState::Cancellation:
-        FillIssues(exprt, *exportInfo);
+        FillIssues(exprt, exportInfo);
         exprt.SetProgress(Ydb::Export::ExportProgress::PROGRESS_CANCELLATION);
         break;
 
     case TExportInfo::EState::Cancelled:
         exprt.SetStatus(Ydb::StatusIds::CANCELLED);
-        FillIssues(exprt, *exportInfo);
+        FillIssues(exprt, exportInfo);
         exprt.SetProgress(Ydb::Export::ExportProgress::PROGRESS_CANCELLED);
         break;
 
@@ -127,14 +127,14 @@ void TSchemeShard::FromXxportInfo(NKikimrExport::TExport& exprt, const TExportIn
         break;
     }
 
-    switch (exportInfo->Kind) {
+    switch (exportInfo.Kind) {
     case TExportInfo::EKind::YT:
-        Y_ABORT_UNLESS(exprt.MutableExportToYtSettings()->ParseFromString(exportInfo->Settings));
+        Y_ABORT_UNLESS(exprt.MutableExportToYtSettings()->ParseFromString(exportInfo.Settings));
         exprt.MutableExportToYtSettings()->clear_token();
         break;
 
     case TExportInfo::EKind::S3:
-        Y_ABORT_UNLESS(exprt.MutableExportToS3Settings()->ParseFromString(exportInfo->Settings));
+        Y_ABORT_UNLESS(exprt.MutableExportToS3Settings()->ParseFromString(exportInfo.Settings));
         exprt.MutableExportToS3Settings()->clear_access_key();
         exprt.MutableExportToS3Settings()->clear_secret_key();
         break;

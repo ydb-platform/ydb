@@ -128,7 +128,7 @@ private:
 class TPartitionLocation {
 public:
     TPartitionLocation(const Ydb::Topic::PartitionLocation& partitionLocation);
-    TPartitionLocation(i32 nodeId, i64 generation);
+    TPartitionLocation(std::int32_t nodeId, std::int64_t generation);
     int32_t GetNodeId() const;
     int64_t GetGeneration() const;
 

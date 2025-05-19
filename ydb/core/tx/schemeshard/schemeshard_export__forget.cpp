@@ -72,13 +72,13 @@ struct TSchemeShard::TExport::TTxForget: public TSchemeShard::TXxport::TTxBase {
             }
 
             Self->Exports.erase(exportInfo->Id);
-            Self->PersistRemoveExport(db, exportInfo);
+            Self->PersistRemoveExport(db, *exportInfo);
         } else {
             LOG_D("TExport::TTxForget, dropping export tables"
                 << ", info: " << exportInfo->ToString()
             );
-            
-            PrepareDropping(Self, exportInfo, db);
+
+            PrepareDropping(Self, *exportInfo, db);
 
             Progress = true;
         }

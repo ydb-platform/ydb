@@ -41,12 +41,22 @@ BELONGS ya.make
         Match type      : TAG
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
+        include/aws/checksums/checksums.h [5:5]
         include/aws/checksums/crc.h [5:5]
         include/aws/checksums/exports.h [5:5]
-        include/aws/checksums/private/crc_priv.h [5:5]
-        source/crc.c [3:3]
+        include/aws/checksums/private/crc32_priv.h [5:5]
+        include/aws/checksums/private/crc64_priv.h [6:6]
+        include/aws/checksums/private/crc_util.h [5:5]
+        source/arm/crc32c_arm.c [3:3]
+        source/checksums.c [3:3]
+        source/crc32.c [3:3]
+        source/crc64.c [3:3]
+        source/crc64_sw.c [3:3]
         source/crc_sw.c [3:3]
         source/intel/asm/crc32c_sse42_asm.c [3:3]
+        source/intel/intrin/crc32c_sse42_avx512.c [3:3]
+        source/intel/intrin/crc64nvme_avx512.c [3:3]
+        source/intel/intrin/crc64nvme_clmul.c [3:3]
 
 KEEP     Apache-2.0           dc7f21ccff0f672f2a7cd6f412ae627d
 BELONGS ya.make

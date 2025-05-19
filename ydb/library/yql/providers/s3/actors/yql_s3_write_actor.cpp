@@ -590,8 +590,8 @@ private:
 
     i64 GetUsedSpace(bool storedOnly) const {
         return std::accumulate(FileWriteActors.cbegin(), FileWriteActors.cend(), i64(0), [storedOnly](i64 sum, const std::pair<const TString, std::vector<TS3FileWriteActor*>>& item) {
-            return sum += std::accumulate(item.second.cbegin(), item.second.cend(), i64(0), [storedOnly](i64 sum, TS3FileWriteActor* actor) {
-                return sum += actor->GetMemoryUsed(storedOnly);
+            return sum + std::accumulate(item.second.cbegin(), item.second.cend(), i64(0), [storedOnly](i64 sum, TS3FileWriteActor* actor) {
+                return sum + actor->GetMemoryUsed(storedOnly);
             });
         });
     }

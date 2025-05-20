@@ -356,12 +356,7 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
 
     std::optional<TSnapshot> ss;
     if (Portion->GetPortionType() == EPortionType::Written) {
-        const auto* portion = static_cast<const TWrittenPortionInfo*>(Portion.get());
-        if (portion->HasCommitSnapshot()) {
-            ss = portion->GetCommitSnapshotVerified();
-        } else if (GetContext()->GetReadMetadata()->IsMyUncommitted(portion->GetInsertWriteId())) {
-            ss = GetContext()->GetReadMetadata()->GetRequestSnapshot();
-        }
+        ss = GetDataSnapshot();
     }
 
     auto batch = GetStageData()
@@ -491,6 +486,23 @@ bool TPortionDataSource::DoAddTxConflict() {
         }
     }
     return false;
+}
+
+std::optional<TSnapshot> TPortionDataSource::GetDataSnapshot() const {
+    switch (Portion->GetPortionType()) {
+        case EPortionType::Written: {
+            const auto* portion = static_cast<const TWrittenPortionInfo*>(Portion.get());
+            if (portion->HasCommitSnapshot()) {
+                return portion->GetCommitSnapshotVerified();
+            } else if (GetContext()->GetReadMetadata()->IsMyUncommitted(portion->GetInsertWriteId())) {
+                return GetContext()->GetReadMetadata()->GetRequestSnapshot();
+            } else {
+                return std::nullopt;
+            }
+        } break;
+        case EPortionType::Compacted:
+            return std::nullopt;
+    }
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

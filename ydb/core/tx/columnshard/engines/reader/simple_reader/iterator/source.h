@@ -455,6 +455,8 @@ public:
         return Portion;
     }
 
+    virtual std::optional<TSnapshot> GetDataSnapshot() const override;
+
     TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context);
 };
 

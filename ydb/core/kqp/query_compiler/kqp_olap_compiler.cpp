@@ -589,18 +589,18 @@ const TTypedColumn CompileExists(const TExprBase& arg, TKqpOlapCompileContext& c
 TTypedColumn CompileYqlKernelScalarApply(const TKqpOlapApply& apply, TKqpOlapCompileContext& ctx) {
     std::vector<ui64> ids;
     TTypeAnnotationNode::TListType argTypes;
-    ids.reserve(apply.Columns().Size());
-    argTypes.reserve(apply.Columns().Size());
-    for (const auto& member : apply.Columns()) {
-        const auto arg = GetOrCreateColumnIdAndType(member, ctx);
-        ids.emplace_back(arg.Id);
-        argTypes.emplace_back(arg.Type);
-    }
-
-    for(const auto& param: apply.Parameters()) {
-        const auto& arg = GetOrCreateColumnIdAndType(param, ctx);
-        ids.emplace_back(arg.Id);
-        argTypes.emplace_back(arg.Type);
+    ids.reserve(apply.Args().Size());
+    argTypes.reserve(apply.Args().Size());
+    for (const auto& arg : apply.Args()) {
+        if (const auto& column = arg.Maybe<TKqpOlapApplyColumnArg>()) {
+            const auto ssaCol = GetOrCreateColumnIdAndType(column.Cast().ColumnName(), ctx);
+            ids.emplace_back(ssaCol.Id);
+            argTypes.emplace_back(ssaCol.Type);
+        } else {
+            const auto& ssaCol = GetOrCreateColumnIdAndType(arg, ctx);
+            ids.emplace_back(ssaCol.Id);
+            argTypes.emplace_back(ssaCol.Type);
+        }
     }
 
     auto *const command = ctx.CreateAssignCmd();

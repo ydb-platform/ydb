@@ -1142,6 +1142,7 @@ Y_UNIT_TEST_SUITE(TResourceBrokerConfig) {
                 }
             }
             Y_ASSERT(false);
+            return ui64(0);
         };
 
         // see https://github.com/ydb-platform/ydb/issues/18513

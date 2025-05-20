@@ -5,7 +5,11 @@ SRCS(
     runner.cpp
     task_queue.cpp
     terminal.cpp
+    transaction_delivery.cpp
     transaction_neworder.cpp
+    transaction_orderstatus.cpp
+    transaction_payment.cpp
+    transaction_stocklevel.cpp
 )
 
 PEERDIR(

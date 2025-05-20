@@ -1,8 +1,13 @@
+#include "test_helpers.h"
+
+
 #include <ydb/library/workload/tpcc/task_queue.h>
+#include <ydb/library/workload/tpcc/terminal.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NYdb::NTPCC;
+using namespace NYdb::NTPCC::NTest;
 
 namespace std {
     template<typename T, typename... Args>
@@ -18,9 +23,9 @@ namespace std {
 
 Y_UNIT_TEST_SUITE(TTaskTest) {
 
-    TTransactionTask MakeInnerTask(int& flag) {
+    TTestTask MakeInnerTask(int& flag) {
         flag = 1;
-        co_return TTransactionResult{};
+        co_return TTestResult{};
     }
 
     TTerminalTask MakeOuterTask(int& outerState, int& innerState) {
@@ -42,9 +47,9 @@ Y_UNIT_TEST_SUITE(TTaskTest) {
         task.await_resume(); // should not throw
     }
 
-    TTransactionTask MakeInnerTaskWithException() {
+    TTestTask MakeInnerTaskWithException() {
         throw std::runtime_error("Inner failure");
-        co_return TTransactionResult{};
+        co_return TTestResult{};
     }
 
     TTerminalTask MakeOuterThatAwaitsInnerException() {
@@ -73,8 +78,8 @@ Y_UNIT_TEST_SUITE(TTaskTest) {
 
     TTerminalTask MakeDeeplyNested(int& counter) {
         ++counter;
-        co_await TTask<TTransactionResult>{[]() -> TTask<TTransactionResult> {
-            co_return TTransactionResult{};
+        co_await TTask<TTestResult>{[]() -> TTask<TTestResult> {
+            co_return TTestResult{};
         }()};
         ++counter;
         co_return;

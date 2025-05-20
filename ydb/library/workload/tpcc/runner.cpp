@@ -12,12 +12,12 @@
 #include <library/cpp/logger/log.h>
 
 #include <util/system/info.h>
-#include <util/system/spinlock.h>
 
 #include <atomic>
 #include <stop_token>
 #include <thread>
 #include <vector>
+#include <iomanip>
 
 namespace NYdb::NTPCC {
 
@@ -49,20 +49,22 @@ public:
 private:
     void Join();
 
+    void DumpFinalStats();
+
 private:
     TRunConfig Config;
 
     std::shared_ptr<TLog> Log;
 
-    Clock::time_point StartTime;
-
     std::stop_source TerminalsStopSource;
     std::stop_source ThreadsStopSource;
 
     std::atomic<bool> StopWarmup{false};
-    std::vector<TTerminal> Terminals;
+    std::vector<std::unique_ptr<TTerminal>> Terminals;
 
     std::unique_ptr<ITaskQueue> TaskQueue;
+
+    Clock::time_point LastStatsDump;
 };
 
 //-----------------------------------------------------------------------------
@@ -81,7 +83,7 @@ TPCCRunner::TPCCRunner(const TRunConfig& config)
     if (cpuCount == 0) {
         // dump sanity check
         std::cerr << "No CPUs" << std::endl;
-        std::terminate();
+        std::exit(1);
     }
 
     const size_t networkThreadCount = NConsoleClient::TYdbCommand::GetNetworkThreadNum(Config.ConnectionConfig);
@@ -107,8 +109,10 @@ TPCCRunner::TPCCRunner(const TRunConfig& config)
 
     TaskQueue = CreateTaskQueue(
         treadCount,
+        Config.MaxInflight,
         maxTerminalsPerThread,
         maxReadyTransactions,
+        TerminalsStopSource.get_token(), // awakes sleeping terminals, when stop requested
         Log);
 
     LOG_I("Creating " << terminalsCount << " terminals and " << treadCount
@@ -117,13 +121,19 @@ TPCCRunner::TPCCRunner(const TRunConfig& config)
     Terminals.reserve(terminalsCount);
     for (size_t i = 0; i < terminalsCount; ++i) {
         // note, that terminal adds itself to ready terminals
-        Terminals.emplace_back(
+        size_t warehouseID = i % TERMINALS_PER_WAREHOUSE + 1;
+        auto terminalPtr = std::make_unique<TTerminal>(
             i,
+            warehouseID,
+            Config.WarehouseCount,
             *TaskQueue,
             drivers[i % drivers.size()],
+            Config.Path,
             TerminalsStopSource.get_token(),
             StopWarmup,
             Log);
+
+        Terminals.emplace_back(std::move(terminalPtr));
     }
 }
 
@@ -141,7 +151,7 @@ void TPCCRunner::Join() {
     TerminalsStopSource.request_stop();
     for (const auto& terminal: Terminals) {
         // terminals should wait for their query coroutines to finish
-        while (!terminal.IsDone()) {
+        while (!terminal->IsDone()) {
             std::this_thread::sleep_for(std::chrono::microseconds(100));
         }
     }
@@ -157,15 +167,22 @@ void TPCCRunner::RunSync() {
 
     TaskQueue->Run();
 
-    // warmup loop
-    // TODO
-    //LOG_D("Starting ")
-    //while (!StopByInterrupt.stop_requested()) {
-    //}
+    // TODO: convert to minutes when needed
+    LOG_D("Starting warmup");
+
+    auto warmupStartTs = Clock::now();
+    auto warmupStopDeadline = warmupStartTs + std::chrono::seconds(Config.WarmupSeconds);
+    while (!StopByInterrupt.stop_requested()) {
+        if (now >= warmupStopDeadline) {
+            break;
+        }
+        std::this_thread::sleep_for(SleepMsEveryIterationMainLoop);
+        now = Clock::now();
+    }
 
     StopWarmup.store(true, std::memory_order_relaxed);
 
-    // TODO: convert to minutes
+    // TODO: convert to minutes when needed
     LOG_I("Measuring during " << Config.RunSeconds << " seconds");
 
     auto startTs = Clock::now();
@@ -180,6 +197,60 @@ void TPCCRunner::RunSync() {
 
     LOG_D("Finished measurements");
     Join();
+
+    DumpFinalStats();
+}
+
+void TPCCRunner::DumpFinalStats() {
+    TTerminalStats stats;
+
+    // Collect stats from all terminals
+    for (const auto& terminal : Terminals) {
+        terminal->CollectStats(stats);
+    }
+
+    // Calculate total transactions
+    size_t totalOK = 0;
+    size_t totalFailed = 0;
+    size_t totalUserAborted = 0;
+
+    // Print header
+    std::cout << "\nTransaction Statistics:\n";
+    std::cout << "----------------------\n";
+    std::cout << std::setw(15) << "Transaction"
+              << std::setw(10) << "OK"
+              << std::setw(10) << "Failed"
+              << std::setw(15) << "User Aborted"
+              << std::setw(20) << "Latency p90 (ms)"
+              << std::endl;
+    std::cout << std::string(65, '-') << std::endl;
+
+    // Print stats for each transaction type
+    const char* txNames[] = {"NewOrder", "Delivery", "OrderStatus", "Payment", "StockLevel"};
+    for (size_t i = 0; i < 5; ++i) {
+        auto type = static_cast<TTerminalStats::ETransactionType>(i);
+        const auto& txStats = stats.GetStats(type);
+
+        totalOK += txStats.OK;
+        totalFailed += txStats.Failed;
+        totalUserAborted += txStats.UserAborted;
+
+        std::cout << std::setw(15) << txNames[i]
+                  << std::setw(10) << txStats.OK
+                  << std::setw(10) << txStats.Failed
+                  << std::setw(15) << txStats.UserAborted
+                  << std::setw(15) << txStats.LatencyHistogramMs.GetValueAtPercentile(90)
+                  << std::endl;
+    }
+
+    // Print totals
+    std::cout << std::string(65, '-') << std::endl;
+    std::cout << std::setw(15) << "TOTAL"
+              << std::setw(10) << totalOK
+              << std::setw(10) << totalFailed
+              << std::setw(15) << totalUserAborted
+              << std::endl;
+    std::cout << std::string(65, '-') << std::endl;
 }
 
 } // anonymous

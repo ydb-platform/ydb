@@ -45,7 +45,7 @@ public:
         return Size;
     }
 
-    bool IsEmpty() const {
+    bool Empty() const {
         return Size == 0;
     }
 

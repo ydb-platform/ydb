@@ -508,7 +508,12 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             UNIT_ASSERT_VALUES_EQUAL(actual.CompletedToken.Content, "pr");
         }
         {
-            TVector<TCandidate> expected = {};
+            TVector<TCandidate> expected = {
+                {FolderName, ".sys/"},
+                {FolderName, "local/"},
+                {FolderName, "prod/"},
+                {FolderName, "test/"},
+            };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM `#"), expected);
         }
         {
@@ -561,6 +566,26 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             TCompletion actual = engine->Complete(SharpedInput(input));
             UNIT_ASSERT_VALUES_EQUAL(actual.Candidates, expected);
             UNIT_ASSERT_VALUES_EQUAL(actual.CompletedToken.Content, "ser");
+        }
+    }
+
+    Y_UNIT_TEST(SelectFromUnclosedIdQuoted) {
+        auto engine = MakeSqlCompletionEngineUT();
+        {
+            TVector<TCandidate> expected = {
+                {FolderName, ".sys/"},
+                {FolderName, "local/"},
+                {FolderName, "prod/"},
+                {FolderName, "test/"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM `#"), expected);
+        }
+        {
+            TVector<TCandidate> expected = {
+                {TableName, "meta"},
+                {FolderName, "service/"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "SELECT * FROM `test/"), expected);
         }
     }
 

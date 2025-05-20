@@ -57,9 +57,18 @@ namespace NSQLComplete {
         }
 
         TLocalSyntaxContext Analyze(TCompletionInput input) override {
+            TMaterializedInput materialized = {
+                .Text = TString(input.Text),
+                .CursorPosition = input.CursorPosition,
+            };
+
+            // - ";" is for a correct stetement split
+            // - "-- `" is for a ilformed ID_QUOTED recovery
+            materialized.Text += "; -- `";
+
             TCompletionInput statement;
             size_t statement_position;
-            if (!GetStatement(Lexer_, input, statement, statement_position)) {
+            if (!GetStatement(Lexer_, materialized, statement, statement_position)) {
                 return {};
             }
 

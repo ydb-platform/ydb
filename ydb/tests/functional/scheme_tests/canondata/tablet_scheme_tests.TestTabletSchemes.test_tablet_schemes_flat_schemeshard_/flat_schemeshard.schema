@@ -6225,7 +6225,7 @@
             },
             {
                 "ColumnId": 6,
-                "ColumnName": "Scheme",
+                "ColumnName": "Table",
                 "ColumnType": "String"
             },
             {

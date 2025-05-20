@@ -16,9 +16,10 @@ TConclusionStatus TSelectCommand::DoExecute(TKikimrRunner& kikimr) {
     const i64 headerApproveStart = controller->GetHeadersApprovedOnSelect().Val();
     const i64 headerNoDataStart = controller->GetHeadersSkippedNoData().Val();
 
-    Cerr << "EXECUTE: " << Command << Endl;
+    const auto command = "PRAGMA OptimizeSimpleILIKE; PRAGMA AnsiLIke;" + Command;
+    Cerr << "EXECUTE: " << command << Endl;
     auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
-    auto it = kikimr.GetQueryClient().StreamExecuteQuery(Command, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+    auto it = kikimr.GetQueryClient().StreamExecuteQuery(command, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), NYdb::EStatus::SUCCESS, it.GetIssues().ToString());
     TString output = StreamResultToYson(it);
     if (Compare) {

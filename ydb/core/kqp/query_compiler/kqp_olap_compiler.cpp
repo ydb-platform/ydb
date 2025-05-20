@@ -608,6 +608,7 @@ TTypedColumn CompileYqlKernelScalarApply(const TKqpOlapApply& apply, TKqpOlapCom
     const auto idx = ctx.GetKernelRequestBuilder().AddScalarApply(apply.Lambda().Ref(), argTypes, ctx.ExprCtx());
     function->SetKernelIdx(idx);
     function->SetFunctionType(TProgram::YQL_KERNEL);
+    function->SetKernelName(apply.KernelName().StringValue());
     std::for_each(ids.cbegin(), ids.cend(), [function] (ui64 id) { function->AddArguments()->SetId(id); });
     return {command->GetColumn().GetId(), ctx.ExprCtx().MakeType<TBlockExprType>(apply.Lambda().Body().Ref().GetTypeAnn())};
 }

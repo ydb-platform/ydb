@@ -2,6 +2,7 @@
 
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
+#include <arrow/api.h>
 #include <arrow/table.h>
 #include <arrow/csv/options.h>
 #include <arrow/csv/reader.h>
@@ -34,107 +35,185 @@ bool ShouldBeOptional(const arrow::DataType& type, std::shared_ptr<FormatConfig>
     }
 }
 
-std::variant<ArrowFields, TString> InferCsvTypes(std::shared_ptr<arrow::io::RandomAccessFile> file, std::shared_ptr<CsvConfig> config) {
-    int64_t fileSize;
-    if (auto sizeStatus = file->GetSize().Value(&fileSize); !sizeStatus.ok()) {
-        return TStringBuilder{} << "coudn't get file size: " << sizeStatus.ToString();
-    }
-
-    std::shared_ptr<arrow::csv::TableReader> reader;
-
-    config->ReadOpts.use_threads = false;
-    config->ReadOpts.block_size = static_cast<int32_t>(fileSize);
-    auto readerStatus = arrow::csv::TableReader::Make(
-        arrow::io::default_io_context(),
-        std::move(file),
-        config->ReadOpts,
-        config->ParseOpts,
-        config->ConvOpts
-    )
-    .Value(&reader);
-
-    if (!readerStatus.ok()) {
-        return TString{TStringBuilder{} << "couldn't open csv/tsv file, check format and compression parameters: " << readerStatus.ToString()};
-    }
-
-    std::shared_ptr<arrow::Table> table;
-    auto tableRes = reader->Read().Value(&table);
-
-    if (!tableRes.ok()) {
-        return TStringBuilder{} << "couldn't parse csv/tsv file, check format and compression parameters: " << tableRes.ToString();
-    }
-
-    return table->fields();
+bool IsFloatingPoint(arrow::Type::type id) {
+    return id == arrow::Type::FLOAT || id == arrow::Type::DOUBLE || id == arrow::Type::HALF_FLOAT;
 }
 
-std::variant<ArrowFields, TString> InferParquetTypes(std::shared_ptr<arrow::io::RandomAccessFile> file) {
+bool IsInteger(arrow::Type::type id) {
+    return id >= arrow::Type::UINT8 && id <= arrow::Type::INT64;
+}
+
+std::shared_ptr<arrow::DataType> GetCommonDataType(const std::shared_ptr<arrow::DataType>& type1,
+                                                   const std::shared_ptr<arrow::DataType>& type2) {
+    if (type1->Equals(*type2)) {
+        return type1;
+    }
+    if (IsFloatingPoint(type1->id()) || IsFloatingPoint(type2->id())) {
+        return arrow::float64();
+    }
+    if (IsInteger(type1->id()) && IsInteger(type2->id())) {
+        return arrow::int64();
+    }
+
+    return arrow::utf8();
+}
+
+std::shared_ptr<arrow::Schema> InferCommonSchema(const std::vector<std::shared_ptr<arrow::Schema>>& schemas) {
+    if (schemas.empty()) {
+        return nullptr;
+    }
+    if (schemas.size() == 1) {
+        return schemas[0];
+    }
+
+    auto common_fields = schemas[0]->fields();
+
+    for (size_t i = 1; i < schemas.size(); ++i) {
+        auto schema = schemas[i];
+        for (int j = 0; j < schema->num_fields(); ++j) {
+            auto currentField = common_fields[j];
+            auto newField = schema->field(j);
+            if (currentField->Equals(newField)) {
+                continue;
+            }
+
+            auto common_type = GetCommonDataType(currentField->type(), newField->type());
+            bool isNullable = currentField->nullable() || schema->field(j)->nullable();
+            common_fields[j] = arrow::field(common_fields[j]->name(), common_type, isNullable);
+        }
+    }
+
+    return std::make_shared<arrow::Schema>(common_fields);
+}
+
+std::shared_ptr<arrow::Schema> GetSchemaFromCsv(
+    const std::shared_ptr<arrow::io::InputStream>& input,
+    std::shared_ptr<CsvConfig> config) {
+
+    config->ReadOpts.use_threads = false;
+    config->ReadOpts.block_size = 1 << 20;
+
+    auto result = arrow::csv::StreamingReader::Make(
+        arrow::io::default_io_context(), input, config->ReadOpts, config->ParseOpts, config->ConvOpts);
+    if (!result.ok()) {
+        return nullptr;
+    }
+
+    auto streaming_reader = result.ValueOrDie();
+    int64_t rows_read = 0;
+    std::shared_ptr<arrow::Schema> schema = nullptr;
+
+    while (rows_read < config->RowsToAnalyze || config->RowsToAnalyze == 0) {
+        auto batch_result = streaming_reader->Next();
+        if (!batch_result.ok() || !(*batch_result)) {
+            break; // No more data
+        }
+
+        auto batch = *batch_result;
+        rows_read += batch->num_rows();
+
+        if (!schema) {
+            schema = batch->schema(); // TODO: merge
+        }
+    }
+
+    return schema;
+}
+
+std::shared_ptr<arrow::Schema> GetSchemaFromJson(const std::shared_ptr<arrow::io::InputStream>& input, std::shared_ptr<JsonConfig> config) {
+    std::shared_ptr<arrow::json::TableReader> reader;
+    arrow::json::ReadOptions readOptions = arrow::json::ReadOptions::Defaults();
+    readOptions.use_threads = false;
+    if (auto random_file = std::dynamic_pointer_cast<arrow::io::RandomAccessFile>(input)) {
+        int64_t file_size;
+        auto size_status = random_file->GetSize().Value(&file_size);
+        if (size_status.ok()) {
+            readOptions.block_size = static_cast<int32_t>(file_size);
+        }
+    }
+    auto result = arrow::json::TableReader::Make(arrow::default_memory_pool(), input, readOptions, config->ParseOpts).Value(&reader);
+    if (!result.ok()) {
+        return nullptr;
+    }
+    auto tableResult = reader->Read();
+    if (!tableResult.ok()) {
+        return nullptr;
+    }
+    return tableResult.ValueOrDie()->schema();
+}
+
+std::shared_ptr<arrow::Schema> GetSchemaFromParquet(const std::shared_ptr<arrow::io::InputStream>& input) {
+    auto file = std::dynamic_pointer_cast<arrow::io::RandomAccessFile>(input);
+    if (!file) {
+        return nullptr;
+    }
+
     parquet::arrow::FileReaderBuilder builder;
     builder.properties(parquet::ArrowReaderProperties(false));
-    auto openStatus = builder.Open(std::move(file));
+    auto openStatus = builder.Open(file);
     if (!openStatus.ok()) {
-        return TStringBuilder{} << "couldn't open parquet file, check format parameters: " << openStatus.ToString();
+        return nullptr;
     }
 
     std::unique_ptr<parquet::arrow::FileReader> reader;
     auto readerStatus = builder.Build(&reader);
     if (!readerStatus.ok()) {
-        return TStringBuilder{} << "couldn't read parquet file, check format parameters: " << readerStatus.ToString();
+        return nullptr;
     }
 
     std::shared_ptr<arrow::Schema> schema;
     auto schemaRes = reader->GetSchema(&schema);
     if (!schemaRes.ok()) {
-        return TStringBuilder{} << "couldn't parse parquet file, check format parameters: " << schemaRes.ToString();
+        return nullptr;
     }
 
-    return schema->fields();
-}
-
-std::variant<ArrowFields, TString> InferJsonTypes(std::shared_ptr<arrow::io::RandomAccessFile> file, std::shared_ptr<JsonConfig> config) {
-    int64_t fileSize;
-    if (auto sizeStatus = file->GetSize().Value(&fileSize); !sizeStatus.ok()) {
-        return TStringBuilder{} << "coudn't get file size: " << sizeStatus.ToString();
-    }
-
-    std::shared_ptr<arrow::json::TableReader> reader;
-    auto readerStatus = arrow::json::TableReader::Make(
-        arrow::default_memory_pool(),
-        std::move(file),
-        arrow::json::ReadOptions{.use_threads = false, .block_size = static_cast<int32_t>(fileSize)},
-        config->ParseOpts
-    ).Value(&reader);
-
-    if (!readerStatus.ok()) {
-        return TString{TStringBuilder{} << "couldn't open json file, check format and compression parameters: " << readerStatus.ToString()};
-    }
-
-    std::shared_ptr<arrow::Table> table;
-    auto tableRes = reader->Read().Value(&table);
-
-    if (!tableRes.ok()) {
-        return TString{TStringBuilder{} << "couldn't parse json file, check format and compression parameters: " << tableRes.ToString()};
-    }
-
-    return table->fields();
+    return schema;
 }
 
 } // namespace
 
-std::variant<ArrowFields, TString> InferTypes(std::shared_ptr<arrow::io::RandomAccessFile> file, std::shared_ptr<FormatConfig> config) {
-    switch (config->Format) {
-    case EFileFormat::CsvWithNames:
-        return InferCsvTypes(std::move(file), std::dynamic_pointer_cast<CsvConfig>(config));
-    case EFileFormat::TsvWithNames:
-        return InferCsvTypes(std::move(file), std::dynamic_pointer_cast<TsvConfig>(config));
-    case EFileFormat::Parquet:
-        return InferParquetTypes(std::move(file));
-    case EFileFormat::JsonEachRow:
-    case EFileFormat::JsonList:
-        return InferJsonTypes(std::move(file), std::dynamic_pointer_cast<JsonConfig>(config));
-    case EFileFormat::Undefined:
-    default:
-        return TStringBuilder{} << "unexpected format: " << ConvertFileFormat(config->Format);
+std::variant<ArrowFields, TString> InferTypes(const std::vector<std::shared_ptr<arrow::io::InputStream>>& inputs, std::shared_ptr<FormatConfig> config) {
+    if (inputs.empty()) {
+        return TString{"no input files"};
     }
+
+    std::vector<std::shared_ptr<arrow::Schema>> schemas;
+
+    for (auto& input : inputs) {
+        std::shared_ptr<arrow::Schema> schema;
+
+        switch (config->Format) {
+        case EFileFormat::CsvWithNames:
+        case EFileFormat::TsvWithNames:
+            schema = GetSchemaFromCsv(input, std::dynamic_pointer_cast<CsvConfig>(config));
+            break;
+
+        case EFileFormat::Parquet:
+            schema = GetSchemaFromParquet(input);
+            break;
+        
+        case EFileFormat::JsonEachRow:
+        case EFileFormat::JsonList:
+            schema = GetSchemaFromJson(input, std::dynamic_pointer_cast<JsonConfig>(config));
+            break;
+
+        default:
+            return TStringBuilder{} << "unexpected format: " << ConvertFileFormat(config->Format);
+        }
+
+        if (!schema) {
+            return TString{"Failed to read schema from input stream."};
+        }
+
+        schemas.push_back(schema);
+    }
+
+    auto commonSchema = InferCommonSchema(schemas);
+    if (!commonSchema) {
+        return TStringBuilder{} << "couldn't infer common schema";
+    }
+
+    return commonSchema->fields();
 }
 
 bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type, std::shared_ptr<FormatConfig> config) {
@@ -246,4 +325,4 @@ bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type, s
     return false;
 }
 
-} // namespace NYdb 
+} // namespace NYdb::NArrowInference

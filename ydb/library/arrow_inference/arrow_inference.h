@@ -17,7 +17,7 @@ namespace NYdb::NArrowInference {
 using ArrowField = std::shared_ptr<arrow::Field>;
 using ArrowFields = std::vector<ArrowField>;
 
-std::variant<ArrowFields, TString> InferTypes(std::shared_ptr<arrow::io::RandomAccessFile> file, std::shared_ptr<FormatConfig> config);
+std::variant<ArrowFields, TString> InferTypes(const std::vector<std::shared_ptr<arrow::io::InputStream>>& inputs, std::shared_ptr<FormatConfig> config);
 bool ArrowToYdbType(Ydb::Type& maybeOptionalType, const arrow::DataType& type, std::shared_ptr<FormatConfig> config);
 
 } // namespace NYdb 

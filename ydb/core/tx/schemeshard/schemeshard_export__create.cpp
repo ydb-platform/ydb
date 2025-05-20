@@ -73,7 +73,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
         if (uid) {
             if (auto it = Self->ExportsByUid.find(uid); it != Self->ExportsByUid.end()) {
                 if (IsSameDomain(it->second, request.GetDatabaseName())) {
-                    Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), it->second);
+                    Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), *it->second);
                     return Reply(std::move(response));
                 } else {
                     return Reply(
@@ -170,7 +170,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             Self->ExportsByUid[uid] = exportInfo;
         }
 
-        Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), exportInfo);
+        Self->FromXxportInfo(*response->Record.MutableResponse()->MutableEntry(), *exportInfo);
 
         Progress = true;
         return Reply(std::move(response));

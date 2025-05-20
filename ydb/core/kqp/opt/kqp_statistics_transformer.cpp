@@ -371,7 +371,7 @@ void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnn
  */
 void InferStatisticsForIndexLookup(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
     auto inputNode = TExprBase(input);
-    auto lookupIndex = inputNode.Cast<TKqlLookupIndexBase>();
+    auto lookupIndex = inputNode.Cast<TKqlStreamLookupIndex>();
 
     auto inputStats = typeCtx->GetStats(lookupIndex.LookupKeys().Raw());
     if (!inputStats) {
@@ -1073,7 +1073,7 @@ bool TKqpStatisticsTransformer::BeforeLambdasSpecific(const TExprNode::TPtr& inp
     else if(TKqlReadTableBase::Match(input.Get()) || TKqlReadTableRangesBase::Match(input.Get())){
         InferStatisticsForReadTable(input, TypeCtx, KqpCtx);
     }
-    else if(TKqlLookupIndexBase::Match(input.Get())){
+    else if(TKqlStreamLookupIndex::Match(input.Get())){
         InferStatisticsForIndexLookup(input, TypeCtx);
     }
     else if(TKqlLookupTableBase::Match(input.Get())) {

@@ -20,7 +20,6 @@ private:
     virtual bool DoApplyToCurrentObject(IOptimizerPlanner& current) const override;
 
     virtual TConclusion<std::shared_ptr<IOptimizerPlanner>> DoBuildPlanner(const TBuildContext& context) const override;
-    virtual bool DoIsEqualTo(const IOptimizerPlannerConstructor& item) const override;
 public:
     virtual TString GetClassName() const override {
         return GetClassNameStatic();

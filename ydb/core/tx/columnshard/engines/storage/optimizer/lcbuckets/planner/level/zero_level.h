@@ -7,49 +7,11 @@ namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 class TZeroLevelPortions: public IPortionsLevel {
 private:
     using TBase = IPortionsLevel;
-    const TLevelCounters LevelCounters;
     const TDuration DurationToDrop;
     const ui64 ExpectedBlobsSize;
     const ui64 PortionsCountAvailable;
-    const std::optional<ui64> PortionsCountLimit;
-    const std::optional<ui64> PortionsSizeLimit;
-    class TOrderedPortion {
-    private:
-        YDB_READONLY_DEF(TPortionInfo::TConstPtr, Portion);
 
-    public:
-        TOrderedPortion(const TPortionInfo::TConstPtr& portion)
-            : Portion(portion) {
-        }
-
-        TOrderedPortion(const TPortionInfo::TPtr& portion)
-            : Portion(portion) {
-        }
-
-        bool operator==(const TOrderedPortion& item) const {
-            return item.Portion->GetPathId() == Portion->GetPathId() && item.Portion->GetPortionId() == Portion->GetPortionId();
-        }
-
-        bool operator<(const TOrderedPortion& item) const {
-            auto cmp = Portion->IndexKeyStart().CompareNotNull(item.Portion->IndexKeyStart());
-            if (cmp == std::partial_ordering::equivalent) {
-                return Portion->GetPortionId() < item.Portion->GetPortionId();
-            } else {
-                return cmp == std::partial_ordering::less;
-            }
-        }
-    };
     std::set<TOrderedPortion> Portions;
-
-    virtual bool IsOverloaded() const override {
-        if (PortionsCountLimit && Portions.size() > *PortionsCountLimit) {
-            return true;
-        }
-        if (PortionsSizeLimit && (ui64)PortionsInfo.GetBlobBytes() > (ui64)*PortionsSizeLimit) {
-            return true;
-        }
-        return false;
-    }
 
     virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& /*pkSchema*/) const override {
         return NArrow::NMerger::TIntervalPositions();
@@ -58,6 +20,14 @@ private:
     virtual std::optional<TPortionsChain> DoGetAffectedPortions(
         const NArrow::TSimpleRow& /*from*/, const NArrow::TSimpleRow& /*to*/) const override {
         return std::nullopt;
+    }
+
+    virtual bool IsAppropriatePortionToMove(const TPortionAccessorConstructor& info) const override {
+        return info.GetTotalBlobsSize() > ExpectedBlobsSize;
+    }
+
+    virtual bool IsAppropriatePortionToStore(const TPortionAccessorConstructor& /*info*/) const override {
+        return true;
     }
 
     virtual ui64 DoGetAffectedPortionBytes(const NArrow::TSimpleRow& /*from*/, const NArrow::TSimpleRow& /*to*/) const override {
@@ -80,14 +50,9 @@ private:
             if (!constructionFlag) {
                 AFL_VERIFY(Portions.emplace(i).second);
             }
-            PortionsInfo.AddPortion(i);
-            LevelCounters.Portions->AddPortion(i);
-            i->InitRuntimeFeature(TPortionInfo::ERuntimeFeature::Optimized, !NextLevel);
         }
         for (auto&& i : remove) {
             AFL_VERIFY(Portions.erase(i));
-            LevelCounters.Portions->RemovePortion(i);
-            PortionsInfo.RemovePortion(i);
         }
     }
 
@@ -107,8 +72,8 @@ private:
 
 public:
     TZeroLevelPortions(const ui32 levelIdx, const std::shared_ptr<IPortionsLevel>& nextLevel, const TLevelCounters& levelCounters,
-        const TDuration durationToDrop, const ui64 expectedBlobsSize, const ui64 portionsCountAvailable,
-        const std::optional<ui64> portionsCountLimit, const std::optional<ui64> portionsSizeLimit);
+        const std::shared_ptr<IOverloadChecker>& overloadChecker, const TDuration durationToDrop, const ui64 expectedBlobsSize,
+        const ui64 portionsCountAvailable, const std::vector<std::shared_ptr<IPortionsSelector>>& selectors, const TString& defaultSelectorName);
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

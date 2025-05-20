@@ -93,6 +93,7 @@ STATEFN(TNodeWarden::StateOnline) {
         fFunc(TEvBlobStorage::TEvStatus::EventType, HandleForwarded);
         fFunc(TEvBlobStorage::TEvAssimilate::EventType, HandleForwarded);
         fFunc(TEvBlobStorage::TEvBunchOfEvents::EventType, HandleForwarded);
+        fFunc(TEvBlobStorage::TEvCheckIntegrity::EventType, HandleForwarded);
         fFunc(TEvRequestProxySessionsState::EventType, HandleForwarded);
 
         cFunc(TEvPrivate::EvGroupPendingQueueTick, HandleGroupPendingQueueTick);
@@ -443,6 +444,9 @@ void TNodeWarden::Bootstrap() {
     }
     if (Cfg->SelfManagementConfig) {
         appConfig.MutableSelfManagementConfig()->CopyFrom(*Cfg->SelfManagementConfig);
+    }
+    if (Cfg->BridgeConfig) {
+        appConfig.MutableBridgeConfig()->CopyFrom(*Cfg->BridgeConfig);
     }
     TString errorReason;
     const bool success = DeriveStorageConfig(appConfig, &StorageConfig, &errorReason);
@@ -1490,6 +1494,26 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
     const auto& nsFrom = appConfig.GetNameserviceConfig();
     auto *nodes = config->MutableAllNodes();
 
+    THashMap<TString, TBridgePileId> piles;
+    if (appConfig.HasBridgeConfig()) {
+        const auto& p = appConfig.GetBridgeConfig().GetPiles();
+        for (int i = 0; i < p.size(); ++i) {
+            if (!p[i].HasName()) {
+                *errorReason = "missing pile name";
+                return false;
+            }
+            const auto [it, inserted] = piles.try_emplace(p[i].GetName(), TBridgePileId::FromValue(i));
+            if (!inserted) {
+                *errorReason = TStringBuilder() << "duplicate pile name " << p[i].GetName();
+                return false;
+            }
+        }
+        if (piles.size() < 2) {
+            *errorReason = "pile set can't be empty or contain less than two elements when bridge mode is enabled";
+            return false;
+        }
+    }
+
     // just copy AllNodes from TAppConfig into TStorageConfig
     nodes->Clear();
     for (const auto& node : nsFrom.GetNode()) {
@@ -1501,6 +1525,21 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
             r->MutableLocation()->CopyFrom(node.GetLocation());
         } else if (node.HasWalleLocation()) {
             r->MutableLocation()->CopyFrom(node.GetWalleLocation());
+        }
+        if (!piles.empty()) {
+            if (!node.HasBridgePileName()) {
+                *errorReason = TStringBuilder() << "mandatory pile name is missing for node " << r->GetNodeId();
+                return false;
+            }
+            const auto it = piles.find(node.GetBridgePileName());
+            if (it == piles.end()) {
+                *errorReason = TStringBuilder() << "incorrect pile name " << node.GetBridgePileName();
+                return false;
+            }
+            it->second.CopyToProto(r, &NKikimrBlobStorage::TNodeIdentifier::SetBridgePileId);
+        } else if (node.HasBridgePileName()) {
+            *errorReason = "pile name can't be specified when Bridge mode is not enabled";
+            return false;
         }
     }
 

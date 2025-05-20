@@ -251,7 +251,7 @@ void TDirectReadSessionManager::UpdatePartitionSession(TPartitionSessionId parti
     Y_ABORT_UNLESS(sessionIt != NodeSessions.end());
 
     TDirectReadId next = 1;
-    TMaybe<TDirectReadId> last;
+    std::optional<TDirectReadId> last;
 
     if (auto session = sessionIt->second->LockShared()) {
         LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "UpdatePartitionSession 02");
@@ -457,7 +457,7 @@ void TDirectReadSession::DeletePartitionSessionIfNeeded(TPartitionSessionId part
 
         LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "DeletePartitionSessionIfNeeded 3 partitionSessionId=" << partitionSessionId << " partitionSession.LastDirectReadId=" << partitionSession.LastDirectReadId << " partitionSession.NextDirectReadId=" << partitionSession.NextDirectReadId);
 
-        if (partitionSession.LastDirectReadId.Defined() && partitionSession.NextDirectReadId >= partitionSession.LastDirectReadId) {
+        if (partitionSession.LastDirectReadId && partitionSession.NextDirectReadId >= partitionSession.LastDirectReadId) {
             LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "DeletePartitionSessionIfNeeded 4 partitionSessionId=" << partitionSessionId);
             PartitionSessions.erase(partitionSessionIt);
 

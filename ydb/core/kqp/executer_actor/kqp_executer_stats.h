@@ -233,9 +233,6 @@ struct TStageExecutionStats {
     TTimeSeriesStats SpillingComputeTimeUs;
     TTimeSeriesStats SpillingChannelTimeUs;
 
-    TTimeSeriesStats SpillingBytes;
-    TTimeSeriesStats SpillingTimeUs;
-
     std::map<TString, TTableStats> Tables;
     std::map<TString, TAsyncBufferStats> Ingress;
     std::map<TString, TAsyncBufferStats> Egress;

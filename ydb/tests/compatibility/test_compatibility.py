@@ -15,7 +15,6 @@ class TestCompatibility(RestartToAnotherVersionFixture):
         self.output_f = open(os.path.join(output_path, "out.log"), "w")
         yield from self.setup_cluster(
             extra_feature_flags={
-                "suppress_compatibility_check": True,
                 # "enable_table_datetime64": True # uncomment for 64 datetime in tpc-h/tpc-ds
                 },
             column_shard_config={

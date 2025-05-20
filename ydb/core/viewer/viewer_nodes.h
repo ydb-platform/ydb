@@ -3282,7 +3282,7 @@ public:
             get:
                 tags:
                   - viewer
-                summary: Nodes info
+                summary: To get information about nodes
                 description: Information about nodes
                 parameters:
                   - name: database
@@ -3318,12 +3318,6 @@ public:
                           * `dynamic`
                           * `storage`
                           * `any`
-                  - name: with
-                    in: query
-                    description: >
-                        filter groups by missing or space:
-                          * `missing`
-                          * `space`
                   - name: storage
                     in: query
                     description: return storage info

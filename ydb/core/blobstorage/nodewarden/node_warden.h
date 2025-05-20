@@ -22,6 +22,7 @@ namespace NKikimr {
         NKikimrConfig::TStaticNameserviceConfig NameserviceConfig;
         std::optional<NKikimrConfig::TDomainsConfig> DomainsConfig;
         std::optional<NKikimrConfig::TSelfManagementConfig> SelfManagementConfig;
+        std::optional<NKikimrConfig::TBridgeConfig> BridgeConfig;
         TString ConfigDirPath;
         std::optional<NKikimrBlobStorage::TYamlConfig> YamlConfig;
         TString StartupConfigYaml;

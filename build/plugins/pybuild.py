@@ -144,15 +144,6 @@ def get_srcdir(path, unit):
     return rootrel_arc_src(path, unit)[: -len(path)].rstrip('/')
 
 
-@lazy
-def get_ruff_configs(unit):
-    rel_config_path = rootrel_arc_src(unit.get('RUFF_CONFIG_PATHS_FILE'), unit)
-    arc_config_path = unit.resolve_arc_path(rel_config_path)
-    abs_config_path = unit.resolve(arc_config_path)
-    with open(abs_config_path, 'r') as fd:
-        return list(json.load(fd).values())
-
-
 def add_python_lint_checks(unit, py_ver, files):
     @lazy
     def get_resolved_files():

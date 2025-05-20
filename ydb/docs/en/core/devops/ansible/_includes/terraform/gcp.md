@@ -17,6 +17,6 @@ Now, being in the `gcp` subdirectory, you can run the following sequence of comm
 
 1. `terraform init` – installing the provider and initializing modules.
 2. `terraform plan` – creating a plan for future infrastructure.
-3. `terraform init` – create resources in the cloud.
+3. `terraform apply` – create resources in the cloud.
 
-Next, use the commands `terraform plan`, `terraform init`, and `terraform destroy` (destruction of the created infrastructure) to apply further changes as necessary.
+Next, use the commands `terraform plan`, `terraform apply`, and `terraform destroy` (destruction of the created infrastructure) to apply further changes as necessary.

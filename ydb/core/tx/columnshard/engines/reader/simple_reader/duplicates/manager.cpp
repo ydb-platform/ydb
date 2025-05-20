@@ -61,8 +61,7 @@ void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
 
     LOCAL_LOG_TRACE("event", "request_filter")("source", source->GetSourceId())("fetching_sources", sourcesToFetch.size());
     AFL_VERIFY(sourcesToFetch.size());
-    if (sourcesToFetch.size() == 1) {
-        // FIXME: if only filtration by snapshot not needed
+    if (sourcesToFetch.size() == 1 && source->GetContext()->GetReadMetadata()->GetRequestSnapshot() >= source->GetRecordSnapshotMax()) {
         AFL_VERIFY(sourcesToFetch.front()->GetSourceId() == source->GetSourceId());
         auto filter = NArrow::TColumnFilter::BuildAllowFilter();
         filter.Add(true, sourcesToFetch.front()->GetRecordsCount());
@@ -131,8 +130,7 @@ void TDuplicateFilterConstructor::Handle(const TEvConstructFilters::TPtr& ev) {
         auto&& segments = intervals[i];
         if (segments.empty() || builtIntervals.contains(i)) {
             // Do nothing
-        } else if (segments.size() == 1) {
-            // FIXME: if only filtration by snapshot not needed
+        } else if (segments.size() == 1 && maxVersion >= mainSource->GetRecordSnapshotMax()) {
             const auto mapInfo = segments.begin()->second.GetInterval();
             NArrow::TColumnFilter filter = NArrow::TColumnFilter::BuildAllowFilter();
             filter.Add(true, mapInfo.GetRowsCount());

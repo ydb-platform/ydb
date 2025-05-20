@@ -1179,6 +1179,8 @@ private:
                     return Sprintf(strRegexp[compSign].c_str(), attr.c_str(), value.c_str());
                 }
             }
+        } else if (auto olapApply = TMaybeNode<TKqpOlapApply>(node)) {
+            return NPlanUtils::ExtractPredicate(olapApply.Cast().Lambda()).Body;
         }
 
         for (const auto& child: node->Children()) {

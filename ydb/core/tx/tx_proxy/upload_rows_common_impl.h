@@ -396,14 +396,14 @@ private:
             if (!cp) {
                 return TConclusionStatus::Fail(Sprintf("Unknown column: %s", name.c_str()));
             }
-            i32 pgTypeMod = -1;            
+            i32 pgTypeMod = -1;
             const ui32 colId = *cp;
             auto& ci = *entry.Columns.FindPtr(colId);
 
             TString columnTypeName = NScheme::TypeName(ci.PType, ci.PTypeMod);
 
             const Ydb::Type& typeInProto = (*reqColumns)[pos].second;
-            
+
             TString parseProtoError;
             NScheme::TTypeInfoMod inTypeInfoMod;
             if (!NScheme::TypeInfoFromProto(typeInProto, inTypeInfoMod, parseProtoError)){
@@ -593,7 +593,7 @@ private:
         TableKind = entry.Kind;
         const bool isColumnTable = (TableKind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
 
-        if (entry.TableId.IsSystemView()) {
+        if (entry.TableId.IsSystemView() || entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindSysView) {
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "is not supported. Table is a system view", ctx);
         }
 

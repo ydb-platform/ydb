@@ -478,6 +478,8 @@ public:
                 tmpSelectivity *= Compute(andNode.Cast().Arg(i));
             }
             resSelectivity = tmpSelectivity;
+        } else if (auto olapApply = input.Maybe<TKqpOlapApply>()) {
+            resSelectivity = TPredicateSelectivityComputer::Compute(olapApply.Cast().Lambda().Body());
         } else if (auto orNode = input.Maybe<TKqpOlapOr>()) {
             double tmpSelectivity = 0.0;
             for (size_t i = 0; i < orNode.Cast().ArgCount(); i++) {

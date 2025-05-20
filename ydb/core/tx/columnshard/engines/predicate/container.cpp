@@ -189,8 +189,8 @@ NArrow::TColumnFilter TPredicateContainer::BuildFilter(const std::shared_ptr<NAr
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
     auto sortingFields = Object->Batch->schema()->field_names();
-    auto position = NArrow::NMerger::TRWSortableBatchPosition(data, 0, sortingFields, {}, false);
-    const auto border = NArrow::NMerger::TSortableBatchPosition(Object->Batch, 0, sortingFields, {}, false);
+    auto position = NArrow::NMerger::TRWSortableBatchPosition(data, 0, data->num_rows(), sortingFields, {}, false);
+    const auto border = NArrow::NMerger::TSortableBatchPosition(Object->Batch, 0, Object->Batch->num_rows(), sortingFields, {}, false);
     const bool needUppedBound = CompareType == NArrow::ECompareType::LESS_OR_EQUAL || CompareType == NArrow::ECompareType::GREATER;
     const auto findBound = position.FindBound(position, 0, data->GetRecordsCount() - 1, border, needUppedBound);
     const ui64 rowsBeforeBound = findBound ? findBound->GetPosition() : data->GetRecordsCount();

@@ -91,7 +91,7 @@ NKikimr::NArrow::NMerger::TRWSortableBatchPosition TSortableBatchPosition::Build
     if (Data) {
         dataColumns = Data->GetFieldNames();
     }
-    return TRWSortableBatchPosition(batch, position, Sorting->GetFieldNames(), dataColumns, ReverseSort);
+    return TRWSortableBatchPosition(batch, position, batch->num_rows(), Sorting->GetFieldNames(), dataColumns, ReverseSort);
 }
 
 TSortableBatchPosition::TFoundPosition TRWSortableBatchPosition::SkipToLower(const TSortableBatchPosition& forFound) {
@@ -129,7 +129,8 @@ TSortableBatchPosition::TFoundPosition TRWSortableBatchPosition::SkipToLower(con
 }
 
 TSortableScanData::TSortableScanData(
-    const ui64 position, const std::shared_ptr<TGeneralContainer>& batch, const std::vector<std::string>& columns) {
+    const ui64 position, const ui64 recordsCount, const std::shared_ptr<TGeneralContainer>& batch, const std::vector<std::string>& columns)
+    : RecordsCount(recordsCount) {
     for (auto&& i : columns) {
         auto c = batch->GetAccessorByNameOptional(i);
         AFL_VERIFY(c)("column_name", i)("columns", JoinSeq(",", columns))("batch", batch->DebugString());
@@ -141,14 +142,16 @@ TSortableScanData::TSortableScanData(
     BuildPosition(position);
 }
 
-TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<TGeneralContainer>& batch) {
+TSortableScanData::TSortableScanData(const ui64 position, const ui64 recordsCount, const std::shared_ptr<TGeneralContainer>& batch)
+    : RecordsCount(recordsCount) {
     Fields = batch->GetSchema()->GetFields();
     Columns = batch->GetColumns();
     BuildPosition(position);
 }
 
 TSortableScanData::TSortableScanData(
-    const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns) {
+    const ui64 position, const ui64 recordsCount, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns)
+    : RecordsCount(recordsCount) {
     for (auto&& i : columns) {
         auto c = batch->GetColumnByName(i);
         AFL_VERIFY(c)("column_name", i)("columns", JoinSeq(",", columns));
@@ -160,7 +163,8 @@ TSortableScanData::TSortableScanData(
     BuildPosition(position);
 }
 
-TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch) {
+TSortableScanData::TSortableScanData(const ui64 position, const ui64 recordsCount, const std::shared_ptr<arrow::RecordBatch>& batch)
+    : RecordsCount(recordsCount) {
     for (auto&& c : batch->columns()) {
         Columns.emplace_back(std::make_shared<NAccessor::TTrivialArray>(c));
     }
@@ -168,7 +172,9 @@ TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<
     BuildPosition(position);
 }
 
-TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& columns) {
+TSortableScanData::TSortableScanData(
+    const ui64 position, const ui64 recordsCount, const std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& columns)
+    : RecordsCount(recordsCount) {
     for (auto&& i : columns) {
         auto c = batch->GetColumnByName(i);
         AFL_VERIFY(c)("batch_names", JoinSeq(",", batch->schema()->field_names()))("column_name", i)("columns", JoinSeq(",", columns));
@@ -216,7 +222,7 @@ void TSortableScanData::BuildPosition(const ui64 position) {
     }
     AFL_VERIFY(StartPosition < FinishPosition);
     AFL_VERIFY(recordsCount);
-    RecordsCount = *recordsCount;
+    AFL_VERIFY(RecordsCount <= recordsCount);
     AFL_VERIFY(position < RecordsCount);
 }
 
@@ -276,7 +282,7 @@ void TCursor::AppendPositionTo(const std::vector<std::unique_ptr<arrow::ArrayBui
 
 TCursor::TCursor(const std::shared_ptr<arrow::Table>& table, const ui64 position, const std::vector<std::string>& columns)
     : Position(position) {
-    PositionAddress = TSortableScanData(position, table, columns).GetPositionAddress();
+    PositionAddress = TSortableScanData(position, table->num_rows(), table, columns).GetPositionAddress();
 }
 
 }   // namespace NKikimr::NArrow::NMerger

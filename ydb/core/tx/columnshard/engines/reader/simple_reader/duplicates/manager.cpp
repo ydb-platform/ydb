@@ -146,8 +146,8 @@ void TDuplicateFilterConstructor::Handle(const TEvConstructFilters::TPtr& ev) {
                     IIndexInfo::GetSnapshotColumnNames(), mainSource->GetContext()->GetCommonContext()->GetCounters(), maxVersionBatch,
                     std::make_unique<TFilterResultSubscriber>(SelfId(), std::move(mapInfos)));
             for (auto&& [source, segment] : segments) {
-                task->AddSource(std::make_shared<NArrow::TGeneralContainer>(segment.ExtractData()),
-                    std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter()), source);
+                task->AddSource(
+                    segment.ExtractData(), std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter()), source);
                 Y_UNUSED(BuildingFilters.emplace(segment.GetInterval(), std::vector<std::shared_ptr<TInternalFilterConstructor>>()).second);
             }
             NConveyor::TScanServiceOperator::SendTaskToExecute(task, mainSource->GetContext()->GetCommonContext()->GetConveyorProcessId());

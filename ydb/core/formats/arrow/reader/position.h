@@ -109,11 +109,14 @@ private:
     }
 
 public:
-    TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch);
-    TSortableScanData(const ui64 position, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns);
-    TSortableScanData(const ui64 position, const std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& columns);
-    TSortableScanData(const ui64 position, const std::shared_ptr<TGeneralContainer>& batch, const std::vector<std::string>& columns);
-    TSortableScanData(const ui64 position, const std::shared_ptr<TGeneralContainer>& batch);
+    TSortableScanData(const ui64 position, const ui64 recordsCount, const std::shared_ptr<arrow::RecordBatch>& batch);
+    TSortableScanData(
+        const ui64 position, const ui64 recordsCount, const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<std::string>& columns);
+    TSortableScanData(
+        const ui64 position, const ui64 recordsCount, const std::shared_ptr<arrow::Table>& batch, const std::vector<std::string>& columns);
+    TSortableScanData(
+        const ui64 position, const ui64 recordsCount, const std::shared_ptr<TGeneralContainer>& batch, const std::vector<std::string>& columns);
+    TSortableScanData(const ui64 position, const ui64 recordsCount, const std::shared_ptr<TGeneralContainer>& batch);
     TSortableScanData(const ui64 position, const ui64 recordsCount, const std::vector<std::shared_ptr<NAccessor::IChunkedArray>>& columns,
         const std::vector<std::shared_ptr<arrow::Field>>& fields)
         : RecordsCount(recordsCount)
@@ -365,46 +368,49 @@ public:
     }
 
     template <class TRecords>
-    TSortableBatchPosition(const std::shared_ptr<TRecords>& batch, const ui32 position, const std::vector<std::string>& sortingColumns,
+    TSortableBatchPosition(const std::shared_ptr<TRecords>& batch, const ui32 position, const ui64 recordsCount, const std::vector<std::string>& sortingColumns,
         const std::vector<std::string>& dataColumns, const bool reverseSort)
         : Position(position)
+        , RecordsCount(recordsCount)
         , ReverseSort(reverseSort) {
         Y_ABORT_UNLESS(batch);
         Y_ABORT_UNLESS(batch->num_rows());
-        RecordsCount = batch->num_rows();
+        AFL_VERIFY((i64)batch->num_rows() >= RecordsCount)("batch", batch->num_rows())("count", RecordsCount);
         AFL_VERIFY(Position < RecordsCount)("position", Position)("count", RecordsCount);
 
         if (dataColumns.size()) {
-            Data = std::make_shared<TSortableScanData>(Position, batch, dataColumns);
+            Data = std::make_shared<TSortableScanData>(Position, RecordsCount, batch, dataColumns);
         }
-        Sorting = std::make_shared<TSortableScanData>(Position, batch, sortingColumns);
+        Sorting = std::make_shared<TSortableScanData>(Position, RecordsCount, batch, sortingColumns);
         Y_DEBUG_ABORT_UNLESS(batch->ValidateFull().ok());
         Y_ABORT_UNLESS(Sorting->GetColumns().size());
     }
 
     template <class TRecords>
-    TSortableBatchPosition(const std::shared_ptr<TRecords>& batch, const ui32 position, const bool reverseSort)
+    TSortableBatchPosition(const std::shared_ptr<TRecords>& batch, const ui32 position, const ui64 recordsCount, const bool reverseSort)
         : Position(position)
+        , RecordsCount(recordsCount)
         , ReverseSort(reverseSort) {
         Y_ABORT_UNLESS(batch);
         Y_ABORT_UNLESS(batch->num_rows());
-        RecordsCount = batch->num_rows();
+        AFL_VERIFY((i64)batch->num_rows() >= RecordsCount)("batch", batch->num_rows())("count", RecordsCount);
         AFL_VERIFY(Position < RecordsCount)("position", Position)("count", RecordsCount);
-        Sorting = std::make_shared<TSortableScanData>(Position, batch);
+        Sorting = std::make_shared<TSortableScanData>(Position, RecordsCount, batch);
         Y_DEBUG_ABORT_UNLESS(batch->ValidateFull().ok());
         Y_ABORT_UNLESS(Sorting->GetColumns().size());
     }
 
     TSortableBatchPosition(const std::vector<std::shared_ptr<arrow::Field>>& fields, const std::vector<std::shared_ptr<arrow::Array>>& columns,
-        const ui32 position, const bool reverseSort)
+        const ui32 position, const ui64 recordsCount, const bool reverseSort)
         : Position(position)
+        , RecordsCount(recordsCount)
         , ReverseSort(reverseSort) {
         Y_ABORT_UNLESS(columns.size());
         Y_ABORT_UNLESS(columns.front()->length());
         for (ui32 i = 1; i < columns.size(); ++i) {
             AFL_VERIFY(columns.front()->length() == columns[i]->length());
         }
-        RecordsCount = columns.front()->length();
+        AFL_VERIFY(columns.front()->length() >= RecordsCount)("batch", columns.front()->length())("count", RecordsCount);
         AFL_VERIFY(Position < RecordsCount)("position", Position)("count", RecordsCount);
         Sorting = std::make_shared<TSortableScanData>(Position, RecordsCount, columns, fields);
         Y_ABORT_UNLESS(Sorting->GetColumns().size());
@@ -667,7 +673,7 @@ public:
         if (!it.IsValid()) {
             return { batch };
         }
-        TRWSortableBatchPosition pos(batch, 0, columnNames, {}, false);
+        TRWSortableBatchPosition pos(batch, 0, batch->num_rows(), columnNames, {}, false);
         it.SkipToUpper(pos);
         bool batchFinished = false;
         i64 recordsCountSplitted = 0;

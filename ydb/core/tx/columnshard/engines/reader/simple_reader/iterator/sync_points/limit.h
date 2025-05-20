@@ -60,7 +60,7 @@ private:
             , Delta(Reverse ? -1 : 1) {
             AFL_VERIFY(Source);
             auto batch = Source->GetStart().GetValue().ToBatch();
-            SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(batch, 0, Reverse);
+            SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(batch, 0, batch->num_rows(), Reverse);
         }
 
         TSourceIterator(const std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>>& arrs,
@@ -77,7 +77,7 @@ private:
             auto prefixSchema = Source->GetSourceSchema()->GetIndexInfo().GetReplaceKeyPrefix(arrs.size());
             auto copyArrs = arrs;
             auto batch = std::make_shared<NArrow::TGeneralContainer>(prefixSchema->fields(), std::move(copyArrs));
-            SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(batch, Start, Reverse);
+            SortableRecord = std::make_shared<NArrow::NMerger::TRWSortableBatchPosition>(batch, Start, batch->num_rows(), Reverse);
             IsValidFlag = ShiftWithFilter();
         }
 

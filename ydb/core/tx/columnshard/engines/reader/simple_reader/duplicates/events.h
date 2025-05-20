@@ -46,6 +46,20 @@ public:
     }
 };
 
+class TColumnDataSlice {
+private:
+    YDB_READONLY_DEF(std::shared_ptr<TColumnsData>, Data);
+    YDB_READONLY_DEF(ui64, Offset);
+    YDB_READONLY_DEF(ui64, RowsCount);
+
+public:
+    TColumnDataSlice(const std::shared_ptr<TColumnsData>& data, const ui64 offset, const ui64 rowsCount)
+        : Data(data)
+        , Offset(offset)
+        , RowsCount(rowsCount) {
+    }
+};
+
 class TEvDuplicateFilterDataFetched
     : public NActors::TEventLocal<TEvDuplicateFilterDataFetched, NColumnShard::TEvPrivate::EvDuplicateFilterDataFetched> {
 private:

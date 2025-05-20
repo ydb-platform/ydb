@@ -38,8 +38,7 @@ class TColumnDataSplitter {
 public:
     class TSourceSegment {
     public:
-        // FIXME
-        using TSlice = NArrow::TGeneralContainer;
+        using TSlice = TColumnDataSlice;
 
     private:
         TDuplicateMapInfo Interval;
@@ -125,10 +124,10 @@ public:
         ui64 offset = 0;
 
         auto sortingFields = Borders.front().GetKey().ToBatch()->schema()->field_names();
-        auto position = NArrow::NMerger::TRWSortableBatchPosition(data->GetData(), 0, sortingFields, {}, false);
+        auto position = NArrow::NMerger::TRWSortableBatchPosition(data->GetData(), 0, data->GetData()->num_rows(), sortingFields, {}, false);
 
         for (const auto& border : Borders) {
-            const auto borderPosition = NArrow::NMerger::TSortableBatchPosition(border.GetKey().ToBatch(), 0, sortingFields, {}, false);
+            const auto borderPosition = NArrow::NMerger::TSortableBatchPosition(border.GetKey().ToBatch(), 0, 1, sortingFields, {}, false);
             if (offset == data->GetData()->GetRecordsCount()) {
                 borderOffsets.emplace_back(offset);
                 continue;
@@ -142,9 +141,8 @@ public:
         std::vector<std::optional<TSourceSegment>> segments;
         for (ui64 i = 1; i < borderOffsets.size(); ++i) {
             TDuplicateMapInfo interval(maxVersion, borderOffsets[i - 1], borderOffsets[i] - borderOffsets[i - 1], sourceId);
-            // FIXME don't copy data for slicing
             segments.emplace_back(interval.GetRowsCount()
-                                      ? TSourceSegment(interval, data->GetData()->Slice(interval.GetOffset(), interval.GetRowsCount()))
+                                      ? TSourceSegment(interval, TColumnDataSlice(data, interval.GetOffset(), interval.GetRowsCount()))
                                       : std::optional<TSourceSegment>());
         }
 

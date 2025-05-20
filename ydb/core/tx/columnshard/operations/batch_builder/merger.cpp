@@ -17,7 +17,7 @@ NKikimr::TConclusionStatus IMerger::Finish() {
 
 NKikimr::TConclusionStatus IMerger::AddExistsDataOrdered(const std::shared_ptr<arrow::Table>& data) {
     AFL_VERIFY(data);
-    NArrow::NMerger::TRWSortableBatchPosition existsPosition(data, 0, Schema->GetPKColumnNames(),
+    NArrow::NMerger::TRWSortableBatchPosition existsPosition(data, 0, data->num_rows(), Schema->GetPKColumnNames(),
         Schema->GetIndexInfo().GetColumnSTLNames(false), false);
     bool exsistFinished = !existsPosition.InitPosition(0);
     while (!IncomingFinished && !exsistFinished) {

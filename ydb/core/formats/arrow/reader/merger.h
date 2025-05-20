@@ -91,14 +91,23 @@ public:
     template <class TDataContainer>
     void AddSource(const std::shared_ptr<TDataContainer>& batch, const std::shared_ptr<NArrow::TColumnFilter>& filter,
         const std::optional<ui64> sourceIdExt = std::nullopt) {
+        if (!batch) {
+            return;
+        }
+        return AddSource(batch, 0, batch->num_rows(), filter, sourceIdExt);
+    }
+
+    template <class TDataContainer>
+    void AddSource(const std::shared_ptr<TDataContainer>& batch, const ui64 position, const ui64 recordsCount,
+        const std::shared_ptr<NArrow::TColumnFilter>& filter, const std::optional<ui64> sourceIdExt = std::nullopt) {
         const ui64 sourceId = sourceIdExt.value_or(SortHeap.Size());
-        if (!batch || !batch->num_rows()) {
+        if (recordsCount == position) {
             return;
         }
 //        Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(batch, SortSchema));
         const bool isDenyFilter = filter && filter->IsTotalDenyFilter();
         auto filterImpl = (!filter || filter->IsTotalAllowFilter()) ? nullptr : filter;
-        SortHeap.Push(TBatchIterator(batch, filterImpl, SortSchema->field_names(),
+        SortHeap.Push(TBatchIterator(batch, position, recordsCount, filterImpl, SortSchema->field_names(),
             (!isDenyFilter && DataSchema) ? DataSchema->field_names() : std::vector<std::string>(), Reverse, VersionColumnNames, sourceId));
     }
 

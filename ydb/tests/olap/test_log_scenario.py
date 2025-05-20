@@ -39,8 +39,6 @@ class YdbWorkloadLog:
             self.pk_mode = YdbWorkloadLog.PKMode.TIMESTAMP_DEVIATION
         else:
             if date_from is not None:
-                if timestamp_deviation is not None:
-                    raise TypeError("timestamp_deviation and uniform PK mode should be applied mutual exclusively")
                 if date_to is None:
                     raise TypeError("missing date_to")
                 self.date_from = date_from
@@ -176,6 +174,10 @@ class TestLogScenario(object):
 
         for thread in threads:
             thread.join()
+
+        current_count: int = self.get_row_count()
+        logging.info(f'check insert: {current_count} {prev_count}')
+        assert current_count != prev_count
 
     def test_log_uniform(self):
         """As per https://github.com/ydb-platform/ydb/issues/13531"""

@@ -168,8 +168,8 @@ public:
         //        Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(batch, SortSchema));
         const bool isDenyFilter = filter && filter->IsTotalDenyFilter();
         auto filterImpl = (!filter || filter->IsTotalAllowFilter()) ? nullptr : filter;
-        SortHeap.Push(TBatchIterator(batch, filterImpl, SortSchema->field_names(),
-            (!isDenyFilter && DataSchema) ? DataSchema->field_names() : std::vector<std::string>(), Reverse, VersionColumnNames, sourceId));
+        SortHeap.Push(TBatchIterator(batch, filterImpl, *SortSchema,
+            (!isDenyFilter && DataSchema) ? *DataSchema : arrow::Schema(arrow::FieldVector()), Reverse, VersionColumnNames, sourceId));
     }
 
     bool IsEmpty() const {
@@ -178,6 +178,7 @@ public:
 
     template <MergeResultBuilder TBuilder>
     void DrainAll(TBuilder& builder) {
+        builder.ValidateDataSchema(DataSchema);
         while (SortHeap.Size()) {
             Y_UNUSED(DrainCurrentPosition(&builder, nullptr, nullptr));
         }

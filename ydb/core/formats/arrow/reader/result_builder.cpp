@@ -65,6 +65,7 @@ TRecordBatchBuilder::TRecordBatchBuilder(const std::vector<std::shared_ptr<arrow
             NArrow::TStatusValidator::Validate(Builders.back()->Reserve(*rowsCountExpectation));
         }
     }
+    AFL_VERIFY(Fields.size() == Builders.size());
 }
 
 std::shared_ptr<arrow::RecordBatch> TRecordBatchBuilder::Finalize() {

@@ -194,6 +194,10 @@ void TCommandWithParameters::AddParams(TParamsBuilder& paramBuilder) {
 
 namespace {
     bool StdinHasData(bool verbose) {
+#if defined(_win32_)
+        // Too complex case for Windows
+        return false;
+#else
         // fd_set to store a set of descriptor set.
         fd_set read_fds;
         FD_ZERO(&read_fds);
@@ -231,6 +235,7 @@ namespace {
             return true;
         }
         return false;
+#endif
     }
 }
 

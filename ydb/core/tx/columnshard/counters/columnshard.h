@@ -117,11 +117,17 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr WriteRequests;
     THashMap<EWriteFailReason, NMonitoring::TDynamicCounters::TCounterPtr> FailedWriteRequests;
     NMonitoring::TDynamicCounters::TCounterPtr SuccessWriteRequests;
+    std::vector<NMonitoring::TDynamicCounters::TCounterPtr> Overloads;
 
 public:
     const std::shared_ptr<TWriteCounters> WritingCounters;
     const TCSInitialization Initialization;
     TTxProgressCounters TxProgress;
+
+    void OnOverload(const TColumnShard::EOverloadStatus status) const {
+        AFL_VERIFY((ui64)status < Overloads.size());
+        Overloads[(ui64)status]->Inc();
+    }
 
     void OnStartWriteRequest() const {
         WriteRequests->Add(1);

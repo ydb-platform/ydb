@@ -352,7 +352,7 @@ public:
     }
 
     enum class EOverloadStatus {
-        ShardTxInFly /* "shard_tx" */,
+        ShardTxInFly /* "shard_tx" */ = 0,
         ShardWritesInFly /* "shard_writes" */,
         ShardWritesSizeInFly /* "shard_writes_size" */,
         InsertTable /* "insert_table" */,

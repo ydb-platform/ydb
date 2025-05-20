@@ -11,6 +11,12 @@ TCSCounters::TCSCounters()
     , WritingCounters(std::make_shared<TWriteCounters>(*this))
     , Initialization(*this)
     , TxProgress(*this) {
+
+    for (auto&& i : GetEnumAllValues<TColumnShard::EOverloadStatus>()) {
+        while (Overloads.size() <= (ui64)i) {
+            Overloads.emplace_back(CreateSubGroup("overload", ::ToString(i)).GetDeriviative("Count"));
+        }
+    }
     StartBackgroundCount = TBase::GetDeriviative("StartBackground/Count");
     TooEarlyBackgroundCount = TBase::GetDeriviative("TooEarlyBackground/Count");
     SetupCompactionCount = TBase::GetDeriviative("SetupCompaction/Count");

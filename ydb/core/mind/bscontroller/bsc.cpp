@@ -58,7 +58,9 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
             Group = group;
             group->AddVSlot(this);
         }
-        ++pdisk->NumActiveSlots;
+        pdisk->NumActiveSlots += TPDiskConfig::GetOwnerWeight(
+            group->SlotSizeUnits.GetOrElse({}),
+            pdisk->SlotSizeUnits);
     }
 }
 

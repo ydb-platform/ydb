@@ -6,6 +6,8 @@
 namespace NKikimr {
     namespace NBsController {
 
+        using TSlotSizeUnits = NKikimrBlobStorage::TPDiskSlotSizeUnits;
+
         class TGroupGeometryInfo;
 
         // TGroupMapper is a helper class used to create groups from a set of PDisks with their respective locations
@@ -99,9 +101,12 @@ namespace NKikimr {
             // (1) and (2). That is, prefix gives us unique domains in which we can find realms to operate, while
             // prefix+infix part gives us distinct fail realms we can use while generating groups.
             bool AllocateGroup(ui32 groupId, TGroupDefinition& group, TGroupMapper::TGroupConstraintsDefinition& constraints,
-                const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TForbiddenPDisks forbid, i64 requiredSpace, bool requireOperational, TString& error);
+                const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TForbiddenPDisks forbid,
+                TSlotSizeUnits::E slotSizeUnits, i64 requiredSpace, bool requireOperational,
+                TString& error);
             bool AllocateGroup(ui32 groupId, TGroupDefinition& group, const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks,
-                TForbiddenPDisks forbid, i64 requiredSpace, bool requireOperational, TString& error);
+                TForbiddenPDisks forbid, TSlotSizeUnits::E slotSizeUnits, i64 requiredSpace, bool requireOperational,
+                TString& error);
 
             struct TMisplacedVDisks {
                 enum EFailLevel : ui32 {
@@ -129,10 +134,11 @@ namespace NKikimr {
                 }
             };
 
-            TMisplacedVDisks FindMisplacedVDisks(const TGroupDefinition& group);
+            TMisplacedVDisks FindMisplacedVDisks(const TGroupDefinition& group, TSlotSizeUnits::E slotSizeUnits);
 
             std::optional<TPDiskId> TargetMisplacedVDisk(TGroupId groupId, TGroupDefinition& group, TVDiskIdShort vdisk, 
-                TForbiddenPDisks forbid, i64 requiredSpace, bool requireOperational, TString& error);
+                TForbiddenPDisks forbid, i64 requiredSpace, bool requireOperational,
+                TSlotSizeUnits::E slotSizeUnits, TString& error);
         };
 
     } // NBsController

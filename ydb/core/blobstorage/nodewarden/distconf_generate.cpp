@@ -403,7 +403,7 @@ namespace NKikimr::NStorage {
                 .PDiskId = pdiskId,
                 .Location = it->second,
                 .Usable = item.Usable,
-                .NumSlots = item.UsedSlots,
+                .NumSlots = item.UsedSlots, // TODO account SlotSizeUnits
                 .MaxSlots = maxSlots,
                 .SlotSizeUnits = slotSizeUnits,
                 .Groups{},
@@ -432,7 +432,7 @@ namespace NKikimr::NStorage {
         };
 
         TString error;
-        if (!mapper.AllocateGroup(groupId, groupDefinition, replacedDisks, forbid, requiredSpace, false, error)) {
+        if (!mapper.AllocateGroup(groupId, groupDefinition, replacedDisks, forbid, NKikimrBlobStorage::TPDiskSlotSizeUnits::SINGLE, requiredSpace, false, error)) {
             throw TExConfigError() << "group allocation failed Error# " << error
                 << " groupDefinition# " << dumpGroupDefinition();
         }

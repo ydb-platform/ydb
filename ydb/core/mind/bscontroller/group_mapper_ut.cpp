@@ -8,6 +8,7 @@
 
 using namespace NKikimr;
 using namespace NKikimr::NBsController;
+using TSlotSizeUnits = NKikimrBlobStorage::TPDiskSlotSizeUnits;
 
 class TTestContext {
     struct TPDiskRecord {
@@ -16,13 +17,16 @@ class TTestContext {
         ui32 RackId;
         ui32 BodyId;
         ui32 NumSlots;
+        TSlotSizeUnits::E SlotSizeUnits;
 
-        TPDiskRecord(ui32 dataCenterId, ui32 roomId, ui32 rackId, ui32 bodyId)
+        TPDiskRecord(ui32 dataCenterId, ui32 roomId, ui32 rackId, ui32 bodyId,
+            TSlotSizeUnits::E slotSizeUnits)
             : DataCenterId(dataCenterId)
             , RoomId(roomId)
             , RackId(rackId)
             , BodyId(bodyId)
             , NumSlots(0)
+            , SlotSizeUnits(slotSizeUnits)
         {}
 
         TNodeLocation GetLocation() const {
@@ -38,6 +42,7 @@ class TTestContext {
     struct TGroupRecord {
         TGroupMapper::TGroupDefinition Group;
         TVector<TPDiskId> PDisks;
+        TSlotSizeUnits::E SlotSizeUnits = {};
     };
 
     TMap<TPDiskId, TPDiskRecord> PDisks;
@@ -57,7 +62,29 @@ public:
                 for (ui32 c = 0; c < numRacks; ++c, ++rack) {
                     for (ui32 d = 0; d < numBodies; ++d, ++body, ++nodeId) {
                         for (ui32 e = 0; e < numDisks; ++e, ++pdiskId) {
-                            PDisks.emplace(TPDiskId(nodeId, pdiskId), TPDiskRecord(dataCenter, room, rack, body));
+                            TPDiskRecord pdisk(dataCenter, room, rack, body, {}); 
+                            PDisks.emplace(TPDiskId(nodeId, pdiskId), pdisk);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    TTestContext(ui32 numDataCenters, ui32 numRooms, ui32 numRacks, ui32 numBodies, TVector<TSlotSizeUnits::E> diskSizeUnits) {
+        ui32 nodeId = 1;
+        ui32 pdiskId = 1;
+        ui32 dataCenter = 1;
+        ui32 room = 1;
+        ui32 rack = 1;
+        ui32 body = 1;
+        for (ui32 a = 0; a < numDataCenters; ++a, ++dataCenter) {
+            for (ui32 b = 0; b < numRooms; ++b, ++room) {
+                for (ui32 c = 0; c < numRacks; ++c, ++rack) {
+                    for (ui32 d = 0; d < numBodies; ++d, ++body, ++nodeId) {
+                        for (ui32 e = 0; e < diskSizeUnits.size(); ++e, ++pdiskId) {
+                            TPDiskRecord pdisk(dataCenter, room, rack, body, diskSizeUnits[e]); 
+                            PDisks.emplace(TPDiskId(nodeId, pdiskId), pdisk);
                         }
                     }
                 }
@@ -71,7 +98,8 @@ public:
             ui32 dataCenter, room, rack, body, numDisks;
             std::tie(dataCenter, room, rack, body, numDisks) = disk;
             for (ui32 pdiskId = 1; numDisks--; ++pdiskId) {
-                const bool inserted = PDisks.emplace(TPDiskId(nodeId, pdiskId), TPDiskRecord(dataCenter, room, rack, body)).second;
+                TPDiskRecord pdisk(dataCenter, room, rack, body, {}); 
+                const bool inserted = PDisks.emplace(TPDiskId(nodeId, pdiskId), pdisk).second;
                 UNIT_ASSERT(inserted);
             }
             ++nodeId;
@@ -87,7 +115,8 @@ public:
             for (const auto& domain : realm) {
                 for (ui32 body = 1; body <= domain; ++body) {
                     for (ui32 pdiskId = 1, i = numDisks; i--; ++pdiskId) {
-                        const bool inserted = PDisks.emplace(TPDiskId(nodeId, pdiskId), TPDiskRecord(dataCenter, room, rack, body)).second;
+                        TPDiskRecord pdisk(dataCenter, room, rack, body, {}); 
+                        const bool inserted = PDisks.emplace(TPDiskId(nodeId, pdiskId), pdisk).second;
                         UNIT_ASSERT(inserted);
                     }
 
@@ -168,21 +197,26 @@ public:
         UNIT_ASSERT(index == v.size());
     }
 
-    ui32 AllocateGroup(TGroupMapper& mapper, TGroupMapper::TGroupDefinition& group, bool allowFailure = false) {
+    ui32 AllocateGroup(TGroupMapper& mapper, TGroupMapper::TGroupDefinition& group,
+        TSlotSizeUnits::E slotSizeUnits = {}, bool allowFailure = false
+    ) {
         ui32 groupId = NextGroupId++;
         TString error;
-        bool success = mapper.AllocateGroup(groupId, group, {}, {}, 0, false, error);
+        bool success = mapper.AllocateGroup(groupId, group, {}, {}, slotSizeUnits, 0, false, error);
         if (!success && allowFailure) {
+            Ctest << "error# " << error << Endl;
             return 0;
         }
         UNIT_ASSERT_C(success, error);
         TGroupRecord& record = Groups[groupId];
         record.Group = group;
+        record.SlotSizeUnits = slotSizeUnits;
         for (const auto& realm : group) {
             for (const auto& domain : realm) {
-                for (const auto& pdisk : domain) {
-                    record.PDisks.push_back(pdisk);
-                    ++PDisks.at(pdisk).NumSlots;
+                for (const auto& pdiskId : domain) {
+                    record.PDisks.push_back(pdiskId);
+                    TPDiskRecord& pdisk = PDisks.at(pdiskId);
+                    pdisk.NumSlots += TPDiskConfig::GetOwnerWeight(slotSizeUnits, pdisk.SlotSizeUnits);
                 }
             }
         }
@@ -190,7 +224,8 @@ public:
     }
 
     TGroupMapper::TGroupDefinition ReallocateGroup(TGroupMapper& mapper, ui32 groupId, const TSet<TPDiskId>& unusableDisks,
-            bool makeThemForbidden = false, bool requireOperational = false, bool allowError = false) {
+            bool makeThemForbidden = false, bool requireOperational = false, bool allowError = false
+    ) {
         TGroupRecord& group = Groups.at(groupId);
 
         TGroupMapper::TForbiddenPDisks forbid(unusableDisks.begin(), unusableDisks.end());
@@ -203,19 +238,21 @@ public:
         for (ui32 i = 0; i < group.Group.size(); ++i) {
             for (ui32 j = 0; j < group.Group[i].size(); ++j) {
                 for (ui32 k = 0; k < group.Group[i][j].size(); ++k) {
-                    auto& pdisk = group.Group[i][j][k];
-                    --PDisks.at(pdisk).NumSlots;
-                    if (unusableDisks.count(pdisk)) {
-                        replacedDisks.emplace(TVDiskIdShort(i, j, k), std::exchange(pdisk, {}));
+                    TPDiskId& pdiskId = group.Group[i][j][k];
+                    TPDiskRecord& pdisk = PDisks.at(pdiskId);
+                    pdisk.NumSlots -= TPDiskConfig::GetOwnerWeight(group.SlotSizeUnits, pdisk.SlotSizeUnits);
+                    if (unusableDisks.count(pdiskId)) {
+                        replacedDisks.emplace(TVDiskIdShort(i, j, k), std::exchange(pdiskId, {}));
                     }
                 }
             }
         }
 
-        Ctest << "groupId# " << groupId << " reallocating group# " << FormatGroup(group.Group) << Endl;
+        Ctest << "groupId# " << groupId << " reallocating group# " << FormatGroup(group.Group)
+            << " slotSizeUnits# " << TSlotSizeUnits::E_Name(group.SlotSizeUnits) << Endl;
 
         TString error;
-        bool success = mapper.AllocateGroup(groupId, group.Group, replacedDisks, std::move(forbid), 0,
+        bool success = mapper.AllocateGroup(groupId, group.Group, replacedDisks, std::move(forbid), group.SlotSizeUnits, 0,
             requireOperational, error);
         if (!success) {
             Ctest << "error# " << error << Endl;
@@ -226,8 +263,9 @@ public:
                 }
                 for (auto& realm : group.Group) {
                     for (auto& domain : realm) {
-                        for (auto& pdisk : domain) {
-                            ++PDisks.at(pdisk).NumSlots;
+                        for (auto& pdiskId : domain) {
+                            TPDiskRecord& pdisk = PDisks.at(pdiskId);
+                            pdisk.NumSlots += TPDiskConfig::GetOwnerWeight(group.SlotSizeUnits, pdisk.SlotSizeUnits);
                         }
                     }
                 }
@@ -239,9 +277,10 @@ public:
         group.PDisks.clear();
         for (const auto& realm : group.Group) {
             for (const auto& domain : realm) {
-                for (const auto& pdisk : domain) {
-                    group.PDisks.push_back(pdisk);
-                    ++PDisks.at(pdisk).NumSlots;
+                for (const auto& pdiskId : domain) {
+                    group.PDisks.push_back(pdiskId);
+                    TPDiskRecord& pdisk = PDisks.at(pdiskId);
+                    pdisk.NumSlots += TPDiskConfig::GetOwnerWeight(group.SlotSizeUnits, pdisk.SlotSizeUnits);
                 }
             }
         }
@@ -270,20 +309,22 @@ public:
         for (ui32 i = 0; i < group.Group.size(); ++i) {
             for (ui32 j = 0; j < group.Group[i].size(); ++j) {
                 for (ui32 k = 0; k < group.Group[i][j].size(); ++k) {
-                    auto& pdisk = group.Group[i][j][k];
-                    --PDisks.at(pdisk).NumSlots;
+                    auto& pdiskId = group.Group[i][j][k];
+                    TPDiskRecord& pdisk = PDisks.at(pdiskId);
+                    pdisk.NumSlots -= TPDiskConfig::GetOwnerWeight(group.SlotSizeUnits, pdisk.SlotSizeUnits);
                 }
             }
         }
 
-        TGroupMapper::TMisplacedVDisks result = mapper.FindMisplacedVDisks(group.Group);
+        TGroupMapper::TMisplacedVDisks result = mapper.FindMisplacedVDisks(group.Group, group.SlotSizeUnits);
         if (result) {
             Ctest << "error# " << result.ErrorReason << Endl;
             if (allowError) {
                 for (auto& realm : group.Group) {
                     for (auto& domain : realm) {
-                        for (auto& pdisk : domain) {
-                            ++PDisks.at(pdisk).NumSlots;
+                        for (auto& pdiskId : domain) {
+                            TPDiskRecord& pdisk = PDisks.at(pdiskId);
+                            pdisk.NumSlots += TPDiskConfig::GetOwnerWeight(group.SlotSizeUnits, pdisk.SlotSizeUnits);
                         }
                     }
                 }
@@ -298,7 +339,7 @@ public:
             status = ESanitizeResult::FAIL;
             for (auto vdisk : result.Disks) {
                 auto target = mapper.TargetMisplacedVDisk(TGroupId::FromValue(groupId), group.Group, vdisk,
-                    std::move(forbid), 0, requireOperational, error);
+                    std::move(forbid), 0, requireOperational, group.SlotSizeUnits, error);
                 if (target) {
                     status = ESanitizeResult::SUCCESS;
                     if (movedDisk) {
@@ -316,9 +357,10 @@ public:
         group.PDisks.clear();
         for (const auto& realm : group.Group) {
             for (const auto& domain : realm) {
-                for (const auto& pdisk : domain) {
-                    group.PDisks.push_back(pdisk);
-                    ++PDisks.at(pdisk).NumSlots;
+                for (const auto& pdiskId : domain) {
+                    group.PDisks.push_back(pdiskId);
+                    TPDiskRecord& pdisk = PDisks.at(pdiskId);
+                    pdisk.NumSlots += TPDiskConfig::GetOwnerWeight(group.SlotSizeUnits, pdisk.SlotSizeUnits);
                 }
             }
         }
@@ -329,15 +371,17 @@ public:
     void SetGroup(ui32 groupId, const TGroupMapper::TGroupDefinition& group) {
         auto& g = Groups[groupId];
         for (const TPDiskId& pdiskId : g.PDisks) {
-            --PDisks.at(pdiskId).NumSlots;
+            TPDiskRecord& pdisk = PDisks.at(pdiskId);
+            pdisk.NumSlots -= TPDiskConfig::GetOwnerWeight(g.SlotSizeUnits, pdisk.SlotSizeUnits);
         }
         g.Group = group;
         g.PDisks.clear();
         for (const auto& realm : g.Group) {
             for (const auto& domain : realm) {
-                for (const auto& pdisk : domain) {
-                    g.PDisks.push_back(pdisk);
-                    ++PDisks.at(pdisk).NumSlots;
+                for (const auto& pdiskId : domain) {
+                    g.PDisks.push_back(pdiskId);
+                    TPDiskRecord& pdisk = PDisks.at(pdiskId);
+                    pdisk.NumSlots += TPDiskConfig::GetOwnerWeight(g.SlotSizeUnits, pdisk.SlotSizeUnits);
                 }
             }
         }
@@ -450,6 +494,7 @@ public:
                 .Usable = !unusableDisks.count(pair.first),
                 .NumSlots = pair.second.NumSlots,
                 .MaxSlots = equalSlots || location.Rack < 8 ? maxSlots : 2 * maxSlots,
+                .SlotSizeUnits = pair.second.SlotSizeUnits,
                 .Groups{g.begin(), g.end()},
                 .SpaceAvailable = 0,
                 .Operational = !nonoperationalDisks.contains(pair.first),
@@ -550,6 +595,81 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(TGroupMapperTest) {
+
+    Y_UNIT_TEST(SimplestErasureNone) {
+        // Single node with sing PDisk with 2 slots
+        TTestContext context(1, 1, 1, 1, 1);
+
+        TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureNone, 1, 1, 1));
+        context.PopulateGroupMapper(mapper, 2);
+
+        UNIT_ASSERT_VALUES_EQUAL(context.GetTotalDisks(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(0, context.GetSlots()[0]);
+
+        TGroupMapper::TGroupDefinition g1, g2;
+        
+        UNIT_ASSERT_UNEQUAL(0, context.AllocateGroup(mapper, g1));
+        UNIT_ASSERT_VALUES_EQUAL(1, context.GetSlots()[0]);
+        
+        UNIT_ASSERT_UNEQUAL(0, context.AllocateGroup(mapper, g2));
+        UNIT_ASSERT_VALUES_EQUAL(2, context.GetSlots()[0]);
+        
+        Ctest << "group after allocation:" << Endl;
+        context.DumpGroup(g1);
+        context.DumpGroup(g2);
+    }
+
+    Y_UNIT_TEST(SimplestMirror3dc) {
+        // Each node has 3 disks
+        TTestContext context(
+            {
+                {1, 1, 1, 1, 3},
+                {2, 1, 2, 1, 3},
+                {3, 1, 3, 1, 3},
+            }
+        );
+
+        TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureMirror3dc, 3, 3, 1, 10, 20, 10, 256));
+        context.PopulateGroupMapper(mapper, 1);
+
+        TGroupMapper::TGroupDefinition g1;
+        UNIT_ASSERT_UNEQUAL(0, context.AllocateGroup(mapper, g1));
+        context.DumpGroup(g1);
+
+        for (ui32 numSlots : context.GetSlots()) {
+            UNIT_ASSERT_VALUES_EQUAL(1, numSlots);
+        }
+
+        TGroupMapper::TGroupDefinition g2;
+        UNIT_ASSERT_EQUAL(0, context.AllocateGroup(mapper, g2, {}, true));
+        context.DumpGroup(g2);
+
+        for (ui32 numSlots : context.GetSlots()) {
+            UNIT_ASSERT_VALUES_EQUAL(1, numSlots);
+        }
+    }
+
+    Y_UNIT_TEST(DifferentSlotSizeUnits) {
+        TTestContext context(1, 1, 1, 1, TVector({TSlotSizeUnits::SINGLE}));
+
+        TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureNone, 1, 1, 1));
+        context.PopulateGroupMapper(mapper, 2);
+
+        UNIT_ASSERT_VALUES_EQUAL(context.GetTotalDisks(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(0, context.GetSlots()[0]);
+
+        TGroupMapper::TGroupDefinition g1, g2;
+        
+        UNIT_ASSERT_EQUAL(1, context.AllocateGroup(mapper, g1, TSlotSizeUnits::DOUBLE));
+        UNIT_ASSERT_VALUES_EQUAL(2, context.GetSlots()[0]);
+        context.DumpGroup(g1);
+        
+        UNIT_ASSERT_EQUAL(0, context.AllocateGroup(mapper, g2, {}, true));
+        UNIT_ASSERT_VALUES_EQUAL(2, context.GetSlots()[0]);
+        context.DumpGroup(g2);
+
+        // TODO Add mode disks
+    }
 
     Y_UNIT_TEST(MapperSequentialCalls) {
         TTestContext globalContext(3, 3, 4, 3, 4);
@@ -974,7 +1094,7 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
                     : TBlobStorageGroupType::Erasure4Plus2Block));
                 context.PopulateGroupMapper(mapper, maxSlots);
                 TGroupMapper::TGroupDefinition group;
-                while (context.AllocateGroup(mapper, group, true)) {
+                while (context.AllocateGroup(mapper, group, {}, true)) {
                     group.clear();
                     if (rand(0, 99) < 5) {
                         goto next_cycle;

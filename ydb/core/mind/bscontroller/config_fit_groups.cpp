@@ -7,6 +7,8 @@
 namespace NKikimr {
     namespace NBsController {
 
+        using TSlotSizeUnits = NKikimrBlobStorage::TPDiskSlotSizeUnits;
+
         class TBlobStorageController::TGroupFitter {
             TConfigState& State;
             const ui32 AvailabilityDomainId;
@@ -54,7 +56,7 @@ namespace NKikimr {
                 for (ui64 reserve = 0; reserve < min || (reserve - min) * 1000000 / Max<ui64>(1, total) < part; ++reserve, ++total) {
                     TGroupMapper::TGroupDefinition group;
                     try {
-                        AllocateOrSanitizeGroup(TGroupId::Zero(), group, {}, {}, 0, false, &TGroupGeometryInfo::AllocateGroup);
+                        AllocateOrSanitizeGroup(TGroupId::Zero(), group, {}, {}, TSlotSizeUnits::SINGLE, 0, false, &TGroupGeometryInfo::AllocateGroup);
                     } catch (const TExFitGroupError&) {
                         throw TExError() << "group reserve constraint hit";
                     }
@@ -95,7 +97,8 @@ namespace NKikimr {
                     requiredSpace = ExpectedSlotSize.front();
                     ExpectedSlotSize.pop_front();
                 }
-                AllocateOrSanitizeGroup(groupId, group, {}, {}, requiredSpace, false, &TGroupGeometryInfo::AllocateGroup);
+                auto slotSizeUnits = StoragePool.DefaultSlotSizeUnits.GetOrElse({});
+                AllocateOrSanitizeGroup(groupId, group, {}, {}, slotSizeUnits, requiredSpace, false, &TGroupGeometryInfo::AllocateGroup);
 
                 // scan all comprising PDisks for PDiskCategory
                 TMaybe<TPDiskCategory> desiredPDiskCategory;
@@ -130,9 +133,7 @@ namespace NKikimr {
                 TGroupInfo *groupInfo = State.Groups.ConstructInplaceNewEntry(groupId, groupId, 1,
                     0, Geometry.GetErasure(), desiredPDiskCategory.GetOrElse(0), StoragePool.VDiskKind,
                     StoragePool.EncryptionMode.GetOrElse(0), lifeCyclePhase, mainKeyId, encryptedGroupKey,
-                    groupKeyNonce, MainKeyVersion, false, false,
-                    StoragePool.DefaultSlotSizeUnits.GetOrElse(NKikimrBlobStorage::TPDiskSlotSizeUnits::UNSPECIFIED),
-                    StoragePoolId, Geometry.GetNumFailRealms(),
+                    groupKeyNonce, MainKeyVersion, false, false, slotSizeUnits, StoragePoolId, Geometry.GetNumFailRealms(),
                     Geometry.GetNumFailDomainsPerFailRealm(), Geometry.GetNumVDisksPerFailDomain());
 
                 // bind group to storage pool
@@ -303,13 +304,15 @@ namespace NKikimr {
                             }
                         }
 
+                        auto slotSizeUnits = groupInfo->SlotSizeUnits.GetOrElse({});
+
                         if ((State.Self.IsGroupLayoutSanitizerEnabled() && replacedSlots.size() == 1 && hasMissingSlots && !layoutIsValid) ||
                                 (replacedSlots.empty() && sanitizingRequest)) {
 
                             STLOG(PRI_INFO, BS_CONTROLLER, BSCFG01, "Attempt to sanitize group layout", (GroupId, groupId));
                             // Use group layout sanitizing algorithm on direct requests or when initial group layout is invalid
-                            auto result = AllocateOrSanitizeGroup(groupId, group, {}, std::move(forbid), requiredSpace,
-                                AllowUnusableDisks, &TGroupGeometryInfo::SanitizeGroup);
+                            auto result = AllocateOrSanitizeGroup(groupId, group, {}, std::move(forbid),
+                                slotSizeUnits, requiredSpace, AllowUnusableDisks, &TGroupGeometryInfo::SanitizeGroup);
 
                             if (replacedSlots.empty()) {
                                 // update information about replaced disks
@@ -330,11 +333,11 @@ namespace NKikimr {
                             }
                             try {
                                 TGroupMapper::MergeTargetDiskConstraints(hardConstraints, softConstraints);
-                                AllocateOrSanitizeGroup(groupId, group, softConstraints, replacedDisks, std::move(forbid), requiredSpace,
-                                    AllowUnusableDisks, &TGroupGeometryInfo::AllocateGroup);
+                                AllocateOrSanitizeGroup(groupId, group, softConstraints, replacedDisks, std::move(forbid),
+                                    slotSizeUnits, requiredSpace, AllowUnusableDisks, &TGroupGeometryInfo::AllocateGroup);
                             } catch (const TExFitGroupError& ex) {
-                                AllocateOrSanitizeGroup(groupId, group, hardConstraints, replacedDisks, std::move(forbid), requiredSpace,
-                                    AllowUnusableDisks, &TGroupGeometryInfo::AllocateGroup);
+                                AllocateOrSanitizeGroup(groupId, group, hardConstraints, replacedDisks, std::move(forbid),
+                                    slotSizeUnits, requiredSpace, AllowUnusableDisks, &TGroupGeometryInfo::AllocateGroup);
                             }
                         }
                         if (!IgnoreVSlotQuotaCheck) {
@@ -433,11 +436,21 @@ namespace NKikimr {
 
         private:            
             template<typename T>
-            std::invoke_result_t<T, TGroupGeometryInfo&, TGroupMapper&, TGroupId, TGroupMapper::TGroupDefinition&, TGroupMapper::TGroupConstraintsDefinition&,
-                    const THashMap<TVDiskIdShort, TPDiskId>&, TGroupMapper::TForbiddenPDisks, i64> AllocateOrSanitizeGroup(
+            std::invoke_result_t<T,
+                    TGroupGeometryInfo&,
+                    TGroupMapper&,
+                    TGroupId,
+                    TGroupMapper::TGroupDefinition&,
+                    TGroupMapper::TGroupConstraintsDefinition&,
+                    const THashMap<TVDiskIdShort, TPDiskId>&,
+                    TGroupMapper::TForbiddenPDisks,
+                    TSlotSizeUnits::E,
+                    i64
+            > AllocateOrSanitizeGroup(
                     TGroupId groupId, TGroupMapper::TGroupDefinition& group, TGroupMapper::TGroupConstraintsDefinition& constraints,
                     const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TGroupMapper::TForbiddenPDisks forbid,
-                    i64 requiredSpace, bool addExistingDisks, T&& func) {
+                    TSlotSizeUnits::E slotSizeUnits, i64 requiredSpace, bool addExistingDisks, T&& func
+            ) {
                 if (!Mapper) {
                     Mapper.emplace(Geometry, StoragePool.RandomizeGroupMapping);
                     PopulateGroupMapper();
@@ -465,17 +478,27 @@ namespace NKikimr {
                         }
                     }
                 } unregister{*Mapper, removeQ};
-                return std::invoke(func, Geometry, *Mapper, groupId, group, constraints, replacedDisks, std::move(forbid), requiredSpace);
+                return std::invoke(func, Geometry, *Mapper, groupId, group, constraints, replacedDisks, std::move(forbid), slotSizeUnits, requiredSpace);
             }
 
             template<typename T>
-            std::invoke_result_t<T, TGroupGeometryInfo&, TGroupMapper&, TGroupId, TGroupMapper::TGroupDefinition&, TGroupMapper::TGroupConstraintsDefinition&,
-                    const THashMap<TVDiskIdShort, TPDiskId>&, TGroupMapper::TForbiddenPDisks, i64> AllocateOrSanitizeGroup(
+            std::invoke_result_t<T,
+                    TGroupGeometryInfo&,
+                    TGroupMapper&,
+                    TGroupId,
+                    TGroupMapper::TGroupDefinition&,
+                    TGroupMapper::TGroupConstraintsDefinition&,
+                    const THashMap<TVDiskIdShort, TPDiskId>&,
+                    TGroupMapper::TForbiddenPDisks,
+                    TSlotSizeUnits::E,
+                    i64
+            > AllocateOrSanitizeGroup(
                     TGroupId groupId, TGroupMapper::TGroupDefinition& group,
                     const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TGroupMapper::TForbiddenPDisks forbid,
-                    i64 requiredSpace, bool addExistingDisks, T&& func) {
+                    TSlotSizeUnits::E slotSizeUnits, i64 requiredSpace, bool addExistingDisks, T&& func
+            ) {
                 TGroupMapper::TGroupConstraintsDefinition emptyConstraints;
-                return AllocateOrSanitizeGroup(groupId, group, emptyConstraints, replacedDisks, forbid, requiredSpace, addExistingDisks, func);
+                return AllocateOrSanitizeGroup(groupId, group, emptyConstraints, replacedDisks, forbid, slotSizeUnits, requiredSpace, addExistingDisks, func);
             }
 
             void PopulateGroupMapper() {
@@ -562,6 +585,7 @@ namespace NKikimr {
                     .Usable = usable,
                     .NumSlots = numSlots,
                     .MaxSlots = info.ExpectedSlotCount,
+                    .SlotSizeUnits = info.SlotSizeUnits,
                     .Groups = std::move(groups),
                     .SpaceAvailable = availableSpace,
                     .Operational = info.Operational,

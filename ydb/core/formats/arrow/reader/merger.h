@@ -59,7 +59,8 @@ private:
                     builder->SkipRecord(SortHeap.Current());
                 }
                 SortHeap.Next();
-                if (SortHeap.Current().GetKeyColumns().Compare(*startSorting, startPosition) != std::partial_ordering::equivalent) {
+                if (SortHeap.Empty() ||
+                    SortHeap.Current().GetKeyColumns().Compare(*startSorting, startPosition) != std::partial_ordering::equivalent) {
                     skippedPk = true;
                 }
             }

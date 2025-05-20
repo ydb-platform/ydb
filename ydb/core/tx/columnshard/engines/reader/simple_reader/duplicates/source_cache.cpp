@@ -28,7 +28,7 @@ void TSourceCache::Handle(const TEvDuplicateFilterDataFetched::TPtr& ev) {
         info.Abort(ev->Get()->GetResult().GetErrorMessage());
     } else {
         auto cached = std::make_shared<TColumnsData>(ev->Get()->GetResult().GetResult());
-        AFL_VERIFY(SourcesData.Insert(sourceId, cached));
+        SourcesData.Insert(sourceId, cached);
         info.Complete(cached);
     }
 }

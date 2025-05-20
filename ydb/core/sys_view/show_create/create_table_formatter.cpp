@@ -1239,8 +1239,14 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
     }
 
     if (!schema.GetIndexes().empty()) {
-        for (const auto& index : schema.GetIndexes()) {
-            FormatUpsertIndex(fullPath, index, columns);
+        try {
+            for (const auto& index : schema.GetIndexes()) {
+                FormatUpsertIndex(fullPath, index, columns);
+            }
+        } catch (const TFormatFail& ex) {
+            return TFormatResult(ex.Status, ex.Error);
+        } catch (const yexception& e) {
+            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
         }
     }
 
@@ -1730,7 +1736,7 @@ void TCreateTableFormatter::FormatUpsertIndex(const TString& fullPath, const NKi
             if (bloomNGrammFilter.HasFilterSizeBytes()) {
                 json["filter_size_bytes"] = bloomNGrammFilter.GetFilterSizeBytes();
             }
-            if (bloomNGrammFilter.HasFilterSizeBytes()) {
+            if (bloomNGrammFilter.HasHashesCount()) {
                 json["hashes_count"] = bloomNGrammFilter.GetHashesCount();
             }
             if (bloomNGrammFilter.HasCaseSensitive()) {

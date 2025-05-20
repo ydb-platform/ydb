@@ -192,7 +192,7 @@ public:
     const TReplaceKeyAdapter& GetStart() const {
         return Start;
     }
-    const TReplaceKeyAdapter GetFinish() const {
+    const TReplaceKeyAdapter& GetFinish() const {
         return Finish;
     }
 
@@ -437,6 +437,8 @@ public:
     const TPortionInfo::TConstPtr& GetPortionInfoPtr() const {
         return Portion;
     }
+
+    virtual std::optional<TSnapshot> GetDataSnapshot() const override;
 
     TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context);
 };

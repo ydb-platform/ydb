@@ -13,6 +13,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
+#include <ydb/public/lib/ydb_cli/dump/files/files.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 
@@ -73,8 +74,8 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
 
     bool BuildSchemeToUpload(const NKikimrScheme::TEvDescribeSchemeResult& describeResult, TString& error) {
         static THashMap<NKikimrSchemeOp::EPathType, TString> TypeToFileName = {
-            {NKikimrSchemeOp::EPathType::EPathTypeView, "create_view.sql"},
-            {NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup, "create_topic.pb"},
+            {NKikimrSchemeOp::EPathType::EPathTypeView, NYdb::NDump::NFiles::CreateView().FileName},
+            {NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup, NYdb::NDump::NFiles::CreateTopic().FileName},
         };
 
         PathType = describeResult.GetPathDescription().GetSelf().GetPathType();

@@ -63,6 +63,7 @@ class TestAlterCompression(ColumnFamilyTestBase):
 
     @pytest.mark.parametrize("suffix, family_settings", COMPRESSION_CASES)
     def test_all_supported_compression(self, suffix: str, family_settings: str):
+        ''' Implements https://github.com/ydb-platform/ydb/issues/13640 '''
         single_upsert_rows_count: int = 10**5
         upsert_count: int = 10
         test_name: str = "all_supported_compression"

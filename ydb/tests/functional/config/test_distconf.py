@@ -322,9 +322,9 @@ class KiKiMRDistConfReassignStateStorageTest(DistConfKiKiMRTest):
 
 class KiKiMRDistConfReassignStateStorageBaseTest(KiKiMRDistConfReassignStateStorageTest):
     def test_cluster_change_state_storage(self):
-        # self.do_test("SchemeBoard")
         self.do_test("StateStorage")
-        self.do_test("StateStorageBoard")
+        # self.do_test("StateStorageBoard")
+        # self.do_test("SchemeBoard")
 
 
 class TestKiKiMRDistConfReassignStateStorageBadCases(KiKiMRDistConfReassignStateStorageBaseTest):

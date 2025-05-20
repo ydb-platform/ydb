@@ -8,6 +8,8 @@
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 
+#include <ydb/library/protobuf_printer/security_printer.h>
+
 namespace NFq {
 
 namespace {
@@ -18,13 +20,36 @@ void PrepareSensitiveFields(::FederatedQuery::Connection& connection, bool extra
     }
 
     auto& setting = *connection.mutable_content()->mutable_setting();
-    if (setting.has_clickhouse_cluster()) {
-        auto& ch = *setting.mutable_clickhouse_cluster();
-        ch.set_password("");
+    switch (setting.connection_case()) {
+    case FederatedQuery::ConnectionSetting::kObjectStorage:
+        break;
+    case FederatedQuery::ConnectionSetting::kYdbDatabase:
+        break;
+    case FederatedQuery::ConnectionSetting::kClickhouseCluster:
+        setting.mutable_clickhouse_cluster()->clear_password();
+        break;
+    case FederatedQuery::ConnectionSetting::kDataStreams:
+        break;
+    case FederatedQuery::ConnectionSetting::kMonitoring:
+        break;
+    case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
+        setting.mutable_postgresql_cluster()->clear_password();
+        break;
+    case FederatedQuery::ConnectionSetting::kGreenplumCluster:
+        setting.mutable_greenplum_cluster()->clear_password();
+        break;
+    case FederatedQuery::ConnectionSetting::kMysqlCluster:
+        setting.mutable_mysql_cluster()->clear_password();
+        break;
+    case FederatedQuery::ConnectionSetting::kLogging:
+        break;
+    case FederatedQuery::ConnectionSetting::kIceberg:
+        break;
+    case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
+        break;
     }
-    if (setting.has_postgresql_cluster()) {
-        auto& pg = *setting.mutable_postgresql_cluster();
-        pg.set_password("");
+    if (auto auth = GetMutableAuth(setting); auth && auth->has_token()) {
+        auth->mutable_token()->clear_token();
     }
 }
 
@@ -92,13 +117,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
     CPS_LOG_T(MakeLogPrefix(scope, user, connectionId)
         << "CreateConnectionRequest: "
         << NKikimr::MaskTicket(token) << " "
-        << request.DebugString());
+        << SecureDebugString(request));
 
     if (const auto& issues = ValidateRequest(ev)) {
         CPS_LOG_D(MakeLogPrefix(scope, user, connectionId)
             << "CreateConnectionRequest, validation failed: "
             << NKikimr::MaskTicket(token) << " "
-            << request.DebugString()
+            << SecureDebugString(request)
             << " error: " << issues.ToString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvCreateConnectionResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
@@ -448,14 +473,14 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
     CPS_LOG_T(MakeLogPrefix(scope, user, connectionId)
         << "ModifyConnectionRequest: "
         << NKikimr::MaskTicket(token)
-        << " " << request.DebugString());
+        << " " << SecureDebugString(request));
 
     NYql::TIssues issues = ValidateConnection(ev, false);
     if (issues) {
         CPS_LOG_D(MakeLogPrefix(scope, user, connectionId)
             << "ModifyConnectionRequest, validation failed: "
             << NKikimr::MaskTicket(token) << " "
-            << request.DebugString()
+            << SecureDebugString(request)
             << " error: " << issues.ToString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvModifyConnectionResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);

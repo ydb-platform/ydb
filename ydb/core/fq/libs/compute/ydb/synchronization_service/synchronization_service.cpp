@@ -333,6 +333,7 @@ private:
             case FederatedQuery::IamAuth::kNone:
             case FederatedQuery::IamAuth::kServiceAccount:
                 return {};
+            case FederatedQuery::IamAuth::kToken:
             case FederatedQuery::IamAuth::kCurrentIam:
             case FederatedQuery::IamAuth::IDENTITY_NOT_SET:
                 return NYql::TIssues{NYql::TIssue{TStringBuilder{} << "Unsupported auth method for connection id " << meta.id() << " with name " << content.name() << " at the synchronization stage"}};
@@ -371,6 +372,7 @@ private:
                 case FederatedQuery::IamAuth::kServiceAccount:
                 break;
                 case FederatedQuery::IamAuth::kCurrentIam:
+                case FederatedQuery::IamAuth::kToken:
                 case FederatedQuery::IamAuth::IDENTITY_NOT_SET:
                 LOG_I("Exclude connection by auth: scope = " << Scope << " , id = " << meta.id() << ", auth = " << static_cast<int>(authCase));
                 excludeIds.push_back(meta.id());

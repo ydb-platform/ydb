@@ -267,7 +267,7 @@ private:
         }
 
         static TString GetLogPrefix(TEvRequest::TPtr& ev) {
-            return TStringBuilder() << "{" << ev->Get()->Request.DebugString() << "} ";
+            return TStringBuilder() << "{" << SecureDebugString(ev->Get()->Request) << "} ";
         }
 
     public:

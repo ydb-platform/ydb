@@ -98,20 +98,19 @@ class TestDML(TestBase):
     def create_types_for_all_select(
         self, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str
     ):
-        statements = []
-        # delete if after https://github.com/ydb-platform/ydb/issues/16930
+        selected_columns = []
         for type in all_types.keys():
             if type not in unsuppored_time_types:
-                statements.append(f"col_{cleanup_type_name(type)}")
+                selected_columns.append(f"col_{cleanup_type_name(type)}")
         for type in pk_types.keys():
             if type not in unsuppored_time_types:
-                statements.append(f"pk_{cleanup_type_name(type)}")
+                selected_columns.append(f"pk_{cleanup_type_name(type)}")
         for type in index.keys():
             if type not in unsuppored_time_types:
-                statements.append(f"col_index_{cleanup_type_name(type)}")
+                selected_columns.append(f"col_index_{cleanup_type_name(type)}")
         if ttl != "":
-            statements.append(f"ttl_{cleanup_type_name(ttl)}")
-        return statements
+            selected_columns.append(f"ttl_{cleanup_type_name(ttl)}")
+        return selected_columns
 
     def assert_type_after_select(
         self,
@@ -197,27 +196,27 @@ class TestDML(TestBase):
         ttl: str,
         dml: DMLOperations,
     ):
-        statements = []
+        selected_columns = []
         for type in all_types.keys():
             if (
                 type not in unsuppored_time_types
                 and type not in unsuppored_distinct_types
                 and type not in uncomparable_types
             ):
-                statements.append(f"col_{cleanup_type_name(type)}")
+                selected_columns.append(f"col_{cleanup_type_name(type)}")
         for type in pk_types.keys():
             if type not in unsuppored_time_types and type not in unsuppored_distinct_types:
-                statements.append(f"pk_{cleanup_type_name(type)}")
+                selected_columns.append(f"pk_{cleanup_type_name(type)}")
         for type in index.keys():
             if type not in unsuppored_time_types and type not in unsuppored_distinct_types:
-                statements.append(f"col_index_{cleanup_type_name(type)}")
+                selected_columns.append(f"col_index_{cleanup_type_name(type)}")
         if ttl != "" and ttl != "DyNumber":
-            statements.append(f"ttl_{cleanup_type_name(ttl)}")
+            selected_columns.append(f"ttl_{cleanup_type_name(ttl)}")
         rows = self.query(
             f"""
-                          select {", ".join(statements)} from {table_name}
+                          select {", ".join(selected_columns)} from {table_name}
                           union
-                          select {", ".join(statements)} from {table_name}
+                          select {", ".join(selected_columns)} from {table_name}
                           """
         )
         for type in all_types.keys():
@@ -272,31 +271,31 @@ class TestDML(TestBase):
     def without(
         self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str
     ):
-        statements_without = []
+        selected_columns_without = []
         for type_name in all_types.keys():
             if type_name in unsuppored_time_types:
-                statements_without.append(f"col_{cleanup_type_name(type_name)}")
+                selected_columns_without.append(f"col_{cleanup_type_name(type_name)}")
         for type_name in pk_types.keys():
             if type_name in unsuppored_time_types:
-                statements_without.append(f"pk_{cleanup_type_name(type_name)}")
+                selected_columns_without.append(f"pk_{cleanup_type_name(type_name)}")
         for type_name in index.keys():
             if type_name in unsuppored_time_types:
-                statements_without.append(f"col_index_{cleanup_type_name(type_name)}")
+                selected_columns_without.append(f"col_index_{cleanup_type_name(type_name)}")
 
         for type_name in all_types.keys():
             if type_name not in unsuppored_time_types:
-                self.create_without(table_name, statements_without, f"col_{cleanup_type_name(type_name)}")
+                self.create_without(table_name, selected_columns_without, f"col_{cleanup_type_name(type_name)}")
         for type_name in pk_types.keys():
             if type_name not in unsuppored_time_types:
-                self.create_without(table_name, statements_without, f"pk_{cleanup_type_name(type_name)}")
+                self.create_without(table_name, selected_columns_without, f"pk_{cleanup_type_name(type_name)}")
         for type_name in index.keys():
             if type_name not in unsuppored_time_types:
-                self.create_without(table_name, statements_without, f"col_index_{cleanup_type_name(type_name)}")
+                self.create_without(table_name, selected_columns_without, f"col_index_{cleanup_type_name(type_name)}")
         if ttl != "":
-            self.create_without(table_name, statements_without, f"ttl_{cleanup_type_name(ttl)}")
+            self.create_without(table_name, selected_columns_without, f"ttl_{cleanup_type_name(ttl)}")
 
-    def create_without(self, table_name, statements_without, without):
-        rows = self.query(f"select * without {", ".join(statements_without)}, {without} from {table_name}")
+    def create_without(self, table_name, selected_columns_without, without):
+        rows = self.query(f"select * without {", ".join(selected_columns_without)}, {without} from {table_name}")
         for col_name in rows[0].keys():
             assert col_name != without, f"a column {without} in the table {table_name} was not excluded"
 

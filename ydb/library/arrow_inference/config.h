@@ -31,6 +31,7 @@ struct CsvConfig : public FormatConfig {
     arrow::csv::ParseOptions ParseOpts = arrow::csv::ParseOptions::Defaults();
     arrow::csv::ConvertOptions ConvOpts = arrow::csv::ConvertOptions::Defaults();
     arrow::csv::ReadOptions ReadOpts = arrow::csv::ReadOptions::Defaults(); // use_threads and block_size will be rewritten
+    int RowsToAnalyze = 0; // 0 means unlimited
 };
 
 using TsvConfig = CsvConfig;

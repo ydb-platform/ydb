@@ -1,12 +1,15 @@
 #include "ydb_table_infer.h"
 
 #include <ydb/library/arrow_inference/arrow_inference.h>
+#include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 
 #include <arrow/csv/options.h>
 #include <arrow/io/file.h>
+#include <arrow/io/stdio.h>
 #include <arrow/table.h>
 #include <util/string/builder.h>
+#include <library/cpp/string_utils/csv/csv.h>
 
 namespace NYdb::NConsoleClient {
 
@@ -29,104 +32,124 @@ TCommandTableInferCsv::TCommandTableInferCsv()
 void TCommandTableInferCsv::Config(TConfig& config) {
     TYdbCommand::Config(config);
 
-    config.Opts->AddLongOption("file", "Path to CSV file(s)")
-        .RequiredArgument("PATH").AppendTo(&FilePaths);
+    config.Opts->SetTrailingArgTitle("<input files...>",
+            "One or more file paths to infer from. Or CSV data can be passed to stdin instead");
+    config.Opts->AddLongOption('p', "path", "Database path to table that should be created")
+        .RequiredArgument("STRING").DefaultValue("table").StoreResult(&Path);
     config.Opts->AddLongOption("header", "Use first row as header")
         .NoArgument().SetFlag(&Header);
     config.Opts->AddLongOption("columns", "Comma-separated list of column names")
-        .RequiredArgument("NAMES").StoreResult(&HeaderRow);
-    config.Opts->AddLongOption("null-value", "String(s) to interpret as NULL. Can be used multiple times")
-        .RequiredArgument("NAME").AppendTo(&NullValues);
-
-    config.SetFreeArgsNum(0);
+        .RequiredArgument("NAMES").StoreResult(&ColumnNames);
+    config.Opts->AddLongOption("rows-to-analyze", "Number of rows to analyze. "
+        "0 means unlimited. Reading will be stopped soon after this number of rows is read.")
+        .DefaultValue(500000).StoreResult(&RowsToAnalyze);
 }
 
 void TCommandTableInferCsv::Parse(TConfig& config) {
     TClientCommand::Parse(config);
 
-    if (FilePaths.empty()) {
-        throw TMisuseException() << "At least one file path should be provided";
+    for (const auto& filePath : config.ParseResult->GetFreeArgs()) {
+        FilePaths.push_back(filePath);
+    }
+    for (const auto& filePath : FilePaths) {
+        if (filePath.empty()) {
+            throw TMisuseException() << "File path is not allowed to be empty";
+        }
     }
 
-    if (Header && !HeaderRow.empty()) {
-        throw TMisuseException() << "Options --header and --columns are mutually exclusive";
+    if (FilePaths.empty()) {
+        if (IsStdinInteractive()) {
+            throw TMisuseException() << "At least one file path should be provided";
+        } else {
+            ReadingFromStdin = true;
+        }
+    }
+
+    if (Header && !ColumnNames.empty()) {
+        throw TMisuseException() << "Options --header and --columns are mutually exclusive."
+            " Use --header if first row in the file  containscolumn names. Use --columns to list column names manually.";
     }
 }
 
 int TCommandTableInferCsv::Run(TConfig& config) {
     Y_UNUSED(config);
+    std::vector<std::shared_ptr<arrow::io::InputStream>> inputs;
+    if (ReadingFromStdin) {
+        inputs.push_back(std::make_shared<arrow::io::StdinStream>());
+    } else {
+        for (const auto& filePath : FilePaths) {
+            auto maybeFile = arrow::io::ReadableFile::Open(filePath.c_str());
+            if (!maybeFile.ok()) {
+                throw TMisuseException() << "Failed to open file: " << filePath;
+            }
+            inputs.push_back(maybeFile.ValueOrDie());
+        }
+    }
+
+    auto formatConfig = std::make_shared<NArrowInference::CsvConfig>();
+    formatConfig->RowsToAnalyze = RowsToAnalyze;
+    if (!ColumnNames.empty()) {
+        NCsvFormat::CsvSplitter splitter(ColumnNames);
+        auto tmp = static_cast<TVector<TString>>(splitter);
+        std::vector<std::string> columnNames;
+        for (const auto& columnName : tmp) {
+            columnNames.push_back(columnName.data());
+        }
+        formatConfig->ReadOpts.column_names = columnNames;
+    } else if (!Header) {
+        formatConfig->ReadOpts.autogenerate_column_names = true;
+    }
+
+    formatConfig->Format = NArrowInference::EFileFormat::CsvWithNames;
+
+    auto result = NYdb::NArrowInference::InferTypes(inputs, formatConfig);
     
-    for (const auto& filePath : FilePaths) {
-        auto maybeFile = arrow::io::ReadableFile::Open(filePath.c_str());
-        if (!maybeFile.ok()) {
-            throw TMisuseException() << "Failed to open file: " << filePath;
-        }
+    if (std::holds_alternative<TString>(result)) {
+        throw TMisuseException() << "Failed to infer schema: " << std::get<TString>(result);
+    }
 
-        THashMap<TString, TString> params;
-        params["format"] = "csv_with_names";
-        if (Header) {
-            params["header"] = "true";
+    auto& arrowFields = std::get<NYdb::NArrowInference::ArrowFields>(result);
+    TStringBuilder query;
+    query << "CREATE TABLE `" << Path << "` (\n";
+    bool first = true;
+    for (const auto& field : arrowFields) {
+        if (field->name().empty()) {
+            continue;
         }
-        if (!HeaderRow.empty()) {
-            params["columns"] = HeaderRow;
+        Ydb::Type inferredType;
+        bool inferResult = NYdb::NArrowInference::ArrowToYdbType(inferredType, *field->type(), formatConfig);
+        if (!first) {
+            query << ",\n";
         }
-
-        auto formatConfig = std::make_shared<NArrowInference::CsvConfig>();
-        if (!NullValues.empty()) {
-            formatConfig->ConvOpts.null_values = NullValues;
-            formatConfig->ConvOpts.quoted_strings_can_be_null = true;
-        }
-
-        formatConfig->Format = NArrowInference::EFileFormat::CsvWithNames;
-        formatConfig->ShouldMakeOptional = true;
-
-        auto result = NYdb::NArrowInference::InferTypes(maybeFile.ValueOrDie(), formatConfig);
-        
-        if (std::holds_alternative<TString>(result)) {
-            throw TMisuseException() << "Failed to infer schema: " << std::get<TString>(result);
-        }
-
-        auto& arrowFields = std::get<NYdb::NArrowInference::ArrowFields>(result);
-        TStringBuilder query;
-        query << "CREATE TABLE `table` (\n";
-        bool first = true;
-        for (const auto& field : arrowFields) {
-            if (field->name().empty()) {
-                continue;
+        TString resultType = "Text";
+        if (inferResult) {
+            TTypeParser parser(inferredType);
+            if (parser.GetKind() == TTypeParser::ETypeKind::Optional) {
+                parser.OpenOptional();
             }
-            Ydb::Type inferredType;
-            bool inferResult = NYdb::NArrowInference::ArrowToYdbType(inferredType, *field->type(), formatConfig);
-            if (!first) {
-                query << ",\n";
-            }
-            TString resultType = "Text";
-            bool isOptional = false;
-            if (inferResult) {
-                TTypeParser parser(inferredType);
-                if (parser.GetKind() == TTypeParser::ETypeKind::Optional) {
-                    isOptional = true;
-                    parser.OpenOptional();
-                }
-                if (parser.GetKind() == TTypeParser::ETypeKind::Primitive) {
-                    resultType = TTypeBuilder()
+            if (parser.GetKind() == TTypeParser::ETypeKind::Primitive) {
+                resultType = (parser.GetPrimitive() == EPrimitiveType::Utf8)
+                    ? "Text"
+                    : TTypeBuilder()
                         .Primitive(parser.GetPrimitive())
                         .Build()
                         .ToString();
-                } else {
-                    throw TMisuseException() << "Only primitive types are supported for table columns."
-                        " Inferred type kind: " << parser.GetKind();
-                }
+            } else {
+                throw TMisuseException() << "Only primitive types are supported for table columns."
+                    " Inferred type kind: " << parser.GetKind();
             }
-            query << "    `" << field->name() << "` " << resultType;
-            if (!isOptional) {
-                query << " NOT NULL";
-            }
-            first = false;
+        } else if (config.IsVerbose()) {
+            Cerr << "Failed to infer type for column " << field->name() << Endl;
         }
-        query << "\n) PRIMARY KEY ()";
-
-        Cout << query << Endl;
+        query << "    `" << field->name() << "` " << resultType;
+        if (!field->nullable()) {
+            query << " NOT NULL";
+        }
+        first = false;
     }
+    query << "\n) PRIMARY KEY (" << arrowFields[0]->name() << ")";
+
+    Cout << query << Endl;
 
     return EXIT_SUCCESS;
 }

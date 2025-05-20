@@ -3,6 +3,8 @@
 namespace NKikimr::NBsController {
 
 class TBlobStorageController::TTxUpdateDiskMetrics : public TTransactionBase<TBlobStorageController> {
+    bool UpdatesSkipped = false;
+
 public:
     TTxUpdateDiskMetrics(TBlobStorageController *controller)
         : TBase(controller)
@@ -15,18 +17,42 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
 
+        ui32 numUpdates = 0;
+        constexpr ui32 maxUpdates = 10'000;
+
+        enum class EAction {
+            PROCESS,
+            SKIP,
+            QUIT
+        };
+        auto check = [&](bool& dirty) {
+            if (dirty) {
+                if (numUpdates < maxUpdates) {
+                    ++numUpdates;
+                    dirty = false;
+                    return EAction::PROCESS;
+                } else {
+                    UpdatesSkipped = true;
+                    return EAction::QUIT;
+                }
+            }
+            return EAction::SKIP;
+        };
+
         for (const auto& [pdiskId, pdisk] : Self->PDisks) {
-            if (std::exchange(pdisk->MetricsDirty, false)) {
+            if (auto e = check(pdisk->MetricsDirty); e == EAction::PROCESS) {
                 auto&& key = pdiskId.GetKey();
                 auto value = pdisk->Metrics;
                 value.ClearPDiskId();
                 db.Table<Schema::PDiskMetrics>().Key(key).Update<Schema::PDiskMetrics::Metrics>(value);
                 Self->SysViewChangedPDisks.insert(pdiskId);
+            } else if (e == EAction::QUIT) {
+                return true;
             }
         }
 
         for (const auto& [vslotId, v] : Self->VSlots) {
-            if (std::exchange(v->MetricsDirty, false)) {
+            if (auto e = check(v->MetricsDirty); e == EAction::PROCESS) {
                 auto groupId = v->GroupId.GetRawId();
                 auto&& key = std::tie(groupId, v->GroupGeneration, v->RingIdx, v->FailDomainIdx, v->VDiskIdx);
                 auto value = v->Metrics;
@@ -34,11 +60,13 @@ public:
                 db.Table<Schema::VDiskMetrics>().Key(key).Update<Schema::VDiskMetrics::Metrics>(value);
                 Self->SysViewChangedVSlots.insert(vslotId);
                 Self->SysViewChangedGroups.insert(v->GroupId);
+            } else if (e == EAction::QUIT) {
+                return true;
             }
         }
 
         for (auto& [vslotId, v] : Self->StaticVSlots) {
-            if (std::exchange(v.MetricsDirty, false)) {
+            if (auto e = check(v.MetricsDirty); e == EAction::PROCESS) {
                 Self->SysViewChangedVSlots.insert(vslotId);
                 auto vdiskId = v.VDiskId;
                 auto groupId = vdiskId.GroupID.GetRawId();
@@ -47,12 +75,18 @@ public:
                 value->ClearVDiskId();
                 db.Table<Schema::VDiskMetrics>().Key(key).Update<Schema::VDiskMetrics::Metrics>(*value);
                 Self->SysViewChangedGroups.insert(vdiskId.GroupID);
+            } else if (e == EAction::QUIT) {
+                return true;
             }
         }
+
         return true;
     }
 
     void Complete(const TActorContext&) override {
+        if (UpdatesSkipped) {
+            return Self->CommitMetrics();
+        }
         TActivationContext::Schedule(TDuration::Seconds(15), new IEventHandle(TEvPrivate::EvCommitMetrics, 0,
             Self->SelfId(), TActorId(), nullptr, 0));
     }

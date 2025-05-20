@@ -33,18 +33,6 @@ std::shared_ptr<IOperator> ExprNodeToOperator (TExprNode::TPtr node) {
     }
 }
 
-void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit>& IUs) {
-    if (node->IsCallable("Member")) {
-        auto member = TCoMember(node);
-        IUs.push_back(TInfoUnit(member.Name().StringValue()));
-        return;
-    }
-
-    for (auto c : node->Children()) {
-        GetAllMembers(c, IUs);
-    }
-}
-
 void DFS(int vertex, TVector<int>& sortedStages, THashSet<int>& visited, const THashMap<int, TVector<int>> & stageInputs) {
     visited.emplace(vertex);
 
@@ -120,6 +108,18 @@ namespace NKqp {
 
 using namespace NYql;
 using namespace NNodes;
+
+void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit>& IUs) {
+    if (node->IsCallable("Member")) {
+        auto member = TCoMember(node);
+        IUs.push_back(TInfoUnit(member.Name().StringValue()));
+        return;
+    }
+
+    for (auto c : node->Children()) {
+        GetAllMembers(c, IUs);
+    }
+}
 
 TInfoUnit::TInfoUnit(TString name) {
     if (auto idx = name.find('.'); idx != TString::npos) {

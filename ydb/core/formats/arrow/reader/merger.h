@@ -43,7 +43,7 @@ private:
     }
 
     template <MergeResultBuilder TBuilder>
-    void DrainCurrentPosition(TBuilder* builder, std::shared_ptr<TSortableScanData>* resultScanData, ui64* resultPosition) {
+    [[nodiscard]] bool DrainCurrentPosition(TBuilder* builder, std::shared_ptr<TSortableScanData>* resultScanData, ui64* resultPosition) {
         Y_ABORT_UNLESS(SortHeap.Size());
         Y_ABORT_UNLESS(!SortHeap.Current().IsControlPoint());
         CheckSequenceInDebug(SortHeap.Current().GetKeyColumns());
@@ -66,11 +66,13 @@ private:
             }
             if (skippedPk) {
                 SortHeap.CleanFinished();
-                return;
+                return false;
             }
         }
 
+        bool foundResult = false;
         if (!SortHeap.Current().IsDeleted()) {
+            foundResult = true;
             //        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("key_add", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
             if (builder) {
                 builder->AddRecord(SortHeap.Current());
@@ -106,6 +108,7 @@ private:
             SortHeap.Next();
         }
         SortHeap.CleanFinished();
+        return foundResult;
     }
 
     void CheckSequenceInDebug(const TRWSortableBatchPosition& nextKeyColumnsPosition);
@@ -176,7 +179,7 @@ public:
     template <MergeResultBuilder TBuilder>
     void DrainAll(TBuilder& builder) {
         while (SortHeap.Size()) {
-            DrainCurrentPosition(&builder, nullptr, nullptr);
+            Y_UNUSED(DrainCurrentPosition(&builder, nullptr, nullptr));
         }
     }
     std::shared_ptr<arrow::Table> SingleSourceDrain(
@@ -204,7 +207,7 @@ public:
                     return true;
                 }
             }
-            DrainCurrentPosition(&builder, &resultScanData, &resultPosition);
+            Y_UNUSED(DrainCurrentPosition(&builder, &resultScanData, &resultPosition));
         }
         if (lastResultPosition && resultScanData) {
             *lastResultPosition = resultScanData->BuildCursor(resultPosition);

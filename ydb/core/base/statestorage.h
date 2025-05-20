@@ -419,7 +419,6 @@ struct TEvStateStorage {
     struct TEvPublishActorGone;
     struct TEvUpdateGroupConfig;
     struct TEvRingGroupPassAway;
-    struct TEvReplicaUpdateConfig;
 
     struct TEvReplicaShutdown : public TEventPB<TEvStateStorage::TEvReplicaShutdown, NKikimrStateStorage::TEvReplicaShutdown, TEvStateStorage::EvReplicaShutdown> {
     };

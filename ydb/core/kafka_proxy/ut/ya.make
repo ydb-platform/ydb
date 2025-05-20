@@ -13,6 +13,7 @@ SRCS(
     metarequest_ut.cpp
     ut_transaction_coordinator.cpp
     ut_transaction_actor.cpp
+    ut_produce_actor.cpp
     actors_ut.cpp
 )
 

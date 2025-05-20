@@ -947,6 +947,11 @@ public:
         }
     }
 
+    // used for tests to validate correct opts
+    const TPartitionWriterOpts GetOpts() {
+        return Opts;
+    }
+
 private:
     bool HasWriteId() const {
         return WriteId.Defined();

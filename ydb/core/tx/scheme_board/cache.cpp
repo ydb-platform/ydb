@@ -902,6 +902,15 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         static bool CalcPathIsPrivate(NKikimrSchemeOp::EPathType type, NKikimrSchemeOp::EPathSubType subType) {
             switch (type) {
+            case NKikimrSchemeOp::EPathTypeTable:
+                switch (subType) {
+                case NKikimrSchemeOp::EPathSubTypeSyncIndexImplTable:
+                case NKikimrSchemeOp::EPathSubTypeAsyncIndexImplTable:
+                case NKikimrSchemeOp::EPathSubTypeVectorKmeansTreeIndexImplTable:
+                    return !AppData()->FeatureFlags.GetEnableAccessToImplIndexTables();
+                default:
+                    return false;
+                }
             case NKikimrSchemeOp::EPathTypePersQueueGroup:
                 switch (subType) {
                 case NKikimrSchemeOp::EPathSubTypeStreamImpl:

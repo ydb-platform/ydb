@@ -2930,6 +2930,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST_TWIN(AlterIndexImplTable, VectorIndex) {
         NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableAccessToImplIndexTables(true);
         if (VectorIndex)
             featureFlags.SetEnableVectorIndex(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);

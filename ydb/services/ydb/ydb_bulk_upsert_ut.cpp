@@ -1081,7 +1081,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
 
         {
             auto res = TestUpsertRow(client, "/Root/ui8/Value_index/indexImplTable", 1, 2);
-            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SUCCESS);    // TODO Should fail
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SCHEME_ERROR);
         }
     }
 

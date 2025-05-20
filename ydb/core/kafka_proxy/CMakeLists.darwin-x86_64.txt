@@ -82,6 +82,7 @@ target_sources(ydb-core-kafka_proxy PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_messages_int.h
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_proxy.h
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kqp_helper.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_producer_instance_id.h
 )
 
 

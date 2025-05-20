@@ -39,7 +39,7 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
         }
         columns = {"pk_": pk_types.keys(), "col_": all_types.keys(), "prefix_": prefix_data.keys(), "vec_": vector.keys()}
         pk_columns = {"pk_": pk_types.keys()}
-        dimensions = [(3, 10), (4, 50)]
+        dimensions = [(5, 10), (4, 50), (3, 100)]
         vector_dimension_data = [5]
         distance_data = ["cosine"]  # "cosine", "manhattan", "euclidean"
         similarity_data = ["cosine"]  # "inner_product", "cosine"

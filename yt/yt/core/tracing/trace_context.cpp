@@ -111,20 +111,13 @@ void SetCurrentTraceContext(TTraceContext* context)
     std::atomic_signal_fence(std::memory_order::seq_cst);
 }
 
-TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext, TSourceLocation loc)
+TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext)
 {
-    if (NConcurrency::NDetail::PerThreadFls() == NConcurrency::NDetail::CurrentFls() && newContext) {
-        YT_LOG_TRACE("Writing propagating storage in thread FLS (Location: %v)",
-            loc);
-    }
-
-    auto& propagatingStorage = GetCurrentPropagatingStorage();
+    auto& propagatingStorage = CurrentPropagatingStorage();
 
     auto oldContext = newContext
         ? propagatingStorage.Exchange<TTraceContextPtr>(newContext).value_or(nullptr)
         : propagatingStorage.Remove<TTraceContextPtr>().value_or(nullptr);
-
-    propagatingStorage.RecordLocation(loc);
 
     auto now = GetApproximateCpuInstant();
     auto& traceContextTimingCheckpoint = TraceContextTimingCheckpoint();

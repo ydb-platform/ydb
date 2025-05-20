@@ -61,7 +61,7 @@ class LoadSuiteBase:
         return result
 
     @classmethod
-    def _get_query_settings(cls, query_num: Optional[int], query_name: Optional[str]) -> QuerySettings:
+    def _get_query_settings(cls, query_num: Optional[int] = None, query_name: Optional[str] = None) -> QuerySettings:
         result = LoadSuiteBase.QuerySettings(
             iterations=cls.iterations,
             timeout=cls.timeout,
@@ -369,7 +369,7 @@ class LoadSuiteBase:
                     for param in allure_test_result.parameters:
                         if param.name in {'query_num', 'query_name'}:
                             param.mode = allure.parameter_mode.HIDDEN.value
-        qparams = self._get_query_settings(query_num, query_name)
+        qparams = self._get_query_settings(query_num=query_num, query_name=query_name)
         if query_name is None:
             query_name = f'Query{query_num:02d}'
         self.save_nodes_state()

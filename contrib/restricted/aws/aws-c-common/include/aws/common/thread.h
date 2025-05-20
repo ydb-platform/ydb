@@ -90,8 +90,7 @@ struct aws_thread_options {
 typedef union {
     void *ptr;
 } aws_thread_once;
-#    define AWS_THREAD_ONCE_STATIC_INIT                                                                                \
-        { NULL }
+#    define AWS_THREAD_ONCE_STATIC_INIT {NULL}
 typedef unsigned long aws_thread_id_t;
 #else
 typedef pthread_once_t aws_thread_once;

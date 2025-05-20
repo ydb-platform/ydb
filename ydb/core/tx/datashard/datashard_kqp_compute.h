@@ -1,10 +1,11 @@
 #pragma once
 
-#include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tx/datashard/datashard_user_table.h>
+#include <ydb/core/engine/minikql/minikql_engine_host_counters.h>
+#include <ydb/core/kqp/runtime/kqp_compute.h>
 
 namespace NKikimr {
     namespace NDataShard {

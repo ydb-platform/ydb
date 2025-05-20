@@ -182,13 +182,12 @@ class Platform(object):
         if self.is_android:
             self.android_api = int(preset('ANDROID_API', ANDROID_API_DEFAULT))
 
-        self.is_cygwin = self.os == 'cygwin'
         self.is_yocto = self.os == 'yocto'
         self.is_emscripten = self.os == 'emscripten'
 
         self.is_none = self.os == 'none'
 
-        self.is_posix = self.is_linux or self.is_apple or self.is_android or self.is_cygwin or self.is_yocto
+        self.is_posix = self.is_linux or self.is_apple or self.is_android or self.is_yocto
 
     @staticmethod
     def from_json(data):
@@ -302,8 +301,6 @@ class Platform(object):
             return 'macos'
         if os in ('win', 'win32', 'win64'):
             return 'windows'
-        if os.startswith('cygwin'):
-            return 'cygwin'
 
         return os
 
@@ -733,7 +730,7 @@ class Build(object):
         swiftc.configure()
         swiftc.print_compiler()
 
-        if host.is_linux or host.is_macos or host.is_cygwin:
+        if host.is_linux or host.is_macos:
             if is_negative('USE_ARCADIA_PYTHON'):
                 python = Python(self.tc)
                 python.configure_posix()
@@ -1481,7 +1478,7 @@ class GnuCompiler(Compiler):
             # Arcadia have API 16 for 32-bit Androids.
             self.c_defines.append('-D_FILE_OFFSET_BITS=64')
 
-        if self.target.is_linux or self.target.is_android or self.target.is_cygwin or self.target.is_none:
+        if self.target.is_linux or self.target.is_android or self.target.is_none:
             self.c_defines.append('-D_GNU_SOURCE')
 
         if self.tc.is_clang and self.target.is_linux and self.target.is_x86_64:

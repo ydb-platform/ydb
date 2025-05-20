@@ -34,6 +34,7 @@ SRCS(
     ydb_tools.cpp
     ydb_workload.cpp
     ydb_workload_import.cpp
+    ydb_workload_tpcc.cpp
     ydb_yql.cpp
 )
 

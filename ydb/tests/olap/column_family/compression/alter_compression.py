@@ -124,13 +124,12 @@ class TestAlterCompression(ColumnFamilyTestBase):
         assert volumes[0] == expected_raw
         assert table.get_portion_stat_by_tier()['__DEFAULT']['Rows'] == expected_raw // 8
 
-        if suffix != "off_compression":
-            volumes: tuple[int, int] = table.get_volumes_column("value")
-            koef: float = self.volumes_without_compression[1] / volumes[1]
-            logging.info(
-                f"compression in `{table.path}` {self.volumes_without_compression[1]} / {volumes[1]}: {koef}"
-            )
-            assert koef > 1
+        volumes: tuple[int, int] = table.get_volumes_column("value")
+        koef: float = self.volumes_without_compression[1] / volumes[1]
+        logging.info(
+            f"compression in `{table.path}` {self.volumes_without_compression[1]} / {volumes[1]}: {koef}"
+        )
+        assert koef > 1
 
     def test_availability_data(self):
         ''' Implements https://github.com/ydb-platform/ydb/issues/13643 '''

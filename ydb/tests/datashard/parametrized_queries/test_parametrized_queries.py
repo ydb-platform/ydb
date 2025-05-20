@@ -19,6 +19,7 @@ from ydb.tests.datashard.lib.types_of_variables import (
     index_zero_sync,
 )
 
+# https://github.com/ydb-platform/ydb/issues/17178
 unsupported_types = [
     "Decimal(15,0)",
     "Decimal(22,9)",

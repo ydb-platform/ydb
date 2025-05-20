@@ -161,9 +161,12 @@ TSourceIdInfo TSourceIdInfo::Parse(const TString& data, TInstant now) {
     result.Offset = ReadAs<ui64>(data, pos);
     result.WriteTimestamp = TInstant::MilliSeconds(ReadAs<ui64>(data, pos, now.MilliSeconds()));
     result.CreateTimestamp = TInstant::MilliSeconds(ReadAs<ui64>(data, pos, now.MilliSeconds()));
+    result.ProducerEpoch = ReadAs<TMaybe<ui32>>(data, pos);
 
     Y_ABORT_UNLESS(result.SeqNo <= (ui64)Max<i64>(), "SeqNo is too big: %" PRIu64, result.SeqNo);
     Y_ABORT_UNLESS(result.Offset <= (ui64)Max<i64>(), "Offset is too big: %" PRIu64, result.Offset);
+    Y_ABORT_UNLESS(result.ProducerEpoch.Empty() ||
+                   result.ProducerEpoch <= (ui32)Max<i16>(), "ProducerEpoch is too big: %" PRIu32, *result.ProducerEpoch);
 
     return result;
 }
@@ -179,6 +182,7 @@ void TSourceIdInfo::Serialize(TBuffer& data) const {
     Write<ui64>(Offset, data, pos);
     Write<ui64>(WriteTimestamp.MilliSeconds(), data, pos);
     Write<ui64>(CreateTimestamp.MilliSeconds(), data, pos);
+    Write<TMaybe<ui32>>(ProducerEpoch, data, pos);
 }
 
 TSourceIdInfo TSourceIdInfo::Parse(const NKikimrPQ::TMessageGroupInfo& proto) {
@@ -188,6 +192,9 @@ TSourceIdInfo TSourceIdInfo::Parse(const NKikimrPQ::TMessageGroupInfo& proto) {
     result.Offset = proto.GetOffset();
     result.WriteTimestamp = TInstant::FromValue(proto.GetWriteTimestamp());
     result.CreateTimestamp = TInstant::FromValue(proto.GetCreateTimestamp());
+    if (proto.HasProducerEpoch()) {
+        result.ProducerEpoch = proto.GetProducerEpoch();
+    }
     result.Explicit = proto.GetExplicit();
     if (result.Explicit) {
         result.State = ConvertState(proto.GetState());
@@ -209,6 +216,9 @@ void TSourceIdInfo::Serialize(NKikimrPQ::TMessageGroupInfo& proto) const {
     proto.SetWriteTimestamp(WriteTimestamp.GetValue());
     proto.SetCreateTimestamp(CreateTimestamp.GetValue());
     proto.SetExplicit(Explicit);
+    if (ProducerEpoch) {
+        proto.SetProducerEpoch(*ProducerEpoch);
+    }
     if (Explicit) {
         proto.SetState(ConvertState(State));
     }
@@ -225,6 +235,7 @@ bool TSourceIdInfo::operator==(const TSourceIdInfo& rhs) const {
         && Offset == rhs.Offset
         && WriteTimestamp == rhs.WriteTimestamp
         && CreateTimestamp == rhs.CreateTimestamp
+        && ProducerEpoch == rhs.ProducerEpoch
         && Explicit == rhs.Explicit
         && State == rhs.State;
 }
@@ -235,6 +246,7 @@ void TSourceIdInfo::Out(IOutputStream& out) const {
         << " Offset: " << Offset
         << " WriteTimestamp: " << WriteTimestamp.GetValue()
         << " CreateTimestamp: " << CreateTimestamp.GetValue()
+        << " ProducerEpoch: " << ProducerEpoch
         << " Explicit: " << (Explicit ? "true" : "false")
         << " State: " << State
     << " }";

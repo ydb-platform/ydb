@@ -1124,9 +1124,12 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             << " InitialSeqNo=" << p.InitialSeqNo
     );
 
-    if (!p.Msg.DisableDeduplication
-        && ((sourceId.SeqNo() && *sourceId.SeqNo() >= p.Msg.SeqNo)
-        || (p.InitialSeqNo && p.InitialSeqNo.value() >= p.Msg.SeqNo))) {
+    [[maybe_unused]] bool kafkaDeduplication = p.Msg.EnableKafkaDeduplication &&
+        sourceId.SeqNo() && *sourceId.SeqNo() >= p.Msg.SeqNo;
+
+    if (!p.Msg.DisableDeduplication && ((sourceId.SeqNo() && *sourceId.SeqNo() >= p.Msg.SeqNo)
+        || (p.InitialSeqNo && p.InitialSeqNo.value() >= p.Msg.SeqNo))
+    ) {
         if (poffset >= curOffset) {
             PQ_LOG_D("Already written message. Topic: '" << TopicName()
                     << "' Partition: " << Partition << " SourceId: '" << EscapeC(p.Msg.SourceId)

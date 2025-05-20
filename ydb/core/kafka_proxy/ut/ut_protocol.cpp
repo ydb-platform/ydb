@@ -453,6 +453,11 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
 
         {
+            // send producer epoch, seqno
+            
+        }
+
+        {
             // Check for few records
 
             TKafkaRecordBatch batch;

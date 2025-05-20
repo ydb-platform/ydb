@@ -1,4 +1,5 @@
 #include "kafka_produce_actor.h"
+#include <library/cpp/string_utils/base64/base64.h>
 #include <ydb/core/kafka_proxy/kafka_metrics.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/util/time_util.h>
@@ -262,7 +263,11 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::
     auto& request = ev->Record;
 
     const auto& batch = data.Records;
-    const TString sourceId = TStringBuilder() << batch->ProducerId;
+
+    const TString producerId(batch->ProducerId, sizeof(batch->ProducerId));
+    // TODO(qyryq) Endianness?
+    // TODO(qyryq) Add transactionalId?
+    const TString sourceId = Base64Encode(producerId);
 
     auto* partitionRequest = request.MutablePartitionRequest();
     partitionRequest->SetTopic(topicName);
@@ -313,6 +318,8 @@ THolder<TEvPartitionWriter::TEvWriteRequest> Convert(const TProduceRequestData::
         w->SetClientDC(clientDC);
         w->SetIgnoreQuotaDeadline(true);
         w->SetExternalOperation(true);
+        w->SetEnableKafkaDeduplication(true);
+        w->SetProducerEpoch(batch->ProducerEpoch);
 
         totalSize += record.Value ? record.Value->size() : 0;
     }

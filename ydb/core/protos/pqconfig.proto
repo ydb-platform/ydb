@@ -465,10 +465,13 @@ message TMessageGroupInfo {
     optional uint64 Offset = 2;
     optional uint64 WriteTimestamp = 3; // TInstant::TValue
     optional uint64 CreateTimestamp = 4; // TInstant::TValue
+    optional uint32 ProducerEpoch = 10;  // For idempotent producer in Kafka protocol
+
     optional bool Explicit = 5;
     optional TPartitionKeyRange KeyRange = 6;
     optional EState State = 7;
     optional THeartbeat LastHeartbeat = 8;
+
 }
 
 message TBootstrapConfig {

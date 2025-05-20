@@ -18,11 +18,14 @@ struct TSourceIdInfo {
     ui64 Offset = 0;
     TInstant WriteTimestamp;
     TInstant CreateTimestamp;
+    TMaybe<ui32> ProducerEpoch;  // For Kafka protocol
+
     bool Explicit = false;
     bool TxModified = false;
     TMaybe<TPartitionKeyRange> KeyRange;
     TMaybe<THeartbeat> LastHeartbeat;
     EState State = EState::Registered;
+
 
     TSourceIdInfo() = default;
     TSourceIdInfo(ui64 seqNo, ui64 offset, TInstant createTs);

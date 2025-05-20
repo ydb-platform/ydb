@@ -24,8 +24,6 @@ class TestDatetime2Format(MixedClusterFixture):
                     event_date DateTime,
                     PRIMARY KEY (id)
                 ) WITH (
-                    AUTO_PARTITIONING_BY_LOAD = ENABLED,
-                    AUTO_PARTITIONING_BY_SIZE = ENABLED,
                     PARTITION_AT_KEYS = ({", ".join(str(i) for i in range(1, rows))})
                 );
             """

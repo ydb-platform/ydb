@@ -5,6 +5,7 @@
 #include <ydb/services/persqueue_v1/actors/events.h>
 
 #include "kafka_messages.h"
+#include "kafka_producer_instance_id.h"
 #include <ydb/library/aclib/aclib.h>
 #include "actors/actors.h"
 
@@ -335,12 +336,6 @@ struct TEvEndTxnRequest : public TEventLocal<TEvEndTxnRequest, EvEndTxnRequest> 
     const TMessagePtr<TEndTxnRequestData> Request;
     TActorId ConnectionId;
     TString DatabasePath;
-};
-struct TProducerInstanceId {
-    i64 Id;
-    i32 Epoch;
-
-    auto operator<=>(TProducerInstanceId const&) const = default;
 };
 
 /*

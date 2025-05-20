@@ -665,12 +665,12 @@ public:
     }
 
     template <bool V = UseMigrationProtocol, class = std::enable_if_t<!V>>
-    TMaybe<TPartitionLocation> GetLocation() const {
+    std::optional<TPartitionLocation> GetLocation() const {
         return TAPartitionStream<false>::Location;
     }
 
     template <bool V = UseMigrationProtocol, class = std::enable_if_t<!V>>
-    TMaybe<NTopic::TDirectReadId> GetLastDirectReadId() const {
+    std::optional<NTopic::TDirectReadId> GetLastDirectReadId() const {
         return TAPartitionStream<false>::LastDirectReadId;
     }
 
@@ -1441,7 +1441,7 @@ private:
     bool WaitingReadResponse = false;
     std::shared_ptr<TServerMessage<UseMigrationProtocol>> ServerMessage; // Server message to write server response to.
     std::unordered_map<ui64, TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>>> PartitionStreams; // assignId -> Partition stream.
-    TMaybe<TDirectReadSessionManager> DirectReadSessionManager; // Only for ydb_topic
+    std::optional<TDirectReadSessionManager> DirectReadSessionManager; // Only for ydb_topic
     TPartitionCookieMapping CookieMapping;  // Only for ydb_persqueue
     std::deque<TDecompressionQueueItem> DecompressionQueue;
     bool DataReadingSuspended = false;

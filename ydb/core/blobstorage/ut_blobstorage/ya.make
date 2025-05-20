@@ -16,6 +16,7 @@ ENDIF()
 SRCS(
     acceleration.cpp
     assimilation.cpp
+    backpressure.cpp
     block_race.cpp
     counting_events.cpp
     deadlines.cpp

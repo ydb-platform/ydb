@@ -51,22 +51,21 @@ private:
         const ui64 startPosition = SortHeap.Current().GetKeyColumns().GetPosition();
         const TSortableScanData* startSorting = SortHeap.Current().GetKeyColumns().GetSorting().get();
         const TSortableScanData* startVersion = SortHeap.Current().GetVersionColumns().GetSorting().get();
+
         if (MaxVersion) {
-            bool changed = false;
-            while (SortHeap.Size() && !SortHeap.Current().IsControlPoint() &&
-                   SortHeap.Current().GetVersionColumns().Compare(*MaxVersion) == std::partial_ordering::greater) {
+            bool skippedPk = false;
+            while (SortHeap.Size() && SortHeap.Current().GetVersionColumns().Compare(*MaxVersion) == std::partial_ordering::greater && !skippedPk) {
                 if (builder) {
                     builder->SkipRecord(SortHeap.Current());
                 }
                 SortHeap.Next();
-                changed = true;
-            }
-            if (changed) {
-                if (SortHeap.Empty() ||
-                    SortHeap.Current().GetKeyColumns().Compare(*startSorting, startPosition) != std::partial_ordering::equivalent) {
-                    SortHeap.CleanFinished();
-                    return;
+                if (SortHeap.Current().GetKeyColumns().Compare(*startSorting, startPosition) != std::partial_ordering::equivalent) {
+                    skippedPk = true;
                 }
+            }
+            if (skippedPk) {
+                SortHeap.CleanFinished();
+                return;
             }
         }
 

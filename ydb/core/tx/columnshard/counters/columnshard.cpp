@@ -18,9 +18,9 @@ TCSCounters::TCSCounters()
     for (auto&& i : GetEnumAllValues<EOverloadStatus>()) {
         AFL_VERIFY((ui32)i < WaitingOverloads.size());
         auto overloadCounters = CreateSubGroup("overload_type", ::ToString(i));
-        WaitingOverloads[i] = overloadCounters.GetDeriviative("Overload/Waiting/Count");
-        WriteOverloadCount[i] = overloadCounters.GetDeriviative("Overload/Write/Count");
-        WriteOverloadBytes[i] = overloadCounters.GetDeriviative("Overload/Write/Bytes");
+        WaitingOverloads[(ui32)i] = overloadCounters.GetDeriviative("Overload/Waiting/Count");
+        WriteOverloadCount[(ui32)i] = overloadCounters.GetDeriviative("Overload/Write/Count");
+        WriteOverloadBytes[(ui32)i] = overloadCounters.GetDeriviative("Overload/Write/Bytes");
     }
     for (auto&& i : WriteOverloadCount) {
         AFL_VERIFY(i);

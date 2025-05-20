@@ -1134,19 +1134,9 @@ Y_UNIT_TEST_SUITE(TResourceBrokerConfig) {
             queuesCpu += q.GetLimit().GetCpu();
         }
         Cerr << "Total queues cpu: " << queuesCpu;
-        
-        auto getCpu = [&](const TString& queue) {
-            for (const auto& q : config.GetQueues()) {
-                if (q.GetName() == queue) {
-                    return q.GetLimit().GetCpu();
-                }
-            }
-            Y_ASSERT(false);
-            return ui64(0);
-        };
 
         // see https://github.com/ydb-platform/ydb/issues/18513
-        UNIT_ASSERT_LT(getCpu("queue_build_index") + getCpu("queue_restore"), config.GetResourceLimit().GetCpu());
+        UNIT_ASSERT_LE(queuesCpu, config.GetResourceLimit().GetCpu());
     }
 
 } // TResourceBrokerConfig

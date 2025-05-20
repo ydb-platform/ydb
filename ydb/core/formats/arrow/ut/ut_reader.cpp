@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
             UNIT_ASSERT(batchBuilder->Flush(&search).ok());
         }
 
-        NMerger::TSortableBatchPosition searchPosition(search, 0, false);
+        NMerger::TSortableBatchPosition searchPosition(search, 0, search->num_rows(), false);
         {
             auto findPosition = NMerger::TSortableBatchPosition::FindBound(data, searchPosition, false, std::nullopt);
             UNIT_ASSERT(!!findPosition);

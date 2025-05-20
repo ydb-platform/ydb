@@ -186,7 +186,7 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
         values = []
 
         for key in range(1, self.rows_count + 1):
-            vector = get_vector(vector_type, vector_dimension, vector_dimension)
+            vector = get_vector(vector_type, key % 127, vector_dimension)
             name = converter.name
             vector_type = converter.vector_type
             values.append(

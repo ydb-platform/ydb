@@ -6,6 +6,8 @@ PY3_LIBRARY()
         external.py
         tpcds.py
         tpch.py
+        workload_nemesis.py
+
     )
 
     PEERDIR (

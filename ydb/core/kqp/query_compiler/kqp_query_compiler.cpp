@@ -1233,55 +1233,57 @@ private:
                 AFL_ENSURE(settings.InconsistentWrite().Cast().StringValue() == "false");
                 settingsProto.SetInconsistentTx(false);
 
-                AFL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
-                for (size_t index = 0; index < tableMeta->Indexes.size(); ++index) {
-                    const auto& indexDescription = tableMeta->Indexes[index];
-                    const auto& implTable = tableMeta->ImplTables[index];
+                if (Config->EnableIndexStreamWrite) {
+                    AFL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
+                    for (size_t index = 0; index < tableMeta->Indexes.size(); ++index) {
+                        const auto& indexDescription = tableMeta->Indexes[index];
+                        const auto& implTable = tableMeta->ImplTables[index];
 
-                    if (indexDescription.Type != TIndexDescription::EType::GlobalSync && indexDescription.Type != TIndexDescription::EType::GlobalSyncUnique) {
-                        // Only sync secondary indexes are supported.
-                        continue;
+                        if (indexDescription.Type != TIndexDescription::EType::GlobalSync && indexDescription.Type != TIndexDescription::EType::GlobalSyncUnique) {
+                            // Only sync secondary indexes are supported.
+                            continue;
+                        }
+
+                        AFL_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
+
+                        auto indexSettings = settingsProto.AddIndexes();
+                        FillTableId(*implTable, *indexSettings->MutableTable());
+
+                        indexSettings->SetIsUniq(indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique);
+
+                        for (const auto& columnName : implTable->KeyColumnNames) {
+                            const auto columnMeta = implTable->Columns.FindPtr(columnName);
+                            YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
+
+                            auto keyColumnProto = indexSettings->AddKeyColumns();
+                            fillColumnProto(columnName, columnMeta, keyColumnProto);
+                        }
+
+                        TVector<TStringBuf> indexColumns;
+                        indexColumns.reserve(implTable->Columns.size());
+
+                        for (const auto& [columnName, columnMeta] : implTable->Columns) {
+                            indexColumns.emplace_back(columnName);
+
+                            auto columnProto = indexSettings->AddColumns();
+                            fillColumnProto(columnName, &columnMeta, columnProto);
+                        }
+
+                        const auto indexColumnToOrder = CreateColumnToOrder(
+                            indexColumns,
+                            implTable,
+                            true);
+                        for (const auto& [columnName, _] : implTable->Columns) {
+                            indexSettings->AddWriteIndexes(indexColumnToOrder.at(columnName));
+                        }
+
+                        //const auto indexPathes = NSchemeHelpers::CreateIndexTablePath(TString(settings.Table().Cast().Path()), indexDescription);
+                        //AFL_ENSURE(indexPathes.size() == 1);
+                        //for (const auto& indexPath: indexPathes) {
+                        //    Cerr << "TEST >> " << indexPath << Endl;
+                        FillTablesMap(settings.Table().Cast().Path(), indexColumns, tablesMap);
+                        //}
                     }
-
-                    AFL_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
-
-                    auto indexSettings = settingsProto.AddIndexes();
-                    FillTableId(*implTable, *indexSettings->MutableTable());
-
-                    indexSettings->SetIsUniq(indexDescription.Type == TIndexDescription::EType::GlobalSyncUnique);
-
-                    for (const auto& columnName : implTable->KeyColumnNames) {
-                        const auto columnMeta = implTable->Columns.FindPtr(columnName);
-                        YQL_ENSURE(columnMeta != nullptr, "Unknown column in sink: \"" + TString(columnName) + "\"");
-
-                        auto keyColumnProto = indexSettings->AddKeyColumns();
-                        fillColumnProto(columnName, columnMeta, keyColumnProto);
-                    }
-
-                    TVector<TStringBuf> indexColumns;
-                    indexColumns.reserve(implTable->Columns.size());
-
-                    for (const auto& [columnName, columnMeta] : implTable->Columns) {
-                        indexColumns.emplace_back(columnName);
-
-                        auto columnProto = indexSettings->AddColumns();
-                        fillColumnProto(columnName, &columnMeta, columnProto);
-                    }
-
-                    const auto indexColumnToOrder = CreateColumnToOrder(
-                        indexColumns,
-                        implTable,
-                        implTable->Kind == EKikimrTableKind::Datashard);
-                    for (const auto& [columnName, _] : implTable->Columns) {
-                        indexSettings->AddWriteIndexes(indexColumnToOrder.at(columnName));
-                    }
-
-                    //const auto indexPathes = NSchemeHelpers::CreateIndexTablePath(TString(settings.Table().Cast().Path()), indexDescription);
-                    //AFL_ENSURE(indexPathes.size() == 1);
-                    //for (const auto& indexPath: indexPathes) {
-                    //    Cerr << "TEST >> " << indexPath << Endl;
-                    FillTablesMap(settings.Table().Cast().Path(), indexColumns, tablesMap);
-                    //}
                 }
             } else {
                 // Table info will be filled during execution after resolving table by name.

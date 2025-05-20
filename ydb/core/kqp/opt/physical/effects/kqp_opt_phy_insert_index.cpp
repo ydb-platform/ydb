@@ -85,73 +85,87 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
     bool abortOnError = insert.OnConflict().Value() == "abort"sv;
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, insert.Table().Path());
 
-    THashSet<TStringBuf> inputColumnsSet;
-    for (const auto& column : insert.Columns()) {
-        inputColumnsSet.emplace(column.Value());
-    }
+    const bool isSink = NeedSinks(table, kqpCtx) && kqpCtx.Config->EnableIndexStreamWrite;
+    const bool needPrecompute = !(isSink && abortOnError);
 
-    auto insertRows = MakeConditionalInsertRows(insert.Input(), table, inputColumnsSet, abortOnError, insert.Pos(), ctx);
-    if (!insertRows) {
-        return node;
-    }
-
-    auto insertRowsPrecompute = Build<TDqPhyPrecompute>(ctx, node.Pos())
-        .Connection(insertRows.Cast())
-        .Done();
-
-    auto indexes = BuildSecondaryIndexVector(table, insert.Pos(), ctx);
-    YQL_ENSURE(indexes);
-
-    auto upsertTable = Build<TKqlUpsertRows>(ctx, insert.Pos())
-        .Table(insert.Table())
-        .Input(insertRowsPrecompute)
-        .Columns(insert.Columns())
-        .ReturningColumns(insert.ReturningColumns())
-        .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
-        .Done();
-
-    TVector<TExprBase> effects;
-    effects.emplace_back(upsertTable);
-
-    for (const auto& [tableNode, indexDesc] : indexes) {
-        THashSet<TStringBuf> indexTableColumnsSet;
-        TVector<TStringBuf> indexTableColumns;
-
-        for (const auto& column : indexDesc->KeyColumns) {
-            YQL_ENSURE(indexTableColumnsSet.emplace(column).second);
-            indexTableColumns.emplace_back(column);
+    if (!needPrecompute) {
+        return Build<TKqlUpsertRows>(ctx, insert.Pos())
+            .Table(insert.Table())
+            .Input(insert.Input())
+            .Columns(insert.Columns())
+            .ReturningColumns(insert.ReturningColumns())
+            .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
+            .Settings(insert.Settings())
+            .Done();
+    } else {
+        THashSet<TStringBuf> inputColumnsSet;
+        for (const auto& column : insert.Columns()) {
+            inputColumnsSet.emplace(column.Value());
         }
 
-        for (const auto& column : table.Metadata->KeyColumnNames) {
-            if (indexTableColumnsSet.insert(column).second) {
-                indexTableColumns.emplace_back(column);
-            }
+        auto insertRows = MakeConditionalInsertRows(insert.Input(), table, inputColumnsSet, abortOnError, insert.Pos(), ctx);
+        if (!insertRows) {
+            return node;
         }
 
-        for (const auto& column : indexDesc->DataColumns) {
-            if (inputColumnsSet.contains(column)) {
-                YQL_ENSURE(indexTableColumnsSet.emplace(column).second);
-                indexTableColumns.emplace_back(column);
-            }
-        }
+        auto insertRowsPrecompute = Build<TDqPhyPrecompute>(ctx, node.Pos())
+            .Connection(insertRows.Cast())
+            .Done();
 
-        auto upsertIndexRows = MakeInsertIndexRows(insertRowsPrecompute, table, inputColumnsSet, indexTableColumns,
-            insert.Pos(), ctx);
+        auto indexes = BuildSecondaryIndexVector(table, insert.Pos(), ctx);
+        YQL_ENSURE(indexes);
 
-        auto upsertIndex = Build<TKqlUpsertRows>(ctx, insert.Pos())
-            .Table(tableNode)
-            .Input(upsertIndexRows)
-            .Columns(BuildColumnsList(indexTableColumns, insert.Pos(), ctx))
-            .ReturningColumns<TCoAtomList>().Build()
+        auto upsertTable = Build<TKqlUpsertRows>(ctx, insert.Pos())
+            .Table(insert.Table())
+            .Input(insertRowsPrecompute)
+            .Columns(insert.Columns())
+            .ReturningColumns(insert.ReturningColumns())
             .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
             .Done();
 
-        effects.emplace_back(upsertIndex);
-    }
+        TVector<TExprBase> effects;
+        effects.emplace_back(upsertTable);
 
-    return Build<TExprList>(ctx, insert.Pos())
-        .Add(effects)
-        .Done();
+        for (const auto& [tableNode, indexDesc] : indexes) {
+            THashSet<TStringBuf> indexTableColumnsSet;
+            TVector<TStringBuf> indexTableColumns;
+
+            for (const auto& column : indexDesc->KeyColumns) {
+                YQL_ENSURE(indexTableColumnsSet.emplace(column).second);
+                indexTableColumns.emplace_back(column);
+            }
+
+            for (const auto& column : table.Metadata->KeyColumnNames) {
+                if (indexTableColumnsSet.insert(column).second) {
+                    indexTableColumns.emplace_back(column);
+                }
+            }
+
+            for (const auto& column : indexDesc->DataColumns) {
+                if (inputColumnsSet.contains(column)) {
+                    YQL_ENSURE(indexTableColumnsSet.emplace(column).second);
+                    indexTableColumns.emplace_back(column);
+                }
+            }
+
+            auto upsertIndexRows = MakeInsertIndexRows(insertRowsPrecompute, table, inputColumnsSet, indexTableColumns,
+                insert.Pos(), ctx);
+
+            auto upsertIndex = Build<TKqlUpsertRows>(ctx, insert.Pos())
+                .Table(tableNode)
+                .Input(upsertIndexRows)
+                .Columns(BuildColumnsList(indexTableColumns, insert.Pos(), ctx))
+                .ReturningColumns<TCoAtomList>().Build()
+                .IsBatch(ctx.NewAtom(insert.Pos(), "false"))
+                .Done();
+
+            effects.emplace_back(upsertIndex);
+        }
+
+        return Build<TExprList>(ctx, insert.Pos())
+            .Add(effects)
+            .Done();
+    }
 }
 
 } // namespace NKikimr::NKqp::NOpt

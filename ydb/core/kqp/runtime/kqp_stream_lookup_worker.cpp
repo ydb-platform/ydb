@@ -993,7 +993,11 @@ private:
         return range.From.subspan(0, Settings.LookupKeyColumns.size());
     }
 
-    NMiniKQL::TStructType* GetLeftRowType() const {
+    NMiniKQL::TStructType* GetLeftRowType() {
+        if (LeftRowType) {
+            // KIKIMR-23296: avoid allocating separate type structure for each lookup
+            return LeftRowType;
+        }
         YQL_ENSURE(InputDesc.HasTransform());
 
         auto outputTypeNode = NMiniKQL::DeserializeNode(TStringBuf{InputDesc.GetTransform().GetOutputType()}, TypeEnv);
@@ -1008,7 +1012,8 @@ private:
         const auto outputLeftRowType = outputTupleType->GetElementType(0);
         YQL_ENSURE(outputLeftRowType->GetKind() == NMiniKQL::TType::EKind::Struct);
 
-        return AS_TYPE(NMiniKQL::TStructType, outputLeftRowType);
+        LeftRowType = AS_TYPE(NMiniKQL::TStructType, outputLeftRowType);
+        return LeftRowType;
     }
 
     NUdf::TUnboxedValue TryBuildResultRow(TLeftRowInfo& leftRowInfo, TConstArrayRef<TCell> rightRow,
@@ -1082,6 +1087,7 @@ private:
     std::unordered_map<ui64, TResultBatch> ResultRowsBySeqNo;
     ui64 InputRowSeqNo = 0;
     ui64 CurrentResultSeqNo = 0;
+    NMiniKQL::TStructType* LeftRowType = nullptr;
 };
 
 std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings,

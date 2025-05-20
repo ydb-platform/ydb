@@ -31,7 +31,7 @@ message CreateQueue {
 
     message EventDetails {
         map<string, string> labels = 1;
-        repeated string name = 2;
+        string name = 2;
     }
 
     message RequestParameters {
@@ -60,7 +60,7 @@ message UpdateQueue {
 
     message EventDetails {
         map<string, string> labels = 1;
-        repeated string name = 2;
+        string name = 2;
     }
 
     message RequestParameters {
@@ -89,7 +89,7 @@ message DeleteQueue {
 
     message EventDetails {
         map<string, string> labels = 1;
-        repeated string name = 2;
+        string name = 2;
     }
 
     message RequestParameters {

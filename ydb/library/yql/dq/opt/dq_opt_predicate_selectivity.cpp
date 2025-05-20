@@ -17,9 +17,9 @@ namespace {
      * Check if a callable is an attribute of some table
      * Currently just return a boolean and cover only basic cases
      */
-    TMaybe<TCoMember> IsAttribute(const TExprBase& input) {
+    std::optional<TString> IsAttribute(const TExprBase& input) {
         if (auto member = input.Maybe<TCoMember>()) {
-            return member.Cast();
+            return TString(member.Cast().Name());
         } else if (auto cast = input.Maybe<TCoSafeCast>()) {
             return IsAttribute(cast.Cast().Value());
         } else if (auto ifPresent = input.Maybe<TCoIfPresent>()) {
@@ -35,8 +35,37 @@ namespace {
         } else if (auto exists = input.Maybe<TCoExists>()) {
             auto child = TExprBase(input.Ptr()->ChildRef(0));
             return IsAttribute(child);
+        } else if (auto argument = input.Maybe<TCoArgument>()) {
+            TString argumentName = TString(argument.Cast().Name());
+            TStringBuf olapApplyMemberPrefix = "members_";
+            if (argumentName.StartsWith(olapApplyMemberPrefix)) {
+                return argumentName.substr(olapApplyMemberPrefix.length(), argumentName.size() - olapApplyMemberPrefix.length());
+            } else {
+                return argumentName;
+            }
         }
+        return std::nullopt;
+    }
 
+    TMaybe<TCoMember> IsMember(const TExprBase& input) {
+        if (auto member = input.Maybe<TCoMember>()) {
+            return member.Cast();
+        } else if (auto cast = input.Maybe<TCoSafeCast>()) {
+            return IsMember(cast.Cast().Value());
+        } else if (auto ifPresent = input.Maybe<TCoIfPresent>()) {
+            return IsMember(ifPresent.Cast().Optional());
+        } else if (auto just = input.Maybe<TCoJust>()) {
+            return IsMember(just.Cast().Input());
+        } else if (input.Ptr()->IsCallable("PgCast")) {
+            auto child = TExprBase(input.Ptr()->ChildRef(0));
+            return IsMember(child);
+        } else if (input.Ptr()->IsCallable("FromPg")) {
+            auto child = TExprBase(input.Ptr()->ChildRef(0));
+            return IsMember(child);
+        } else if (auto exists = input.Maybe<TCoExists>()) {
+            auto child = TExprBase(input.Ptr()->ChildRef(0));
+            return IsMember(child);
+        }
         return Nothing();
     }
 
@@ -143,11 +172,15 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeEqualitySelectivity(cons
         return ComputeEqualitySelectivity(right, left);
     }
 
-    if (auto maybeMember = IsAttribute(left)) {
+    if (auto attribute = IsAttribute(left)) {
         // In case both arguments refer to an attribute, return 0.2
-        if (auto maybeAnotherMember = IsAttribute(right)) {
+        if (IsAttribute(right)) {
             if (CollectMemberEqualities) {
-                MemberEqualities.Add(*maybeMember.Get(), *maybeAnotherMember.Get());
+                auto maybeMember = IsMember(left);
+                auto maybeAnotherMember = IsMember(right);
+                if (maybeMember && maybeAnotherMember) {
+                    MemberEqualities.Add(*maybeMember.Get(), *maybeAnotherMember.Get());
+                }
             }
             return 0.3;
         }
@@ -155,14 +188,16 @@ double NYql::NDq::TPredicateSelectivityComputer::ComputeEqualitySelectivity(cons
         // Currently, with the basic statistics we just return 1/nRows
 
         else if (IsConstantExprWithParams(right.Ptr())) {
-            TString attributeName = maybeMember.Get()->Name().StringValue();
+            TString attributeName = attribute.value();
             if (!IsConstantExpr(right.Ptr())) {
                 return DefaultSelectivity(Stats, attributeName);
             }
 
             if (Stats == nullptr || Stats->ColumnStatistics == nullptr) {
                 if (CollectColumnsStatUsedMembers) {
-                    ColumnStatsUsedMembers.AddEquality(*maybeMember.Get());
+                    if (auto maybeMember = IsMember(left)) {
+                        ColumnStatsUsedMembers.AddEquality(*maybeMember.Get());
+                    }
                 }
                 return DefaultSelectivity(Stats, attributeName);
             }

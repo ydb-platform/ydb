@@ -193,10 +193,11 @@ public:
 
         const auto argsType = ArrayType::get(valueType, RunConfigArgs);
         const auto args = new AllocaInst(argsType, 0U, "args", block);
+        const auto zero = ConstantInt::get(indexType, 0);
         Value* runConfigValue;
         for (ui32 i = 0; i < RunConfigArgs; i++) {
             const auto argIndex = ConstantInt::get(indexType, i);
-            const auto argSlot = GetElementPtrInst::CreateInBounds(valueType, args, {argIndex}, "arg", block);
+            const auto argSlot = GetElementPtrInst::CreateInBounds(argsType, args, {zero, argIndex}, "arg", block);
             if (i == 0) {
                 GetNodeValue(argSlot, RunConfigNode, ctx, block);
                 runConfigValue = new LoadInst(valueType, argSlot, "runconfig", block);

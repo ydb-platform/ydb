@@ -7,6 +7,7 @@
 * [Объект доступа](../concepts/glossary.md#access-object)
 * [Субъект доступа](../concepts/glossary.md#access-subject)
 * [Права доступа](../concepts/glossary.md#access-right)
+* [Уровни доступа](../concepts/glossary.md#access-level))
 * [Список доступов](../concepts/glossary.md#access-acl)
 * [Владелец](../concepts/glossary.md#access-owner)
 * [Пользователь](../concepts/glossary.md#access-user)
@@ -70,33 +71,20 @@
 * [{#T}](../yql/reference/syntax/alter-group.md)
 * [{#T}](../yql/reference/syntax/drop-group.md)
 
-## Права доступа {#right}
+## Управление доступом {#access-control}
 
-[Права доступа](../concepts/glossary.md#access-right) в {{ ydb-short-name }} привязаны не к [субъекту](../concepts/glossary.md#access-subject), а к [объекту доступа](../concepts/glossary.md#access-object).
+Управление доступом в {{ ydb-short-name }} реализуется двумя механизмами:
 
-У каждого объекта доступа есть список прав — [ACL](../concepts/glossary.md#access-acl) (Access Control List) — он хранит все предоставленные [субъектам доступа](../concepts/glossary.md#subject) (пользователям и группам) права на объект.
+- [правами доступа](../../concepts/glossary.md#access-right) на [схемных объектах](../../concepts/glossary.md#scheme-object);
+- [уровнями доступа](../../concepts/glossary.md#access-level), определяющими дополнительные возможности или ограничения.
 
-По умолчанию, права наследуются от родителей потомкам по дереву объектов доступа.
+Оба механизма применяются одновременно: для конкретного [субъекта](../../concepts/glossary.md#access-subject) действие оказывается доступно, если оба механизма его разрешают, и не доступно, если хотя бы один не разрешает.
 
-Для управления правами служат следующие виды YQL запросов:
+Подробнее о правах доступа см. в статье [{#T}](./access-rights.md).
 
-* [{#T}](../yql/reference/syntax/grant.md).
-* [{#T}](../yql/reference/syntax/revoke.md).
+Подробнее об уровнях доступа см. в статье [{#T}](./access-levels.md).
 
-Для управления правами служат следующие CLI-команды:
-
-* [chown](../reference/ydb-cli/commands/scheme-permissions.md#chown)
-* [grant](../reference/ydb-cli/commands/scheme-permissions.md#grant-revoke)
-* [revoke](../reference/ydb-cli/commands/scheme-permissions.md#grant-revoke)
-* [set](../reference/ydb-cli/commands/scheme-permissions.md#set)
-* [clear](../reference/ydb-cli/commands/scheme-permissions.md#clear)
-* [clear-inheritance](../reference/ydb-cli/commands/scheme-permissions.md#clear-inheritance)
-* [set-inheritance](../reference/ydb-cli/commands/scheme-permissions.md#set-inheritance)
-
-Для просмотра ACL объекта доступа служат следующие CLI-команды:
-
-* [describe](../reference/ydb-cli/commands/scheme-describe.md)
-* [list](../reference/ydb-cli/commands/scheme-permissions.md#list)
+### Уровни доступа {#access-levels}
 
 ## Владелец объекта {#owner}
 

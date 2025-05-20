@@ -18,13 +18,13 @@ using TNetworkProjectId = NObjectClient::TObjectId;
 using TProxyRoleId = NObjectClient::TObjectId;
 using TAccountResourceUsageLeaseId = NObjectClient::TObjectId;
 
-extern const TString RootAccountName;
+extern const std::string RootAccountName;
 extern const NYPath::TYPath RootAccountCypressPath;
-extern const TString TmpAccountName;
-extern const TString SysAccountName;
-extern const TString IntermediateAccountName;
-extern const TString ChunkWiseAccountingMigrationAccountName;
-extern const TString SequoiaAccountName;
+extern const std::string TmpAccountName;
+extern const std::string SysAccountName;
+extern const std::string IntermediateAccountName;
+extern const std::string ChunkWiseAccountingMigrationAccountName;
+extern const std::string SequoiaAccountName;
 
 using NRpc::RootUserName;
 extern const TString GuestUserName;

@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import copy
 import pytest
 import yatest
 import time
@@ -33,10 +34,14 @@ class RestartToAnotherVersionFixture:
         self.all_binary_paths = request.param
 
     def setup_cluster(self, **kwargs):
+        extra_feature_flags = kwargs.pop("extra_feature_flags", {})
+        extra_feature_flags = copy.copy(extra_feature_flags)
+        extra_feature_flags["suppress_compatibility_check"] = True
         self.config = KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,
             binary_paths=self.all_binary_paths[self.current_binary_paths_index],
             use_in_memory_pdisks=False,
+            extra_feature_flags=extra_feature_flags,
             **kwargs,
         )
 
@@ -109,3 +114,47 @@ class MixedClusterFixture:
         self.driver.wait()
         yield
         self.cluster.stop()
+
+
+class RollingUpgradeAndDowngradeFixture:
+    @pytest.fixture(autouse=True)
+    def base_setup(self):
+        self.all_binary_paths = [last_stable_binary_path]
+
+    def setup_cluster(self, **kwargs):
+        self.config = KikimrConfigGenerator(
+            erasure=Erasure.MIRROR_3_DC,
+            binary_paths=self.all_binary_paths,
+            **kwargs,
+        )
+
+        self.cluster = KiKiMR(self.config)
+        self.cluster.start()
+        self.endpoint = "grpc://%s:%s" % ('localhost', self.cluster.nodes[1].port)
+
+        self.driver = ydb.Driver(
+            ydb.DriverConfig(
+                database='/Root',
+                endpoint=self.endpoint
+            )
+        )
+        self.driver.wait()
+        yield
+        self.cluster.stop()
+
+    def roll(self):
+        # from old to new
+        for node_id, node in self.cluster.nodes.items():
+            node.stop()
+            node.binary_path = current_binary_path
+            node.start()
+            yield
+
+        # from new to old
+        for node_id, node in self.cluster.nodes.items():
+            node.stop()
+            node.binary_path = last_stable_binary_path
+            node.start()
+            yield
+
+        yield

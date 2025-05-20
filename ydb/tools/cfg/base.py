@@ -639,6 +639,10 @@ class ClusterDetailsProvider(object):
         self.__cluster_description["domains"] = values
 
     @property
+    def domains_config_as_dict(self):
+        return self.__cluster_description["domains_config"]
+
+    @property
     def domains_config(self):
         domains_config_dict = self.__cluster_description.get("domains_config", {})
         if domains_config_dict == {}:

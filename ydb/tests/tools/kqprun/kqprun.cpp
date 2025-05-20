@@ -740,6 +740,16 @@ protected:
                 return nodeCount;
             });
 
+        options.AddLongOption("dc-count", "Number of data centers")
+            .RequiredArgument("uint")
+            .DefaultValue(1)
+            .StoreMappedResultT<ui32>(&RunnerOptions.YdbSettings.DcCount, [](ui32 dcCount) {
+                if (dcCount < 1) {
+                    ythrow yexception() << "Number of data centers less than one";
+                }
+                return dcCount;
+            });
+
         options.AddLongOption('E', "emulate-yt", "Emulate YT tables (use file gateway instead of native gateway)")
             .NoArgument()
             .SetFlag(&EmulateYt);

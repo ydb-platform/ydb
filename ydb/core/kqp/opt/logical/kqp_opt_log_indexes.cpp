@@ -17,8 +17,7 @@ using namespace NYql::NNodes;
 
 namespace {
 
-TCoAtomList BuildKeyColumnsList(const TKikimrTableDescription& /* table */, TPositionHandle pos, TExprContext& ctx,
-                                const auto& columnsToSelect) {
+TCoAtomList BuildKeyColumnsList(TPositionHandle pos, TExprContext& ctx, const auto& columnsToSelect) {
     TVector<TExprBase> columnsList;
     columnsList.reserve(columnsToSelect.size());
     for (auto column : columnsToSelect) {
@@ -35,7 +34,7 @@ TCoAtomList BuildKeyColumnsList(const TKikimrTableDescription& /* table */, TPos
 }
 
 TCoAtomList BuildKeyColumnsList(const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx) {
-    return BuildKeyColumnsList(table, pos, ctx, table.Metadata->KeyColumnNames);
+    return BuildKeyColumnsList(pos, ctx, table.Metadata->KeyColumnNames);
 }
 
 TCoAtomList MergeColumns(const NNodes::TCoAtomList& col1, const TVector<TString>& col2, TExprContext& ctx) {
@@ -306,21 +305,20 @@ struct TReadMatch {
     }
 };
 
-template<typename TRead>
-bool CheckIndexCovering(const TRead& read, const TIntrusivePtr<TKikimrTableMetadata>& indexMeta) {
-    for (const auto& col : read.Columns()) {
+bool CheckIndexCovering(const TCoAtomList& readColumns, const TIntrusivePtr<TKikimrTableMetadata>& indexMeta) {
+    for (const auto& col : readColumns) {
         if (!indexMeta->Columns.contains(col.StringValue())) {
-            return true;
+            return false;
         }
     }
-    return false;
+    return true;
 }
 
 TExprBase DoRewriteIndexRead(const TReadMatch& read, TExprContext& ctx,
     const TKikimrTableDescription& tableDesc, TIntrusivePtr<TKikimrTableMetadata> indexMeta,
     const TVector<TString>& extraColumns, const std::function<TExprBase(const TExprBase&)>& middleFilter = {})
 {
-    const bool needDataRead = CheckIndexCovering(read, indexMeta);
+    const bool isCovered = CheckIndexCovering(read.Columns(), indexMeta);
 
     if (read.FullScan()) {
         const auto indexName = read.Index().StringValue();
@@ -329,7 +327,7 @@ TExprBase DoRewriteIndexRead(const TReadMatch& read, TExprContext& ctx,
         ctx.AddWarning(issue);
     }
 
-    if (!needDataRead) {
+    if (isCovered) {
         // We can read all data from index table.
         auto ret = read.BuildRead(ctx, BuildTableMeta(*indexMeta, read.Pos(), ctx), read.Columns());
 
@@ -517,26 +515,41 @@ void VectorReadLevel(
 
 void VectorReadMain(
     TExprContext& ctx, TPositionHandle pos,
-    const TKqpTable& postingTable, const TCoAtomList& postingColumns,
-    const TKqpTable& mainTable, const TCoAtomList& mainColumns,
+    const TKqpTable& postingTable,
+    const TIntrusivePtr<TKikimrTableMetadata> & postingTableMeta,
+    const TKqpTable& mainTable,
+    const TIntrusivePtr<TKikimrTableMetadata> & mainTableMeta,
+    const TCoAtomList& mainColumns,
     TExprNodePtr& read)
 {
-    // TODO(mbkkt) handle covered index columns
     TKqpStreamLookupSettings settings;
     settings.Strategy = EStreamLookupStrategyType::LookupRows;
-    read = Build<TKqlStreamLookupTable>(ctx, pos)
-        .Table(postingTable)
-        .LookupKeys(read)
-        .Columns(postingColumns)
-        .Settings(settings.BuildNode(ctx, pos))
-    .Done().Ptr();
+    const bool isCovered = CheckIndexCovering(mainColumns, postingTableMeta);
 
-    read = Build<TKqlStreamLookupTable>(ctx, pos)
-        .Table(mainTable)
-        .LookupKeys(read)
-        .Columns(mainColumns)
-        .Settings(settings.BuildNode(ctx, pos))
-    .Done().Ptr();
+    if (!isCovered) {
+        const auto postingColumns = BuildKeyColumnsList(pos, ctx, mainTableMeta->KeyColumnNames);
+
+        read = Build<TKqlStreamLookupTable>(ctx, pos)
+            .Table(postingTable)
+            .LookupKeys(read)
+            .Columns(postingColumns)
+            .Settings(settings.BuildNode(ctx, pos))
+        .Done().Ptr();
+
+        read = Build<TKqlStreamLookupTable>(ctx, pos)
+            .Table(mainTable)
+            .LookupKeys(read)
+            .Columns(mainColumns)
+            .Settings(settings.BuildNode(ctx, pos))
+        .Done().Ptr();
+    } else {
+        read = Build<TKqlStreamLookupTable>(ctx, pos)
+            .Table(postingTable)
+            .LookupKeys(read)
+            .Columns(mainColumns)
+            .Settings(settings.BuildNode(ctx, pos))
+        .Done().Ptr();
+    }
 }
 
 void VectorTopMain(TExprContext& ctx, const TCoTopBase& top, TExprNodePtr& read) {
@@ -568,9 +581,8 @@ TExprBase DoRewriteTopSortOverKMeansTree(
     const auto postingTable = BuildTableMeta(*postingTableDesc->Metadata, pos, ctx);
     const auto mainTable = BuildTableMeta(*tableDesc.Metadata, pos, ctx);
 
-    const auto levelColumns = BuildKeyColumnsList(*levelTableDesc, pos, ctx,
+    const auto levelColumns = BuildKeyColumnsList(pos, ctx,
             std::initializer_list<std::string_view>{NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn});
-    const auto postingColumns = BuildKeyColumnsList(*postingTableDesc, pos, ctx, tableDesc.Metadata->KeyColumnNames);
     const auto& mainColumns = match.Columns();
 
     TNodeOnNodeOwnedMap replaces;
@@ -601,7 +613,7 @@ TExprBase DoRewriteTopSortOverKMeansTree(
 
     VectorReadLevel(indexDesc, ctx, pos, kqpCtx, levelLambda, top, levelTable, levelColumns, read);
 
-    VectorReadMain(ctx, pos, postingTable, postingColumns, mainTable, mainColumns, read);
+    VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, read);
 
     if (flatMap) {
         read = Build<TCoFlatMap>(ctx, flatMap.Cast().Pos())
@@ -638,13 +650,12 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
     const auto prefixTable = BuildTableMeta(*prefixTableDesc->Metadata, pos, ctx);
     const auto mainTable = BuildTableMeta(*tableDesc.Metadata, pos, ctx);
 
-    const auto levelColumns = BuildKeyColumnsList(*levelTableDesc, pos, ctx,
+    const auto levelColumns = BuildKeyColumnsList(pos, ctx,
             std::initializer_list<std::string_view>{NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn});
-    const auto postingColumns = BuildKeyColumnsList(*postingTableDesc, pos, ctx, tableDesc.Metadata->KeyColumnNames);
     const auto prefixColumns = [&] {
         auto columns = indexDesc.KeyColumns;
         columns.back().assign(NTableIndex::NTableVectorKmeansTreeIndex::IdColumn);
-        return BuildKeyColumnsList(*prefixTableDesc, pos, ctx, columns);
+        return BuildKeyColumnsList(pos, ctx, columns);
     }();
     const auto& mainColumns = match.Columns();
 
@@ -688,7 +699,7 @@ TExprBase DoRewriteTopSortOverPrefixedKMeansTree(
 
     VectorReadLevel(indexDesc, ctx, pos, kqpCtx, levelLambda, top, levelTable, levelColumns, read);
 
-    VectorReadMain(ctx, pos, postingTable, postingColumns, mainTable, mainColumns, read);
+    VectorReadMain(ctx, pos, postingTable, postingTableDesc->Metadata, mainTable, tableDesc.Metadata, mainColumns, read);
 
     if (mainLambda) {
         read = Build<TCoMap>(ctx, flatMap.Pos())
@@ -719,56 +730,6 @@ TExprBase KqpRewriteIndexRead(const TExprBase& node, TExprContext& ctx, const TK
     return node;
 }
 
-TExprBase KqpRewriteLookupIndex(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
-    if (kqpCtx.IsScanQuery()) {
-        // TODO: Enable index lookup for scan queries as we now support stream lookups.
-        return node;
-    }
-
-    if (auto maybeLookupIndex = node.Maybe<TKqlLookupIndex>()) {
-        auto lookupIndex = maybeLookupIndex.Cast();
-
-        const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, lookupIndex.Table().Path());
-        const auto indexName = lookupIndex.Index().Value();
-        auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(indexName);
-        // TODO(mbkkt) instead of ensure should be warning and main table lookup?
-        YQL_ENSURE(indexDesc->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree,
-            "lookup doesn't support vector index: " << indexName);
-
-        const bool needDataRead = CheckIndexCovering(lookupIndex, implTable);
-
-        if (!needDataRead) {
-            TKqpStreamLookupSettings settings;
-            settings.Strategy = EStreamLookupStrategyType::LookupRows;
-            return Build<TKqlStreamLookupTable>(ctx, node.Pos())
-                .Table(BuildTableMeta(*implTable, node.Pos(), ctx))
-                .LookupKeys(lookupIndex.LookupKeys())
-                .Columns(lookupIndex.Columns())
-                .Settings(settings.BuildNode(ctx, node.Pos()))
-                .Done();
-        }
-
-        auto keyColumnsList = BuildKeyColumnsList(tableDesc, node.Pos(), ctx);
-
-        TKqpStreamLookupSettings settings;
-        settings.Strategy = EStreamLookupStrategyType::LookupRows;
-        TExprBase lookupIndexTable = Build<TKqlStreamLookupTable>(ctx, node.Pos())
-            .Table(BuildTableMeta(*implTable, node.Pos(), ctx))
-            .LookupKeys(lookupIndex.LookupKeys())
-            .Columns(keyColumnsList)
-            .Settings(settings.BuildNode(ctx, node.Pos()))
-            .Done();
-
-        return Build<TKqlStreamLookupTable>(ctx, node.Pos())
-            .Table(lookupIndex.Table())
-            .LookupKeys(lookupIndexTable.Ptr())
-            .Columns(lookupIndex.Columns())
-            .Settings(settings.BuildNode(ctx, node.Pos()))
-            .Done();
-    }
-
-    return node;
-}
 
 TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TKqlStreamLookupIndex>()) {
@@ -785,8 +746,8 @@ TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, 
     YQL_ENSURE(indexDesc->Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree,
         "stream lookup doesn't support vector index: " << indexName);
 
-    const bool needDataRead = CheckIndexCovering(streamLookupIndex, implTable);
-    if (!needDataRead) {
+    const bool isCovered = CheckIndexCovering(streamLookupIndex.Columns(), implTable);
+    if (isCovered) {
         return Build<TKqlStreamLookupTable>(ctx, node.Pos())
             .Table(BuildTableMeta(*implTable, node.Pos(), ctx))
             .LookupKeys(streamLookupIndex.LookupKeys())

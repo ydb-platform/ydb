@@ -179,6 +179,7 @@ public:
     }
     virtual TString GetWorkloadName() const = 0;
 
+    virtual void Validate(const ECommandType /*commandType*/, int /*workloadType*/) {};
 public:
     ui64 BulkSize = 10000;
     std::string DbPath;

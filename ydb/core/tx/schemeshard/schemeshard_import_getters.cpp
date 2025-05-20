@@ -173,29 +173,29 @@ protected:
 
 // Downloads scheme-related objects from S3
 class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
-    static TString MetadataKeyFromSettings(const TImportInfo::TPtr& importInfo, ui32 itemIdx) {
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        return TStringBuilder() << importInfo->GetItemSrcPrefix(itemIdx) << "/metadata.json";
+    static TString MetadataKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx) {
+        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+        return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/metadata.json";
     }
 
-    static TString SchemeKeyFromSettings(const TImportInfo::TPtr& importInfo, ui32 itemIdx, TStringBuf filename) {
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        return TStringBuilder() << importInfo->GetItemSrcPrefix(itemIdx) << '/' << filename;
+    static TString SchemeKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx, TStringBuf filename) {
+        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+        return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << '/' << filename;
     }
 
-    static TString PermissionsKeyFromSettings(const TImportInfo::TPtr& importInfo, ui32 itemIdx) {
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        return TStringBuilder() << importInfo->GetItemSrcPrefix(itemIdx) << "/permissions.pb";
+    static TString PermissionsKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx) {
+        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+        return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/permissions.pb";
     }
 
-    static TString ChangefeedDescriptionKeyFromSettings(const TImportInfo::TPtr& importInfo, ui32 itemIdx, const TString& changefeedName) {
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        return TStringBuilder() << importInfo->GetItemSrcPrefix(itemIdx) << "/" << changefeedName << "/changefeed_description.pb";
+    static TString ChangefeedDescriptionKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx, const TString& changefeedName) {
+        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+        return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/" << changefeedName << "/changefeed_description.pb";
     }
 
-    static TString TopicDescriptionKeyFromSettings(const TImportInfo::TPtr& importInfo, ui32 itemIdx, const TString& changefeedName) {
-        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
-        return TStringBuilder() << importInfo->GetItemSrcPrefix(itemIdx) << "/" << changefeedName << "/topic_description.pb";
+    static TString TopicDescriptionKeyFromSettings(const TImportInfo& importInfo, ui32 itemIdx, const TString& changefeedName) {
+        Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
+        return TStringBuilder() << importInfo.GetItemSrcPrefix(itemIdx) << "/" << changefeedName << "/topic_description.pb";
     }
 
     static bool IsView(TStringBuf schemeKey) {
@@ -238,11 +238,11 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         if (NoObjectFound(result.GetError().GetErrorType())) {
             if (IsTableScheme(SchemeKey)) {
                 // try search for a view
-                SchemeKey = SchemeKeyFromSettings(ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateView().FileName);
+                SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateView().FileName);
                 HeadObject(SchemeKey);
             } else if (IsView(SchemeKey)) {
                 // try search for a topic
-                SchemeKey = SchemeKeyFromSettings(ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateTopic().FileName);
+                SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateTopic().FileName);
                 HeadObject(SchemeKey);
             }
             return;
@@ -298,7 +298,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         }
 
         Y_ABORT_UNLESS(IndexDownloadedChangefeed < ChangefeedsNames.size());
-        GetObject(ChangefeedDescriptionKeyFromSettings(ImportInfo, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]), result.GetResult().GetContentLength());
+        GetObject(ChangefeedDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]), result.GetResult().GetContentLength());
     }
 
     void HandleTopic(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
@@ -313,7 +313,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         }
 
         Y_ABORT_UNLESS(IndexDownloadedChangefeed < ChangefeedsNames.size());
-        GetObject(TopicDescriptionKeyFromSettings(ImportInfo, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]), result.GetResult().GetContentLength());
+        GetObject(TopicDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]), result.GetResult().GetContentLength());
     }
 
     void HandleMetadata(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
@@ -506,11 +506,11 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
         auto nextStep = [this]() {
             Become(&TThis::StateDownloadTopics);
-            HeadObject(TopicDescriptionKeyFromSettings(ImportInfo, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]));
+            HeadObject(TopicDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]));
         };
 
         if (NeedValidateChecksums) {
-            StartValidatingChecksum(ChangefeedDescriptionKeyFromSettings(ImportInfo, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]), content, nextStep);
+            StartValidatingChecksum(ChangefeedDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]), content, nextStep);
         } else {
             nextStep();
         }
@@ -551,12 +551,12 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                 Reply();
             } else {
                 Become(&TThis::StateDownloadChangefeeds);
-                HeadObject(ChangefeedDescriptionKeyFromSettings(ImportInfo, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]));
+                HeadObject(ChangefeedDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]));
             }
         };
 
         if (NeedValidateChecksums) {
-            StartValidatingChecksum(TopicDescriptionKeyFromSettings(ImportInfo, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]), content, nextStep);
+            StartValidatingChecksum(TopicDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]), content, nextStep);
         } else {
             nextStep();
         }
@@ -593,7 +593,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             Resize(item.Changefeeds.MutableChangefeeds(), ChangefeedsNames.size());
 
             Y_ABORT_UNLESS(IndexDownloadedChangefeed < ChangefeedsNames.size());
-            HeadObject(ChangefeedDescriptionKeyFromSettings(ImportInfo, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]));
+            HeadObject(ChangefeedDescriptionKeyFromSettings(*ImportInfo, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]));
         } else {
             Reply();
         }
@@ -668,9 +668,9 @@ public:
         : TGetterFromS3<TSchemeGetter>(std::move(importInfo), std::move(iv))
         , ReplyTo(replyTo)
         , ItemIdx(itemIdx)
-        , MetadataKey(MetadataKeyFromSettings(ImportInfo, itemIdx))
-        , SchemeKey(SchemeKeyFromSettings(ImportInfo, itemIdx, "scheme.pb"))
-        , PermissionsKey(PermissionsKeyFromSettings(ImportInfo, itemIdx))
+        , MetadataKey(MetadataKeyFromSettings(*ImportInfo, itemIdx))
+        , SchemeKey(SchemeKeyFromSettings(*ImportInfo, itemIdx, "scheme.pb"))
+        , PermissionsKey(PermissionsKeyFromSettings(*ImportInfo, itemIdx))
         , NeedDownloadPermissions(!ImportInfo->Settings.no_acl())
         , NeedValidateChecksums(!ImportInfo->Settings.skip_checksum_validation())
     {
@@ -762,12 +762,12 @@ private:
 }; // TSchemeGetter
 
 class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
-    static TString SchemaMappingKeyFromSettings(const TImportInfo::TPtr& importInfo) {
-        return TStringBuilder() << importInfo->Settings.source_prefix() << "/SchemaMapping/mapping.json";
+    static TString SchemaMappingKeyFromSettings(const TImportInfo& importInfo) {
+        return TStringBuilder() << importInfo.Settings.source_prefix() << "/SchemaMapping/mapping.json";
     }
 
-    static TString SchemaMappingMetadataKeyFromSettings(const TImportInfo::TPtr& importInfo) {
-        return TStringBuilder() << importInfo->Settings.source_prefix() << "/SchemaMapping/metadata.json";
+    static TString SchemaMappingMetadataKeyFromSettings(const TImportInfo& importInfo) {
+        return TStringBuilder() << importInfo.Settings.source_prefix() << "/SchemaMapping/metadata.json";
     }
 
     void HandleMetadata(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
@@ -905,8 +905,8 @@ public:
     TSchemaMappingGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo)
         : TGetterFromS3<TSchemaMappingGetter>(std::move(importInfo), Nothing())
         , ReplyTo(replyTo)
-        , MetadataKey(SchemaMappingMetadataKeyFromSettings(ImportInfo))
-        , SchemaMappingKey(SchemaMappingKeyFromSettings(ImportInfo))
+        , MetadataKey(SchemaMappingMetadataKeyFromSettings(*ImportInfo))
+        , SchemaMappingKey(SchemaMappingKeyFromSettings(*ImportInfo))
     {
     }
 

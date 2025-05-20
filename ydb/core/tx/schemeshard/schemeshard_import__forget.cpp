@@ -55,7 +55,7 @@ struct TSchemeShard::TImport::TTxForget: public TSchemeShard::TXxport::TTxBase {
         case TImportInfo::EState::Cancelled:
             Self->ImportsByUid.erase(importInfo->Uid);
             Self->Imports.erase(importInfo->Id);
-            Self->PersistRemoveImport(db, importInfo);
+            Self->PersistRemoveImport(db, *importInfo);
             return respond(Ydb::StatusIds::SUCCESS);
 
         case TImportInfo::EState::Waiting:

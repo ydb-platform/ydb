@@ -26,8 +26,9 @@ public:
 
 private:
     std::vector<std::string> FilePaths;
-    TString HeaderRow;
-    std::vector<std::string> NullValues;
+    bool ReadingFromStdin = false;
+    TString ColumnNames;
+    int RowsToAnalyze;
     bool Header = false;
 };
 

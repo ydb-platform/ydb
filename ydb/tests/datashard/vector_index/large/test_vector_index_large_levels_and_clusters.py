@@ -1,12 +1,13 @@
 from ydb.tests.datashard.lib.vector_base import VectorBase
 from ydb.tests.library.common.wait_for import wait_for
-from ydb.tests.datashard.lib.vector_index import BinaryStringConverter, get_vector, targets
+from ydb.tests.datashard.lib.vector_index import BinaryStringConverter, get_vector, targets, VectorIndexOperations
 from ydb.tests.datashard.lib.create_table import create_table_sql_request, create_vector_index_sql_request
 from ydb.tests.datashard.lib.types_of_variables import format_sql_value, cleanup_type_name
 
 
 class TestVectorIndexLargeLevelsAndClusters(VectorBase):
     def setup_method(self):
+        self.vector_index = VectorIndexOperations(self)
         self.table_name = "table"
         self.index_name = "idx_vector_vec_String"
         self.rows_count = 1000
@@ -58,13 +59,16 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
                     sync="",
                 )
                 self.query(create_table_sql)
-                self._upsert_values(
+                self.vector_index._upsert_values(
                     table_name=table_path,
                     all_types=all_types,
                     prefix=prefix_data,
                     pk_types=pk_types,
                     vector_type=vector_type,
                     vector_dimension=vector_dimension,
+                    to_binary_string_converters=self.to_binary_string_converters,
+                    rows_count=self.rows_count,
+                    count_prefix=self.count_prefix,
                 )
 
                 for cover in covers:
@@ -159,63 +163,13 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
         )
         self._drop_index(table_path)
 
-    def _select(
-        self, table_path, vector_type, vector_name, col_name, knn_func, statements, numb, prefix, vector_dimension
-    ):
-        vector = get_vector(vector_type, numb, vector_dimension)
-        select_sql = f"""
-                                    $Target = {self.to_binary_string_converters[vector_type].name}(Cast([{vector}] AS List<{vector_type}>));
-                                    select {", ".join(statements)}
-                                    from {table_path} view idx_vector_{vector_name}
-                                    {f"WHERE prefix_String = {prefix}" if prefix != "" else ""}
-                                    order by {knn_func}({col_name}, $Target) {"DESC" if knn_func in targets["similarity"].values() else "ASC"}
-                                    limit {self.rows_count//self.count_prefix if prefix != "" else self.rows_count};
-                                    """
-        return self.query(select_sql)
-
-    def _upsert_values(
-        self,
-        table_name,
-        all_types,
-        prefix,
-        pk_types,
-        vector_type,
-        vector_dimension,
-    ):
-        converter = self.to_binary_string_converters[vector_type]
-        values = []
-
-        for key in range(1, self.rows_count + 1):
-            vector = get_vector(vector_type, key % 127, vector_dimension)
-            name = converter.name
-            vector_type = converter.vector_type
-            values.append(
-                f'''(
-                    {", ".join([format_sql_value(key, type_name) for type_name in pk_types.keys()])},
-                    {", ".join([format_sql_value(key, type_name) for type_name in all_types.keys()])},
-                    {", ".join([format_sql_value(key % self.count_prefix, type_name) for type_name in prefix.keys()])},
-                    Untag({name}([{vector}]), "{vector_type}")
-                    )
-                    '''
-            )
-        upsert_sql = f"""
-            UPSERT INTO `{table_name}` (
-                {", ".join([f"pk_{cleanup_type_name(type_name)}" for type_name in pk_types.keys()])},
-                {", ".join([f"col_{cleanup_type_name(type_name)}" for type_name in all_types.keys()])},
-                {", ".join([f"prefix_{cleanup_type_name(type_name)}" for type_name in prefix.keys()])},
-                vec_String
-            )
-            VALUES {",".join(values)};
-        """
-        self.query(upsert_sql)
-
     def create_statements(self, all_types):
         return [f"col_{type_name}" for type_name in all_types.keys()]
 
     def _wait_inddex_ready(self, table_path, vector_type, knn_func, statements, prefix, vector_dimension):
         def predicate():
             try:
-                self._select(
+                self.vector_index._select(
                     table_path=table_path,
                     vector_type=vector_type,
                     vector_name="vec_String",
@@ -225,6 +179,9 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
                     numb=1,
                     prefix=prefix,
                     vector_dimension=vector_dimension,
+                    to_binary_string_converters=self.to_binary_string_converters,
+                    rows_count=self.rows_count,
+                    count_prefix=self.count_prefix
                 )
             except Exception:
                 return False
@@ -232,7 +189,7 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
 
         wait_for(predicate, timeout_seconds=200, step_seconds=5)
         try:
-            self._select(
+            self.vector_index._select(
                 table_path=table_path,
                 vector_type=vector_type,
                 vector_name="vec_String",
@@ -242,6 +199,9 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
                 numb=1,
                 prefix=prefix,
                 vector_dimension=vector_dimension,
+                to_binary_string_converters=self.to_binary_string_converters,
+                rows_count=self.rows_count,
+                count_prefix=self.count_prefix
             )
         except Exception as ex:
             assert str(ex) == "Global index", str(ex)
@@ -270,7 +230,7 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
                 )
 
     def _select_assert(self, table_path, vector_type, knn_func, statements, numb, prefix, vector_dimension):
-        rows = self._select(
+        rows = self.vector_index._select(
             table_path=table_path,
             vector_type=vector_type,
             vector_name="vec_String",
@@ -280,6 +240,9 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
             numb=numb,
             prefix=prefix,
             vector_dimension=vector_dimension,
+            to_binary_string_converters=self.to_binary_string_converters,
+            rows_count=self.rows_count,
+            count_prefix=self.count_prefix
         )
 
         assert len(rows) != 0, "Query returned an empty set"

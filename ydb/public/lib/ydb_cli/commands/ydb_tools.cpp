@@ -279,7 +279,7 @@ int TCommandRestore::Run(TConfig& config) {
 
     if (VerifyExistence && !Replace) {
         throw TMisuseException()
-            << "the --verify-existence option must be used together with the --replace option";
+            << "The --verify-existence option must be used together with the --replace option.";
     }
 
     auto log = std::make_shared<TLog>(CreateLogBackend("cerr", TConfig::VerbosityLevelToELogPriority(config.VerbosityLevel)));

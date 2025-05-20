@@ -1115,9 +1115,12 @@ TRestoreResult TRestoreClient::Restore(NScheme::ESchemeEntryType type, const TFs
 
 }
 
-TRestoreResult TRestoreClient::DropAndRestoreExternals(const TVector<TFsBackupEntry>& backupEntries, const TVector<size_t>& externalDataSources, const THashMap<TString, size_t>& externalTables, const TRestoreSettings& settings) {
+TRestoreResult TRestoreClient::DropAndRestoreExternals(const TVector<TFsBackupEntry>& backupEntries, const TVector<size_t>& externalDataSources, const THashMap<TString, size_t>& externalTables, const TRestoreSettings& settings, const THashMap<TString, ESchemeEntryType>& existingEntries) {
     for (size_t i : externalDataSources) {
         const auto& [fsPath, dbPath, type] = backupEntries[i];
+        if (!existingEntries.contains(dbPath)) {
+            continue;
+        }
         TVector<TString> references;
         if (auto status = GetExternalTablesReferencingSource(TableClient, dbPath, references); !status.IsSuccess()) {
             return Result<TRestoreResult>(fsPath, std::move(status));
@@ -1132,15 +1135,19 @@ TRestoreResult TRestoreClient::DropAndRestoreExternals(const TVector<TFsBackupEn
     }
 
     for (const auto& [dbPath, i] : externalTables) {
-        auto result = Drop(ESchemeEntryType::ExternalTable, dbPath, settings);
-        if (!result.IsSuccess()) {
-            return result;
+        if (existingEntries.contains(dbPath)) {
+            auto result = Drop(ESchemeEntryType::ExternalTable, dbPath, settings);
+            if (!result.IsSuccess()) {
+                return result;
+            }
         }
     }
     for (size_t i : externalDataSources) {
         const auto& [fsPath, dbPath, type] = backupEntries[i];
-        if (auto result = Drop(type, dbPath, settings); !result.IsSuccess()) {
-            return result;
+        if (existingEntries.contains(dbPath)) {
+            if (auto result = Drop(type, dbPath, settings); !result.IsSuccess()) {
+                return result;
+            }
         }
         if (auto result = RestoreExternalDataSource(fsPath, dbPath, settings, false); !result.IsSuccess()) {
             return result;
@@ -1178,22 +1185,28 @@ TRestoreResult TRestoreClient::DropAndRestoreTablesAndDependents(const TVector<T
 
     for (size_t i : views) {
         const auto& [fsPath, dbPath, type] = backupEntries[i];
-        if (auto result = Drop(type, dbPath, settings); !result.IsSuccess()) {
-            return result;
+        if (existingEntries.contains(dbPath)) {
+            if (auto result = Drop(type, dbPath, settings); !result.IsSuccess()) {
+                return result;
+            }
         }
     }
 
     for (const auto& [dbPath, i] : replications) {
-        if (auto result = Drop(ESchemeEntryType::Replication, dbPath, settings); !result.IsSuccess()) {
-            return result;
+        if (existingEntries.contains(dbPath)) {
+            if (auto result = Drop(ESchemeEntryType::Replication, dbPath, settings); !result.IsSuccess()) {
+                return result;
+            }
         }
     }
 
     // the main loop: tables are restored here
     for (const auto& [_, i] : tables) {
         const auto& [fsPath, dbPath, type] = backupEntries[i];
-        if (auto result = Drop(type, dbPath, settings); !result.IsSuccess()) {
-            return result;
+        if (existingEntries.contains(dbPath)) {
+            if (auto result = Drop(type, dbPath, settings); !result.IsSuccess()) {
+                return result;
+            }
         }
         if (auto result = RestoreTable(fsPath, dbPath, settings, false); !result.IsSuccess()) {
             return result;
@@ -1289,7 +1302,7 @@ TRestoreResult TRestoreClient::DropAndRestore(const TFsPath& fsBackupRoot, const
         }
     }
 
-    if (auto result = DropAndRestoreExternals(backupEntries, externalDataSources, externalTables, settings); !result.IsSuccess()) {
+    if (auto result = DropAndRestoreExternals(backupEntries, externalDataSources, externalTables, settings, existingEntries); !result.IsSuccess()) {
         return result;
     }
     if (auto result = DropAndRestoreTablesAndDependents(backupEntries, tables, views, replications, dbRestoreRoot, settings, existingEntries); !result.IsSuccess()) {
@@ -1298,8 +1311,10 @@ TRestoreResult TRestoreClient::DropAndRestore(const TFsPath& fsBackupRoot, const
 
     for (size_t i : regular) {
         const auto& [fsPath, dbPath, type] = backupEntries[i];
-        if (auto result = Drop(type, dbPath, settings); !result.IsSuccess()) {
-            return result;
+        if (existingEntries.contains(dbPath)) {
+            if (auto result = Drop(type, dbPath, settings); !result.IsSuccess()) {
+                return result;
+            }
         }
         Y_ENSURE(dbPath.StartsWith(dbRestoreRoot), "dbPath must be built by appending a relative path to dbRestoreRoot");
         if (auto result = Restore(type, fsPath, dbRestoreRoot, dbPath.substr(dbRestoreRoot.size()), settings, false, false); !result.IsSuccess()) {

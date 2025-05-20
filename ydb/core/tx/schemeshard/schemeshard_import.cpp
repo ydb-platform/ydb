@@ -197,7 +197,7 @@ void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInf
 
     if (item.Table) {
         record.Update(
-            NIceDb::TUpdate<Schema::ImportItems::Table>(item.Table->SerializeAsString())
+            NIceDb::TUpdate<Schema::ImportItems::Scheme>(item.Table->SerializeAsString())
         );
     }
 

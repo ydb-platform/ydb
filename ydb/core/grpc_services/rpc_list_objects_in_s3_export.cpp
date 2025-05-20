@@ -24,6 +24,12 @@ public:
     using TBase = TRpcOperationRequestActor<TListObjectsInS3ExportRPC, TEvListObjectsInS3ExportRequest>;
     using TRpcOperationRequestActor<TListObjectsInS3ExportRPC, TEvListObjectsInS3ExportRequest>::TRpcOperationRequestActor;
 
+    explicit TListObjectsInS3ExportRPC(IRequestOpCtx* request)
+        : TBase(request)
+        , UserToken(CreateUserToken(request))
+    {
+    }
+
     STATEFN(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NKikimr::NSchemeShard::TEvImport::TEvListObjectsInS3ExportResponse, Handle);
@@ -89,6 +95,10 @@ public:
             }
         }
 
+        if (!this->CheckDatabaseAccess(CanonizePath(entry.Path), entry.SecurityObject)) {
+            return;
+        }
+
         auto domainInfo = entry.DomainInfo;
         if (!domainInfo) {
             LOG_E("Got empty domain info");
@@ -97,6 +107,27 @@ public:
 
         SchemeShardId = domainInfo->ExtractSchemeShard();
         SendRequestToSchemeShard();
+    }
+
+    bool CheckDatabaseAccess(const TString& path, TIntrusivePtr<TSecurityObject> securityObject) {
+        const ui32 access = NACLib::DescribeSchema;
+
+        if (!UserToken || !securityObject) {
+            return true;
+        }
+
+        if (securityObject->CheckAccess(access, *UserToken)) {
+            return true;
+        }
+
+        Reply(Ydb::StatusIds::UNAUTHORIZED,
+            TStringBuilder() << "Access denied"
+                << ": for# " << UserToken->GetUserSID()
+                << ", path# " << path
+                << ", access# " << NACLib::AccessRightsToString(access),
+            NKikimrIssues::TIssuesIds::ACCESS_DENIED,
+            NActors::TActivationContext::AsActorContext());
+        return false;
     }
 
     void SendRequestToSchemeShard() {
@@ -151,9 +182,18 @@ public:
         TBase::PassAway();
     }
 
+    static THolder<const NACLib::TUserToken> CreateUserToken(IRequestOpCtx* request) {
+        if (const auto& userToken = request->GetSerializedToken()) {
+            return MakeHolder<NACLib::TUserToken>(userToken);
+        } else {
+            return {};
+        }
+    }
+
 private:
     ui64 SchemeShardId = 0;
     TActorId PipeClient;
+    const THolder<const NACLib::TUserToken> UserToken;
 };
 
 void DoListObjectsInS3ExportRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {

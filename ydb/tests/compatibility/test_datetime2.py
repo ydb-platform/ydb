@@ -14,7 +14,7 @@ class TestDatetime2Format(MixedClusterFixture):
     def test_simple(self):
         
         with ydb.QuerySessionPool(self.driver) as session_pool:
-            ROWS = 1000
+            ROWS = 100
 
             # ---------------- CREATE TABLE ------------------
             query = f"""

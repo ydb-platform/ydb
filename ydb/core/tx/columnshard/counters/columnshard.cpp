@@ -12,7 +12,7 @@ TCSCounters::TCSCounters()
     , Initialization(*this)
     , TxProgress(*this) {
 
-    for (auto&& i : GetEnumAllValues<TColumnShard::EOverloadStatus>()) {
+    for (auto&& i : GetEnumAllValues<EOverloadStatus>()) {
         while (Overloads.size() <= (ui64)i) {
             Overloads.emplace_back(CreateSubGroup("overload", ::ToString(i)).GetDeriviative("Count"));
         }

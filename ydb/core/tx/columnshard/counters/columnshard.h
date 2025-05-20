@@ -2,15 +2,26 @@
 #include "initialization.h"
 #include "tx_progress.h"
 
-#include <ydb/library/signals/owner.h>
-
 #include <ydb/core/tx/columnshard/counters/tablet_counters.h>
 #include <ydb/core/tx/data_events/common/signals_flow.h>
+
+#include <ydb/library/signals/owner.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <util/generic/hash_set.h>
 
 namespace NKikimr::NColumnShard {
+
+enum class EOverloadStatus {
+    ShardTxInFly /* "shard_tx" */ = 0,
+    ShardWritesInFly /* "shard_writes" */,
+    ShardWritesSizeInFly /* "shard_writes_size" */,
+    InsertTable /* "insert_table" */,
+    OverloadMetadata /* "overload_metadata" */,
+    Disk /* "disk" */,
+    None /* "none" */,
+    OverloadCompaction /* "overload_compaction" */
+};
 
 enum class EWriteFailReason {
     Disabled /* "disabled" */,
@@ -124,7 +135,7 @@ public:
     const TCSInitialization Initialization;
     TTxProgressCounters TxProgress;
 
-    void OnOverload(const TColumnShard::EOverloadStatus status) const {
+    void OnOverload(const EOverloadStatus status) const {
         AFL_VERIFY((ui64)status < Overloads.size());
         Overloads[(ui64)status]->Inc();
     }

@@ -381,7 +381,7 @@ public:
         CA_LOG_D("Open: token=" << token);
     }
 
-    void Write(TWriteToken token, IDataBatchPtr&& data) {
+    void Write(TWriteToken token, IDataBatchPtr data) {
         YQL_ENSURE(!Closed);
         YQL_ENSURE(ShardedWriteController);
         CA_LOG_D("Write: token=" << token);
@@ -1837,14 +1837,14 @@ public:
                 {
                     const auto [ptr, id] = createWriteActor(settings.TableId, settings.TablePath, settings.KeyColumns);
                     writeInfo.Actors.emplace_back(TWriteInfo::TActorInfo{
-                        .Ptr = ptr,
+                        .WriteActor = ptr,
                         .Id = id,
                     });
                 }
                 for (const auto& indexSettings : settings.Indexes) {
                     const auto [ptr, id] = createWriteActor(indexSettings.TableId, indexSettings.TablePath, indexSettings.KeyColumns);
                     writeInfo.Actors.emplace_back(TWriteInfo::TActorInfo{
-                        .Ptr = ptr,
+                        .WriteActor = ptr,
                         .Id = id,
                     });
                 }
@@ -1853,18 +1853,19 @@ public:
             EnableStreamWrite &= settings.EnableStreamWrite;
 
             token = TWriteToken{settings.TableId, CurrentWriteToken++};
-            writeInfo.Actors[0].Ptr->Open(
-                token.Cookie,
-                settings.OperationType,
-                std::move(settings.KeyColumns),
-                std::move(settings.Columns),
-                std::move(settings.WriteIndex),
-                settings.Priority);
 
             AFL_ENSURE(writeInfo.Actors.size() == settings.Indexes.size() + 1);
             for (size_t index = 0; index < settings.Indexes.size(); ++index) {
                 auto& indexSettings = settings.Indexes[index];
-                writeInfo.Actors[index + 1].Ptr->Open(
+
+                writeInfo.Actors[index + 1].Projections[token.Cookie] = CreateDataBatchProjection(
+                    settings.Columns,
+                    settings.WriteIndex,
+                    indexSettings.Columns,
+                    indexSettings.WriteIndex,
+                    Alloc);
+
+                writeInfo.Actors[index + 1].WriteActor->Open(
                     token.Cookie,
                     NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, // TODO: Operation for index (delete by key + upsert)
                     std::move(indexSettings.KeyColumns),
@@ -1872,6 +1873,14 @@ public:
                     std::move(indexSettings.WriteIndex),
                     settings.Priority);
             }
+
+            writeInfo.Actors[0].WriteActor->Open(
+                token.Cookie,
+                settings.OperationType,
+                std::move(settings.KeyColumns),
+                std::move(settings.Columns),
+                std::move(settings.WriteIndex),
+                settings.Priority);
         } else {
             token = *ev->Get()->Token;
         }
@@ -1912,9 +1921,11 @@ public:
         for (auto& [tableId, queue] : RequestQueues) {
             auto& writeInfo = WriteInfos.at(tableId);
 
-            if (!writeInfo.Actors[0].Ptr->IsReady()) {
-                CA_LOG_D("ProcessRequestQueue " << tableId << " NOT READY queue=" << queue.size());
-                return;
+            for (auto& actor : writeInfo.Actors) {
+                if (!actor.WriteActor->IsReady()) {
+                    CA_LOG_D("ProcessRequestQueue " << tableId << " NOT READY queue=" << queue.size());
+                    return;
+                }
             }
 
             while (!queue.empty()) {
@@ -1922,13 +1933,19 @@ public:
 
                 // if lookup isn't needed
                 if (message.Data) {
-                    // TODO: indexes <- filtered message.Data
-                    writeInfo.Actors[0].Ptr->Write(message.Token.Cookie, std::move(message.Data));
+                    for (auto& actor : writeInfo.Actors) {
+                        if (actor.Projections.contains(message.Token.Cookie)) {
+                            auto preparedBatch = actor.Projections.at(message.Token.Cookie)->Project(message.Data);
+                            actor.WriteActor->Write(message.Token.Cookie, preparedBatch);
+                        } else {
+                            actor.WriteActor->Write(message.Token.Cookie, message.Data);
+                        }
+                    }
                 }
 
                 if (message.Close) {
                     for (auto& actor : writeInfo.Actors) {
-                        actor.Ptr->Close(message.Token.Cookie);
+                        actor.WriteActor->Close(message.Token.Cookie);
                     }
                 }
 
@@ -2935,7 +2952,7 @@ public:
     void ForEachWriteActor(std::function<void(TKqpTableWriteActor*, const TActorId)>&& func) {
         for (auto& [_, writeInfo] : WriteInfos) {
             for (auto& actorInfo : writeInfo.Actors) {
-                func(actorInfo.Ptr, actorInfo.Id);
+                func(actorInfo.WriteActor, actorInfo.Id);
             }
         }
     }
@@ -2943,7 +2960,7 @@ public:
     void ForEachWriteActor(std::function<void(const TKqpTableWriteActor*, const TActorId)>&& func) const {
         for (const auto& [_, writeInfo] : WriteInfos) {
             for (const auto& actorInfo : writeInfo.Actors) {
-                func(actorInfo.Ptr, actorInfo.Id);
+                func(actorInfo.WriteActor, actorInfo.Id);
             }
         }
     }
@@ -2970,7 +2987,8 @@ private:
 
     struct TWriteInfo {
         struct TActorInfo {
-            TKqpTableWriteActor* Ptr = nullptr;
+            THashMap<IShardedWriteController::TWriteToken, IDataBatchProjectionPtr> Projections;
+            TKqpTableWriteActor* WriteActor = nullptr;
             TActorId Id;
         };
 

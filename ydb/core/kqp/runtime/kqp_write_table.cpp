@@ -171,6 +171,10 @@ public:
         Data.reset();
     }
 
+    const TRecordBatchPtr& GetData() const {
+        return Data;
+    }
+
 private:
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc = nullptr;
     TRecordBatchPtr Data;
@@ -248,6 +252,10 @@ public:
             SerializedMemory += GetCellHeaderSize() * row.size() + size;
             Memory += size;
         }
+    }
+
+    const TOwnedCellVecBatch& GetRows() const {
+        return Rows;
     }
 
 private:
@@ -1017,6 +1025,74 @@ IPayloadSerializerPtr CreateDataShardPayloadSerializer(
         partitioning, keyColumns, inputColumns, std::move(writeIndex), std::move(alloc));
 }
 
+class TDataBatchProjection : public IDataBatchProjection {
+public:
+    TDataBatchProjection(
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+        const TConstArrayRef<ui32> inputWriteIndex,
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
+        const TConstArrayRef<ui32> outputWriteIndex,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
+            : Alloc(std::move(alloc)) {
+        AFL_ENSURE(inputColumns.size() == inputWriteIndex.size());
+        AFL_ENSURE(outputColumns.size() == outputWriteIndex.size());
+        AFL_ENSURE(outputColumns.size() <= inputColumns.size());
+
+        THashMap<ui32, ui32> InputColumnIdToIndex;
+        for (size_t index = 0; index < inputColumns.size(); ++index) {
+            InputColumnIdToIndex[inputColumns[index].GetId()] = index;
+        }
+        std::vector<ui32> reversedInputWriteIndex(inputWriteIndex.size());
+        for (size_t index = 0; index < inputWriteIndex.size(); ++index) {
+            reversedInputWriteIndex[inputWriteIndex[index]] = index;
+        }
+
+        ColumnsMapping.resize(outputColumns.size());
+        for (size_t index = 0; index < outputColumns.size(); ++index) {
+            const auto& outputColumnIndex = outputWriteIndex[index];
+            const auto& outputColumnId = outputColumns.at(outputColumnIndex).GetId();
+            const auto& inputColumnIndex = InputColumnIdToIndex.at(outputColumnId);
+            const auto& inputIndex = reversedInputWriteIndex.at(inputColumnIndex);
+
+            ColumnsMapping[index] = inputIndex;
+        }
+    }
+
+    IDataBatchPtr Project(const IDataBatchPtr& data) const override {
+        auto* batch = dynamic_cast<TRowBatch*>(data.Get());
+        AFL_ENSURE(batch);
+        return ProjectDataShard(*dynamic_cast<TRowBatch*>(data.Get()));
+    }
+
+    IDataBatchPtr ProjectDataShard(const TRowBatch& data) const {
+        const size_t columnsCount = ColumnsMapping.size();
+        TRowsBatcher rowBatcher(columnsCount, std::nullopt, Alloc);
+        std::vector<TCell> cells(columnsCount);
+        for (const auto& row : data.GetRows()) {
+            for (size_t index = 0; index < columnsCount; ++index) {
+                cells[index] = row[ColumnsMapping[index]];
+            }
+            rowBatcher.AddRow(cells);
+        }
+        return rowBatcher.Flush(true);
+    }
+
+private:
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
+
+    std::vector<ui32> ColumnsMapping;
+};
+
+}
+
+IDataBatchProjectionPtr CreateDataBatchProjection(
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+        const TConstArrayRef<ui32> inputWriteIndex,
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
+        const TConstArrayRef<ui32> outputWriteIndex,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
+    return MakeIntrusive<TDataBatchProjection>(
+        inputColumns, inputWriteIndex, outputColumns, outputWriteIndex, std::move(alloc));
 }
 
 IDataBatcherPtr CreateColumnDataBatcher(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,

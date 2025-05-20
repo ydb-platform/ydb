@@ -1243,6 +1243,8 @@ private:
                         continue;
                     }
 
+                    AFL_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
+
                     auto indexSettings = settingsProto.AddIndexes();
                     FillTableId(*implTable, *indexSettings->MutableTable());
 

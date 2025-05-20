@@ -26,6 +26,8 @@ private:
         for (ui32 i = baseLevel; i + 1 < Levels.size(); ++i) {
             if (Levels[i]->IsAppropriatePortionToMove(info) && Levels[i + 1]->IsAppropriatePortionToStore(info)) {
                 result = i + 1;
+            } else {
+                break;
             }
         }
         return result;

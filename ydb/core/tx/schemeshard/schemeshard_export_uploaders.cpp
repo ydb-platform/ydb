@@ -73,10 +73,9 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
     }
 
     bool BuildSchemeToUpload(const NKikimrScheme::TEvDescribeSchemeResult& describeResult, TString& error) {
-        using namespace NYdb::NDump::NFiles;
         static THashMap<NKikimrSchemeOp::EPathType, TString> TypeToFileName = {
-            {NKikimrSchemeOp::EPathType::EPathTypeView, CreateView().FileName},
-            {NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup, CreateTopic().FileName},
+            {NKikimrSchemeOp::EPathType::EPathTypeView, NYdb::NDump::NFiles::CreateView().FileName},
+            {NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup, NYdb::NDump::NFiles::CreateTopic().FileName},
         };
 
         PathType = describeResult.GetPathDescription().GetSelf().GetPathType();

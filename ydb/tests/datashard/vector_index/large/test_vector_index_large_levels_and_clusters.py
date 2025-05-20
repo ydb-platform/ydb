@@ -1,8 +1,8 @@
 from ydb.tests.datashard.lib.vector_base import VectorBase
 from ydb.tests.library.common.wait_for import wait_for
-from ydb.tests.datashard.lib.vector_index import BinaryStringConverter, get_vector, targets, VectorIndexOperations
+from ydb.tests.datashard.lib.vector_index import BinaryStringConverter, targets, VectorIndexOperations
 from ydb.tests.datashard.lib.create_table import create_table_sql_request, create_vector_index_sql_request
-from ydb.tests.datashard.lib.types_of_variables import format_sql_value, cleanup_type_name
+from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name
 
 
 class TestVectorIndexLargeLevelsAndClusters(VectorBase):

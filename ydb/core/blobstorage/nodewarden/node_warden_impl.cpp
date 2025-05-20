@@ -261,6 +261,14 @@ void TNodeWarden::Bootstrap() {
     }
     StorageConfig.SetClusterUUID(Cfg->NameserviceConfig.GetClusterUUID());
 
+    const auto& bsFrom = Cfg->BlobStorageConfig;
+    auto *bsTo = StorageConfig.MutableBlobStorageConfig();
+    if (bsFrom.HasBscSettings()) {
+        bsTo->MutableBscSettings()->CopyFrom(bsFrom.GetBscSettings());
+    } else {
+        bsTo->ClearBscSettings();
+    }
+
     // Start a statically configured set
     if (Cfg->BlobStorageConfig.HasServiceSet()) {
         const auto& serviceSet = Cfg->BlobStorageConfig.GetServiceSet();

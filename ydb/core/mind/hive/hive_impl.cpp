@@ -1708,6 +1708,22 @@ void THive::UpdateCounterTabletChannelHistorySize() {
     }
 }
 
+void THive::UpdateCounterNodesDown(i64 nodesDownDiff) {
+    if (TabletCounters != nullptr) {
+        auto& counter = TabletCounters->Simple()[NHive::COUNTER_NODES_DOWN];
+        auto newValue = counter.Get() + nodesDownDiff;
+        counter.Set(newValue);
+    }
+}
+
+void THive::UpdateCounterNodesFrozen(i64 nodesFrozenDiff) {
+    if (TabletCounters != nullptr) {
+        auto& counter = TabletCounters->Simple()[NHive::COUNTER_NODES_FROZEN];
+        auto newValue = counter.Get() + nodesFrozenDiff;
+        counter.Set(newValue);
+    }
+}
+
 void THive::RecordTabletMove(const TTabletMoveInfo& moveInfo) {
     TabletMoveHistory.PushBack(moveInfo);
     TabletCounters->Cumulative()[NHive::COUNTER_TABLETS_MOVED].Increment(1);

@@ -213,6 +213,14 @@ protected:
         if (ownMemoryQuota) {
             MemoryQuota = InitMemoryQuota();
         }
+
+        auto it = task->GetTaskParams().find("SleepMsOnStart");
+        if (it != task->GetTaskParams().end()) {
+            auto sleepMs = FromStringWithDefault<ui32>(it->second, 0);
+            if (sleepMs) {
+                SleepUntil = TInstant::Now() + TDuration::MilliSeconds(sleepMs);
+            }
+        }
     }
 
     ~TDqComputeActorBase() override {
@@ -699,7 +707,11 @@ protected:
     void ContinueExecute(EResumeSource source = EResumeSource::Default) {
         if (!ResumeEventScheduled && Running) {
             ResumeEventScheduled = true;
-            this->Send(this->SelfId(), new TEvDqCompute::TEvResumeExecution{source});
+            if (SleepUntil) {
+                this->Schedule(SleepUntil - TInstant::Now(), new TEvDqCompute::TEvResumeExecution{source});
+            } else {
+                this->Send(this->SelfId(), new TEvDqCompute::TEvResumeExecution{source});
+            }
         }
     }
 
@@ -1063,6 +1075,14 @@ protected:
 protected:
     void HandleExecuteBase(TEvDqCompute::TEvResumeExecution::TPtr&) {
         ResumeEventScheduled = false;
+        if (SleepUntil) {
+            if (SleepUntil <= TInstant::Now()) {
+                SleepUntil = TInstant::Zero();
+            } else {
+                ContinueExecute();
+                return;
+            }
+        }
         if (Running) {
             DoExecute();
         }
@@ -2054,6 +2074,8 @@ protected:
     TIntrusivePtr<NYql::NDq::TRequestContext> RequestContext;
     ui64 ComputeActorElapsedTicks = 0;
     ui64 TaskRunnerActorElapsedTicks = 0;
+    TDuration CpuTime;
+    TInstant SleepUntil;
 
     struct TProcessOutputsState {
         int Inflight = 0;

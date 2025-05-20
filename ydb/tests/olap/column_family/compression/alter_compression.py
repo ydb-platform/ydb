@@ -128,7 +128,7 @@ class TestAlterCompression(ColumnFamilyTestBase):
             volumes: tuple[int, int] = table.get_volumes_column("value")
             koef: float = self.volumes_without_compression[1] / volumes[1]
             logging.info(
-                f"volume of compression in `{table.path}` is {self.volumes_without_compression[1]} / {volumes[1]}: {koef}"
+                f"compression in `{table.path}` {self.volumes_without_compression[1]} / {volumes[1]}: {koef}"
             )
             assert koef > 1
 

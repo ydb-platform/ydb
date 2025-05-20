@@ -78,7 +78,7 @@ TMinMaxSpecialKeys::TMinMaxSpecialKeys(std::shared_ptr<arrow::RecordBatch> batch
     Y_ABORT_UNLESS(batch->num_rows());
     Y_ABORT_UNLESS(schema);
 
-    NMerger::TRWSortableBatchPosition record(batch, 0, schema->field_names(), {}, false);
+    NMerger::TRWSortableBatchPosition record(batch, 0, batch->num_rows(), schema->field_names(), {}, false);
     std::optional<NMerger::TCursor> minValue;
     std::optional<NMerger::TCursor> maxValue;
     while (true) {

@@ -72,7 +72,8 @@ std::set<ui32> TReadMetadata::GetPKColumnIds() const {
 }
 
 NArrow::NMerger::TSortableBatchPosition TReadMetadata::BuildSortedPosition(const NArrow::TSimpleRow& key) const {
-    return NArrow::NMerger::TSortableBatchPosition(key.ToBatch(), 0, GetReplaceKey()->field_names(), {}, IsDescSorted());
+    std::shared_ptr<arrow::RecordBatch> batch = key.ToBatch();
+    return NArrow::NMerger::TSortableBatchPosition(key.ToBatch(), 0, batch->num_rows(), GetReplaceKey()->field_names(), {}, IsDescSorted());
 }
 
 void TReadMetadata::DoOnReadFinished(NColumnShard::TColumnShard& owner) const {

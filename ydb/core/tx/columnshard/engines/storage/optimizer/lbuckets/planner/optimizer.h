@@ -774,8 +774,8 @@ public:
         , Counters(counters)
         , Others(Counters, GetCommonFreshnessCheckDuration()) {
         if (MainPortion) {
-            NArrow::NMerger::TSortableBatchPosition sBatchPosition(
-                MainPortion->IndexKeyStart().ToBatch(), 0, pkSchema->field_names(), {}, false);
+            std::shared_ptr<arrow::RecordBatch> batch = MainPortion->IndexKeyStart().ToBatch();
+            NArrow::NMerger::TSortableBatchPosition sBatchPosition(batch, 0, batch->num_rows(), pkSchema->field_names(), {}, false);
             StartPos = std::move(sBatchPosition);
             Counters->PortionsAlone->AddPortion(MainPortion);
         }
@@ -904,16 +904,16 @@ public:
         auto result = std::make_shared<NCompaction::TGeneralCompactColumnEngineChanges>(granule, portions, saverContext);
         if (MainPortion) {
             NArrow::NMerger::TSortableBatchPosition pos(
-                MainPortion->IndexKeyStart().ToBatch(), 0, primaryKeysSchema->field_names(), {}, false);
+                MainPortion->IndexKeyStart().ToBatch(), 0, 1, primaryKeysSchema->field_names(), {}, false);
             result->AddCheckPoint(pos, false);
         }
         if (!nextBorder && MainPortion && !forceMergeForTests) {
             NArrow::NMerger::TSortableBatchPosition pos(
-                MainPortion->IndexKeyEnd().ToBatch(), 0, primaryKeysSchema->field_names(), {}, false);
+                MainPortion->IndexKeyEnd().ToBatch(), 0, 1, primaryKeysSchema->field_names(), {}, false);
             result->AddCheckPoint(pos, true);
         }
         if (stopPoint) {
-            NArrow::NMerger::TSortableBatchPosition pos(stopPoint->ToBatch(), 0, primaryKeysSchema->field_names(), {}, false);
+            NArrow::NMerger::TSortableBatchPosition pos(stopPoint->ToBatch(), 0, 1, primaryKeysSchema->field_names(), {}, false);
             result->AddCheckPoint(pos, false);
         }
         return result;

@@ -40,7 +40,7 @@ std::partial_ordering TSimpleRow::CompareNotNull(const TSimpleRow& item) const {
 }
 
 NMerger::TSortableBatchPosition TSimpleRow::BuildSortablePosition(const bool reverse /*= false*/) const {
-    return NMerger::TSortableBatchPosition(ToBatch(), 0, reverse);
+    return NMerger::TSortableBatchPosition(ToBatch(), 0, 1, reverse);
 }
 
 TSimpleRow TSimpleRowContent::Build(const std::shared_ptr<arrow::Schema>& schema) const {

@@ -66,8 +66,8 @@ void TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
                 auto conclusion = Context.GetActualSchema()->BuildDefaultBatch(Context.GetActualSchema()->GetIndexInfo().ArrowSchema(), 1, true);
                 AFL_VERIFY(!conclusion.IsFail())("error", conclusion.GetErrorMessage());
                 auto batchDefault = conclusion.DetachResult();
-                NArrow::NMerger::TSortableBatchPosition pos(
-                    batchDefault, 0, batchDefault->schema()->field_names(), batchDefault->schema()->field_names(), false);
+                NArrow::NMerger::TSortableBatchPosition pos(batchDefault, 0, batchDefault->num_rows(), batchDefault->schema()->field_names(),
+                    batchDefault->schema()->field_names(), false);
                 merger = std::make_shared<TUpdateMerger>(batch, Context.GetActualSchema(),
                     insertionConclusion.IsSuccess() ? "" : insertionConclusion.GetErrorMessage(), pos);
                 break;

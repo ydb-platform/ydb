@@ -50,12 +50,13 @@ public:
     }
 
     template <class TDataContainer>
-    TBatchIterator(std::shared_ptr<TDataContainer> batch, std::shared_ptr<NArrow::TColumnFilter> filter,
-        const std::vector<std::string>& keyColumns, const std::vector<std::string>& dataColumns, const bool reverseSort, const std::vector<std::string>& versionColumnNames)
+    TBatchIterator(std::shared_ptr<TDataContainer> batch, const ui64 position, const ui64 recordsCount, std::shared_ptr<NArrow::TColumnFilter> filter,
+        const std::vector<std::string>& keyColumns, const std::vector<std::string>& dataColumns, const bool reverseSort,
+        const std::vector<std::string>& versionColumnNames)
         : ControlPointFlag(false)
-        , KeyColumns(batch, 0, keyColumns, dataColumns, reverseSort)
-        , VersionColumns(batch, 0, versionColumnNames, {}, false)
-        , RecordsCount(batch->num_rows())
+        , KeyColumns(batch, position, recordsCount, keyColumns, dataColumns, reverseSort)
+        , VersionColumns(batch, position, recordsCount, versionColumnNames, {}, false)
+        , RecordsCount(recordsCount)
         , ReverseSortKff(reverseSort ? -1 : 1)
         , Filter(filter) {
         Y_ABORT_UNLESS(KeyColumns.InitPosition(GetFirstPosition()));

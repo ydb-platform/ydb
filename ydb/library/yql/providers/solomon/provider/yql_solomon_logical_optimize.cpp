@@ -13,7 +13,7 @@ namespace {
 
 class TSolomonLogicalOptProposalTransformer: public TOptimizeTransformerBase {
 public:
-TSolomonLogicalOptProposalTransformer(TSolomonState::TPtr state)
+    explicit TSolomonLogicalOptProposalTransformer(TSolomonState::TPtr state)
         : TOptimizeTransformerBase(state->Types, NLog::EComponent::ProviderGeneric, {})
         , State_(state)
     {
@@ -34,12 +34,12 @@ TSolomonLogicalOptProposalTransformer(TSolomonState::TPtr state)
             return node;
         }
 
-        const auto& maybeSoSourceSettings = dqSource.Input().Maybe<TSoSourceSettings>(); // b yql_solomon_logical_optimize.cpp:36
+        const auto& maybeSoSourceSettings = dqSource.Input().Maybe<TSoSourceSettings>();
         if (!maybeSoSourceSettings) {
             return node;
         }
 
-        TSet<TStringBuf> extractMembers;
+        std::unordered_set<TStringBuf> extractMembers;
         for (auto member : extract.Members()) {
             extractMembers.insert(member.Value());
         }
@@ -49,6 +49,9 @@ TSolomonLogicalOptProposalTransformer(TSolomonState::TPtr state)
 
         TVector<TCoAtom> newSystemColumns;
         TVector<TCoAtom> newLabelNames;
+
+        newSystemColumns.reserve(extractMembers.size());
+        newLabelNames.reserve(extractMembers.size());
 
         for (const auto& atom : systemColumns) {
             if (TString column = atom.StringValue(); extractMembers.contains(column)) {
@@ -65,7 +68,7 @@ TSolomonLogicalOptProposalTransformer(TSolomonState::TPtr state)
         const auto rowType = node.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
 
         TVector<const TItemExprType*> newColumnTypes;
-        newColumnTypes.reserve(systemColumns.Size() + labelNames.Size());
+        newColumnTypes.reserve(extractMembers.size());
         for (const auto& item : rowType->GetItems()) {
             if (extractMembers.contains(item->GetName())) {
                 newColumnTypes.push_back(ctx.MakeType<TItemExprType>(item->GetName(), item->GetItemType()));
@@ -80,10 +83,10 @@ TSolomonLogicalOptProposalTransformer(TSolomonState::TPtr state)
                 .InitFrom(maybeSoSourceSettings.Cast())
                 .RowType(newRowTypeNode)
                 .SystemColumns<TCoAtomList>()
-                    .Add(newSystemColumns)
+                    .Add(std::move(newSystemColumns))
                     .Build()
                 .LabelNames<TCoAtomList>()
-                    .Add(newLabelNames)
+                    .Add(std::move(newLabelNames))
                     .Build()
                 .Build()
             .RowType(newRowTypeNode)

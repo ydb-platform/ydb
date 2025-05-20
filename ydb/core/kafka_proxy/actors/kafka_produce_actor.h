@@ -128,7 +128,7 @@ private:
     void ProcessInitializationRequests(const TActorContext& ctx);
     void CleanTopics(const TActorContext& ctx);
     void CleanWriters(const TActorContext& ctx);
-    std::pair<ETopicStatus, TActorId> PartitionWriter(const TString& topicPath, ui32 partitionId, TMaybe<TProducerInstanceId> txnProducerInstanceId, const TActorContext& ctx);
+    std::pair<ETopicStatus, TActorId> PartitionWriter(const TTopicPartition& topicPartition, const TProducerInstanceId& producerInstanceId, const TMaybe<TString>& transactionalId, const TActorContext& ctx);
 
     TString LogPrefix();
     void LogEvent(IEventHandle& ev);
@@ -197,9 +197,9 @@ private:
     std::unordered_map<TTopicPartition, TWriterInfo, TTopicPartitionHashFn> TransactionalWriters;
 
     void CleanWriter(const TTopicPartition& topicPartition, const TActorId& writerId);
-    std::pair<TKafkaProduceActor::ETopicStatus, TActorId> GetOrCreateNonTransactionalWriter(const TString& topicPath, ui32 partitionId, const TTopicInfo& topicInfo, const TActorContext& ctx);
-    std::pair<TKafkaProduceActor::ETopicStatus, TActorId> GetOrCreateTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& txnProducerInstanceId, const TActorContext& ctx);
-    std::pair<TKafkaProduceActor::ETopicStatus, TActorId> CreateTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& txnProducerInstanceId, const TActorContext& ctx);
+    std::pair<TKafkaProduceActor::ETopicStatus, TActorId> GetOrCreateNonTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TActorContext& ctx);
+    std::pair<TKafkaProduceActor::ETopicStatus, TActorId> GetOrCreateTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TString& transactionalId, const TActorContext& ctx);
+    std::pair<TKafkaProduceActor::ETopicStatus, TActorId> CreateTransactionalWriter(const TTopicPartition& topicPartition, const TTopicInfo& topicInfo, const TProducerInstanceId& producerInstanceId, const TString& transactionalId, const TActorContext& ctx);
 };
 
 }

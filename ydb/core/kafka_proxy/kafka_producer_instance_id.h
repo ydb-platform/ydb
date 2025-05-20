@@ -1,6 +1,7 @@
 #pragma once
 
 #include <compare>
+#include <util/stream/output.h>
 #include <util/system/types.h>
 
 namespace NKafka {
@@ -10,4 +11,8 @@ namespace NKafka {
     
         auto operator<=>(TProducerInstanceId const&) const = default;
     };
+    inline IOutputStream& operator<<(IOutputStream& os, const TProducerInstanceId& obj) {
+        os << "{Id: " << obj.Id << ", Epoch: " << obj.Epoch;
+        return os;
+    }
 } // namespace NKafka

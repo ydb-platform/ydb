@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
-#include <ydb/core/persqueue/writer/writer.h>
+#include <ydb/core/persqueue/writer/writer.cpp>
 
 namespace {
     using namespace NKafka;
@@ -99,13 +99,25 @@ namespace {
                 auto event = MakeHolder<TEvKafka::TEvProduceRequest>(0, NKafka::TMessagePtr<NKafka::TProduceRequestData>({}, message));
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, event.Release()));
             }
+
+            void AssertCorrectOptsInPartitionWriter(const TActorId& writerId, const TProducerInstanceId& producerInstanceId, const TMaybe<TString>& transactionalId) {
+                NKikimr::NPQ::TPartitionWriter* writer = dynamic_cast<NKikimr::NPQ::TPartitionWriter*>(Ctx->Runtime->FindActor(writerId));
+                const TPartitionWriterOpts& writerOpts = writer->GetOpts();
+
+                UNIT_ASSERT_VALUES_EQUAL(*writerOpts.KafkaProducerInstanceId, producerInstanceId);
+                if (transactionalId) {
+                    UNIT_ASSERT_VALUES_EQUAL(*writerOpts.KafkaTransactionalId, *transactionalId);
+                } else {
+                    UNIT_ASSERT(transactionalId.Empty());
+                }
+            }
         };
 
     Y_UNIT_TEST_SUITE_F(ProduceActor, TProduceActorFixture) {
 
         Y_UNIT_TEST(OnProduceWithTransactionalIdAndNewEpoch_shouldRegisterNewPartitionWriterAndSendPoisonPillToOld) {
-            ui64 producerId = 0;
-            ui64 producerEpoch = 0;
+            i64 producerId = 0;
+            i32 producerEpoch = 0;
             TActorId writeRequestReceiver;
             TActorId poisonPillReceiver;
             ui32 writeRequestsCounter = 0;
@@ -134,6 +146,7 @@ namespace {
             };
             UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
             TActorId firstPartitionWriterId = writeRequestReceiver;
+            AssertCorrectOptsInPartitionWriter(firstPartitionWriterId, {producerId, producerEpoch}, TransactionalId);
 
             // produce with new epoch
             SendProduce(TransactionalId, producerId, producerEpoch + 1);
@@ -146,6 +159,7 @@ namespace {
             UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options2));
             TActorId secondPartitionWriterId = writeRequestReceiver;
             UNIT_ASSERT_VALUES_UNEQUAL(secondPartitionWriterId, firstPartitionWriterId);
+            AssertCorrectOptsInPartitionWriter(secondPartitionWriterId, {producerId, producerEpoch + 1}, TransactionalId);
 
             // assert we send poison pill to old writer
             TDispatchOptions options3;
@@ -157,8 +171,8 @@ namespace {
         }
 
         Y_UNIT_TEST(OnProduceWithoutTransactionalId_shouldNotKillOldWriter) {
-            ui64 producerId = 0;
-            ui64 producerEpoch = 0;
+            i64 producerId = 0;
+            i32 producerEpoch = 0;
             TActorId writeRequestReceiver;
             ui32 writeRequestsCounter = 0;
             ui32 poisonPillCounter = 0;
@@ -182,6 +196,7 @@ namespace {
             };
             UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
             TActorId firstPartitionWriterId = writeRequestReceiver;
+            AssertCorrectOptsInPartitionWriter(firstPartitionWriterId, {producerId, producerEpoch}, {});
 
             // produce with new epoch
             SendProduce({}, producerId, producerEpoch + 1);

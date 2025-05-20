@@ -12,4 +12,8 @@ SRCS(
     GLOBAL request.cpp
 )
 
+RECURSE_FOR_TESTS(
+    ut
+)
+
 END()

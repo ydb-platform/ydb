@@ -99,28 +99,35 @@ Explicit casting using [CAST](../syntax/expressions.md#cast):
 
 #### Casting to numeric types
 
-| Type | Bool | Int | Uint | Float | Double | Decimal |
-| --- | --- | --- | --- | --- | --- | --- |
-| **Bool** | — | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | No | Yes | No |
-| **INT** | Yes<sup>2</sup> | — | Yes<sup>3</sup> | Yes | Yes | Yes |
-| **Uint** | Yes<sup>2</sup> | Yes | — | Yes | Yes | Yes |
-| **Float** | Yes<sup>2</sup> | Yes | Yes | — | Yes | No |
-| **Double** | Yes<sup>2</sup> | Yes | Yes | Yes | — | No |
-| **Decimal** | No | Yes | Yes | Yes | Yes | — |
-| **String** | Yes | Yes | Yes | Yes | Yes | Yes |
-| **Utf8** | Yes | Yes | Yes | Yes | Yes | Yes |
-| **Json** | No | No | No | No | No | No |
-| **Yson** | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> |
-| **Uuid** | No | No | No | No | No | No |
-| **Date** | No | Yes | Yes | Yes | Yes | No | Yes |
-| **Datetime** | No | Yes | Yes | Yes | Yes | No |
-| **Timestamp** | No | Yes | Yes | Yes | Yes | No |
-| **Interval** | No | Yes | Yes | Yes | Yes | No |
+| Type          | Bool            | Int8            | Int16           | Int32           | Int64           | Uint8             | Uint16            | Uint32            | Uint64            | Float           | Double          | Decimal |
+|---------------|-----------------|-----------------|-----------------|-----------------|-----------------|-------------------|-------------------|-------------------|-------------------|-----------------|-----------------|---------|
+| **Bool**      | —               | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup> | Yes<sup>1</sup>   | Yes<sup>1</sup>   | Yes<sup>1</sup>   | Yes<sup>1</sup>   | Yes<sup>1</sup> | Yes<sup>1</sup> | No      |
+| **Int8**      | Yes<sup>2</sup> | —               | Yes             | Yes             | Yes             | Yes<sup>3</sup>   | Yes<sup>3</sup>   | Yes<sup>3</sup>   | Yes<sup>3</sup>   | Yes             | Yes             | Yes     |
+| **Int16**     | Yes<sup>2</sup> | Yes<sup>4</sup> | —               | Yes             | Yes             | Yes<sup>3,4</sup> | Yes<sup>3</sup>   | Yes<sup>3</sup>   | Yes<sup>3</sup>   | Yes             | Yes             | Yes     |
+| **Int32**     | Yes<sup>2</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | —               | Yes             | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes<sup>3</sup>   | Yes<sup>3</sup>   | Yes             | Yes             | Yes     |
+| **Int64**     | Yes<sup>2</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | —               | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes<sup>3</sup>   | Yes             | Yes             | Yes     |
+| **Uint8**     | Yes<sup>2</sup> | Yes<sup>4</sup> | Yes             | Yes             | Yes             | —                 | Yes               | Yes               | Yes               | Yes             | Yes             | Yes     |
+| **Uint16**    | Yes<sup>2</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes             | Yes             | Yes<sup>4</sup>   | —                 | Yes               | Yes               | Yes             | Yes             | Yes     |
+| **Uint32**    | Yes<sup>2</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes             | Yes<sup>4</sup>   | Yes<sup>4</sup>   | —                 | Yes               | Yes             | Yes             | Yes     |
+| **Uint64**    | Yes<sup>2</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup>   | Yes<sup>4</sup>   | Yes<sup>4</sup>   | —                 | Yes             | Yes             | Yes     |
+| **Float**     | Yes<sup>2</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | —               | Yes             | No      |
+| **Double**    | Yes<sup>2</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes             | —               | No      |
+| **Decimal**   | No              | Yes             | Yes             | Yes             | Yes             | Yes               | Yes               | Yes               | Yes               | Yes             | Yes             | —       |
+| **String**    | Yes             | Yes             | Yes             | Yes             | Yes             | Yes               | Yes               | Yes               | Yes               | Yes             | Yes             | Yes     |
+| **Utf8**      | Yes             | Yes             | Yes             | Yes             | Yes             | Yes               | Yes               | Yes               | Yes               | Yes             | Yes             | Yes     |
+| **Json**      | No              | No              | No              | No              | No              | No                | No                | No                | No                | No              | No              | No      |
+| **Yson**      | Yes<sup>5</sup> | Yes<sup>5</sup> | Yes<sup>5</sup> | Yes<sup>5</sup> | Yes<sup>5</sup> | Yes<sup>5</sup>   | Yes<sup>5</sup>   | Yes<sup>5</sup>   | Yes<sup>5</sup>   | Yes<sup>5</sup> | Yes<sup>5</sup> | No      |
+| **Uuid**      | No              | No              | No              | No              | No              | No                | No                | No                | No                | No              | No              | No      |
+| **Date**      | No              | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes             | Yes             | Yes<sup>4</sup>   | Yes               | Yes               | Yes               | Yes             | Yes             | No      |
+| **Datetime**  | No              | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes             | Yes<sup>4</sup>   | Yes<sup>4</sup>   | Yes               | Yes               | Yes             | Yes             | No      |
+| **Timestamp** | No              | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup>   | Yes<sup>4</sup>   | Yes<sup>4</sup>   | Yes               | Yes             | Yes             | No      |
+| **Interval**  | No              | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes<sup>4</sup> | Yes             | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes<sup>3,4</sup> | Yes<sup>3</sup>   | Yes             | Yes             | No      |
 
 <sup>1</sup> `True` is converted to `1` and `False` to `0`.
 <sup>2</sup> Any value other than `0` is converted to `True`, `0` is converted to `False`.
-<sup>3</sup> Possible only in the case of a non-negative value.
-<sup>4</sup> Using the built-in function [Yson::ConvertTo](../udf/list/yson.md#ysonconvertto).
+<sup>3</sup> Possible only in case of a non-negative value.
+<sup>4</sup> Possible only within the valid range.
+<sup>5</sup> Using the built-in function [Yson::ConvertTo](../udf/list/yson.md#ysonconvertto).
 
 #### Converting to date and time data types
 
@@ -140,7 +147,7 @@ Explicit casting using [CAST](../syntax/expressions.md#cast):
 | **Date** | — | Yes | Yes | No |
 | **Datetime** | Yes | — | Yes | No |
 | **Timestamp** | Yes | Yes | — | No |
-| **Interval** | No | No | No | — | — |
+| **Interval** | No | No | No | — |
 
 #### Conversion to other data types
 

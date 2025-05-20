@@ -24,6 +24,7 @@ using namespace NTabletFlatExecutor;
 void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const NEvWrite::TWriteMeta& writeMeta, const ui64 writeSize,
     const ui64 cookie, std::unique_ptr<NActors::IEventBase>&& event, const TActorContext& ctx) {
     Counters.GetTabletCounters()->IncCounter(COUNTER_WRITE_FAIL);
+    Counters.GetCSCounters().OnWriteOverload(overloadReason, writeSize);
     switch (overloadReason) {
         case EOverloadStatus::Disk:
             Counters.OnWriteOverloadDisk();

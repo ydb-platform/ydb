@@ -24,7 +24,7 @@ enum class EOverloadStatus {
 };
 
 enum class EWriteFailReason {
-    Disabled /* "disabled" */,
+    Disabled /* "disabled" */ = 0,
     PutBlob /* "put_blob" */,
     LongTxDuplication /* "long_tx_duplication" */,
     NoTable /* "no_table" */,
@@ -128,16 +128,24 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr WriteRequests;
     THashMap<EWriteFailReason, NMonitoring::TDynamicCounters::TCounterPtr> FailedWriteRequests;
     NMonitoring::TDynamicCounters::TCounterPtr SuccessWriteRequests;
-    std::vector<NMonitoring::TDynamicCounters::TCounterPtr> Overloads;
+    std::vector<NMonitoring::TDynamicCounters::TCounterPtr> WaitingOverloads;
+    std::vector<NMonitoring::TDynamicCounters::TCounterPtr> WriteOverloadCount;
+    std::vector<NMonitoring::TDynamicCounters::TCounterPtr> WriteOverloadBytes;
 
 public:
     const std::shared_ptr<TWriteCounters> WritingCounters;
     const TCSInitialization Initialization;
     TTxProgressCounters TxProgress;
 
-    void OnOverload(const EOverloadStatus status) const {
-        AFL_VERIFY((ui64)status < Overloads.size());
-        Overloads[(ui64)status]->Inc();
+    void OnWaitingOverload(const EOverloadStatus status) const {
+        AFL_VERIFY((ui64)status < WaitingOverloads.size());
+        WaitingOverloads[(ui64)status]->Inc();
+    }
+
+    void OnWriteOverload(const EOverloadStatus status, const ui32 size) const {
+        AFL_VERIFY((ui64)status < WriteOverloadCount.size());
+        WriteOverloadCount[(ui64)status]->Inc();
+        WriteOverloadBytes[(ui64)status]->Add(size);
     }
 
     void OnStartWriteRequest() const {

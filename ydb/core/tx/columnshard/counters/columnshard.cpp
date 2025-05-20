@@ -12,10 +12,18 @@ TCSCounters::TCSCounters()
     , Initialization(*this)
     , TxProgress(*this) {
 
+    WaitingOverloads.resize(GetEnumItemsCount<EOverloadStatus>());
+    WriteOverloadCount.resize(GetEnumItemsCount<EOverloadStatus>());
+    WriteOverloadBytes.resize(GetEnumItemsCount<EOverloadStatus>());
     for (auto&& i : GetEnumAllValues<EOverloadStatus>()) {
-        while (Overloads.size() <= (ui64)i) {
-            Overloads.emplace_back(CreateSubGroup("overload", ::ToString(i)).GetDeriviative("Count"));
-        }
+        AFL_VERIFY((ui32)i < WaitingOverloads.size());
+        auto overloadCounters = CreateSubGroup("overload_type", ::ToString(i));
+        WaitingOverloads[i] = overloadCounters.GetDeriviative("Overload/Waiting/Count");
+        WriteOverloadCount[i] = overloadCounters.GetDeriviative("Overload/Write/Count");
+        WriteOverloadBytes[i] = overloadCounters.GetDeriviative("Overload/Write/Bytes");
+    }
+    for (auto&& i : WriteOverloadCount) {
+        AFL_VERIFY(i);
     }
     StartBackgroundCount = TBase::GetDeriviative("StartBackground/Count");
     TooEarlyBackgroundCount = TBase::GetDeriviative("TooEarlyBackground/Count");

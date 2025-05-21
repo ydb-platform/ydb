@@ -21,13 +21,13 @@ class TestAlterCompression(ColumnFamilyTestBase):
     @classmethod
     def setup_class(cls):
         super(TestAlterCompression, cls).setup_class()
+        cls.single_upsert_rows_count: int = 10**5
+        cls.upsert_count: int = 10
         cls.volumes_without_compression: tuple[int, int]
         cls.create_table_without_compression()
 
     @classmethod
     def create_table_without_compression(cls):
-        single_upsert_rows_count: int = 10**5
-        upsert_count: int = 10
         test_name: str = "all_supported_compression"
         test_dir: str = f"{cls.ydb_client.database}/{cls.class_name}/{test_name}"
         table_path: str = f"{test_dir}/off_compression"
@@ -46,9 +46,9 @@ class TestAlterCompression(ColumnFamilyTestBase):
         )
         logger.info(f"Table {table_path} created")
         table = ColumnTableHelper(cls.ydb_client, table_path)
-        cls.upsert_and_wait_portions(table, single_upsert_rows_count, upsert_count)
+        cls.upsert_and_wait_portions(table, cls.single_upsert_rows_count, cls.upsert_count)
 
-        expected_raw = upsert_count * single_upsert_rows_count * 8
+        expected_raw = cls.upsert_count * cls.single_upsert_rows_count * 8
         cls.volumes_without_compression: tuple[int, int] = table.get_volumes_column("value")
 
         volumes = table.get_volumes_column("value")
@@ -97,8 +97,6 @@ class TestAlterCompression(ColumnFamilyTestBase):
     @pytest.mark.parametrize("suffix, family_settings", COMPRESSION_CASES)
     def test_all_supported_compression(self, suffix: str, family_settings: str):
         ''' Implements https://github.com/ydb-platform/ydb/issues/13640 '''
-        single_upsert_rows_count: int = 10**5
-        upsert_count: int = 10
         test_name: str = "all_supported_compression"
         test_dir: str = f"{self.ydb_client.database}/{self.class_name}/{test_name}"
         table_path: str = f"{test_dir}/{suffix}"
@@ -117,9 +115,9 @@ class TestAlterCompression(ColumnFamilyTestBase):
         )
         logger.info(f"Table {table_path} created")
         table = ColumnTableHelper(self.ydb_client, table_path)
-        self.upsert_and_wait_portions(table, single_upsert_rows_count, upsert_count)
+        self.upsert_and_wait_portions(table, self.single_upsert_rows_count, self.upsert_count)
 
-        expected_raw = upsert_count * single_upsert_rows_count * 8
+        expected_raw = self.upsert_count * self.single_upsert_rows_count * 8
         volumes = table.get_volumes_column("value")
         assert volumes[0] == expected_raw
         assert table.get_portion_stat_by_tier()['__DEFAULT']['Rows'] == expected_raw // 8

@@ -88,7 +88,6 @@ END()
 RECURSE(
     engines
     splitter
-    tools/visualize_portions
 )
 
 RECURSE_FOR_TESTS(

@@ -157,7 +157,7 @@ public:
     TColumnSchema& SetSimpleLogicalType(ESimpleLogicalValueType type);
     TColumnSchema& SetSortOrder(std::optional<ESortOrder> value);
     TColumnSchema& SetLock(const std::optional<std::string>& value);
-    TColumnSchema& SetExpression(const std::optional<TString>& value);
+    TColumnSchema& SetExpression(const std::optional<std::string>& value);
     TColumnSchema& SetMaterialized(std::optional<bool> value);
     TColumnSchema& SetAggregate(const std::optional<std::string>& value);
     TColumnSchema& SetGroup(const std::optional<std::string>& value);
@@ -349,6 +349,9 @@ public:
     //! For sorted tables, return the current schema.
     //! For ordered tables, prepends the current schema with |(tablet_index)| key column.
     TTableSchemaPtr WithTabletIndex() const;
+
+    //! Prepends the current schema without |(tablet_index, row_index)| columns.
+    TTableSchemaPtr ToCreate() const;
 
     //! Returns the current schema as-is.
     //! For ordered tables, prepends the current schema with |(tablet_index)| key column.

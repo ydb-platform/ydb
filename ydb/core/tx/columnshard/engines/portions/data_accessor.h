@@ -365,7 +365,7 @@ public:
     static TConclusion<TPortionDataAccessor> BuildFromProto(
         const NKikimrColumnShardDataSharingProto::TPortionInfo& proto, const TIndexInfo& indexInfo, const IBlobGroupSelector& groupSelector);
 
-    std::vector<TString> GetIndexInplaceDataVerified(const ui32 indexId) const {
+    std::vector<TString> GetIndexInplaceDataOptional(const ui32 indexId) const {
         if (!Indexes) {
             return {};
         }
@@ -408,8 +408,8 @@ public:
     NArrow::NSplitter::TSerializationStats GetSerializationStat(const ISnapshotSchema& schema) const {
         NArrow::NSplitter::TSerializationStats result;
         for (auto&& i : GetRecordsVerified()) {
-            if (schema.GetFieldByColumnIdOptional(i.ColumnId)) {
-                result.AddStat(i.GetSerializationStat(schema.GetFieldByColumnIdVerified(i.ColumnId)->name()));
+            if (auto col = schema.GetFieldByColumnIdOptional(i.ColumnId)) {
+                result.AddStat(i.GetSerializationStat(col->name()));
             }
         }
         return result;

@@ -156,8 +156,9 @@ struct TWrittenChunkReplicasInfo;
 
 class TChunkReplica;
 using TChunkReplicaList = TCompactVector<TChunkReplica, TypicalReplicaCount>;
+using TChunkReplicaSlimList = TCompactVector<TChunkReplica, SlimTypicalReplicaCount>;
 
-extern const TString DefaultStoreAccountName;
+extern const std::string DefaultStoreAccountName;
 extern const TString DefaultStoreMediumName;
 extern const TString DefaultCacheMediumName;
 extern const TString DefaultSlotsMediumName;

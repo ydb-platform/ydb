@@ -497,7 +497,6 @@ void TClusterInfo::UpdatePDiskState(const TPDiskID &id, const NKikimrWhiteboard:
 void TClusterInfo::AddVDisk(const NKikimrBlobStorage::TBaseConfig::TVSlot &info)
 {
     ui32 nodeId = info.GetVSlotId().GetNodeId();
-    Y_DEBUG_ABORT_UNLESS(HasNode(nodeId));
     if (!HasNode(nodeId)) {
         BLOG_ERROR("Got VDisk info from BSC base config for unknown node " << nodeId);
         return;

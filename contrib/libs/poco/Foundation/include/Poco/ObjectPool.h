@@ -48,7 +48,7 @@ public:
 		return new C;
 	}
 	
-	bool validateObject(P pObject)
+	bool validateObject(P /*pObject*/)
 		/// Checks whether the object is still valid
 		/// and can be reused.
 		///
@@ -61,14 +61,14 @@ public:
 		return true;
 	}
 	
-	void activateObject(P pObject)
+	void activateObject(P /*pObject*/)
 		/// Called before an object is handed out by the pool.
 		/// Also called for newly created objects, before
 		/// they are given out for the first time.
 	{
 	}
 	
-	void deactivateObject(P pObject)
+	void deactivateObject(P /*pObject*/)
 		/// Called after an object has been given back to the
 		/// pool and the object is still valid (a prior call
 		/// to validateObject() returned true).
@@ -98,20 +98,20 @@ public:
 		return new C;
 	}
 	
-	bool validateObject(Poco::AutoPtr<C> pObject)
+	bool validateObject(Poco::AutoPtr<C> /*pObject*/)
 	{
 		return true;
 	}
 	
-	void activateObject(Poco::AutoPtr<C> pObject)
+	void activateObject(Poco::AutoPtr<C> /*pObject*/)
 	{
 	}
 	
-	void deactivateObject(Poco::AutoPtr<C> pObject)
+	void deactivateObject(Poco::AutoPtr<C> /*pObject*/)
 	{
 	}
 	
-	void destroyObject(Poco::AutoPtr<C> pObject)
+	void destroyObject(Poco::AutoPtr<C> /*pObject*/)
 	{
 	}
 };
@@ -126,20 +126,20 @@ public:
 		return new C;
 	}
 	
-	bool validateObject(Poco::SharedPtr<C> pObject)
+	bool validateObject(Poco::SharedPtr<C> /*pObject*/)
 	{
 		return true;
 	}
 	
-	void activateObject(Poco::SharedPtr<C> pObject)
+	void activateObject(Poco::SharedPtr<C> /*pObject*/)
 	{
 	}
 	
-	void deactivateObject(Poco::SharedPtr<C> pObject)
+	void deactivateObject(Poco::SharedPtr<C> /*pObject*/)
 	{
 	}
 	
-	void destroyObject(Poco::SharedPtr<C> pObject)
+	void destroyObject(Poco::SharedPtr<C> /*pObject*/)
 	{
 	}
 };

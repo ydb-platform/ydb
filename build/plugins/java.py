@@ -3,7 +3,6 @@ import ymake
 import json
 import os
 import base64
-import six
 
 
 DELIM = '================================'
@@ -115,7 +114,7 @@ def onjava_module(unit, *args):
     for java_srcs_args in data['JAVA_SRCS']:
         external = None
 
-        for i in six.moves.range(len(java_srcs_args)):
+        for i in range(len(java_srcs_args)):
             arg = java_srcs_args[i]
 
             if arg == 'EXTERNAL':
@@ -135,9 +134,9 @@ def onjava_module(unit, *args):
         if external:
             unit.onpeerdir(external)
 
-    data = {k: v for k, v in six.iteritems(data) if v}
+    data = {k: v for k, v in data.items() if v}
 
-    dart = 'JAVA_DART: ' + six.ensure_str(base64.b64encode(six.ensure_binary(json.dumps(data)))) + '\n' + DELIM + '\n'
+    dart = 'JAVA_DART: ' + base64.b64encode(json.dumps(data).encode('utf-8')).decode('utf-8') + '\n' + DELIM + '\n'
     unit.set_property(['JAVA_DART_DATA', dart])
 
 
@@ -278,7 +277,7 @@ def parse_words(words):
             continue
         props.append('-B')
         if len(p) > 1:
-            props.append(six.ensure_str(base64.b64encode(six.ensure_binary("{}={}".format(p[0], ' '.join(p[1:]))))))
+            props.append(base64.b64encode("{}={}".format(p[0], ' '.join(p[1:])).encode('utf-8')).decode('utf-8'))
         else:
             ymake.report_configure_error('CUSTOM_PROPERTY "{}" value is not specified'.format(p[0]))
     for i, o in enumerate(outputs):

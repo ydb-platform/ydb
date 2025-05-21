@@ -17,7 +17,7 @@ constexpr inline TStringBuf GROUP_PATH = "/blob_storage_config/service_set/group
 constexpr inline TStringBuf DISABLE_BUILTIN_SECURITY_PATH = "/domains_config/disable_builtin_security";
 constexpr inline TStringBuf DEFAULT_GROUPS_PATH = "/domains_config/default_groups";
 constexpr inline TStringBuf DEFAULT_ACCESS_PATH = "/domains_config/default_access";
-constexpr inline TStringBuf POOL_CONFIG_PATH = "/domains_config/domains/*/storage_pool_types/*/pool_config";
+constexpr inline TStringBuf POOL_CONFIG_PATH = "/domains_config/domain/*/storage_pool_types/*/pool_config";
 
 constexpr inline TStringBuf ERASURE_SPECIES_FIELD = "erasure_species";
 

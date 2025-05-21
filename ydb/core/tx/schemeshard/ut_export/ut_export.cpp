@@ -649,6 +649,73 @@ namespace {
             Run(Runtime(), Env(), tables, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, userSID);
         }
 
+        void TestTopic(bool enablePermissions = false) {
+          EnvOptions().EnablePermissionsExport(enablePermissions);
+          Env();
+          ui64 txId = 100;
+    
+          TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", R"(
+              Name: "Topic"
+              TotalGroupCount: 2
+              PartitionPerTablet: 1
+              PQTabletConfig {
+                  PartitionConfig {
+                      LifetimeSeconds: 10
+                  }
+              }
+          )");
+          Env().TestWaitNotification(Runtime(), txId);
+    
+          auto request = Sprintf(R"(
+              ExportToS3Settings {
+                endpoint: "localhost:%d"
+                scheme: HTTP
+                items {
+                  source_path: "/MyRoot/Topic"
+                  destination_prefix: ""
+                }
+              }
+          )", S3Port());
+    
+          auto schemeshardId = TTestTxConfig::SchemeShard;
+          TestExport(Runtime(), schemeshardId, ++txId, "/MyRoot", request, "", "", Ydb::StatusIds::SUCCESS);
+          Env().TestWaitNotification(Runtime(), txId, schemeshardId);
+    
+          TestGetExport(Runtime(), schemeshardId, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+          UNIT_ASSERT(HasS3File("/create_topic.pb"));
+          UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent("/create_topic.pb"), R"(partitioning_settings {
+  min_active_partitions: 2
+  max_active_partitions: 1
+  auto_partitioning_settings {
+    strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
+    partition_write_speed {
+      stabilization_window {
+        seconds: 300
+      }
+      up_utilization_percent: 80
+      down_utilization_percent: 20
+    }
+  }
+}
+retention_period {
+  seconds: 10
+}
+supported_codecs {
+}
+partition_write_speed_bytes_per_second: 50000000
+partition_write_burst_bytes: 50000000
+)");
+    
+          if (enablePermissions) {
+            UNIT_ASSERT(HasS3File("/permissions.pb"));
+            UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent("/permissions.pb"), R"(actions {
+  change_owner: "root@builtin"
+}
+)");
+          }
+        
+        };
+
     protected:
         TS3Mock::TSettings& S3Settings() {
             if (!S3ServerSettings) {
@@ -1400,8 +1467,8 @@ partitioning_settings {
                 const auto* msg = ev->Get<NSharedCache::TEvResult>();
                 UNIT_ASSERT_VALUES_EQUAL(msg->Status, NKikimrProto::OK);
 
-                auto result = MakeHolder<NSharedCache::TEvResult>(msg->Origin, msg->Cookie, NKikimrProto::ERROR);
-                std::move(msg->Loaded.begin(), msg->Loaded.end(), std::back_inserter(result->Loaded));
+                auto result = MakeHolder<NSharedCache::TEvResult>(msg->PageCollection, msg->Cookie, NKikimrProto::ERROR);
+                std::move(msg->Pages.begin(), msg->Pages.end(), std::back_inserter(result->Pages));
 
                 injectResult = MakeHolder<IEventHandle>(ev->Recipient, ev->Sender, result.Release(), ev->Flags, ev->Cookie);
                 return TTestActorRuntime::EEventAction::DROP;
@@ -2844,5 +2911,13 @@ attributes {
                 KeyColumnNames: ["key"]
             )",
         }, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, "", "", {}, true);
+    }
+
+    Y_UNIT_TEST(Topics) {
+      TestTopic();
+    }
+
+    Y_UNIT_TEST(TopicsWithPermissions) {
+      TestTopic(true);
     }
 }

@@ -100,8 +100,9 @@ TConclusion<bool> TDetectInMem::DoExecuteInplace(const std::shared_ptr<IDataSour
     source->InitFetchingPlan(plan);
     TFetchingScriptCursor cursor(plan, 0);
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("sdmem"));
-    auto task = std::make_shared<TStepAction>(source, std::move(cursor), source->GetContext()->GetCommonContext()->GetScanActorId(), false);
-    NConveyor::TScanServiceOperator::SendTaskToExecute(task);
+    const auto& commonContext = *source->GetContext()->GetCommonContext();
+    auto task = std::make_shared<TStepAction>(source, std::move(cursor), commonContext.GetScanActorId(), false);
+    NConveyor::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
     return false;
 }
 
@@ -193,8 +194,9 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDa
     source->InitFetchingPlan(plan);
     if (source->NeedFullAnswer()) {
         TFetchingScriptCursor cursor(plan, 0);
-        auto task = std::make_shared<TStepAction>(source, std::move(cursor), context->GetCommonContext()->GetScanActorId(), false);
-        NConveyor::TScanServiceOperator::SendTaskToExecute(task);
+        const auto& commonContext = *context->GetCommonContext();
+        auto task = std::make_shared<TStepAction>(source, std::move(cursor), commonContext.GetScanActorId(), false);
+        NConveyor::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
         return false;
     } else {
         return true;

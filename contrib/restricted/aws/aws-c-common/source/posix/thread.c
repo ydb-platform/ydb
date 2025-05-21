@@ -4,7 +4,7 @@
  */
 
 #if !defined(__MACH__)
-#    define _GNU_SOURCE
+#    define _GNU_SOURCE /* NOLINT(bugprone-reserved-identifier) */
 #endif
 
 #include <aws/common/clock.h>
@@ -275,6 +275,25 @@ int aws_thread_launch(
             if (attr_return) {
                 goto cleanup;
             }
+        } else if (!options->stack_size) {
+            /**
+             * On some systems, the default stack size is too low (128KB on musl at the time of writing this), which can
+             * cause stack overflow when the dependency chain is long. Increase the stack size to at
+             * least 1MB, which is the default on Windows.
+             */
+            size_t min_stack_size = (size_t)1 * 1024 * 1024;
+            size_t current_stack_size;
+            attr_return = pthread_attr_getstacksize(attributes_ptr, &current_stack_size);
+            if (attr_return) {
+                goto cleanup;
+            }
+
+            if (current_stack_size < min_stack_size) {
+                attr_return = pthread_attr_setstacksize(attributes_ptr, min_stack_size);
+                if (attr_return) {
+                    goto cleanup;
+                }
+            }
         }
 
 /* AFAIK you can't set thread affinity on apple platforms, and it doesn't really matter since all memory
@@ -296,9 +315,9 @@ int aws_thread_launch(
             attr_return = pthread_attr_setaffinity_np(attributes_ptr, sizeof(cpuset), &cpuset);
 
             if (attr_return) {
-                AWS_LOGF_ERROR(
+                AWS_LOGF_WARN(
                     AWS_LS_COMMON_THREAD,
-                    "id=%p: pthread_attr_setaffinity_np() failed with %d.",
+                    "id=%p: pthread_attr_setaffinity_np() failed with %d. Continuing without cpu affinity",
                     (void *)thread,
                     attr_return);
                 goto cleanup;
@@ -382,7 +401,20 @@ cleanup:
 
     if (attr_return) {
         s_thread_wrapper_destroy(wrapper);
-
+        if (options && options->cpu_id >= 0) {
+            /*
+             * `pthread_create` can fail with an `EINVAL` error or `EDEADLK` on freebasd if the `cpu_id` is
+             * restricted/invalid. Since the pinning to a particular `cpu_id` is supposed to be best-effort, try to
+             * launch a thread again without pinning to a specific cpu_id.
+             */
+            AWS_LOGF_INFO(
+                AWS_LS_COMMON_THREAD,
+                "id=%p: Attempting to launch the thread again without pinning to a cpu_id",
+                (void *)thread);
+            struct aws_thread_options new_options = *options;
+            new_options.cpu_id = -1;
+            return aws_thread_launch(thread, func, arg, &new_options);
+        }
         switch (attr_return) {
             case EINVAL:
                 return aws_raise_error(AWS_ERROR_THREAD_INVALID_SETTINGS);

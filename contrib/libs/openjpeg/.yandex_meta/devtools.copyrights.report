@@ -1,0 +1,573 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 156729456a69de93c11c39f023a0e2c2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        j2k.c [7:20]
+        j2k.h [7:17]
+        openjpeg.h [7:19]
+        pi.c [7:15]
+        tcd.c [7:18]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 26ae08eeff365098c5a1454789219b30
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [7:15]
+        bio.c [7:14]
+        bio.h [7:14]
+        cio.c [7:16]
+        cio.h [7:16]
+        dwt.c [7:17]
+        dwt.h [7:14]
+        event.c [7:10]
+        event.h [7:10]
+        image.c [7:8]
+        image.h [7:8]
+        j2k.c [7:20]
+        j2k.h [7:17]
+        jp2.c [7:17]
+        jp2.h [7:13]
+        mct.c [7:16]
+        mct.h [7:16]
+        mqc.c [7:15]
+        mqc.h [7:15]
+        mqc_inl.h [7:15]
+        openjpeg.c [7:10]
+        openjpeg.h [7:19]
+        opj_clock.c [7:8]
+        opj_clock.h [7:8]
+        opj_includes.h [7:10]
+        opj_intmath.h [7:14]
+        opj_malloc.h [7:9]
+        pi.c [7:15]
+        pi.h [7:14]
+        t1.c [7:17]
+        t1.h [7:16]
+        t2.c [7:17]
+        t2.h [7:17]
+        tcd.c [7:18]
+        tcd.h [7:17]
+        tgt.c [7:16]
+        tgt.h [7:17]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3255416921fce487d6eafd5a97a6963a
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2021, Aous Naman
+        // Copyright (c) 2021, Kakadu Software Pty Ltd, Australia
+        // Copyright (c) 2021, The University of New South Wales, Australia
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        ht_dec.c [5:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 3e5a8817ea1d6ed125d0a29fb5781a76
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [7:15]
+        bio.c [7:14]
+        bio.h [7:14]
+        cio.c [7:16]
+        cio.h [7:16]
+        dwt.c [7:17]
+        dwt.h [7:14]
+        j2k.c [7:20]
+        j2k.h [7:17]
+        jp2.c [7:17]
+        mct.c [7:16]
+        mct.h [7:16]
+        mqc.c [7:15]
+        mqc.h [7:15]
+        mqc_inl.h [7:15]
+        openjpeg.h [7:19]
+        opj_intmath.h [7:14]
+        pi.c [7:15]
+        pi.h [7:14]
+        t1.c [7:17]
+        t1.h [7:16]
+        t2.c [7:17]
+        t2.h [7:17]
+        tcd.c [7:18]
+        tcd.h [7:17]
+        tgt.c [7:16]
+        tgt.h [7:17]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 55e4177f698d05dc721417a6103f01af
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        dwt.c [7:17]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 60bbb1946c5720a631b0e530309742ec
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2015, Mathieu Malaterre <mathieu.malaterre@gmail.com>
+         * Copyright (c) 2015, Matthieu Darbois
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        opj_malloc.c [7:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 68e1bb0be295ca341bd43c3face3ebc9
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [7:15]
+        bio.c [7:14]
+        bio.h [7:14]
+        cio.c [7:16]
+        cio.h [7:16]
+        dwt.c [7:17]
+        dwt.h [7:14]
+        j2k.c [7:20]
+        j2k.h [7:17]
+        jp2.c [7:17]
+        jp2.h [7:13]
+        mct.c [7:16]
+        mct.h [7:16]
+        mqc.c [7:15]
+        mqc.h [7:15]
+        mqc_inl.h [7:15]
+        openjpeg.h [7:19]
+        opj_codec.h [7:9]
+        opj_intmath.h [7:14]
+        pi.c [7:15]
+        pi.h [7:14]
+        t1.c [7:17]
+        t1.h [7:16]
+        t2.c [7:17]
+        t2.h [7:17]
+        tcd.c [7:18]
+        tcd.h [7:17]
+        tgt.c [7:16]
+        tgt.h [7:17]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 6e5ca22a0f30998bbb66a4c40109b94c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [7:15]
+        bio.c [7:14]
+        bio.h [7:14]
+        cio.c [7:16]
+        cio.h [7:16]
+        dwt.c [7:17]
+        dwt.h [7:14]
+        j2k.c [7:20]
+        j2k.h [7:17]
+        jp2.c [7:17]
+        mct.c [7:16]
+        mct.h [7:16]
+        mqc.c [7:15]
+        mqc.h [7:15]
+        mqc_inl.h [7:15]
+        openjpeg.h [7:19]
+        opj_intmath.h [7:14]
+        pi.c [7:15]
+        pi.h [7:14]
+        t1.c [7:17]
+        t1.h [7:16]
+        t2.c [7:17]
+        t2.h [7:17]
+        tcd.c [7:18]
+        tcd.h [7:17]
+        tgt.c [7:16]
+        tgt.h [7:17]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 849525ac2dbf33d2094d6da92dd427c9
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2021, Aous Naman
+        // Copyright (c) 2021, Kakadu Software Pty Ltd, Australia
+        // Copyright (c) 2021, The University of New South Wales, Australia
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        ht_dec.c [5:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 8d334eb2e5625c12e794ca846229d02d
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2017, IntoPix SA <contact@intopix.com>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        sparse_array.c [7:8]
+        sparse_array.h [7:8]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 93c2fab33e0487ca6082e8f4c0e760a6
+BELONGS ya.make
+    License text:
+        // Copyright (c) 2021, Aous Naman
+        // Copyright (c) 2021, Kakadu Software Pty Ltd, Australia
+        // Copyright (c) 2021, The University of New South Wales, Australia
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        ht_dec.c [5:7]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a179d465d626cd55fbefa8b8b0f395fe
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        j2k.c [7:20]
+        jp2.c [7:17]
+        openjpeg.h [7:19]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a3dcc7cc285538df6d03c99242e2cf44
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cio.c [7:16]
+        cio.h [7:16]
+        event.c [7:10]
+        event.h [7:10]
+        jp2.c [7:17]
+        jp2.h [7:13]
+        mct.c [7:16]
+        mct.h [7:16]
+        openjpeg.c [7:10]
+        opj_includes.h [7:10]
+        t2.c [7:17]
+        t2.h [7:17]
+        tcd.c [7:18]
+        tcd.h [7:17]
+        tgt.c [7:16]
+
+KEEP     COPYRIGHT_SERVICE_LABEL a589adbd314fd0742f06d257cbad909b
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [7:15]
+        j2k.c [7:20]
+        j2k.h [7:17]
+        openjpeg.h [7:19]
+        tgt.h [7:17]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ac5b0225c39a75ddc9b50da4434ddfc6
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2008, Jerome Fimes, Communications & Systemes <jerome.fimes@c-s.fr>
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        function_list.c [7:8]
+        function_list.h [7:8]
+        invert.c [7:8]
+        invert.h [7:8]
+        j2k.c [7:20]
+        j2k.h [7:17]
+        mqc.c [7:15]
+        mqc.h [7:15]
+        mqc_inl.h [7:15]
+        openjpeg.h [7:19]
+        tgt.h [7:17]
+
+KEEP     COPYRIGHT_SERVICE_LABEL bfcfb221aeb5a2c5163f3190bf6f72ed
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [7:15]
+        bio.c [7:14]
+        bio.h [7:14]
+        cio.c [7:16]
+        cio.h [7:16]
+        dwt.c [7:17]
+        dwt.h [7:14]
+        j2k.c [7:20]
+        j2k.h [7:17]
+        jp2.c [7:17]
+        jp2.h [7:13]
+        mct.c [7:16]
+        mct.h [7:16]
+        mqc.c [7:15]
+        mqc.h [7:15]
+        mqc_inl.h [7:15]
+        openjpeg.h [7:19]
+        opj_intmath.h [7:14]
+        pi.c [7:15]
+        pi.h [7:14]
+        t1.c [7:17]
+        t1.h [7:16]
+        t2.c [7:17]
+        t2.h [7:17]
+        tcd.c [7:18]
+        tcd.h [7:17]
+        tgt.c [7:16]
+        tgt.h [7:17]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c55d957169a61d48b23333b6a8653870
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        dwt.c [7:17]
+        opj_malloc.h [7:9]
+        t1.c [7:17]
+
+KEEP     COPYRIGHT_SERVICE_LABEL c9c2b77c5425f11ff9c0fac4b3e44d8f
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [7:15]
+        bio.c [7:14]
+        bio.h [7:14]
+        cio.c [7:16]
+        cio.h [7:16]
+        dwt.c [7:17]
+        dwt.h [7:14]
+        j2k.c [7:20]
+        j2k.h [7:17]
+        jp2.c [7:17]
+        jp2.h [7:13]
+        mct.c [7:16]
+        mct.h [7:16]
+        mqc.c [7:15]
+        mqc.h [7:15]
+        mqc_inl.h [7:15]
+        openjpeg.h [7:19]
+        opj_codec.h [7:9]
+        opj_intmath.h [7:14]
+        pi.c [7:15]
+        pi.h [7:14]
+        t1.c [7:17]
+        t1.h [7:16]
+        t2.c [7:17]
+        t2.h [7:17]
+        tcd.c [7:18]
+        tcd.h [7:17]
+        tgt.c [7:16]
+        tgt.h [7:17]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cc3e831570c01f17428af962edfdbcb4
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        cio.c [7:16]
+        cio.h [7:16]
+        event.c [7:10]
+        event.h [7:10]
+        jp2.c [7:17]
+        jp2.h [7:13]
+        mct.c [7:16]
+        mct.h [7:16]
+        openjpeg.c [7:10]
+        opj_includes.h [7:10]
+        t2.c [7:17]
+        t2.h [7:17]
+        tcd.c [7:18]
+        tcd.h [7:17]
+        tgt.c [7:16]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d4bebe97ba73b61bb4f06758758c3ae2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        t1.c [7:17]
+        t1.h [7:16]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d6cd4576170670e6662aaa6efc3cfc25
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [7:15]
+        j2k.c [7:20]
+        j2k.h [7:17]
+        openjpeg.h [7:19]
+        tgt.h [7:17]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d71fd7a07d2b8f92b4a4a7beea6f7c58
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        dwt.c [7:17]
+        j2k.c [7:20]
+        opj_common.h [7:8]
+        t1.c [7:17]
+        t1.h [7:16]
+        t2.c [7:17]
+        t2.h [7:17]
+        tcd.c [7:18]
+        tcd.h [7:17]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ea27e4bb66b6267783c1bb9666bdf66c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        bio.c [7:14]
+        bio.h [7:14]
+        cio.c [7:16]
+        cio.h [7:16]
+        dwt.c [7:17]
+        dwt.h [7:14]
+        j2k.c [7:20]
+        j2k.h [7:17]
+        jp2.c [7:17]
+        mct.c [7:16]
+        mct.h [7:16]
+        mqc.c [7:15]
+        mqc.h [7:15]
+        mqc_inl.h [7:15]
+        openjpeg.h [7:19]
+        opj_intmath.h [7:14]
+        pi.c [7:15]
+        pi.h [7:14]
+        t1.c [7:17]
+        t1.h [7:16]
+        t2.c [7:17]
+        t2.h [7:17]
+        tcd.c [7:18]
+        tcd.h [7:17]
+        tgt.c [7:16]
+        tgt.h [7:17]
+
+KEEP     COPYRIGHT_SERVICE_LABEL ec90dc8b115731bc3da3ed34cead3788
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [7:15]
+
+KEEP     COPYRIGHT_SERVICE_LABEL efd62ab9db6fe7e7540ef13ef8c534a0
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2015, Mathieu Malaterre <mathieu.malaterre@gmail.com>
+         * Copyright (c) 2015, Matthieu Darbois
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        opj_malloc.c [7:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f027075e354919011704dd9023651843
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2016, Even Rouault
+         * All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        thread.c [7:8]
+        thread.h [7:8]
+        tls_keys.h [7:8]

@@ -282,4 +282,5 @@ int aws_huffman_decode(
 
     /* This case is unreachable */
     AWS_ASSERT(0);
+    return aws_raise_error(AWS_ERROR_INVALID_STATE);
 }

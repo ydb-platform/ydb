@@ -230,7 +230,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         UNIT_ASSERT_VALUES_EQUAL(billRecords.size(), 0);
     }
 
-    Y_UNIT_TEST(VectorIndexDescriptionIsPersisted) {
+    Y_UNIT_TEST_FLAG(VectorIndexDescriptionIsPersisted, prefixed) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -239,6 +239,7 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             Name: "vectors"
             Columns { Name: "id" Type: "Uint64" }
             Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "prefix" Type: "Uint64" }
             Columns { Name: "covered" Type: "String" }
             KeyColumnNames: [ "id" ]
         )");
@@ -288,9 +289,13 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
         });
 
         const ui64 buildIndexTx = ++txId;
+        const TVector<TString> indexColumns = prefixed
+            ? TVector<TString>{"prefix", "embedding"}
+            : TVector<TString>{"embedding"};
+        const TVector<TString> dataColumns = { "covered" };
         TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", TBuildIndexConfig{
-            "by_embedding", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, { "embedding" }, { "covered" },
-            { globalIndexSettings, globalIndexSettings }, std::move(kmeansTreeSettings)
+            "by_embedding", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, indexColumns, dataColumns,
+            { globalIndexSettings, globalIndexSettings, globalIndexSettings }, std::move(kmeansTreeSettings)
         });
 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
@@ -319,6 +324,15 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
             NLs::MaxPartitionsCountEqual(3),
             NLs::SplitBoundaries<ui64>({12345, 54321})
         });
+        if (prefixed) {
+        TestDescribeResult(DescribePrivatePath(runtime, JoinFsPaths("/MyRoot/vectors/by_embedding", PrefixTable), true, true), {
+            NLs::IsTable,
+            NLs::PartitionCount(3),
+            NLs::MinPartitionsCountEqual(3),
+            NLs::MaxPartitionsCountEqual(3),
+            NLs::SplitBoundaries<ui64>({12345, 54321})
+        });
+        }
 
         for (size_t i = 0; i != 3; ++i) {
             if (i != 0) {
@@ -329,8 +343,8 @@ Y_UNIT_TEST_SUITE (VectorIndexBuildTest) {
                 NLs::PathExist,
                 NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
                 NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
-                NLs::IndexKeys({"embedding"}),
-                NLs::IndexDataColumns({"covered"}),
+                NLs::IndexKeys(indexColumns),
+                NLs::IndexDataColumns(dataColumns),
                 NLs::KMeansTreeDescription(
                     Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
                     Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,

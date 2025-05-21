@@ -13,6 +13,23 @@
 struct aws_der_encoder;
 struct aws_der_decoder;
 
+/*
+ * Note: encoder/decoder only supports unsigned representations of integers and usage
+ * of signed integers might lead to unexpected results.
+ * Context: DER spec requires ints to be stored in big endian format with MSB
+ * representing signedness. To disambiguate between negative number and big
+ * positive number, null byte can be added in front of positive number. DER spec
+ * requires representation to be the shortest possible one.
+ * During encoding aws_der_encoder_write_unsigned_integer assumes that cursor
+ * points to a positive number and will prepend 0 if needed by DER spec to
+ * indicate its positive number. Encoder does not support writing negative numbers.
+ * Decoder aws_der_encoder_write_unsigned_integer will strip any leading 0 as
+ * needed and will error out if der contains negative number.
+ * Take special care when integrating with 3p libraries cause they might expect
+ * different format. Ex. this format matches what openssl calls bin format
+ * (BN_bin2bn) and might not work as expected with openssl mpi format.
+ */
+
 enum aws_der_type {
     /* Primitives */
     AWS_DER_BOOLEAN = 0x01,
@@ -69,7 +86,7 @@ AWS_CAL_API void aws_der_encoder_destroy(struct aws_der_encoder *encoder);
  * @param integer A cursor pointing to the integer's memory
  * @return AWS_OP_ERR if an error occurs, otherwise AWS_OP_SUCCESS
  */
-AWS_CAL_API int aws_der_encoder_write_integer(struct aws_der_encoder *encoder, struct aws_byte_cursor integer);
+AWS_CAL_API int aws_der_encoder_write_unsigned_integer(struct aws_der_encoder *encoder, struct aws_byte_cursor integer);
 /**
  * Writes a boolean to the DER stream
  * @param encoder The encoder to use
@@ -195,7 +212,7 @@ AWS_CAL_API int aws_der_decoder_tlv_string(struct aws_der_decoder *decoder, stru
  * @param integer The buffer to store the integer into
  * @return AWS_OP_ERR if an error occurs, otherwise AWS_OP_SUCCESS
  */
-AWS_CAL_API int aws_der_decoder_tlv_integer(struct aws_der_decoder *decoder, struct aws_byte_cursor *integer);
+AWS_CAL_API int aws_der_decoder_tlv_unsigned_integer(struct aws_der_decoder *decoder, struct aws_byte_cursor *integer);
 
 /**
  * Extracts the current TLV BOOLEAN value (BOOLEAN)

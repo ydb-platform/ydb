@@ -127,6 +127,7 @@ namespace Tests {
         TString DomainName = TestDomainName;
         ui32 NodeCount = 1;
         ui32 DynamicNodeCount = 0;
+        std::optional<ui32> DataCenterCount;
         ui64 StorageGeneration = 0;
         bool FetchPoolsGeneration = false;
         NFake::TStorage CustomDiskParams;
@@ -190,6 +191,7 @@ namespace Tests {
         TServerSettings& SetDomainName(const TString& value);
         TServerSettings& SetNodeCount(ui32 value) { NodeCount = value; return *this; }
         TServerSettings& SetDynamicNodeCount(ui32 value) { DynamicNodeCount = value; return *this; }
+        TServerSettings& SetDataCenterCount(ui32 value) { DataCenterCount = value; return *this; }
         TServerSettings& SetStorageGeneration(ui64 storageGeneration, bool fetchPoolsGeneration = false) { StorageGeneration = storageGeneration; FetchPoolsGeneration = fetchPoolsGeneration; return *this; }
         TServerSettings& SetCustomDiskParams(const NFake::TStorage& value) { CustomDiskParams = value; return *this; }
         TServerSettings& SetControls(const TControls& value) { Controls = value; return *this; }

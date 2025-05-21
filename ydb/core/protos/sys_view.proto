@@ -278,6 +278,8 @@ message TGroupInfo {
     // down/persisted down ?
     // metrics ?
     optional bool LayoutCorrect = 16 [default = true];  // is the group layout correct?
+    optional string OperatingStatus = 17;
+    optional string ExpectedStatus = 18;
 }
 
 message TGroupEntry {

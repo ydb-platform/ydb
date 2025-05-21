@@ -497,7 +497,7 @@ namespace NActors {
                           << Settings->ComponentName(component) << " "
                           << PriorityToString(priority);
 
-                if (fileName) {
+                if (fileName && Settings->LogSourceLocation) {
                     logRecord << ": " << fileName << ":" << lineNumber;
                 }
                 logRecord << ": " << formatted;

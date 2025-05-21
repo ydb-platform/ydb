@@ -37,8 +37,10 @@ protected:
     virtual std::shared_ptr<arrow::Scalar> DoGetLastScalar() const override {
         return Last;
     }
-    virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(TString&& data, const TSimpleColumnInfo& columnInfo) const override {
+    virtual std::shared_ptr<IPortionDataChunk> DoCopyWithAnotherBlob(
+        TString&& data, const ui32 rawBytes, const TSimpleColumnInfo& columnInfo) const override {
         TColumnRecord cRecord = Record;
+        cRecord.MutableMeta().SetRawBytes(rawBytes);
         cRecord.ResetBlobRange();
         return std::make_shared<TChunkPreparation>(std::move(data), cRecord, columnInfo);
     }

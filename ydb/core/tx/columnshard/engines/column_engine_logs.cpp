@@ -191,7 +191,7 @@ std::shared_ptr<TInsertColumnEngineChanges> TColumnEngineForLogs::StartInsert(st
 }
 
 ui64 TColumnEngineForLogs::GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<TInternalPathId>& pathIds,
-    const std::optional<ui64> waitingPriority) noexcept {
+    const std::optional<ui64> waitingPriority) const noexcept {
     auto priority = GranulesStorage->GetCompactionPriority(dataLocksManager, pathIds, waitingPriority);
     if (!priority) {
         return 0;
@@ -438,12 +438,7 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(
     }
 
     for (const auto& [_, portionInfo] : spg->GetInsertedPortions()) {
-        AFL_VERIFY(portionInfo->HasInsertWriteId());
-        if (withUncommitted) {
-            if (!portionInfo->IsVisible(snapshot, !withUncommitted)) {
-                continue;
-            }
-        } else if (!portionInfo->HasCommitSnapshot()) {
+        if (!portionInfo->IsVisible(snapshot, !withUncommitted)) {
             continue;
         }
         const bool skipPortion = !pkRangesFilter.IsUsed(*portionInfo);

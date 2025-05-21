@@ -180,6 +180,16 @@ TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<
     BuildPosition(position);
 }
 
+TSortableScanData::TSortableScanData(const ui64 position, const ui64 recordsCount, const std::vector<std::shared_ptr<arrow::Array>>& columns,
+    const std::vector<std::shared_ptr<arrow::Field>>& fields)
+    : RecordsCount(recordsCount)
+    , Fields(fields) {
+    for (auto&& i : columns) {
+        Columns.emplace_back(std::make_shared<NAccessor::TTrivialArray>(i));
+    }
+    BuildPosition(position);
+}
+
 void TSortableScanData::AppendPositionTo(
     const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, const ui64 position, ui64* recordSize) const {
     AFL_VERIFY(builders.size() == PositionAddress.size());

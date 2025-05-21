@@ -24,6 +24,10 @@ ydb/core/kqp/ut/olap KqpOlapJson.BloomIndexesVariants
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesColumnActualization
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictActualization
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictStatActualization
+ydb/core/kqp/ut/olap KqpOlapDelete.DeleteWithDiffrentTypesPKColumns-isStream
+ydb/core/kqp/ut/olap KqpOlapJson.CompactionVariants
+ydb/core/kqp/ut/olap KqpOlapJson.DuplicationCompactionVariants
+ydb/core/kqp/ut/olap KqpOlapJson.SwitchAccessorCompactionVariants
 ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
 ydb/core/kqp/ut/olap [*/*] chunk chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
@@ -248,6 +252,9 @@ ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generate
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTimestampWithTimeZone]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestTxOptions]
 ydb/tests/sql sole chunk chunk
+ydb/tests/olap/ttl_tiering ttl_unavailable_s3.py.TestUnavailableS3.test
+ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_delete_s3_tiering
+ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteTtl.test_ttl_delete
 ydb/tests/sql/large sole chunk chunk
 ydb/tests/sql/large test_bulkupserts_tpch.py.TestTpchBulkUpsertsOperations.test_bulk_upsert_lineitem_with_overlapping_keys
 ydb/tests/sql/large test_bulkupserts_tpch.py.TestTpchBulkUpsertsOperations.test_repeated_bulk_upsert_lineitem

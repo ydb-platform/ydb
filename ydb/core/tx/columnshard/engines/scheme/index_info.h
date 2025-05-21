@@ -31,6 +31,7 @@ class Schema;
 
 namespace NKikimr::NOlap {
 class TPortionInfo;
+class TCompactedPortionInfo;
 namespace NIndexes {
 class TSkipIndex;
 }
@@ -56,6 +57,7 @@ struct TIndexInfo: public IIndexInfo {
 private:
     using TColumns = THashMap<ui32, NTable::TColumn>;
     friend class TPortionInfo;
+    friend class TCompactedPortionInfo;
     friend class TPortionDataAccessor;
 
     std::vector<ui32> ColumnIdxSortedByName;
@@ -237,6 +239,7 @@ public:
         result.PKColumnIds = pkIds;
         result.SetAllKeys(operators, columns);
         result.Validate();
+        result.Version = 1;
         return result;
     }
 

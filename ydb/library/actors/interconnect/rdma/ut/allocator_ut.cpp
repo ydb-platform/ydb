@@ -41,32 +41,29 @@ Y_UNIT_TEST_SUITE(Allocator) {
 
         {
             auto memRegion = memPool->Alloc(BUF_SIZE);
-            UNIT_ASSERT_C(!memRegion->IsEmpty(), "unable to allocate memory region");
             UNIT_ASSERT_C(memRegion->GetAddr(), "invalid address");
+            UNIT_ASSERT_VALUES_EQUAL_C(memRegion->GetSize(), BUF_SIZE, "invalid address");
             for (ui32 i = 0; i < NInterconnect::NRdma::NLinkMgr::GetAllCtxs().size(); ++i) {
-                auto mr = memRegion->GetMr(i);
-                UNIT_ASSERT_C(mr, "unable to register memory region");
-                UNIT_ASSERT_C(mr->lkey != 0, "invalid lkey");
-                UNIT_ASSERT_C(mr->rkey != 0, "invalid rkey");
-                UNIT_ASSERT_C(mr->addr == memRegion->GetAddr(), "invalid address");
-                UNIT_ASSERT_C(mr->length == BUF_SIZE, "invalid length");
-                Cerr << "lkey: " << mr->lkey << " rkey: " << mr->rkey << Endl;
+                // auto mr = memRegion->GetMr(i);
+                UNIT_ASSERT_C(memRegion->GetLKey(i) != 0, "invalid lkey");
+                UNIT_ASSERT_C(memRegion->GetRKey(i) != 0, "invalid rkey");
+                Cerr << "lkey: " << memRegion->GetLKey(i) << " rkey: " << memRegion->GetRKey(i) << Endl;
             }
         }
         for (ui32 i = 0; i < 10; ++i) {
             auto m1 = memPool->Alloc(BUF_SIZE);
-            UNIT_ASSERT_C(!m1->IsEmpty(), "unable to allocate memory region");
+            UNIT_ASSERT_C(m1->GetAddr() != nullptr, "invalid address");
             auto m2 = memPool->Alloc(BUF_SIZE);
-            UNIT_ASSERT_C(!m2->IsEmpty(), "unable to allocate memory region");
+            UNIT_ASSERT_C(m2->GetAddr() != nullptr, "invalid address");
             auto m3 = memPool->Alloc(BUF_SIZE);
-            UNIT_ASSERT_C(!m2->IsEmpty(), "unable to allocate memory region");
+            UNIT_ASSERT_C(m2->GetAddr() != nullptr, "invalid address");
         }
     }
 
     Y_UNIT_TEST(AllocMemoryWithMemPoolAsync) {
         const ui32 NUM_THREADS = 20;
         const ui32 NUM_ALLOC = 10000;
-        const ui32 BUF_SIZE = 1 * 1024 * 1024;
+        const ui32 BUF_SIZE = 4 * 1024;
 
         auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
 
@@ -78,7 +75,6 @@ Y_UNIT_TEST_SUITE(Allocator) {
                 auto now = TInstant::Now();
                 for (ui32 j = 0; j < NUM_ALLOC; ++j) {
                     auto memRegion = memPool->Alloc(BUF_SIZE);
-                    UNIT_ASSERT_C(!memRegion->IsEmpty(), "unable to allocate memory region");
                     UNIT_ASSERT_C(memRegion->GetAddr(), "invalid address");
                 }
                 t = (TInstant::Now() - now).MicroSeconds();

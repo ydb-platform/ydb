@@ -24,6 +24,8 @@ Y_UNIT_TEST_SUITE(Ibv) {
                 UNIT_ASSERT(err == 0);
                 Cerr << "port " << port << " speed: " << (int)portAttrs.active_speed << Endl;
             }
+            ibv_close_device(ctx);
         }
+        ibv_free_device_list(deviceList);
     }
 }

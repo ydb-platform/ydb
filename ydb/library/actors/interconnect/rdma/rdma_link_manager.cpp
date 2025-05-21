@@ -3,6 +3,7 @@
 
 #include <ydb/library/actors/interconnect/rdma/ibdrv/include/infiniband/verbs.h>
 
+#include <util/generic/scope.h>
 #include <util/generic/string.h>
 #include <util/stream/output.h>
 #include <util/string/printf.h>

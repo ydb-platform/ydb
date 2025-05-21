@@ -1010,12 +1010,8 @@ private:
         if (!msg.Success) {
             return CancelAndPersist(db, importInfo, msg.ItemIdx, msg.Error, "cannot get scheme");
         }
-        if (!IsCreatedByQuery(item)) {
-            TString error;
-            if (!CreateTablePropose(Self, TTxId(), *importInfo, msg.ItemIdx, error)) {
-                return CancelAndPersist(db, importInfo, msg.ItemIdx, error, "invalid scheme");
-            }
-        } else {
+        
+        if (IsCreatedByQuery(item)) {
             // Send the creation query to KQP to prepare.
             const auto database = GetDatabase(*Self);
             const TString source = TStringBuilder()
@@ -1030,6 +1026,11 @@ private:
                 Self->SelfId(), msg.ImportId, msg.ItemIdx, item.CreationQuery, database
             ));
             Self->RunningImportSchemeQueryExecutors.emplace(item.SchemeQueryExecutor);
+        } else if (item.Table) {
+            TString error;
+            if (!CreateTablePropose(Self, TTxId(), *importInfo, msg.ItemIdx, error)) {
+                return CancelAndPersist(db, importInfo, msg.ItemIdx, error, "invalid table scheme");
+            }
         }
 
         Self->PersistImportItemScheme(db, *importInfo, msg.ItemIdx);

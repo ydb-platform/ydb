@@ -71,10 +71,10 @@ void TWriteAggregation::Flush(const ui64 tabletId) {
         Context.GetWritingCounters()->OnAggregationWrite(Units.size(), SumSize);
         std::shared_ptr<NConveyor::ITask> task =
             std::make_shared<TBuildPackSlicesTask>(std::move(Units), Context, PathId, tabletId, ModificationType);
-        NConveyor::TInsertServiceOperator::SendTaskToExecute(task);
+        NConveyor::TCompServiceOperator::SendTaskToExecute(task);
         Units.clear();
         SumSize = 0;
     }
 }
 
-}   // namespace NKikimr::NColumnShard::NWritingPortions
+}   // namespace NKikimr::NOlap::NWritingPortions

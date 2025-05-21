@@ -592,13 +592,8 @@ protected:
             AFL_VERIFY(TxEvent->IndexChanges->ResourcesGuard);
         }
         TxEvent->IndexChanges->Blobs = ExtractBlobsData();
-        const bool isInsert = !!dynamic_pointer_cast<NOlap::TInsertColumnEngineChanges>(TxEvent->IndexChanges);
         std::shared_ptr<NConveyor::ITask> task = std::make_shared<TChangesTask>(std::move(TxEvent), Counters, TabletId, ParentActorId, LastCompletedTx);
-        if (isInsert) {
-            NConveyor::TInsertServiceOperator::SendTaskToExecute(task);
-        } else {
-            NConveyor::TCompServiceOperator::SendTaskToExecute(task);
-        }
+        NConveyor::TCompServiceOperator::SendTaskToExecute(task);
     }
     virtual bool DoOnError(const TString& storageId, const NOlap::TBlobRange& range, const NOlap::IBlobsReadingAction::TErrorStatus& status) override {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DoOnError")("storage_id", storageId)("blob_id", range)("status", status.GetErrorMessage())("status_code", status.GetStatus());
@@ -1500,7 +1495,7 @@ public:
         }
 
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("stage", "finished");
-        NConveyor::TInsertServiceOperator::AsyncTaskToExecute(std::make_shared<TAccessorsParsingTask>(FetchCallback, std::move(FetchedAccessors)));
+        NConveyor::TCompServiceOperator::AsyncTaskToExecute(std::make_shared<TAccessorsParsingTask>(FetchCallback, std::move(FetchedAccessors)));
         return true;
     }
     void Complete(const TActorContext& /*ctx*/) override {

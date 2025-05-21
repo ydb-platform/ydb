@@ -48,6 +48,9 @@ public:
         auto& context = NActors::TActorContext::AsActorContext();
         context.Register(new TAsyncTaskExecutor(task));
     }
+    static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, const ESpecialTaskProcesses processType) {
+        return SendTaskToExecute(task, (ui64)processType);
+    }
     static bool SendTaskToExecute(const std::shared_ptr<ITask>& task, const ui64 processId = 0) {
         if (TSelf::IsEnabled() && NActors::TlsActivationContext) {
             auto& context = NActors::TActorContext::AsActorContext();

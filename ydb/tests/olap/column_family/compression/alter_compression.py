@@ -128,6 +128,8 @@ class TestAllCompression(TestCompressionBase):
         cls.single_upsert_rows_count: int = 10**5
         cls.upsert_count: int = 10
         cls.volumes_without_compression: tuple[int, int]
+        cls.test_name: str = "all_supported_compression"
+        cls.test_dir: str = f"{cls.ydb_client.database}/{cls.class_name}/{cls.test_name}"
         cls.create_table_without_compression()
 
     COMPRESSION_CASES = [
@@ -140,9 +142,7 @@ class TestAllCompression(TestCompressionBase):
 
     @classmethod
     def create_table_without_compression(cls):
-        test_name: str = "all_supported_compression"
-        test_dir: str = f"{cls.ydb_client.database}/{cls.class_name}/{test_name}"
-        table_path: str = f"{test_dir}/off_compression"
+        table_path: str = f"{cls.test_dir}/off_compression"
         table_family: str = cls.add_family_in_create(name='default', settings='COMPRESSION = "off"')
 
         cls.ydb_client.query(
@@ -170,9 +170,7 @@ class TestAllCompression(TestCompressionBase):
     @pytest.mark.parametrize("suffix, family_settings", COMPRESSION_CASES)
     def test_all_supported_compression(self, suffix: str, family_settings: str):
         ''' Implements https://github.com/ydb-platform/ydb/issues/13640 '''
-        test_name: str = "all_supported_compression"
-        test_dir: str = f"{self.ydb_client.database}/{self.class_name}/{test_name}"
-        table_path: str = f"{test_dir}/{suffix}"
+        table_path: str = f"{self.test_dir}/{suffix}"
         table_family: str = self.add_family_in_create(name='default', settings=family_settings)
 
         self.ydb_client.query(

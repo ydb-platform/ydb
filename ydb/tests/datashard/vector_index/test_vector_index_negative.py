@@ -1,5 +1,3 @@
-import pytest
-
 from ydb.tests.datashard.lib.vector_base import VectorBase
 from ydb.tests.datashard.lib.create_table import create_table_sql_request, create_vector_index_sql_request
 from ydb.tests.datashard.lib.types_of_variables import (

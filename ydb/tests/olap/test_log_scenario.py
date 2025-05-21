@@ -53,7 +53,7 @@ class YdbWorkloadLog:
 
     def create_table(self, table_name: str):
         logging.info('YdbWorkloadLog init table')
-        command = self.begin_command + ["init", "--path", table_name, "--store", "column"]
+        command = self.begin_command + ["init", "--path", table_name, "--store", "column", "--ttl", "1000"]
         self._call(command=command, wait=True)
 
     def _insert_rows(self, operation_name: str, seconds: int, threads: int, rows: int, wait: bool):

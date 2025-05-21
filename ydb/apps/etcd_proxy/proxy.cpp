@@ -199,13 +199,23 @@ int TProxy::ImportDatabase() {
     const auto driver = NYdb::TDriver(config);
     auto client = NYdb::NTable::TTableClient(driver);
 
+    if (const auto res = Stuff->Client->ExecuteQuery(Stuff->TablePrefix + "ALTER TABLE `current` DROP INDEX `lease`;", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); !res.IsSuccess()) {
+        std::cout << res.GetIssues().ToString() << std::endl;
+        return 1;
+    }
+
     if (const auto res = client.BulkUpsert(Database + Folder + "/current", std::move(value)).ExtractValueSync(); !res.IsSuccess()) {
         std::cout << res.GetIssues().ToString() << std::endl;
         return 1;
     }
 
+    if (const auto res = Stuff->Client->ExecuteQuery(Stuff->TablePrefix + "ALTER TABLE `current` ADD INDEX `lease` GLOBAL ON (`lease`);", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync(); !res.IsSuccess()) {
+        std::cout << res.GetIssues().ToString() << std::endl;
+        return 1;
+    }
+
     const auto& param = NYdb::TParamsBuilder().AddParam("$Prefix").String(ImportPrefix_).Build().Build();
-    if (const auto res = Stuff->Client->ExecuteQuery(R"(
+    if (const auto res = Stuff->Client->ExecuteQuery(Stuff->TablePrefix + R"(
 insert into `history` select * from `current` where startswith(`key`,$Prefix);
 insert into `revision` (`stub`,`revision`,`timestamp`) values (true,0L,CurrentUtcDatetime());
 insert into `revision` select false as `stub`, nvl(max(`modified`), 0L) as `revision`, CurrentUtcDatetime(max(`modified`)) as `timestamp` from `history`;

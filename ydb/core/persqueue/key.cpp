@@ -52,6 +52,16 @@ TKey TKey::ForFastWrite(EType type,
     return {type, partition, offset, partNo, count, internalPartsCount, '?'};
 }
 
+bool TKey::IsFastWrite() const
+{
+    return GetSuffix() == '?';
+}
+
+void TKey::SetFastWrite()
+{
+    SetSuffix('?');
+}
+
 TKey TKey::FromKey(const TKey& k,
                    EType type,
                    const TPartitionId& partition,

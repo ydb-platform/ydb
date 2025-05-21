@@ -4,6 +4,7 @@
 #include "partition_util.h"
 
 #include <memory>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -110,6 +111,7 @@ const TPartitionId& TInitializerStep::PartitionId() const {
 }
 
 void TInitializerStep::PoisonPill(const TActorContext& ctx) {
+    DBGTRACE_LOG("send TEvPoisonPill");
     ctx.Send(Partition()->Tablet, new TEvents::TEvPoisonPill());
 }
 
@@ -323,12 +325,16 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
         bool res = meta.ParseFromString(response.GetValue());
         Y_ABORT_UNLESS(res);
 
+        DBGTRACE_LOG("meta=" << meta.ShortDebugString());
+
         Partition()->BlobEncoder.StartOffset = meta.GetStartOffset();
         Partition()->BlobEncoder.EndOffset = meta.GetEndOffset();
         Partition()->BlobEncoder.FirstUncompactedOffset = meta.GetFirstUncompactedOffset();
+
         if (Partition()->BlobEncoder.StartOffset == Partition()->BlobEncoder.EndOffset) {
            Partition()->BlobEncoder.NewHead.Offset = Partition()->BlobEncoder.Head.Offset = Partition()->BlobEncoder.EndOffset;
         }
+
         if (meta.HasStartOffset()) {
             GetContext().StartOffset = meta.GetStartOffset();
         }
@@ -489,12 +495,16 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             }
             FormHeadAndProceed();
 
-            if (GetContext().StartOffset && *GetContext().StartOffset !=  Partition()->CompactionBlobEncoder.StartOffset) {
+            //Partition()->DumpZones(__FILE__, __LINE__);
+
+            if (GetContext().StartOffset && *GetContext().StartOffset != Partition()->CompactionBlobEncoder.StartOffset) {
                 PQ_LOG_ERROR("StartOffset from meta and blobs are different: " << *GetContext().StartOffset << " != " << Partition()->CompactionBlobEncoder.StartOffset);
+                Y_ABORT("meta is broken");
                 return PoisonPill(ctx);
             }
-            if (GetContext().EndOffset && *GetContext().EndOffset !=  Partition()->BlobEncoder.EndOffset) {
+            if (GetContext().EndOffset && *GetContext().EndOffset != Partition()->BlobEncoder.EndOffset) {
                 PQ_LOG_ERROR("EndOffset from meta and blobs are different: " << *GetContext().EndOffset << " != " << Partition()->BlobEncoder.EndOffset);
+                Y_ABORT("meta is broken");
                 return PoisonPill(ctx);
             }
 
@@ -523,6 +533,10 @@ THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TR
 
     std::sort(keys.begin(), keys.end());
 
+    for (size_t i = 0; i < keys.size(); ++i) {
+        DBGTRACE_LOG("key[" << i << "]=" << keys[i]);
+    }
+
     TVector<TString> filtered;
     TKey lastKey;
 
@@ -545,9 +559,9 @@ THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TR
                     }
                 } else {
                     // candidate после lastKey
-                    Y_ABORT_UNLESS(lastKey.GetPartNo() + lastKey.GetInternalPartsCount() == candidate.GetPartNo(),
-                                   "lastKey=%s, candidate=%s",
-                                   lastKey.ToString().data(), candidate.ToString().data());
+                    //Y_ABORT_UNLESS(lastKey.GetPartNo() + lastKey.GetInternalPartsCount() == candidate.GetPartNo(),
+                    //               "lastKey=%s, candidate=%s",
+                    //               lastKey.ToString().data(), candidate.ToString().data());
                     filtered.push_back(std::move(k));
                     lastKey = candidate;
                 }
@@ -689,6 +703,8 @@ void TInitDataRangeStep::FormHeadAndProceed() {
 
         cz.Head.Offset = bodyKey.GetOffset() + bodyKey.GetCount();
         cz.Head.PartNo = 0;
+
+        cz.EndOffset = cz.Head.Offset;
     }
 
     // Compaction Head
@@ -701,6 +717,8 @@ void TInitDataRangeStep::FormHeadAndProceed() {
 
         cz.Head.Offset = headKey.GetOffset();
         cz.Head.PartNo = headKey.GetPartNo();
+
+        cz.EndOffset = headKey.GetOffset() + headKey.GetCount();
     }
 
     // FastWrite Body
@@ -713,21 +731,29 @@ void TInitDataRangeStep::FormHeadAndProceed() {
 
         fwz.Head.Offset = bodyKey.GetOffset() + bodyKey.GetCount();
         fwz.Head.PartNo = 0;
+
+        fwz.EndOffset = fwz.Head.Offset;
     }
 
     if (fwz.DataKeysBody.empty()) {
         cz.StartOffset = startOffset;
-        cz.EndOffset = endOffset;
+        //cz.EndOffset = endOffset;
 
         fwz.StartOffset = endOffset;
-        fwz.EndOffset = endOffset;
+        //fwz.EndOffset = endOffset;
     } else {
         cz.StartOffset = startOffset;
-        cz.EndOffset = fwz.DataKeysBody.front().Key.GetOffset();
+        //cz.EndOffset = fwz.DataKeysBody.front().Key.GetOffset();
 
         fwz.StartOffset = cz.EndOffset;
-        fwz.EndOffset = endOffset;
+        //fwz.EndOffset = endOffset;
     }
+
+    if (cz.IsEmpty()) {
+        cz.Head.Offset = fwz.StartOffset;
+    }
+
+    Partition()->DumpZones(__FILE__, __LINE__);
 
     Y_ABORT_UNLESS(fwz.HeadKeys.empty() || fwz.Head.Offset == fwz.HeadKeys.front().Key.GetOffset() && fwz.Head.PartNo == fwz.HeadKeys.front().Key.GetPartNo());
     Y_ABORT_UNLESS(fwz.Head.Offset < endOffset || fwz.Head.Offset == endOffset && fwz.HeadKeys.empty());

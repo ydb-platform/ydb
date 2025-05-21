@@ -12,6 +12,7 @@
 
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 
 namespace NKikimr::NPQ {
@@ -1294,11 +1295,16 @@ void TestWritePQImpl(bool fast) {
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        DBGTRACE("Test: " << dispatchName);
 
         activeZone = false;
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(100);
+
+        //tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(1'000);
+        //tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsSize(200_MB);
+        tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
 
         // Important client, lifetimeseconds=0 - never delete
         PQTabletPrepare({.partitions = 2, .writeSpeed = 200000000}, {{"user", true}}, tc);
@@ -1314,7 +1320,7 @@ void TestWritePQImpl(bool fast) {
 
         TString sb{6_MB + 512_KB, '_'};
         data.push_back({1, sb.substr(pp)});
-        CmdWrite(0,"sourceid0", data, tc, false, {}, true, "", -1, 100);
+        CmdWrite(0, "sourceid0", data, tc, false, {}, true, "", -1, 100);
         activeZone = false;
 
         PQGetPartInfo(100, 101, tc);

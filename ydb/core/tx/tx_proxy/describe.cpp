@@ -100,13 +100,6 @@ class TDescribeReq : public TActor<TDescribeReq> {
             if (columnType.TypeInfo) {
                 *col->MutableTypeInfo() = std::move(*columnType.TypeInfo);
             }
-            col->SetIsBuildInProgress(column.IsBuildInProgress);
-
-            if (column.DefaultKind == TTableColumnInfo::DEFAULT_SEQUENCE) {
-                col->SetDefaultFromSequence(std::move(column.DefaultFromSequence));
-            } else if (column.DefaultKind == TTableColumnInfo::DEFAULT_LITERAL) {
-                *col->MutableDefaultFromLiteral() = std::move(column.DefaultFromLiteral);
-            }
 
             if (column.IsNotNullColumn) {
                 col->SetNotNull(true);
@@ -408,7 +401,8 @@ void TDescribeReq::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &
     const auto& describePath = SchemeRequest->Ev->Get()->Record.GetDescribePath();
 
     if (entry.TableId.IsSystemView() && entry.Kind != TNavigate::KindSysView) {
-        // don't go to schemeshard
+        // don't go to schemeshard if entry describes sys view path and this path is virtual
+        // for materialized sys view paths send the request to SchemeShard
         const auto& path = describePath.GetPath();
 
         if (entry.TableId.SysViewInfo == NSysView::SysPathName) {
@@ -497,6 +491,8 @@ void TDescribeReq::Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult:
         }
 
         if (self.GetPathType() == NKikimrSchemeOp::EPathType::EPathTypeSysView) {
+            // have to fill schema related fields for sys views with materialized paths
+            // sys views with virtual paths get these fields from SchemeCache
             auto* record = ev->Get()->MutableRecord();
             auto& descr = *record->MutablePathDescription();
 

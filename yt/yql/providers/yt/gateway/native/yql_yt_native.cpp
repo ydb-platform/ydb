@@ -1710,13 +1710,17 @@ public:
     TGetTablePartitionsResult GetTablePartitions(TGetTablePartitionsOptions&& options) override {
         try {
             TSession::TPtr session = GetSession(options.SessionId());
+            const TString cluster = options.Cluster();
+            const TString tmpFolder = GetTablesTmpFolder(*options.Config(), cluster);
 
-            auto execCtx = MakeExecCtx(std::move(options), session, options.Cluster(), nullptr, nullptr);
+            auto execCtx = MakeExecCtx(std::move(options), session, cluster, nullptr, nullptr);
             auto entry = execCtx->GetOrCreateEntry();
 
             TVector<NYT::TRichYPath> paths;
             for (const auto& pathInfo: execCtx->Options_.Paths()) {
-                const TString tmpFolder = GetTablesTmpFolder(*options.Config(), pathInfo->Table->Cluster);
+                YQL_ENSURE(pathInfo->Table->Cluster == cluster,
+                    "Remote tables are not supported in GetTablePartitions(): requested cluster " << pathInfo->Table->Cluster.Quote() <<
+                    ", runtime cluster: " << cluster.Quote());
                 const auto tablePath = TransformPath(tmpFolder, pathInfo->Table->Name, pathInfo->Table->IsTemp, session->UserName_);
                 NYT::TRichYPath richYtPath{NYT::AddPathPrefix(tablePath, NYT::TConfig::Get()->Prefix)};
                 if (!pathInfo->Table->IsTemp || pathInfo->Table->IsAnonymous) {

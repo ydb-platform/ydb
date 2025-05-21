@@ -9,7 +9,6 @@ private:
     using TBase = IPortionsLevel;
 
     std::set<TOrderedPortion, std::less<>> Portions;
-    const TLevelCounters LevelCounters;
     const double BytesLimitFraction = 1;
     const ui64 ExpectedPortionSize = (1 << 20);
     const ui64 SizeLimitGuarantee = 0;
@@ -60,9 +59,9 @@ private:
         if (!GetNextLevel()) {
             return 0;
         }
-        if ((ui64)PortionsInfo.GetBlobBytes() > GetLevelBlobBytesLimit() && PortionsInfo.GetCount() > 2 &&
-            (ui64)PortionsInfo.GetBlobBytes() > ExpectedPortionSize * 2) {
-            return ((ui64)GetLevelId() << 48) + PortionsInfo.GetBlobBytes() - GetLevelBlobBytesLimit();
+        if ((ui64)GetPortionsInfo().GetBlobBytes() > GetLevelBlobBytesLimit() && GetPortionsInfo().GetCount() > 2 &&
+            (ui64)GetPortionsInfo().GetBlobBytes() > ExpectedPortionSize * 2) {
+            return ((ui64)GetLevelId() << 48) + GetPortionsInfo().GetBlobBytes() - GetLevelBlobBytesLimit();
         } else {
             return 0;
         }
@@ -75,9 +74,9 @@ private:
 public:
     TOneLayerPortions(const ui64 levelId, const double bytesLimitFraction, const ui64 expectedPortionSize,
         const std::shared_ptr<IPortionsLevel>& nextLevel, const std::shared_ptr<TSimplePortionsGroupInfo>& summaryPortionsInfo,
-        const TLevelCounters& levelCounters, const ui64 sizeLimitGuarantee, const bool strictOneLayer = true)
-        : TBase(levelId, nextLevel)
-        , LevelCounters(levelCounters)
+        const TLevelCounters& levelCounters, const ui64 sizeLimitGuarantee, const std::vector<std::shared_ptr<IPortionsSelector>>& selectors,
+        const TString& defaultSelectorName, const bool strictOneLayer = true)
+        : TBase(levelId, nextLevel, nullptr, levelCounters, selectors, defaultSelectorName)
         , BytesLimitFraction(bytesLimitFraction)
         , ExpectedPortionSize(expectedPortionSize)
         , SizeLimitGuarantee(sizeLimitGuarantee)
@@ -136,7 +135,7 @@ public:
     virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& /*pkSchema*/) const override {
         NArrow::NMerger::TIntervalPositions result;
         for (auto&& i : Portions) {
-            result.AddPosition(i.GetStartPosition().BuildSortablePosition(), false);
+            result.AddPosition(i.GetStart().BuildSortablePosition(), false);
         }
         return result;
     }

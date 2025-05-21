@@ -1,6 +1,6 @@
 #include "zero_level.h"
 
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/zero_level.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/level/zero_level.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
@@ -54,47 +54,50 @@ bool TZeroLevelConstructor::DoDeserializeFromProto(const NKikimrSchemeOp::TCompa
     if (!proto.HasZeroLevel()) {
         return true;
     }
-    if (proto.GetZeroLevel().HasPortionsLiveDurationSeconds()) {
-        PortionsLiveDuration = TDuration::Seconds(proto.GetZeroLevel().GetPortionsLiveDurationSeconds());
+    auto& pLevel = proto.GetZeroLevel();
+    if (pLevel.HasPortionsLiveDurationSeconds()) {
+        PortionsLiveDuration = TDuration::Seconds(pLevel.GetPortionsLiveDurationSeconds());
     }
-    if (proto.GetZeroLevel().HasExpectedBlobsSize()) {
-        ExpectedBlobsSize = proto.GetZeroLevel().GetExpectedBlobsSize();
+    if (pLevel.HasExpectedBlobsSize()) {
+        ExpectedBlobsSize = pLevel.GetExpectedBlobsSize();
     }
-    if (proto.GetZeroLevel().HasPortionsCountAvailable()) {
-        PortionsCountAvailable = proto.GetZeroLevel().GetPortionsCountAvailable();
+    if (pLevel.HasPortionsCountAvailable()) {
+        PortionsCountAvailable = pLevel.GetPortionsCountAvailable();
     }
-    if (proto.GetZeroLevel().HasPortionsCountLimit()) {
-        PortionsCountLimit = proto.GetZeroLevel().GetPortionsCountLimit();
+    if (pLevel.HasPortionsCountLimit()) {
+        PortionsCountLimit = pLevel.GetPortionsCountLimit();
     }
-    if (proto.GetZeroLevel().HasPortionsSizeLimit()) {
-        PortionsSizeLimit = proto.GetZeroLevel().GetPortionsSizeLimit();
+    if (pLevel.HasPortionsSizeLimit()) {
+        PortionsSizeLimit = pLevel.GetPortionsSizeLimit();
     }
     return true;
 }
 
 void TZeroLevelConstructor::DoSerializeToProto(NKikimrSchemeOp::TCompactionLevelConstructorContainer& proto) const {
+    auto& mLevel = *proto.MutableZeroLevel();
     if (PortionsLiveDuration) {
-        proto.MutableZeroLevel()->SetPortionsLiveDurationSeconds(PortionsLiveDuration->Seconds());
+        mLevel.SetPortionsLiveDurationSeconds(PortionsLiveDuration->Seconds());
     }
     if (ExpectedBlobsSize) {
-        proto.MutableZeroLevel()->SetExpectedBlobsSize(*ExpectedBlobsSize);
+        mLevel.SetExpectedBlobsSize(*ExpectedBlobsSize);
     }
     if (PortionsCountAvailable) {
-        proto.MutableZeroLevel()->SetPortionsCountAvailable(*PortionsCountAvailable);
+        mLevel.SetPortionsCountAvailable(*PortionsCountAvailable);
     }
     if (PortionsCountLimit) {
-        proto.MutableZeroLevel()->SetPortionsCountLimit(*PortionsCountLimit);
+        mLevel.SetPortionsCountLimit(*PortionsCountLimit);
     }
     if (PortionsSizeLimit) {
-        proto.MutableZeroLevel()->SetPortionsSizeLimit(*PortionsSizeLimit);
+        mLevel.SetPortionsSizeLimit(*PortionsSizeLimit);
     }
 }
 
 std::shared_ptr<NKikimr::NOlap::NStorageOptimizer::NLCBuckets::IPortionsLevel> TZeroLevelConstructor::DoBuildLevel(
     const std::shared_ptr<IPortionsLevel>& nextLevel, const ui32 indexLevel, const std::shared_ptr<TSimplePortionsGroupInfo>& /*portionsInfo*/,
-    const TLevelCounters& counters) const {
-    return std::make_shared<TZeroLevelPortions>(indexLevel, nextLevel, counters, PortionsLiveDuration.value_or(TDuration::Max()),
-        ExpectedBlobsSize.value_or((ui64)1 << 20), PortionsCountAvailable.value_or(10), PortionsCountLimit, PortionsSizeLimit);
+    const TLevelCounters& counters, const std::vector<std::shared_ptr<IPortionsSelector>>& selectors) const {
+    return std::make_shared<TZeroLevelPortions>(indexLevel, nextLevel, counters,
+        std::make_shared<TLimitsOverloadChecker>(PortionsCountLimit, PortionsSizeLimit), PortionsLiveDuration.value_or(TDuration::Max()),
+        ExpectedBlobsSize.value_or((ui64)1 << 20), PortionsCountAvailable.value_or(10), selectors, GetDefaultSelectorName());
 }
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

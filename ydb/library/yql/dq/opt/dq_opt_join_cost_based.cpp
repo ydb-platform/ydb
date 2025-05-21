@@ -47,6 +47,17 @@ bool DqCollectJoinRelationsWithStats(
     return true;
 }
 
+TString RelsToString(const TVector<std::shared_ptr<TRelOptimizerNode>>& rels) {
+    TVector<TString> strs;
+    strs.reserve(rels.size());
+
+    for (const auto& rel: rels) {
+        strs.push_back(rel->Label);
+    }
+
+    return "[" + JoinSeq(", ", strs) + "]";
+}
+
 /**
  * Convert JoinTuple from AST into an internal representation of a optimizer plan
  * This procedure also hooks up rels with statistics to the leaf nodes of the plan
@@ -60,7 +71,6 @@ std::shared_ptr<TJoinOptimizerNode> ConvertToJoinTree(
     std::shared_ptr<IBaseOptimizerNode> left;
     std::shared_ptr<IBaseOptimizerNode> right;
 
-
     if (joinTuple.LeftScope().Maybe<TCoEquiJoinTuple>()) {
         left = ConvertToJoinTree(joinTuple.LeftScope().Cast<TCoEquiJoinTuple>(), rels);
     }
@@ -69,6 +79,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertToJoinTree(
         auto it = find_if(rels.begin(), rels.end(), [scope] (const std::shared_ptr<TRelOptimizerNode>& n) {
             return scope == n->Label;
         } );
+        Y_ENSURE(it != rels.end(), "Left scope not found in rels, scope: " << scope << ", rels: " << RelsToString(rels));
         left = *it;
     }
 
@@ -79,7 +90,9 @@ std::shared_ptr<TJoinOptimizerNode> ConvertToJoinTree(
         auto scope = joinTuple.RightScope().Cast<TCoAtom>().StringValue();
         auto it = find_if(rels.begin(), rels.end(), [scope] (const std::shared_ptr<TRelOptimizerNode>& n) {
             return scope == n->Label;
-        } );
+        });
+
+        Y_ENSURE(it != rels.end(), TStringBuilder{} << "Right scope not found in rels, scope: " << scope << ", rels: " << RelsToString(rels));
         right =  *it;
     }
 
@@ -529,7 +542,18 @@ void CollectInterestingOrderingsFromJoinTree(
     }
 
     auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
-    auto joinTree = ConvertToJoinTree(joinTuple, rels);
+    std::shared_ptr<TJoinOptimizerNode> joinTree;
+
+    try {
+        joinTree = ConvertToJoinTree(joinTuple, rels);
+    } catch (std::exception& e) {
+        YQL_CLOG(TRACE, CoreDq) << "Error while converting join tree: " << e.what();
+    }
+
+    if (!joinTree) {
+        return;
+    }
+
     auto hypergraph = MakeJoinHypergraph<std::bitset<256>>(joinTree, {}, false);
     THashSet<TString> interestingOrderingIdxes;
     interestingOrderingIdxes.reserve(hypergraph.GetEdges().size());

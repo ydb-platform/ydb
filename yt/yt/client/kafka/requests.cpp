@@ -109,11 +109,19 @@ void TRecord::Serialize(IKafkaProtocolWriter* writer, int version) const
         WRITE_KAFKA_FIELD(recordWriter, WriteVarLong, TimestampDelta)
         WRITE_KAFKA_FIELD(recordWriter, WriteVarInt, OffsetDelta)
 
-        WRITE_KAFKA_FIELD(recordWriter, WriteVarInt, Key.size())
-        WRITE_KAFKA_FIELD(recordWriter, WriteData, Key)
+        if (Key) {
+            WRITE_KAFKA_FIELD(recordWriter, WriteVarInt, Key->size())
+            WRITE_KAFKA_FIELD(recordWriter, WriteData, *Key)
+        } else {
+            WRITE_KAFKA_FIELD(recordWriter, WriteVarInt, -1)
+        }
 
-        WRITE_KAFKA_FIELD(recordWriter, WriteVarInt, Value.size())
-        WRITE_KAFKA_FIELD(recordWriter, WriteData, Value)
+        if (Value) {
+            WRITE_KAFKA_FIELD(recordWriter, WriteVarInt, Value->size())
+            WRITE_KAFKA_FIELD(recordWriter, WriteData, *Value)
+        } else {
+            WRITE_KAFKA_FIELD(recordWriter, WriteVarInt, -1)
+        }
 
         WRITE_KAFKA_FIELD(recordWriter, WriteVarInt, Headers.size())
         for (const auto& header : Headers) {
@@ -131,8 +139,16 @@ void TRecord::Serialize(IKafkaProtocolWriter* writer, int version) const
             writer->WriteInt64(TimestampDelta);
         }
 
-        writer->WriteBytes(Key);
-        writer->WriteBytes(Value);
+        if (Key) {
+            writer->WriteBytes(*Key);
+        } else {
+            writer->WriteInt32(-1);
+        }
+        if (Value) {
+            writer->WriteBytes(*Value);
+        } else {
+            writer->WriteInt32(-1);
+        }
     } else {
         THROW_ERROR_EXCEPTION("Unsupported Record version %v in serialization", version);
     }
@@ -153,14 +169,18 @@ void TRecord::Deserialize(IKafkaProtocolReader* reader, int version)
 
         auto keySize = reader->ReadVarInt();
         YT_LOG_TRACE("Parsing Record (KeySize: %v)", keySize);
-        reader->ReadString(&Key, keySize);
+        if (keySize > 0) {
+            Key = TString{};
+            reader->ReadString(&(*Key), keySize);
+        }
 
         i32 valueSize;
         READ_KAFKA_FIELD(valueSize, ReadVarInt);
 
         if (valueSize > 0) {
             YT_LOG_TRACE("Parsing Record (ValueSize: %v)", valueSize);
-            reader->ReadString(&Value, valueSize);
+            Value = TString{};
+            reader->ReadString(&(*Value), valueSize);
         }
 
         i32 headerCount;
@@ -329,13 +349,13 @@ void TRspApiVersions::Serialize(IKafkaProtocolWriter* writer, int apiVersion) co
 void TReqMetadataTopic::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
 {
     if (apiVersion >= 10) {
-        TopicId = reader->ReadUuid();
+        READ_KAFKA_FIELD(TopicId, ReadUuid)
     }
 
     if (apiVersion < 9) {
-        Topic = reader->ReadString();
+        READ_KAFKA_FIELD(Name, ReadString)
     } else {
-        Topic = reader->ReadCompactString();
+        READ_KAFKA_FIELD(Name, ReadCompactString)
     }
     if (apiVersion >= 9) {
         NKafka::Deserialize(TagBuffer, reader, /*isCompact*/ true);
@@ -347,14 +367,14 @@ void TReqMetadata::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
     NKafka::Deserialize(Topics, reader, apiVersion >= 9, apiVersion);
 
     if (apiVersion >= 4) {
-        AllowAutoTopicCreation = reader->ReadBool();
+        READ_KAFKA_FIELD(AllowAutoTopicCreation, ReadBool)
     }
 
     if (apiVersion >= 8) {
         if (apiVersion <= 10) {
-            IncludeClusterAuthorizedOperations = reader->ReadBool();
+            READ_KAFKA_FIELD(IncludeClusterAuthorizedOperations, ReadBool)
         }
-        IncludeTopicAuthorizedOperations = reader->ReadBool();
+        READ_KAFKA_FIELD(IncludeTopicAuthorizedOperations, ReadBool)
     }
 
     if (apiVersion >= 9) {
@@ -364,11 +384,19 @@ void TReqMetadata::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
 
 void TRspMetadataBroker::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
 {
-    writer->WriteInt32(NodeId);
-    writer->WriteString(Host);
-    writer->WriteInt32(Port);
+    WRITE_KAFKA_FIELD(writer, WriteInt32, NodeId)
+    if (apiVersion < 9) {
+        WRITE_KAFKA_FIELD(writer, WriteString, Host)
+    } else {
+        WRITE_KAFKA_FIELD(writer, WriteCompactString, Host)
+    }
+    WRITE_KAFKA_FIELD(writer, WriteInt32, Port)
     if (apiVersion >= 1) {
-        writer->WriteNullableString(Rack);
+        if (apiVersion < 9) {
+            WRITE_KAFKA_FIELD(writer, WriteNullableString, Rack)
+        } else {
+            WRITE_KAFKA_FIELD(writer, WriteCompactNullableString, Rack)
+        }
     }
     if (apiVersion >= 9) {
         NKafka::Serialize(TagBuffer, writer, /*isCompact*/ true);
@@ -377,18 +405,26 @@ void TRspMetadataBroker::Serialize(IKafkaProtocolWriter* writer, int apiVersion)
 
 void TRspMetadataTopicPartition::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
 {
-    writer->WriteErrorCode(ErrorCode);
-    writer->WriteInt32(PartitionIndex);
-    writer->WriteInt32(LeaderId);
+    WRITE_KAFKA_FIELD(writer, WriteErrorCode, ErrorCode)
+    WRITE_KAFKA_FIELD(writer, WriteInt32, PartitionIndex)
+    WRITE_KAFKA_FIELD(writer, WriteInt32, LeaderId)
+
     // TODO(nadya73): check version.
     writer->WriteInt32(ReplicaNodes.size());
     for (auto replicaNode : ReplicaNodes) {
         writer->WriteInt32(replicaNode);
     }
-     // TODO(nadya73): check version.
+    // TODO(nadya73): check version.
     writer->WriteInt32(IsrNodes.size());
     for (auto isrNode : IsrNodes) {
         writer->WriteInt32(isrNode);
+    }
+    if (apiVersion >= 5) {
+        // TODO(nadya73): check version.
+        writer->WriteInt32(OfflineReplicas.size());
+        for (auto offlineReplica : OfflineReplicas) {
+            writer->WriteInt32(offlineReplica);
+        }
     }
     if (apiVersion >= 9) {
         NKafka::Serialize(TagBuffer, writer, /*isCompact*/ true);
@@ -397,12 +433,22 @@ void TRspMetadataTopicPartition::Serialize(IKafkaProtocolWriter* writer, int api
 
 void TRspMetadataTopic::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
 {
-    writer->WriteErrorCode(ErrorCode);
-    writer->WriteString(Name);
+    WRITE_KAFKA_FIELD(writer, WriteErrorCode, ErrorCode)
+    if (apiVersion < 9) {
+        WRITE_KAFKA_FIELD(writer, WriteString, Name)
+    } else {
+        WRITE_KAFKA_FIELD(writer, WriteCompactString, Name)
+    }
+    if (apiVersion >= 10) {
+        WRITE_KAFKA_FIELD(writer, WriteUuid, TopicId)
+    }
     if (apiVersion >= 1) {
-        writer->WriteBool(IsInternal);
+        WRITE_KAFKA_FIELD(writer, WriteBool, IsInternal)
     }
     NKafka::Serialize(Partitions, writer, apiVersion >= 9, apiVersion);
+    if (apiVersion >= 8) {
+        WRITE_KAFKA_FIELD(writer, WriteInt32, TopicAuthorizedOperations)
+    }
     if (apiVersion >= 9) {
         NKafka::Serialize(TagBuffer, writer, /*isCompact*/ true);
     }
@@ -410,12 +456,19 @@ void TRspMetadataTopic::Serialize(IKafkaProtocolWriter* writer, int apiVersion) 
 
 void TRspMetadata::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
 {
+    if (apiVersion >= 3) {
+        WRITE_KAFKA_FIELD(writer, WriteInt32, ThrottleTimeMs)
+    }
     NKafka::Serialize(Brokers, writer, apiVersion >= 9, apiVersion);
     if (apiVersion >= 2) {
-        writer->WriteNullableString(ClusterId);
+        if (apiVersion < 9) {
+            WRITE_KAFKA_FIELD(writer, WriteNullableString, ClusterId)
+        } else {
+            WRITE_KAFKA_FIELD(writer, WriteCompactNullableString, ClusterId)
+        }
     }
     if (apiVersion >= 1) {
-        writer->WriteInt32(ControllerId);
+        WRITE_KAFKA_FIELD(writer, WriteInt32, ControllerId)
     }
     NKafka::Serialize(Topics, writer, apiVersion >= 9, apiVersion);
     if (apiVersion >= 9) {
@@ -841,15 +894,16 @@ void TRspProduce::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
 
 void TReqListOffsetsTopicPartition::Deserialize(IKafkaProtocolReader* reader, int /*apiVersion*/)
 {
-    PartitionIndex = reader->ReadInt32();
-    Timestamp = reader->ReadInt64(); // TODO: use timestamp?
-    MaxNumOffsets = reader->ReadInt32();
+    READ_KAFKA_FIELD(PartitionIndex, ReadInt32)
+    READ_KAFKA_FIELD(Timestamp, ReadInt64)  // TODO: use timestamp?
 }
 
 void TReqListOffsetsTopic::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
 {
-    Name = reader->ReadString();
-    Partitions.resize(reader->ReadInt32());
+    READ_KAFKA_FIELD(Name, ReadString)
+    i32 partitionCount;
+    READ_KAFKA_FIELD(partitionCount, ReadInt32)
+    Partitions.resize(partitionCount);
     for (auto& partition : Partitions) {
         partition.Deserialize(reader, apiVersion);
     }
@@ -857,28 +911,27 @@ void TReqListOffsetsTopic::Deserialize(IKafkaProtocolReader* reader, int apiVers
 
 void TReqListOffsets::Deserialize(IKafkaProtocolReader* reader, int apiVersion)
 {
-    ReplicaId = reader->ReadInt32();
-    Topics.resize(reader->ReadInt32());
+    READ_KAFKA_FIELD(ReplicaId, ReadInt32)
+    i32 topicCount;
+    READ_KAFKA_FIELD(topicCount, ReadInt32)
+    Topics.resize(topicCount);
     for (auto& topic : Topics) {
         topic.Deserialize(reader, apiVersion);
     }
 }
 
-void TRspListOffsetsTopicPartition::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
+void TRspListOffsetsTopicPartition::Serialize(IKafkaProtocolWriter* writer, int /*apiVersion*/) const
 {
-    writer->WriteInt32(PartitionIndex);
-    writer->WriteErrorCode(ErrorCode);
-
-    if (apiVersion <= 0) {
-        writer->WriteInt32(1); // Size of 'old_style_offsets'.
-    }
-    writer->WriteInt64(Offset);
+    WRITE_KAFKA_FIELD(writer, WriteInt32, PartitionIndex)
+    WRITE_KAFKA_FIELD(writer, WriteErrorCode, ErrorCode)
+    WRITE_KAFKA_FIELD(writer, WriteInt64, Timestamp)
+    WRITE_KAFKA_FIELD(writer, WriteInt64, Offset)
 }
 
 void TRspListOffsetsTopic::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
 {
-    writer->WriteString(Name);
-    writer->WriteInt32(Partitions.size());
+    WRITE_KAFKA_FIELD(writer, WriteString, Name)
+    WRITE_KAFKA_FIELD(writer, WriteInt32, Partitions.size())
     for (const auto& partition : Partitions) {
         partition.Serialize(writer, apiVersion);
     }
@@ -886,7 +939,7 @@ void TRspListOffsetsTopic::Serialize(IKafkaProtocolWriter* writer, int apiVersio
 
 void TRspListOffsets::Serialize(IKafkaProtocolWriter* writer, int apiVersion) const
 {
-    writer->WriteInt32(Topics.size());
+    WRITE_KAFKA_FIELD(writer, WriteInt32, Topics.size())
     for (const auto& topic : Topics) {
         topic.Serialize(writer, apiVersion);
     }

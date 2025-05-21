@@ -410,16 +410,16 @@ public:
         return true;
     }
 
-    ui32 FindCluster(TArrayRef<const TCell> row, NTable::TPos embeddingPos)
+    std::optional<ui32> FindCluster(TArrayRef<const TCell> row, NTable::TPos embeddingPos)
     {
         Y_ASSERT(embeddingPos < row.size());
         const auto embedding = row.at(embeddingPos).AsRef();
         if (!IsExpectedSize<TCoord>(embedding, Dimensions)) {
-            return Max<ui32>();
+            return {};
         }
         
         auto min = TMetric::Init();
-        ui32 closest = Max<ui32>();
+        std::optional<ui32> closest = {};
         for (size_t i = 0; const auto& cluster : Clusters) {
             auto distance = TMetric::Distance(cluster.data(), embedding.data(), Dimensions);
             if (distance < min) {

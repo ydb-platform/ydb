@@ -431,22 +431,22 @@ private:
 
     void FeedKMeans(TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
-            Clusters.AggregateToCluster(pos, row.at(EmbeddingPos).Data());
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            Clusters.AggregateToCluster(*pos, row.at(EmbeddingPos).Data());
         }
     }
 
     void FeedUploadBuild2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
-            AddRowBuild2Build(*PostingBuf, Child + pos, key, row, PrefixColumns);
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            AddRowBuild2Build(*PostingBuf, Child + *pos, key, row, PrefixColumns);
         }
     }
 
     void FeedUploadBuild2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
-            AddRowBuild2Posting(*PostingBuf, Child + pos, key, row, DataPos, PrefixColumns);
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            AddRowBuild2Posting(*PostingBuf, Child + *pos, key, row, DataPos, PrefixColumns);
         }
     }
 

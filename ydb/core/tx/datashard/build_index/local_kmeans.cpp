@@ -436,36 +436,36 @@ private:
 
     void FeedKMeans(TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
-            Clusters.AggregateToCluster(pos, row.at(EmbeddingPos).Data());
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            Clusters.AggregateToCluster(*pos, row.at(EmbeddingPos).Data());
         }
     }
 
     void FeedUploadMain2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
-            AddRowMain2Build(*PostingBuf, Child + pos, key, row);
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            AddRowMain2Build(*PostingBuf, Child + *pos, key, row);
         }
     }
 
     void FeedUploadMain2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
-            AddRowMain2Posting(*PostingBuf, Child + pos, key, row, DataPos);
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            AddRowMain2Posting(*PostingBuf, Child + *pos, key, row, DataPos);
         }
     }
 
     void FeedUploadBuild2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
-            AddRowBuild2Build(*PostingBuf, Child + pos, key, row);
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            AddRowBuild2Build(*PostingBuf, Child + *pos, key, row);
         }
     }
 
     void FeedUploadBuild2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
-        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos != Max<ui32>()) {
-            AddRowBuild2Posting(*PostingBuf, Child + pos, key, row, DataPos);
+        if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
+            AddRowBuild2Posting(*PostingBuf, Child + *pos, key, row, DataPos);
         }
     }
 

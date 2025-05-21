@@ -25,8 +25,12 @@ target_link_libraries(antlr_ast-gen-v1_antlr4 PUBLIC
 target_sources(antlr_ast-gen-v1_antlr4 PRIVATE
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Parser.cpp
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Visitor.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4BaseVisitor.cpp
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Parser.h
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Visitor.h
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4BaseVisitor.h
 )
 
 
@@ -43,14 +47,19 @@ copy_file(
 run_antlr4(
   OUTPUT
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Parser.cpp
-  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.cpp
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Parser.h
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.cpp
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Visitor.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Visitor.h
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4BaseVisitor.cpp
+  ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4BaseVisitor.h
   WORKING_DIRECTORY
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4
   ANTLER_ARGS
   ${PROJECT_BINARY_DIR}/yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4.g
   -no-listener
+  -visitor
   -package
   NALADefaultAntlr4
   -lib

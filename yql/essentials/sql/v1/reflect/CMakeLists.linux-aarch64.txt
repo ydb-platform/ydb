@@ -26,6 +26,7 @@ target_link_libraries(sql-v1-reflect PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  library-cpp-case_insensitive_string
   library-cpp-resource
 )
 
@@ -42,6 +43,7 @@ target_link_libraries(sql-v1-reflect.global PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  library-cpp-case_insensitive_string
   library-cpp-resource
 )
 

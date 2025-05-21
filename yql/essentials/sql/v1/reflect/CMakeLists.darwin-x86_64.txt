@@ -25,6 +25,7 @@ add_library(sql-v1-reflect)
 target_link_libraries(sql-v1-reflect PUBLIC
   contrib-libs-cxxsupp
   yutil
+  library-cpp-case_insensitive_string
   library-cpp-resource
 )
 
@@ -40,6 +41,7 @@ add_global_library_for(sql-v1-reflect.global
 target_link_libraries(sql-v1-reflect.global PUBLIC
   contrib-libs-cxxsupp
   yutil
+  library-cpp-case_insensitive_string
   library-cpp-resource
 )
 

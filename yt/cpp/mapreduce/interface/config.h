@@ -242,7 +242,7 @@ struct TConfig
     THashSet<TString> CommandsWithFraming;
 
     /// Which implemetation of table writer to use.
-    ETableWriterVersion TableWriterVersion = ETableWriterVersion::V2;
+    ETableWriterVersion TableWriterVersion = ETableWriterVersion::Auto;
 
     /// Redirects stdout to stderr for jobs.
     bool RedirectStdoutToStderr = false;

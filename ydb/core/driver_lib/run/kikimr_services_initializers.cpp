@@ -984,7 +984,7 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
 template<typename TCreateFunc>
 void StartLocalStateStorageReplicas(TCreateFunc createFunc, TStateStorageInfo *info, ui32 poolId, TActorSystemSetup &setup) {
     ui32 index = 0;
-    for(auto &ringGroup : info->RingGroups) {
+    for (auto &ringGroup : info->RingGroups) {
         for (auto &ring : ringGroup.Rings) {
             for (TActorId replica : ring.Replicas) {
                 if (replica.NodeId() == setup.NodeId) {

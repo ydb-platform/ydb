@@ -400,6 +400,8 @@ void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageContro
     }
 
     info->SetLayoutCorrect(groupInfo->LayoutCorrect);
+    info->SetOperatingStatus(NKikimrBlobStorage::TGroupStatus::E_Name(groupInfo->Status.OperatingStatus));
+    info->SetExpectedStatus(NKikimrBlobStorage::TGroupStatus::E_Name(groupInfo->Status.ExpectedStatus));
 }
 
 void CopyInfo(NKikimrSysView::TStoragePoolInfo* info, const TBlobStorageController::TStoragePoolInfo& poolInfo) {

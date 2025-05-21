@@ -141,6 +141,7 @@ target_sources(ydb-core-grpc_services PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_kh_describe.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_kh_snapshots.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_kqp_base.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_list_objects_in_s3_export.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_list_operations.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_load_rows.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/grpc_services/rpc_log_store.cpp

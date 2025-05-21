@@ -41,6 +41,7 @@ target_link_options(ydb-core-backup-common-ut PRIVATE
 
 target_sources(ydb-core-backup-common-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/backup/common/encryption_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/backup/common/metadata_ut.cpp
 )
 
 

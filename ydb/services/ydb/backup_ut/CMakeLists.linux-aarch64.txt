@@ -62,6 +62,7 @@ target_link_options(ydb-services-ydb-backup_ut PRIVATE
 target_sources(ydb-services-ydb-backup_ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/services/ydb/backup_ut/backup_path_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/services/ydb/backup_ut/encrypted_backup_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/services/ydb/backup_ut/list_objects_in_s3_export_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/services/ydb/backup_ut/ydb_backup_ut.cpp
 )
 

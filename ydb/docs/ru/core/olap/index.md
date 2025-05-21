@@ -5,7 +5,7 @@
 ## Данный раздел содержит следующие материалы
 
 * [{#T}](scenarios.md)
-* [{#T}](datasets/index.md)
+* [{#T}](optimizing.md)
 * [Импорт датасетов](datasets/index.md)
 
 {% include [olap-links](_includes/olap-links.md) %}

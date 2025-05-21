@@ -1,8 +1,8 @@
 items:
   - name: Typical OLAP scenarios
     href: scenarios.md
-  - name: Recomendations
-    href: recomendations.md
+  - name: Optimizing analytical queries
+    href: optimizing.md
   - name: Dataset import
     href: datasets/index.md
     include:

@@ -1,4 +1,4 @@
-# Recommendations for optimizing analytical queries
+# Optimizing analytical queries
 
 1. **Selecting the right primary key**
    * Use columns frequently involved in filtering

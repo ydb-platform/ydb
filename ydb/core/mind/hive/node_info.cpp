@@ -286,8 +286,7 @@ bool TNodeInfo::IsAbleToRunTablet(const TTabletInfo& tablet, TTabletDebugState* 
     }
 
     if (tablet.IsAlive() && GetNodeUsageForTablet(tablet, false) > Hive.GetMaxNodeUsageToKick()) {
-        // .. or when node is node overloaded yet, but would be
-        BLOG_TRACE("Not allowed: " << GetNodeUsage() << " -> "  << GetNodeUsageForTablet(tablet, false));
+        // ... or when node is not overloaded yet, but would be
         if (debugState) {
             debugState->NodesWithoutResources++;
         }

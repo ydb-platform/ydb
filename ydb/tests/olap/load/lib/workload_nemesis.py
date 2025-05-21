@@ -1,7 +1,9 @@
 import allure
 import pytest
+import os
+import stat
 from .conftest import LoadSuiteBase
-from os import getenv, os, stat
+from os import getenv
 from ydb.tests.olap.lib.ydb_cli import WorkloadType, YdbCliHelper
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
 from ydb.tests.olap.lib.utils import get_external_param
@@ -9,7 +11,7 @@ from ydb.tests.olap.lib.utils import get_external_param
 from library.python import resource
 
 STRESS_BINARIES_DEPLOY_PATH = '/tmp/stress_binaries/'
-WORKLOAD_BINARY_PATH = os.path.join(STRESS_BINARIES_DEPLOY_PATH, WORKLOAD_BINARY_NAME)
+WORKLOAD_BINARY_NAME = 'simple_queue'  # Имя бинарного файла
 
 class TestWorkloadNemesis(LoadSuiteBase):
     workload_type: WorkloadType = WorkloadType.Clickbench
@@ -17,23 +19,8 @@ class TestWorkloadNemesis(LoadSuiteBase):
     
     path = get_external_param('table-path-clickbench', f'{YdbCluster.tables_path}/clickbench/hits')
 
-    def deploy_tools(self):
-        for node in self.kikimr_cluster.nodes.values():
-            node.ssh_command(["sudo", "mkdir", "-p", STRESS_BINARIES_DEPLOY_PATH], raise_on_error=False)
-            for artifact in self.artifacts:
-                node_artifact_path = os.path.join(
-                    STRESS_BINARIES_DEPLOY_PATH,
-                    os.path.basename(
-                        artifact
-                    )
-                )
-                node.copy_file_or_dir(
-                    artifact,
-                    node_artifact_path
-                )
-                node.ssh_command(f"sudo chmod 777 {node_artifact_path}", raise_on_error=False)
-
     def _unpack_resource(self, name):
+        """Распаковывает ресурс из пакета"""
         res = resource.find(name)
         path_to_unpack = os.path.join(self.working_dir, name)
         with open(path_to_unpack, "wb") as f:
@@ -44,25 +31,36 @@ class TestWorkloadNemesis(LoadSuiteBase):
         return path_to_unpack
     
     def _unpack_workload_binary(self, workload_binary_name: str):
+        """Распаковывает бинарный файл из ресурсов и возвращает путь к нему"""
         return self._unpack_resource(workload_binary_name)
     
     def test_workload_simple_queue(self):
-        print('SELFDATA')
-        print(dir(self))
-        print('CLUSTERDATA')
-        print(dir(YdbCluster))
-        for  node in YdbCluster.get_cluster_nodes():
-                #self.execute( f'sudo chmod 777 /home/kirrysin/fork2/ydb/tests/stress/simple_queue/simple_queue --endpoint {node.host}:{node.ic_port}  --database {YdbCluster.ydb_database} --mode row ')
-                print('NODEDATA')
-                print(dir(node))
-                result = self.execute( f'pwd')
-                print(result)
-                result = self.execute( f'ls /tmp/simple_queue/ -lhtr')
-                print(result)
-                #result = self.execute( f'/tmp/simple_queue/simple_queue --endpoint {node.host}:{node.ic_port}  --database {YdbCluster.ydb_database} --mode row ')
-                #print(result)
-   
+        """Тест запуска workload с простой очередью на всех нодах кластера"""
+        # Распаковываем бинарный файл из ресурсов
+        binary_path = self._unpack_workload_binary(WORKLOAD_BINARY_NAME)
+        
+        # Разворачиваем бинарный файл на всех нодах кластера
+        deploy_results = YdbCluster.deploy_binaries_to_nodes([binary_path], STRESS_BINARIES_DEPLOY_PATH)
+        
+        # Для каждой ноды в кластере
+        for node in YdbCluster.get_cluster_nodes():
+            node_host = node.host
+            print(f"Node: {node_host}")
+            
+            # Проверяем, успешно ли был развернут бинарный файл
+            binary_result = deploy_results.get(node_host, {}).get(WORKLOAD_BINARY_NAME, {})
+            success = binary_result.get('success', False)
+            print(f"Binary status: {success}")
+            
+            # Запускаем бинарный файл на ноде, если он был успешно развернут
+            if success:
+                target_path = binary_result['path']
+                cmd = f"{target_path} --endpoint {node.host}:{node.ic_port} --database {YdbCluster.ydb_database} --mode row"
+                
+                result = node.execute_command(cmd, raise_on_error=False)
+                print(f"Execution result: {result}")
                
+        # Сохраняем состояние нод и выполняем тестовый запрос
         self.save_nodes_state()
         result = YdbCliHelper.workload_run(
             path='path_1',
@@ -77,4 +75,3 @@ class TestWorkloadNemesis(LoadSuiteBase):
             external_path=self.get_external_path(),
         )
         self.process_query_result(result, 'ls', False)
-       # self.run_workload_test(self.path, 12)

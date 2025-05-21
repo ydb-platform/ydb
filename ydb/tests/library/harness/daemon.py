@@ -231,12 +231,6 @@ class Daemon(object):
         self.__check_before_end_stop("kill")
         self.__close_output_files()
 
-    def update_command(self, new_command):
-        new_command_tuple = tuple(new_command)
-        if self.__command != new_command_tuple:
-            self.logger.info(f"Updating daemon command from {self.__command} to {new_command_tuple}")
-            self.__command = new_command_tuple
-
 
 @six.add_metaclass(abc.ABCMeta)
 class ExternalNodeDaemon(object):

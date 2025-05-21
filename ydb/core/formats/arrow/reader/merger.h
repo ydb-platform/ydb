@@ -131,6 +131,9 @@ public:
         Y_ABORT_UNLESS(SortSchema);
         Y_ABORT_UNLESS(SortSchema->num_fields());
         Y_ABORT_UNLESS(!DataSchema || DataSchema->num_fields());
+        if (MaxVersion) {
+            MaxVersion->ValidateSchema(*SortSchema, VersionColumnNames);
+        }
     }
 
     void PutControlPoint(const TSortableBatchPosition& point, const bool deepCopy);

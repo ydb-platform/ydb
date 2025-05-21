@@ -11,7 +11,7 @@ private:
     TRWSortableBatchPosition VersionColumns;
     i64 RecordsCount;
     int ReverseSortKff;
-    YDB_READONLY_DEF(ui64, SourceId);
+    YDB_READONLY(ui64, SourceId, 0);
 
     std::shared_ptr<NArrow::TColumnFilter> Filter;
     std::shared_ptr<NArrow::TColumnFilter::TIterator> FilterIterator;

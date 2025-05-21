@@ -39,6 +39,9 @@ private:
 protected:
     std::shared_ptr<TColumnsSet> EmptyColumns = std::make_shared<TColumnsSet>();
 
+    virtual void DoAbort() {
+    }
+
 public:
     template <class T>
     std::shared_ptr<TFetchingScript> GetColumnsFetchingPlan(const std::shared_ptr<T>& source) {
@@ -75,6 +78,7 @@ public:
 
     void Abort() {
         CommonContext->Stop();
+        DoAbort();
     }
 
     virtual ~TSpecialReadContext() {

@@ -77,11 +77,9 @@ struct TEvStateStorage {
         };
 
         ESigWaitMode SigWaitMode;
-        ESigWaitMode RingGroupsSigWaitMode;
 
-        TProxyOptions(ESigWaitMode sigWaitMode = SigNone, ESigWaitMode ringGroupsSigWaitMode = SigNone)
+        TProxyOptions(ESigWaitMode sigWaitMode = SigNone)
             : SigWaitMode(sigWaitMode)
-            , RingGroupsSigWaitMode(ringGroupsSigWaitMode)
         {}
 
         TString ToString() const {
@@ -121,6 +119,30 @@ struct TEvStateStorage {
         }
     };
 
+    struct TSignature : THashMap<TActorId, ui64> {
+        TString ToString() const {
+            TStringStream str;
+            str << "{ Size: " << size();
+            if (!empty()) {
+                str << " Signature: {";
+                ui32 i  =0;
+                for (auto& [id, sig] : *this) {
+                    if(i++ > 0)
+                        str << ", ";
+                    str << "{" << id.ToString() <<" : " << sig << "}";
+                }
+                str << "}";
+            }
+            str << "}";
+            return str.Str();
+        }
+        void Merge(TEvStateStorage::TSignature signature) {
+            for(auto [replicaId, sig] : signature) {
+                insert_or_assign(replicaId, sig);
+            }
+        }
+    };
+
     struct TEvUpdate : public TEventLocal<TEvUpdate, EvUpdate> {
         const ui64 TabletID;
         const ui64 Cookie;
@@ -128,37 +150,31 @@ struct TEvStateStorage {
         const TActorId ProposedLeaderTablet;
         const ui32 ProposedGeneration;
         const ui32 ProposedStep;
-        const ui32 SignatureSz;
-        const TArrayHolder<ui64> Signature;
+        const TSignature Signature;
         const TProxyOptions ProxyOptions;
 
-        TEvUpdate(ui64 tabletId, ui64 cookie, const TActorId &leader, const TActorId &leaderTablet, ui32 gen, ui32 step, const ui64 *sig, ui32 sigsz, const TProxyOptions &proxyOptions = TProxyOptions())
+        TEvUpdate(ui64 tabletId, ui64 cookie, const TActorId &leader, const TActorId &leaderTablet, ui32 gen, ui32 step, const TSignature &sig, const TProxyOptions &proxyOptions = TProxyOptions())
             : TabletID(tabletId)
             , Cookie(cookie)
             , ProposedLeader(leader)
             , ProposedLeaderTablet(leaderTablet)
             , ProposedGeneration(gen)
             , ProposedStep(step)
-            , SignatureSz(sigsz)
-            , Signature(new ui64[sigsz])
+            , Signature(sig)
             , ProxyOptions(proxyOptions)
         {
-            Copy(sig, sig + sigsz, Signature.Get());
         }
 
-        TEvUpdate(const TEvUpdate& ev, ui32 sigOffset, ui32 sigSize) 
+        TEvUpdate(const TEvUpdate& ev) 
             : TabletID(ev.TabletID)
             , Cookie(ev.Cookie)
             , ProposedLeader(ev.ProposedLeader)
             , ProposedLeaderTablet(ev.ProposedLeaderTablet)
             , ProposedGeneration(ev.ProposedGeneration)
             , ProposedStep(ev.ProposedStep)
-            , SignatureSz(sigSize)
-            , Signature(new ui64[sigSize])
+            , Signature(ev.Signature)
             , ProxyOptions(ev.ProxyOptions) 
         {
-            Y_ABORT_UNLESS(sigOffset + sigSize <= ev.SignatureSz);
-            Copy(ev.Signature.Get() + sigOffset, ev.Signature.Get() + sigOffset + sigSize, Signature.Get());
         }
 
         TString ToString() const {
@@ -169,14 +185,7 @@ struct TEvStateStorage {
             str << " ProposedLeaderTablet: " << ProposedLeaderTablet.ToString();
             str << " ProposedGeneration: " << ProposedGeneration;
             str << " ProposedStep: " << ProposedStep;
-            str << " SignatureSz: " << SignatureSz;
-            if (SignatureSz) {
-                str << " Signature: {" << Signature[0];
-                for (size_t i = 1; i < SignatureSz; ++i) {
-                    str << ", " << Signature[i];
-                }
-                str << "}";
-            }
+            str << " Signature: " << Signature.ToString();
             str << " ProxyOptions: " << ProxyOptions.ToString();
             str << "}";
             return str.Str();
@@ -234,33 +243,27 @@ struct TEvStateStorage {
         const ui64 Cookie;
         const TActorId ProposedLeader;
         const ui32 ProposedGeneration;
-        const ui32 SignatureSz;
-        const TArrayHolder<ui64> Signature;
+        const TSignature Signature;
         const TProxyOptions ProxyOptions;
 
-        TEvLock(ui64 tabletId, ui64 cookie, const TActorId &leader, ui32 gen, const ui64 *sig, ui32 sigsz, const TProxyOptions &proxyOptions = TProxyOptions())
+        TEvLock(ui64 tabletId, ui64 cookie, const TActorId &leader, ui32 gen, const TSignature sig, const TProxyOptions &proxyOptions = TProxyOptions())
             : TabletID(tabletId)
             , Cookie(cookie)
             , ProposedLeader(leader)
             , ProposedGeneration(gen)
-            , SignatureSz(sigsz)
-            , Signature(new ui64[sigsz])
+            , Signature(sig)
             , ProxyOptions(proxyOptions)
         {
-            Copy(sig, sig + sigsz, Signature.Get());
         }
 
-        TEvLock(const TEvLock& ev, ui32 sigOffset, ui32 sigSize)
+        TEvLock(const TEvLock& ev)
             : TabletID(ev.TabletID)
             , Cookie(ev.Cookie)
             , ProposedLeader(ev.ProposedLeader)
             , ProposedGeneration(ev.ProposedGeneration)
-            , SignatureSz(sigSize)
-            , Signature(new ui64[sigSize])
+            , Signature(ev.Signature)
             , ProxyOptions(ev.ProxyOptions) 
         {
-            Y_ABORT_UNLESS(sigOffset + sigSize <= ev.SignatureSz);
-            Copy(ev.Signature.Get() + sigOffset, ev.Signature.Get() + sigOffset + sigSize, Signature.Get());
         }
 
         TString ToString() const {
@@ -269,28 +272,12 @@ struct TEvStateStorage {
             str << " Cookie: " << Cookie;
             str << " ProposedLeader: " << ProposedLeader.ToString();
             str << " ProposedGeneration: " << ProposedGeneration;
-            str << " SignatureSz: " << SignatureSz;
-            if (SignatureSz) {
-                str << " Signature: {" << Signature[0];
-                for (size_t i = 1; i < SignatureSz; ++i) {
-                    str << ", " << Signature[i];
-                }
-                str << "}";
-            }
+            str << " Signature: " << Signature.ToString();
             str << " ProxyOptions: " << ProxyOptions.ToString();
             str << "}";
             return str.Str();
         }
     };
-
-    inline static void MakeFilteredSignatureCopy(const ui64 *sig, ui32 sigsz, ui64 *target) {
-        for (ui32 i = 0; i != sigsz; ++i) {
-            if (sig[i] != Max<ui64>())
-                target[i] = sig[i];
-            else
-                target[i] = 0;
-        }
-    }
 
     struct TEvInfo : public TEventLocal<TEvInfo, EvInfo> {
         const NKikimrProto::EReplyStatus Status;
@@ -302,11 +289,10 @@ struct TEvStateStorage {
         const ui32 CurrentStep;
         const bool Locked;
         const ui64 LockedFor;
-        const ui32 SignatureSz;
-        TArrayHolder<ui64> Signature;
+        const TSignature Signature;
         TVector<std::pair<TActorId, TActorId>> Followers;
 
-        TEvInfo(NKikimrProto::EReplyStatus status, ui64 tabletId, ui64 cookie, const TActorId &leader, const TActorId &leaderTablet, ui32 gen, ui32 step, bool locked, ui64 lockedFor, const ui64 *sig, ui32 sigsz, const TMap<TActorId, TActorId> &followers)
+        TEvInfo(NKikimrProto::EReplyStatus status, ui64 tabletId, ui64 cookie, const TActorId &leader, const TActorId &leaderTablet, ui32 gen, ui32 step, bool locked, ui64 lockedFor, const TSignature &sig, const TMap<TActorId, TActorId> &followers)
             : Status(status)
             , TabletID(tabletId)
             , Cookie(cookie)
@@ -316,12 +302,9 @@ struct TEvStateStorage {
             , CurrentStep(step)
             , Locked(locked)
             , LockedFor(lockedFor)
-            , SignatureSz(sigsz)
-            , Signature(new ui64[sigsz])
+            , Signature(sig)
             , Followers(followers.begin(), followers.end())
-        {
-            MakeFilteredSignatureCopy(sig, sigsz, Signature.Get());
-        }
+        {}
 
         TString ToString() const {
             TStringStream str;
@@ -334,14 +317,7 @@ struct TEvStateStorage {
             str << " CurrentStep: " << CurrentStep;
             str << " Locked: " << (Locked ? "true" : "false");
             str << " LockedFor: " << LockedFor;
-            str << " SignatureSz: " << SignatureSz;
-            if (SignatureSz) {
-                str << " Signature: {" << Signature[0];
-                for (size_t i = 1; i < SignatureSz; ++i) {
-                    str << ", " << Signature[i];
-                }
-                str << "}";
-            }
+            str << " Signature: " << Signature.ToString();
             if (!Followers.empty()) {
                 str << " Followers: [";
                 for (auto it = Followers.begin(); it != Followers.end(); ++it) {
@@ -359,28 +335,17 @@ struct TEvStateStorage {
 
     struct TEvUpdateSignature : public TEventLocal<TEvUpdateSignature, EvUpdateSignature> {
         const ui64 TabletID;
-        const ui32 Sz;
-        const TArrayHolder<ui64> Signature;
+        const TSignature Signature;
 
-        TEvUpdateSignature(ui64 tabletId, ui64 *sig, ui32 sigsz)
+        TEvUpdateSignature(ui64 tabletId, TSignature &sig)
             : TabletID(tabletId)
-            , Sz(sigsz)
-            , Signature(new ui64[sigsz])
-        {
-            MakeFilteredSignatureCopy(sig, sigsz, Signature.Get());
-        }
+            , Signature(sig)
+        {}
 
         TString ToString() const {
             TStringStream str;
             str << "{EvUpdateSignature TabletID: " << TabletID;
-            str << " Sz: " << Sz;
-            if (Sz) {
-                str << " Signature: {" << Signature[0];
-                for (size_t i = 1; i < Sz; ++i) {
-                    str << ", " << Signature[i];
-                }
-                str << "}";
-            }
+            str << " Signature: " << Signature.ToString();
             str << "}";
             return str.Str();
         }

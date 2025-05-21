@@ -41,7 +41,8 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     ui32 Replicas;
     THolder<TStateStorageInfo::TSelection> ReplicaSelection;
-    TArrayHolder<ui64> Signature;
+    TEvStateStorage::TSignature Signature;
+    THashSet<TActorId> UndeliveredReplicas;
 
     TStateStorageInfo::TSelection::EStatus ReplyStatus;
     ui32 RepliesMerged;
@@ -64,18 +65,19 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         info->SelectReplicas(TabletID, selection.Get(), RingGroupIndex);
         Replicas = selection->Sz;
         ReplicaSelection = std::move(selection);
-        Signature.Reset(new ui64[Replicas]);
-        Fill(Signature.Get(), Signature.Get() + Replicas, 0);
+        Signature.clear();
+        UndeliveredReplicas.clear();
     }
 
     template<typename T>
     void SendRequest(const T &op) {
         Y_ABORT_UNLESS(ReplicaSelection && ReplicaSelection->SelectedReplicas && ReplicaSelection->Sz);
 
-        ui64 cookie = 0;
         const ui32 sendFlags = IEventHandle::FlagTrackDelivery | (UseInterconnectSubscribes ? IEventHandle::FlagSubscribeOnSession : 0);
-        for (ui32 i = 0; i < ReplicaSelection->Sz; ++i, ++cookie)
-            Send(ReplicaSelection->SelectedReplicas[i], op(cookie), sendFlags, cookie);
+        for (ui64 cookie = 0; cookie < ReplicaSelection->Sz; ++cookie) {
+            auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
+            Send(replicaId, op(cookie, replicaId), sendFlags, cookie);
+        }
     }
 
     void PassAway() override {
@@ -93,7 +95,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     }
 
     void Reply(NKikimrProto::EReplyStatus status) {
-        Send(Source, new TEvStateStorage::TEvInfo(status, TabletID, Cookie, ReplyLeader, ReplyLeaderTablet, ReplyGeneration, ReplyStep, ReplyLocked, ReplyLockedFor, Signature.Get(), Replicas, Followers));
+        Send(Source, new TEvStateStorage::TEvInfo(status, TabletID, Cookie, ReplyLeader, ReplyLeaderTablet, ReplyGeneration, ReplyStep, ReplyLocked, ReplyLockedFor, Signature, Followers));
     }
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status) {
@@ -112,16 +114,16 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     struct TCloneUpdateEventOp {
         const TEvStateStorage::TEvUpdate * const Ev;
         const bool UpdateLeaderTablet;
-        mutable ui32 Idx;
 
         TCloneUpdateEventOp(const TEvStateStorage::TEvUpdate *ev)
             : Ev(ev)
             , UpdateLeaderTablet(!!ev->ProposedLeaderTablet)
-            , Idx(0)
         {}
 
-        IEventBase* operator()(ui64 cookie) const {
+        IEventBase* operator()(ui64 cookie, TActorId replicaId) const {
             THolder<TEvStateStorage::TEvReplicaUpdate> req(new TEvStateStorage::TEvReplicaUpdate());
+            if(auto it = Ev->Signature.find(replicaId); it != Ev->Signature.end())
+                req->Record.SetSignature(it->second);
             req->Record.SetTabletID(Ev->TabletID);
             ActorIdToProto(Ev->ProposedLeader, req->Record.MutableProposedLeader());
 
@@ -130,32 +132,25 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
             req->Record.SetProposedGeneration(Ev->ProposedGeneration);
             req->Record.SetProposedStep(Ev->ProposedStep);
-            req->Record.SetSignature(Ev->Signature[Idx]);
-
-            ++Idx;
             req->Record.SetCookie(cookie);
-
             return req.Release();
         }
     };
 
     struct TCloneLockEventOp {
         const TEvStateStorage::TEvLock * const Ev;
-        mutable ui32 Idx;
 
         TCloneLockEventOp(const TEvStateStorage::TEvLock *ev)
             : Ev(ev)
-            , Idx(0)
         {}
 
-        IEventBase* operator()(ui64 cookie) const {
+        IEventBase* operator()(ui64 cookie, TActorId replicaId) const {
             THolder<TEvStateStorage::TEvReplicaLock> req(new TEvStateStorage::TEvReplicaLock());
+            if(auto it = Ev->Signature.find(replicaId); it != Ev->Signature.end())
+                req->Record.SetSignature(it->second);
             req->Record.SetTabletID(Ev->TabletID);
             ActorIdToProto(Ev->ProposedLeader, req->Record.MutableProposedLeader());
             req->Record.SetProposedGeneration(Ev->ProposedGeneration);
-            req->Record.SetSignature(Ev->Signature[Idx]);
-
-            ++Idx;
             req->Record.SetCookie(cookie);
 
             return req.Release();
@@ -163,21 +158,18 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     };
 
     void MergeNodeError(ui32 node) {
-        ui64 cookie = 0;
-        for (ui32 i = 0; i < ReplicaSelection->Sz; ++i, ++cookie) {
-            const ui32 replicaNode = ReplicaSelection->SelectedReplicas[i].NodeId();
-            if (replicaNode == node)
+        for (ui32 cookie = 0; cookie < ReplicaSelection->Sz; ++cookie) {
+            auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
+            if (replicaId.NodeId() == node)
                 MergeConnectionError(cookie);
         }
     }
 
     void MergeConnectionError(ui64 cookie) {
         Y_ABORT_UNLESS(cookie < Replicas);
-
-        if (Signature[cookie] == 0) {
-            Signature[cookie] = Max<ui64>();
+        auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
+        if (!Signature.contains(replicaId) && UndeliveredReplicas.insert(replicaId).second) {
             ++RepliesMerged;
-
             ReplicaSelection->MergeReply(TStateStorageInfo::TSelection::StatusUnavailable, &ReplyStatus, cookie, false);
         }
     }
@@ -188,8 +180,10 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         const ui64 cookie = record.GetCookie();
 
         Y_ABORT_UNLESS(cookie < Replicas);
-        Y_ABORT_UNLESS(Signature[cookie] == 0 || Signature[cookie] == Max<ui64>());
-        Signature[cookie] = ev->Record.GetSignature();
+        auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
+        Y_ABORT_UNLESS(!Signature.contains(replicaId));
+        UndeliveredReplicas.erase(replicaId);
+        Signature[replicaId] = ev->Record.GetSignature();
         ++RepliesMerged;
         ++SignaturesMerged;
 
@@ -255,7 +249,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         Source = ev->Sender;
 
         PrepareInit(msg);
-        SendRequest([this](ui64 cookie) { return new TEvStateStorage::TEvReplicaLookup(TabletID, cookie); });
+        SendRequest([this](ui64 cookie, TActorId /*replica*/) { return new TEvStateStorage::TEvReplicaLookup(TabletID, cookie); });
 
         Become(&TThis::StateLookup, TDuration::MicroSeconds(StateStorageRequestTimeout), new TEvents::TEvWakeup());
     }
@@ -272,14 +266,9 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         SuggestedGeneration = msg->ProposedGeneration;
         SuggestedStep = msg->ProposedStep;
 
-        if (msg->SignatureSz == Replicas) {
             TCloneUpdateEventOp op(msg);
             SendRequest(op);
             Become(&TThis::StateUpdate, TDuration::MicroSeconds(StateStorageRequestTimeout), new TEvents::TEvWakeup());
-        } else {
-            // wrong signature, reply with no-info (but correct signature count)
-            ReplyAndDie(NKikimrProto::ERROR);
-        }
     }
 
     void HandleInit(TEvStateStorage::TEvLock::TPtr &ev) {
@@ -293,13 +282,9 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         SuggestedGeneration = msg->ProposedGeneration;
         SuggestedStep = 0;
 
-        if (msg->SignatureSz == Replicas) {
             TCloneLockEventOp op(msg);
             SendRequest(op);
             Become(&TThis::StateUpdate, TDuration::MicroSeconds(StateStorageRequestTimeout), new TEvents::TEvWakeup());
-        } else { // wrong signature, reply with no-info (but correct signature count)
-            ReplyAndDie(NKikimrProto::ERROR);
-        }
     }
 
     // lookup handling
@@ -364,8 +349,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     void HandleLookup(TEvents::TEvUndelivered::TPtr &ev) {
         BLOG_D("ProxyRequest::HandleLookup ringGroup:" << RingGroupIndex << " ev: " << ev->Get()->ToString());
-        const ui64 cookie = ev->Cookie;
-        MergeConnectionError(cookie);
+        MergeConnectionError(ev->Cookie);
         CheckLookupReply();
     }
 
@@ -439,8 +423,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     void HandleUpdate(TEvents::TEvUndelivered::TPtr &ev) {
         BLOG_D("ProxyRequest::HandleUpdate ringGroup:" << RingGroupIndex << " ev: " << ev->Get()->ToString());
-        const ui64 cookie = ev->Cookie;
-        MergeConnectionError(cookie);
+        MergeConnectionError(ev->Cookie);
         CheckUpdateReply();
     }
 
@@ -455,10 +438,9 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     void MergeSigNodeError(ui32 node) {
         for (ui32 i = 0; i < ReplicaSelection->Sz; ++i) {
-            const ui32 replicaNode = ReplicaSelection->SelectedReplicas[i].NodeId();
-            if (replicaNode == node) {
-                if (Signature[i] == 0) {
-                    Signature[i] = Max<ui64>();
+            const auto replicaId = ReplicaSelection->SelectedReplicas[i];
+            if (replicaId.NodeId() == node) {
+                if (!Signature.contains(replicaId) && UndeliveredReplicas.insert(replicaId).second) {
                     ++RepliesAfterReply;
                 }
             }
@@ -467,14 +449,13 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     void UpdateSigFor(ui64 cookie, ui64 sig) {
         Y_ABORT_UNLESS(cookie < Replicas);
-
-        if (Signature[cookie] == 0) {
-            Signature[cookie] = sig;
+        const auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
+        if ((sig == Max<ui64>() && UndeliveredReplicas.insert(replicaId).second) || Signature.insert({ replicaId, sig }).second) {
             ++RepliesAfterReply;
             ++SignaturesMerged;
 
             if (RepliesMerged + RepliesAfterReply == Replicas) {
-                Send(Source, new TEvStateStorage::TEvUpdateSignature(TabletID, Signature.Get(), Replicas));
+                Send(Source, new TEvStateStorage::TEvUpdateSignature(TabletID, Signature));
                 return PassAway();
             }
         }
@@ -483,18 +464,16 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     void HandleUpdateSig(TEvents::TEvUndelivered::TPtr &ev) {
         const ui64 cookie = ev->Cookie;
         BLOG_D("ProxyRequest::HandleUpdateSig undelivered ringGroup:" << RingGroupIndex << " for: " << cookie);
-
         return UpdateSigFor(cookie, Max<ui64>());
     }
 
     void HandleUpdateSig(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
         const ui32 node = ev->Get()->NodeId;
         BLOG_D("ProxyRequest::HandleUpdateSig ringGroup:" << RingGroupIndex << " node disconnected: " << node);
-
         MergeSigNodeError(node);
 
         if (RepliesMerged + RepliesAfterReply == Replicas) {
-            Send(Source, new TEvStateStorage::TEvUpdateSignature(TabletID, Signature.Get(), Replicas));
+            Send(Source, new TEvStateStorage::TEvUpdateSignature(TabletID, Signature));
             return PassAway();
         }
     }
@@ -505,15 +484,16 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         TEvStateStorage::TEvReplicaInfo *msg = ev->Get();
         const ui64 cookie = msg->Record.GetCookie();
         Y_ABORT_UNLESS(cookie < Replicas);
-        Y_ABORT_UNLESS(Signature[cookie] == 0 || Signature[cookie] == Max<ui64>());
-
+        const auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
+        Y_ABORT_UNLESS(!Signature.contains(replicaId));
+        UndeliveredReplicas.erase(replicaId);
         return UpdateSigFor(cookie, msg->Record.GetSignature());
     }
 
     void HandleUpdateSigTimeout() {
         BLOG_D("ProxyRequest::HandleUpdateSigTimeout ringGroup:" << RingGroupIndex << " RepliesAfterReply# " << (ui32)RepliesAfterReply);
         if (RepliesAfterReply > 0)
-            Send(Source, new TEvStateStorage::TEvUpdateSignature(TabletID, Signature.Get(), Replicas));
+            Send(Source, new TEvStateStorage::TEvUpdateSignature(TabletID, Signature));
         PassAway();
     }
 
@@ -612,7 +592,6 @@ public:
 class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStorageRingGroupProxyRequest> {
     TIntrusivePtr<TStateStorageInfo> Info;
     THashMap<TActorId, ui32> RingGroupActors;
-    THashMap<ui32, TActorId> RingGroupActorsByIndex;
 
     TActorId Source;
     THashSet<TActorId> Replies;
@@ -629,21 +608,19 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     ui64 LockedFor;
     TMap<TActorId, TActorId> Followers;
 
-    ui32 SignatureSz;
-    TArrayHolder<ui64> Signature;
+    TEvStateStorage::TSignature Signature;
 
 
     void HandleInit(TEvStateStorage::TEvLookup::TPtr &ev) {
         TEvStateStorage::TEvLookup *msg = ev->Get();
         Source = ev->Sender;
-        WaitAllReplies = msg->ProxyOptions.RingGroupsSigWaitMode == msg->ProxyOptions.SigSync;
+        WaitAllReplies = msg->ProxyOptions.SigWaitMode != msg->ProxyOptions.SigNone;
         BLOG_D("RingGroupProxyRequest::HandleInit ev: " << msg->ToString());
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
             if (!WaitAllReplies && Info->RingGroups[ringGroupIndex].WriteOnly)
                 continue;
             auto actorId = RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, ringGroupIndex));
             RingGroupActors[actorId] = ringGroupIndex;
-            RingGroupActorsByIndex[ringGroupIndex] = actorId;
             Send(actorId, new TEvStateStorage::TEvLookup(*msg));
         }
     }
@@ -653,36 +630,11 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         T *msg = ev->Get();
         Source = ev->Sender;
         WaitAllReplies = true;
-        if (SignatureSz != msg->SignatureSz) {
-            TabletID = msg->TabletID;
-            Cookie = msg->Cookie;
-            Reply(NKikimrProto::EReplyStatus::ERROR);
-            PassAway();
-            return;
-        }
         BLOG_D("RingGroupProxyRequest::HandleInit ev: " << msg->ToString());
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
             auto actorId = RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, ringGroupIndex));
             RingGroupActors[actorId] = ringGroupIndex;
-            RingGroupActorsByIndex[ringGroupIndex] = actorId;
-            Send(actorId, new T(*msg, GetRingOffset(ringGroupIndex), Info->RingGroups[ringGroupIndex].NToSelect));
-        }
-    }
-
-    ui32 GetRingOffset(ui32 ringGroupIdx) {
-        ui32 offset = 0;
-        for (ui32 i = 0; i < ringGroupIdx; i++)
-            offset += Info->RingGroups[i].NToSelect;
-        return offset;
-    }
-
-    void UpdateSignature(ui32 ringGroupIdx, const ui64 *sig, ui32 sz) {
-        ui32 offset = GetRingOffset(ringGroupIdx);
-        Y_ABORT_UNLESS(offset + sz <= SignatureSz);
-
-        for (ui32 i = 0; i < sz; i++, offset++) {
-            if (sig != 0 && sig[i] != Max<ui64>())
-                Signature[offset] = sig[i];
+            Send(actorId, new T(*msg));
         }
     }
 
@@ -702,11 +654,11 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         } else {
             // TODO: if ringGroups return different results? Y_ABORT("StateStorage ring groups are not synchronized");
         }
-        UpdateSignature(ringGroupIdx, msg->Signature.Get(), msg->SignatureSz);
+        Signature.Merge(msg->Signature);
     }
 
     void Reply(NKikimrProto::EReplyStatus status) {
-        auto* msg = new TEvStateStorage::TEvInfo(status, TabletID, Cookie, CurrentLeader, CurrentLeaderTablet, CurrentGeneration, CurrentStep, Locked, LockedFor, Signature.Get(), SignatureSz, Followers);
+        auto* msg = new TEvStateStorage::TEvInfo(status, TabletID, Cookie, CurrentLeader, CurrentLeaderTablet, CurrentGeneration, CurrentStep, Locked, LockedFor, Signature, Followers);
         BLOG_D("RingGroupProxyRequest::Reply ev: " << msg->ToString());
         Send(Source, msg);
     }
@@ -715,16 +667,6 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         bool reply = Replies.size() == Info->RingGroups.size()
             || (WaitAllReplies && status != NKikimrProto::EReplyStatus::OK)
             || (!WaitAllReplies && status == NKikimrProto::EReplyStatus::OK);
-        if(!reply && WaitAllReplies) {
-            for(ui32 i : xrange(Info->RingGroups.size())) {
-                auto& rg = Info->RingGroups[i];
-                if(!rg.WriteOnly && RingGroupActorsByIndex.contains(i) && !Replies.contains(RingGroupActorsByIndex[i])) {
-                    return reply;
-                }
-            }
-            BLOG_D("RingGroupProxyRequest::FastReply: " << status);
-            return true;
-        }
         return reply;
     }
 
@@ -741,9 +683,8 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
 
     void HandleResult(TEvStateStorage::TEvUpdateSignature::TPtr &ev) {
         TEvStateStorage::TEvUpdateSignature *msg = ev->Get();
-        UpdateSignature(RingGroupActors[ev->Sender], msg->Signature.Get(), msg->Sz);
-        auto *reply = new TEvStateStorage::TEvUpdateSignature(msg->TabletID, Signature.Get(), SignatureSz);
-        Send(Source, reply);
+        Signature.Merge(msg->Signature);
+        Send(Source, new TEvStateStorage::TEvUpdateSignature(msg->TabletID, Signature));
     }
 
     void Timeout() {
@@ -764,12 +705,8 @@ public:
 
     TStateStorageRingGroupProxyRequest(TIntrusivePtr<TStateStorageInfo> info)
         : Info(info)
-        , Replies(0)
         , RingGroupPassAwayCounter(0)
-        , SignatureSz(info->RingGroupsSelectionSize())
-        , Signature(new ui64[SignatureSz])
     {
-        Fill(Signature.Get(), Signature.Get() + SignatureSz, 0);
     }
 
     void Bootstrap() {

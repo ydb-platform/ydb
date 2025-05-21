@@ -27,13 +27,11 @@ class TTablet : public TActor<TTablet> {
         ui32 KnownStep;
         TActorId CurrentLeader;
 
-        ui32 SignatureSz;
-        TArrayHolder<ui64> Signature;
+        TEvStateStorage::TSignature Signature;
 
         TStateStorageInfo()
             : KnownGeneration(0)
             , KnownStep(0)
-            , SignatureSz(0)
         {}
 
         void Update(const TEvStateStorage::TEvInfo *msg) {
@@ -51,16 +49,6 @@ class TTablet : public TActor<TTablet> {
             } else {
                 // happens?
             }
-        }
-
-        bool MergeSignature(ui64 *sig, ui32 sigsz) {
-            if (sigsz != SignatureSz) {
-                return false;
-            }
-            for (ui32 i = 0; i != sigsz; ++i)
-                if (const ui64 x = sig[i])
-                    Signature[i] = x;
-            return true;
         }
     } StateStorageInfo;
 

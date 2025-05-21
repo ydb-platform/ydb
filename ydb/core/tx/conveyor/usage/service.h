@@ -1,26 +1,33 @@
 #pragma once
 #include "config.h"
-#include <ydb/library/actors/core/actorid.h>
-#include <ydb/library/actors/core/actor.h>
+
 #include <ydb/core/tx/conveyor/service/service.h>
 #include <ydb/core/tx/conveyor/usage/events.h>
+
+#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actorid.h>
 
 namespace NKikimr::NConveyor {
 
 class TAsyncTaskExecutor: public TActorBootstrapped<TAsyncTaskExecutor> {
 private:
     const std::shared_ptr<ITask> Task;
+
 public:
     TAsyncTaskExecutor(const std::shared_ptr<ITask>& task)
-        : Task(task)
-    {
-
+        : Task(task) {
     }
 
     void Bootstrap() {
         auto gAway = PassAwayGuard();
         Task->Execute(nullptr, Task);
     }
+};
+
+enum class ESpecialTaskProcesses {
+    Insert = 1,
+    Compaction = 2,
+    Normalizer = 3
 };
 
 template <class TConveyorPolicy>
@@ -35,6 +42,7 @@ private:
         Y_ABORT_UNLESS(TConveyorPolicy::Name.size() == 4);
         return TConveyorPolicy::Name;
     }
+
 public:
     static void AsyncTaskToExecute(const std::shared_ptr<ITask>& task) {
         auto& context = NActors::TActorContext::AsActorContext();
@@ -71,7 +79,6 @@ public:
             return TProcessGuard(externalProcessId, {});
         }
     }
-
 };
 
 class TScanConveyorPolicy {
@@ -96,4 +103,4 @@ using TScanServiceOperator = TServiceOperatorImpl<TScanConveyorPolicy>;
 using TCompServiceOperator = TServiceOperatorImpl<TCompConveyorPolicy>;
 using TInsertServiceOperator = TServiceOperatorImpl<TInsertConveyorPolicy>;
 
-}
+}   // namespace NKikimr::NConveyor

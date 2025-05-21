@@ -593,7 +593,7 @@ protected:
         }
         TxEvent->IndexChanges->Blobs = ExtractBlobsData();
         std::shared_ptr<NConveyor::ITask> task = std::make_shared<TChangesTask>(std::move(TxEvent), Counters, TabletId, ParentActorId, LastCompletedTx);
-        NConveyor::TCompServiceOperator::SendTaskToExecute(task);
+        NConveyor::TCompServiceOperator::SendTaskToExecute(task, NConveyor::ESpecialTaskProcesses::Compaction);
     }
     virtual bool DoOnError(const TString& storageId, const NOlap::TBlobRange& range, const NOlap::IBlobsReadingAction::TErrorStatus& status) override {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("event", "DoOnError")("storage_id", storageId)("blob_id", range)("status", status.GetErrorMessage())("status_code", status.GetStatus());

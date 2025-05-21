@@ -481,7 +481,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         const ui64 pathHash = CityHash64(path);
         const ui64 idHash = pathId.Hash();
 
-        for(ui32 ringGroupIndex : xrange(GroupInfo->RingGroups.size())) {
+        for (ui32 ringGroupIndex : xrange(GroupInfo->RingGroups.size())) {
             TStateStorageInfo::TSelection selection;
 
             GroupInfo->SelectReplicas(pathHash, &selection, ringGroupIndex);

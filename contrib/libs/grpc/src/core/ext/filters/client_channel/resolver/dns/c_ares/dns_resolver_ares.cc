@@ -811,7 +811,7 @@ class AresDNSResolver : public DNSResolver {
 };
 
 bool ShouldUseAres(y_absl::string_view resolver_env) {
-  return !resolver_env.empty() && y_absl::EqualsIgnoreCase(resolver_env, "ares");
+  return resolver_env.empty() || y_absl::EqualsIgnoreCase(resolver_env, "ares");
 }
 
 bool UseAresDnsResolver() {

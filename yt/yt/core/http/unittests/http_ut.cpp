@@ -1035,7 +1035,7 @@ TEST_P(THttpServerTest, ResponseStreaming)
     Sleep(TDuration::MilliSeconds(10));
 }
 
-static constexpr auto& Logger = HttpLogger;
+constinit const auto Logger = HttpLogger;
 
 class TCancelingHandler
     : public IHttpHandler

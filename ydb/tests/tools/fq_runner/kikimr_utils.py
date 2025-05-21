@@ -205,7 +205,10 @@ class YQv2Extension(ExtensionPoint):
                         'connection': {
                             'endpoint': kikimr.tenants["/compute"].endpoint(),
                             'database': '/local'
-                        }
+                        },
+                        'access_config': {
+                            'external_sources_access_sid' : ['account@sa']
+                        } 
                     }
                 }
             },

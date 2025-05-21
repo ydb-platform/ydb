@@ -4,65 +4,52 @@
 #include <util/generic/xrange.h>
 #include <util/generic/mem_copy.h>
 #include <util/generic/algorithm.h>
+#include "statestorage_ringwalker.h"
 
 namespace NKikimr {
-
-static const ui32 Primes[128] = {
-    104743, 105023, 105359, 105613,
-    104759, 105031, 105361, 105619,
-    104761, 105037, 105367, 105649,
-    104773, 105071, 105373, 105653,
-    104779, 105097, 105379, 105667,
-    104789, 105107, 105389, 105673,
-    104801, 105137, 105397, 105683,
-    104803, 105143, 105401, 105691,
-    104827, 105167, 105407, 105701,
-    104831, 105173, 105437, 105727,
-    104849, 105199, 105449, 105733,
-    104851, 105211, 105467, 105751,
-    104869, 105227, 105491, 105761,
-    104879, 105229, 105499, 105767,
-    104891, 105239, 105503, 105769,
-    104911, 105251, 105509, 105817,
-    104917, 105253, 105517, 105829,
-    104933, 105263, 105527, 105863,
-    104947, 105269, 105529, 105871,
-    104953, 105277, 105533, 105883,
-    104959, 105319, 105541, 105899,
-    104971, 105323, 105557, 105907,
-    104987, 105331, 105563, 105913,
-    104999, 105337, 105601, 105929,
-    105019, 105341, 105607, 105943,
-    105953, 106261, 106487, 106753,
-    105967, 106273, 106501, 106759,
-    105971, 106277, 106531, 106781,
-    105977, 106279, 106537, 106783,
-    105983, 106291, 106541, 106787,
-    105997, 106297, 106543, 106801,
-    106013, 106303, 106591, 106823,
-};
 
 constexpr ui64 MaxRingCount = 1024;
 constexpr ui64 MaxNodeCount = 1024;
 
-class TStateStorageRingWalker {
-    const ui32 Sz;
-    const ui32 Delta;
-    ui32 A;
-public:
-    TStateStorageRingWalker(ui32 hash, ui32 sz)
-        : Sz(sz)
-        , Delta(Primes[hash % 128])
-        , A(hash + Delta)
-    {
-        Y_DEBUG_ABORT_UNLESS(Delta > Sz);
+TString TEvStateStorage::TSignature::ToString() const {
+    TStringStream str;
+    str << "{ Size: " << Size();
+    if (!ReplicasSignature.empty()) {
+        str << " Signature: {";
+        ui32 i = 0;
+        for (auto& [id, sig] : ReplicasSignature) {
+            if(i++ > 0)
+                str << ", ";
+            str << "{" << id.ToString() <<" : " << sig << "}";
+        }
+        str << "}";
     }
+    str << "}";
+    return str.Str();
+}
 
-    ui32 Next() {
-        A += Delta;
-        return (A % Sz);
+ui32 TEvStateStorage::TSignature::Size() const {
+    return ReplicasSignature.size();
+}
+
+void TEvStateStorage::TSignature::Merge(const TEvStateStorage::TSignature& signature) {
+    for(auto [replicaId, sig] : signature.ReplicasSignature) {
+        SetReplicaSignature(replicaId, sig);
     }
-};
+}
+
+bool TEvStateStorage::TSignature::HasReplicaSignature(const TActorId &replicaId) const {
+    return ReplicasSignature.contains(replicaId); 
+}
+
+ui64 TEvStateStorage::TSignature::GetReplicaSignature(const TActorId &replicaId) const {
+    auto it = ReplicasSignature.find(replicaId);
+    return it == ReplicasSignature.end() ? 0 : it->second;
+}
+
+void TEvStateStorage::TSignature::SetReplicaSignature(const TActorId &replicaId, ui64 signature) {
+    ReplicasSignature[replicaId] = signature;
+}
 
 void TStateStorageInfo::SelectReplicas(ui64 tabletId, TSelection *selection, ui32 ringGroupIdx) const {
     const ui32 hash = StateStorageHashFromTabletID(tabletId);

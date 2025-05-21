@@ -119,28 +119,16 @@ struct TEvStateStorage {
         }
     };
 
-    struct TSignature : THashMap<TActorId, ui64> {
-        TString ToString() const {
-            TStringStream str;
-            str << "{ Size: " << size();
-            if (!empty()) {
-                str << " Signature: {";
-                ui32 i  =0;
-                for (auto& [id, sig] : *this) {
-                    if(i++ > 0)
-                        str << ", ";
-                    str << "{" << id.ToString() <<" : " << sig << "}";
-                }
-                str << "}";
-            }
-            str << "}";
-            return str.Str();
-        }
-        void Merge(TEvStateStorage::TSignature signature) {
-            for(auto [replicaId, sig] : signature) {
-                insert_or_assign(replicaId, sig);
-            }
-        }
+    class TSignature {
+        THashMap<TActorId, ui64> ReplicasSignature;
+
+    public:
+        ui32 Size() const;
+        bool HasReplicaSignature(const TActorId &replicaId) const;
+        ui64 GetReplicaSignature(const TActorId &replicaId) const;
+        void SetReplicaSignature(const TActorId &replicaId, ui64 signature);
+        void Merge(const TEvStateStorage::TSignature& signature);
+        TString ToString() const;
     };
 
     struct TEvUpdate : public TEventLocal<TEvUpdate, EvUpdate> {
@@ -246,7 +234,7 @@ struct TEvStateStorage {
         const TSignature Signature;
         const TProxyOptions ProxyOptions;
 
-        TEvLock(ui64 tabletId, ui64 cookie, const TActorId &leader, ui32 gen, const TSignature sig, const TProxyOptions &proxyOptions = TProxyOptions())
+        TEvLock(ui64 tabletId, ui64 cookie, const TActorId &leader, ui32 gen, const TSignature &sig, const TProxyOptions &proxyOptions = TProxyOptions())
             : TabletID(tabletId)
             , Cookie(cookie)
             , ProposedLeader(leader)
@@ -337,7 +325,7 @@ struct TEvStateStorage {
         const ui64 TabletID;
         const TSignature Signature;
 
-        TEvUpdateSignature(ui64 tabletId, TSignature &sig)
+        TEvUpdateSignature(ui64 tabletId, const TSignature &sig)
             : TabletID(tabletId)
             , Signature(sig)
         {}
@@ -480,7 +468,7 @@ struct TStateStorageInfo : public TThrRefBase {
         ui32 Sz;
         TArrayHolder<TActorId> SelectedReplicas;
         TArrayHolder<EStatus> Status;
-        
+
         TSelection()
             : Sz(0)
         {}

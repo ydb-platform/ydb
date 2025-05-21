@@ -65,8 +65,6 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         info->SelectReplicas(TabletID, selection.Get(), RingGroupIndex);
         Replicas = selection->Sz;
         ReplicaSelection = std::move(selection);
-        Signature.clear();
-        UndeliveredReplicas.clear();
     }
 
     template<typename T>
@@ -122,8 +120,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
         IEventBase* operator()(ui64 cookie, TActorId replicaId) const {
             THolder<TEvStateStorage::TEvReplicaUpdate> req(new TEvStateStorage::TEvReplicaUpdate());
-            if(auto it = Ev->Signature.find(replicaId); it != Ev->Signature.end())
-                req->Record.SetSignature(it->second);
+            req->Record.SetSignature(Ev->Signature.GetReplicaSignature(replicaId));
             req->Record.SetTabletID(Ev->TabletID);
             ActorIdToProto(Ev->ProposedLeader, req->Record.MutableProposedLeader());
 
@@ -146,8 +143,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
         IEventBase* operator()(ui64 cookie, TActorId replicaId) const {
             THolder<TEvStateStorage::TEvReplicaLock> req(new TEvStateStorage::TEvReplicaLock());
-            if(auto it = Ev->Signature.find(replicaId); it != Ev->Signature.end())
-                req->Record.SetSignature(it->second);
+            req->Record.SetSignature(Ev->Signature.GetReplicaSignature(replicaId));
             req->Record.SetTabletID(Ev->TabletID);
             ActorIdToProto(Ev->ProposedLeader, req->Record.MutableProposedLeader());
             req->Record.SetProposedGeneration(Ev->ProposedGeneration);
@@ -168,7 +164,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     void MergeConnectionError(ui64 cookie) {
         Y_ABORT_UNLESS(cookie < Replicas);
         auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
-        if (!Signature.contains(replicaId) && UndeliveredReplicas.insert(replicaId).second) {
+        if (!Signature.HasReplicaSignature(replicaId) && UndeliveredReplicas.insert(replicaId).second) {
             ++RepliesMerged;
             ReplicaSelection->MergeReply(TStateStorageInfo::TSelection::StatusUnavailable, &ReplyStatus, cookie, false);
         }
@@ -181,9 +177,9 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
         Y_ABORT_UNLESS(cookie < Replicas);
         auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
-        Y_ABORT_UNLESS(!Signature.contains(replicaId));
+        Y_ABORT_UNLESS(!Signature.HasReplicaSignature(replicaId));
         UndeliveredReplicas.erase(replicaId);
-        Signature[replicaId] = ev->Record.GetSignature();
+        Signature.SetReplicaSignature(replicaId, ev->Record.GetSignature());
         ++RepliesMerged;
         ++SignaturesMerged;
 
@@ -440,7 +436,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         for (ui32 i = 0; i < ReplicaSelection->Sz; ++i) {
             const auto replicaId = ReplicaSelection->SelectedReplicas[i];
             if (replicaId.NodeId() == node) {
-                if (!Signature.contains(replicaId) && UndeliveredReplicas.insert(replicaId).second) {
+                if (!Signature.HasReplicaSignature(replicaId) && UndeliveredReplicas.insert(replicaId).second) {
                     ++RepliesAfterReply;
                 }
             }
@@ -450,7 +446,8 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
     void UpdateSigFor(ui64 cookie, ui64 sig) {
         Y_ABORT_UNLESS(cookie < Replicas);
         const auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
-        if ((sig == Max<ui64>() && UndeliveredReplicas.insert(replicaId).second) || Signature.insert({ replicaId, sig }).second) {
+        if ((sig == Max<ui64>() && UndeliveredReplicas.insert(replicaId).second) || !Signature.HasReplicaSignature(replicaId)) {
+            Signature.SetReplicaSignature(replicaId, sig);
             ++RepliesAfterReply;
             ++SignaturesMerged;
 
@@ -485,7 +482,7 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
         const ui64 cookie = msg->Record.GetCookie();
         Y_ABORT_UNLESS(cookie < Replicas);
         const auto replicaId = ReplicaSelection->SelectedReplicas[cookie];
-        Y_ABORT_UNLESS(!Signature.contains(replicaId));
+        Y_ABORT_UNLESS(!Signature.HasReplicaSignature(replicaId));
         UndeliveredReplicas.erase(replicaId);
         return UpdateSigFor(cookie, msg->Record.GetSignature());
     }

@@ -778,7 +778,7 @@ void TTablet::HandleStateStorageInfoResolve(TEvStateStorage::TEvInfo::TPtr &ev) 
             MakeHolder<NTracing::TOnHandleStateStorageInfoResolve>(
                 StateStorageInfo.KnownGeneration
                 , StateStorageInfo.KnownStep
-                , StateStorageInfo.Signature.size()));
+                , StateStorageInfo.Signature.Size()));
     }
 
     switch (msg->Status) {
@@ -831,7 +831,7 @@ void TTablet::HandleStateStorageInfoLock(TEvStateStorage::TEvInfo::TPtr &ev) {
                 IntrospectionTrace->Attach(MakeHolder<NTracing::TOnHandleStateStorageInfoLock>(
                     StateStorageInfo.KnownGeneration
                     , StateStorageInfo.KnownStep
-                    , StateStorageInfo.Signature.size()));
+                    , StateStorageInfo.Signature.Size()));
             }
 
             Register(CreateTabletFindLastEntry(SelfId(), false, Info.Get(), 0, Leader));
@@ -1901,7 +1901,7 @@ void TTablet::LockedInitializationPath() {
         IntrospectionTrace->Attach(MakeHolder<NTracing::TOnLockedInitializationPath>(
             StateStorageInfo.KnownGeneration
             , StateStorageInfo.KnownStep
-            , StateStorageInfo.Signature.size()));
+            , StateStorageInfo.Signature.Size()));
     }
 
     // lock => find latest => update => normal path

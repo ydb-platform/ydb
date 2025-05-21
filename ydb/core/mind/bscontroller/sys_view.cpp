@@ -310,7 +310,9 @@ void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageContro
     }
     info->SetAvailableSize(pDiskInfo->Metrics.GetAvailableSize());
     info->SetTotalSize(pDiskInfo->Metrics.GetTotalSize());
-    info->SetState(NKikimrBlobStorage::TPDiskState::E_Name(pDiskInfo->Metrics.GetState()));
+    if (auto s = pDiskInfo->Metrics.GetState(); pDiskInfo->Operational || s != NKikimrBlobStorage::TPDiskState::Normal) {
+        info->SetState(NKikimrBlobStorage::TPDiskState::E_Name(s));
+    }
     info->SetStatusV2(NKikimrBlobStorage::EDriveStatus_Name(pDiskInfo->Status));
     if (pDiskInfo->StatusTimestamp != TInstant::Zero()) {
         info->SetStatusChangeTimestamp(pDiskInfo->StatusTimestamp.GetValue());

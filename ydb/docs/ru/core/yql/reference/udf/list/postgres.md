@@ -30,7 +30,7 @@
 | `p`    | `PgFloat8`  | число с плавающей точкой (64 бит double)                                                                   |
 | `pf4`  | `PgFloat4`  | число с плавающей точкой (32 бит float)                                                                    |
 | `pf8`  | `PgFloat8`  |                                                                                                            |
-| `pn`   | `PgNumeric` | число с плавающей точкой произвольной точности (до 131072 цифр перед запятой, до 16383 цифр после запятой) | 
+| `pn`   | `PgNumeric` | число с плавающей точкой произвольной точности (до 131072 цифр перед запятой, до 16383 цифр после запятой) |
 
 ### Строковые литералы {#stringliterals}
 
@@ -188,9 +188,9 @@ SELECT
 | `Datetime64` | `timestamp` |`pgtimestamp` |
 | `Timestamp64` | `timestamp` |`pgtimestamp` |
 | `Interval64`| `interval` |`pginterval` |
-| `TzDate32` | `text` |  |`pgtext` |
-| `TzDatetime64` | `text` |  |`pgtext` |
-| `TzTimestamp64` | `text` |  |`pgtext` |
+| `TzDate32` | `text` | `pgtext` |
+| `TzDatetime64` | `text` | `pgtext` |
+| `TzTimestamp64` | `text` | `pgtext` |
 | `Decimal` | `numeric` |`pgnumeric` |
 | `DyNumber` | `numeric` |`pgnumeric` |
 

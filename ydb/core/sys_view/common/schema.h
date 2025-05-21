@@ -2,6 +2,7 @@
 
 #include "path.h"
 
+#include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tx/locks/sys_tables.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
@@ -826,6 +827,8 @@ public:
     virtual bool IsSystemViewPath(const TVector<TString>& path, TSystemViewPath& sysViewPath) const = 0;
 
     virtual TMaybe<TSchema> GetSystemViewSchema(const TStringBuf viewName, ETarget target) const = 0;
+
+    virtual TMaybe<TSchema> GetSystemViewSchema(NKikimrSysView::ESysViewType viewType) const = 0;
 
     virtual bool IsSystemView(const TStringBuf viewName) const = 0;
 

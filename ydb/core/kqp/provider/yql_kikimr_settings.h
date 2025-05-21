@@ -188,6 +188,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableNewRBO = false;
     bool EnableSpillingInHashJoinShuffleConnections = false;
     bool EnableOlapScalarApply = false;
+    bool EnableOlapSubstringPushdown = false;
 
     void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;

@@ -298,6 +298,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     auto path = TPath::Init(buildInfo.TablePathId, ss);
     const auto& tableInfo = ss->Tables.at(path->PathId);
     NTableIndex::TTableColumns implTableColumns;
+    THashSet<TString> indexDataColumns;
     {
         buildInfo.SerializeToProto(ss, modifyScheme.MutableInitiateIndexBuild());
         const auto& indexDesc = modifyScheme.GetInitiateIndexBuild().GetIndex();
@@ -311,6 +312,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
         implTableColumns.Columns.emplace(indexKeys.KeyColumns.back());
         modifyScheme.ClearInitiateIndexBuild();
+        indexDataColumns = THashSet<TString>(buildInfo.DataColumns.begin(), buildInfo.DataColumns.end());
+        indexDataColumns.insert(indexKeys.KeyColumns.back());
     }
 
     using namespace NTableIndex::NTableVectorKmeansTreeIndex;
@@ -343,7 +346,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
 
         return propose;
     }
-    op = CalcVectorKmeansTreePostingImplTableDesc({}, tableInfo, tableInfo->PartitionConfig(), implTableColumns, {}, suffix);
+    op = NTableIndex::CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, {}, suffix);
     const auto [count, parts, step] = ComputeKMeansBoundaries(*tableInfo, buildInfo);
 
     auto& policy = *resetPartitionsSettings();

@@ -80,7 +80,7 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
 
                 exportInfo->State = TExportInfo::EState::Cancellation;
                 if (item.WaitTxId != InvalidTxId) {
-                    Send(Self->SelfId(), CancelPropose(exportInfo, item.WaitTxId), 0, exportInfo->Id);
+                    Send(Self->SelfId(), CancelPropose(*exportInfo, item.WaitTxId), 0, exportInfo->Id);
                 }
             }
         }
@@ -90,7 +90,7 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        Self->PersistExportState(db, exportInfo);
+        Self->PersistExportState(db, *exportInfo);
 
         Send(Request->Sender, std::move(response), 0, Request->Cookie);
         SendNotificationsIfFinished(exportInfo);
@@ -169,12 +169,12 @@ struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
         Self->TxIdToExport.erase(backupTxId);
 
         NIceDb::TNiceDb db(txc.DB);
-        Self->PersistExportItemState(db, exportInfo, itemIdx);
+        Self->PersistExportItemState(db, *exportInfo, itemIdx);
 
         if (cancelledItems == cancellableItems) {
             exportInfo->State = TExportInfo::EState::Cancelled;
             exportInfo->EndTime = TAppData::TimeProvider->Now();
-            Self->PersistExportState(db, exportInfo);
+            Self->PersistExportState(db, *exportInfo);
         }
 
         SendNotificationsIfFinished(exportInfo);

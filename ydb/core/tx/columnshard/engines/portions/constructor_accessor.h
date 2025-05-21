@@ -144,6 +144,18 @@ public:
 
     }
 
+    ui64 GetTotalBlobsSize() const {
+        AFL_VERIFY(Records.size());
+        ui64 size = 0;
+        for (auto&& r : Records) {
+            size += r.GetBlobRange().GetSize();
+        }
+        for (auto&& r : Indexes) {
+            size += r.GetDataSize();
+        }
+        return size;
+    }
+
     static TPortionAccessorConstructor BuildForRewriteBlobs(const TPortionInfo& portion) {
         return TPortionAccessorConstructor(portion.BuildConstructor(true, false));
     }

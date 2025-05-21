@@ -146,6 +146,10 @@ public:
 
         virtual EBlobState GetBlobState(const TSubgroupPartLayout& parts, const TSubgroupVDisks& failedDisks) const = 0;
 
+        // check recoverability of the blob based only on presense of different parts without checking the layout
+        virtual EBlobState GetBlobStateWithoutLayoutCheck(const TSubgroupPartLayout& parts,
+                const TSubgroupVDisks& failedDisks) const = 0;
+
         // check if we need to resurrect something; returns bit mask of parts needed for specified disk in group,
         // nth bit represents nth part; all returned parts are suitable for this particular disk
         virtual ui32 GetPartsToResurrect(const TSubgroupPartLayout& parts, ui32 idxInSubgroup) const = 0;
@@ -306,6 +310,9 @@ public:
     const TCypherKey* GetCypherKey() const { return &Key; }
     std::shared_ptr<TTopology> PickTopology() const { return Topology; }
 
+    const std::vector<TGroupId>& GetBridgeGroupIds() const { return BridgeGroupIds; }
+    bool IsBridged() const { return !BridgeGroupIds.empty(); }
+
     // for testing purposes; numFailDomains = 0 automatically selects possible minimum for provided erasure; groupId=0
     // and groupGen=1 for constructed group
     explicit TBlobStorageGroupInfo(TBlobStorageGroupType gtype, ui32 numVDisksPerFailDomain = 1,
@@ -443,6 +450,8 @@ private:
     TMaybe<TKikimrScopeId> AcceptedScope;
     TString StoragePoolName;
     NPDisk::EDeviceType DeviceType = NPDisk::DEVICE_TYPE_UNKNOWN;
+    // bridge mode fields
+    std::vector<TGroupId> BridgeGroupIds;
 };
 
 // physical fail domain description

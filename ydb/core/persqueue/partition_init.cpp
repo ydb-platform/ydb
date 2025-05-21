@@ -488,15 +488,6 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             }
             FormHeadAndProceed();
 
-            if (GetContext().StartOffset && *GetContext().StartOffset !=  Partition()->StartOffset) {
-                PQ_LOG_ERROR("StartOffset from meta and blobs are different: " << *GetContext().StartOffset << " != " << Partition()->StartOffset);
-                return PoisonPill(ctx);
-            }
-            if (GetContext().EndOffset && *GetContext().EndOffset !=  Partition()->EndOffset) {
-                PQ_LOG_ERROR("EndOffset from meta and blobs are different: " << *GetContext().EndOffset << " != " << Partition()->EndOffset);
-                return PoisonPill(ctx);
-            }
-
             Done(ctx);
             break;
         case NKikimrProto::NODATA:
@@ -592,10 +583,6 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
         Y_ABORT_UNLESS(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
         TKey k = MakeKeyFromString(pair.GetKey(), PartitionId());
         if (!actualKeys.contains(pair.GetKey())) {
-            Partition()->DeletedKeys.emplace_back(k.ToString());
-            continue;
-        }
-        if (GetContext().StartOffset && (k.GetOffset() < *GetContext().StartOffset)) {
             Partition()->DeletedKeys.emplace_back(k.ToString());
             continue;
         }

@@ -5,7 +5,7 @@ import threading
 
 from ydb.tests.stress.oltp_workload.workload.type.vector_index import WorkloadVectorIndex
 from ydb.tests.stress.oltp_workload.workload.type.insert_delete_all_types import WorkloadInsertDeleteAllTypes
-from ydb.tests.stress.oltp_workload.workload.type.selevt_partition import WorkloadSelectPartition
+from ydb.tests.stress.oltp_workload.workload.type.select_partition import WorkloadSelectPartition
 
 ydb.interceptor.monkey_patch_event_handler()
 

@@ -171,8 +171,9 @@ public:
         //        Y_DEBUG_ABORT_UNLESS(NArrow::IsSorted(batch, SortSchema));
         const bool isDenyFilter = filter && filter->IsTotalDenyFilter();
         auto filterImpl = (!filter || filter->IsTotalAllowFilter()) ? nullptr : filter;
+        static const arrow::Schema emptySchema = arrow::Schema(arrow::FieldVector());
         SortHeap.Push(TBatchIterator(batch, filterImpl, *SortSchema,
-            (!isDenyFilter && DataSchema) ? *DataSchema : arrow::Schema(arrow::FieldVector()), Reverse, VersionColumnNames, sourceId));
+            (!isDenyFilter && DataSchema) ? *DataSchema : emptySchema, Reverse, VersionColumnNames, sourceId));
     }
 
     bool IsEmpty() const {

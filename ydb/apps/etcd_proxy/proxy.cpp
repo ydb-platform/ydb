@@ -265,8 +265,10 @@ int TProxy::ExportDatabase() {
                 if (streamPart.EOS())
                     break;
 
-                if (!streamPart.IsSuccess())
+                if (!streamPart.IsSuccess()) {
+                    std::cout << streamPart.GetIssues().ToString() << std::endl;
                     return 1;
+                }
 
                 etcdserverpb::TxnRequest txnRequest;
                 for (auto parser = NYdb::TResultSetParser(streamPart.ExtractPart()); parser.TryNextRow();) {
@@ -285,10 +287,14 @@ int TProxy::ExportDatabase() {
                     return 1;
                 }
             }
-        } else
+        } else {
+            std::cout << it.GetIssues().ToString() << std::endl;
             return 1;
-    } else
+        }
+    } else {
+        std::cout << res.GetIssues().ToString() << std::endl;
         return 1;
+    }
 
     std::cout << count << " keys exported successfully." << std::endl;
     return 0;

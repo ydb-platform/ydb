@@ -31,7 +31,7 @@ using namespace NColumnConverters;
 using namespace NComplexTypes;
 using namespace NTableClient;
 
-static constexpr auto& Logger = FormatsLogger;
+constinit const auto Logger = FormatsLogger;
 
 using TBodyWriter = std::function<void(TMutableRef)>;
 using TBatchColumn = IUnversionedColumnarRowBatch::TColumn;

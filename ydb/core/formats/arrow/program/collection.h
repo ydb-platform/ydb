@@ -461,6 +461,9 @@ public:
     }
 
     void AddFilter(const TColumnFilter& filter) {
+        if (filter.IsTotalAllowFilter()) {
+            return;
+        }
         if (!UseFilter) {
             *Filter = Filter->And(filter);
         } else {

@@ -104,6 +104,7 @@ private:
 
 DEFINE_REFCOUNTED_TYPE(TLogicalType)
 
+TLogicalTypePtr ParseType(TStringBuf typeString);
 TString ToString(const TLogicalType& logicalType);
 void FormatValue(TStringBuilderBase* builder, const TLogicalType& logicalType, TStringBuf /*spec*/);
 

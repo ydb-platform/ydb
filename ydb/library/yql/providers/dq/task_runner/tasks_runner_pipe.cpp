@@ -2033,7 +2033,7 @@ private:
     void ProcessJobs(const TString& exePath, const TPortoSettings& portoSettings) {
         NThreading::TPromise<void> promise = NThreading::NewPromise();
 
-        promise.GetFuture().Apply([=](const NThreading::TFuture<void>&) mutable {
+        promise.GetFuture().Apply([=, this](const NThreading::TFuture<void>&) mutable {
             Start(exePath, portoSettings);
         });
 

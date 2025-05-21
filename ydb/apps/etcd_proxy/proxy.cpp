@@ -208,7 +208,7 @@ int TProxy::ImportDatabase() {
     if (const auto res = Stuff->Client->ExecuteQuery(R"(
 insert into `history` select * from `current` where startswith(`key`,$Prefix);
 insert into `revision` (`stub`,`revision`,`timestamp`) values (true,0L,CurrentUtcDatetime());
-insert into `revision` select false as `stub`, nvl(max(`modified`), 0L) as `revision`, CurrentUtcDatetime(`modified`) as `timestamp` from `history`;"
+insert into `revision` select false as `stub`, nvl(max(`modified`), 0L) as `revision`, CurrentUtcDatetime(max(`modified`)) as `timestamp` from `history`;
     )", NYdb::NQuery::TTxControl::NoTx(), param).ExtractValueSync(); !res.IsSuccess()) {
         std::cout << res.GetIssues().ToString() << std::endl;
         return 1;

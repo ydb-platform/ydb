@@ -3,6 +3,7 @@ PY3_LIBRARY()
 PY_SRCS(
     insert_delete_all_types.py
     select_partition.py
+    vector_index.py
 )
 
 PEERDIR(

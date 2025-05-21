@@ -41,8 +41,19 @@ namespace NKikimr::NBsController {
                 return i32(MaxSlots) - NumSlots;
             }
 
-            double GetPickerScore() const {
-                return double(NumSlots) / MaxSlots;
+            // the less the better
+            double GetPickerScore(TSlotSizeUnits::E slotSizeUnits) const {
+                double penalty = 0;
+                ui32 vu = slotSizeUnits ?: 1;
+                ui32 pu = SlotSizeUnits ?: 1;
+                if (vu > pu) {
+                    // double-unit vdisk occupies two single pdisk slots
+                    penalty += 10;
+                } else if (vu < pu) {
+                    // single-unit vdisk occupies double-unit pdisk slot (storage waste)
+                    penalty += 20;
+                }
+                return double(NumSlots) / MaxSlots + penalty;
             }
         };
 
@@ -171,7 +182,7 @@ namespace NKikimr::NBsController {
                 return true;
             }
 
-            TPDiskByPosition SetupMatchingDisks(double maxScore) {
+            TPDiskByPosition SetupMatchingDisks(double maxScore, TSlotSizeUnits::E slotSizeUnits) {
                 TPDiskByPosition res;
                 res.reserve(Self.PDiskByPosition.size());
 
@@ -182,7 +193,7 @@ namespace NKikimr::NBsController {
 
                 std::vector<ui32> numMatchingDisksInDomain(Self.DomainMapper.GetIdCount(), 0);
                 for (const auto& [position, pdisk] : Self.PDiskByPosition) {
-                    pdisk->Matching = pdisk->GetPickerScore() <= maxScore && DiskIsUsable(*pdisk);
+                    pdisk->Matching = pdisk->GetPickerScore(slotSizeUnits) <= maxScore && DiskIsUsable(*pdisk);
                     if (pdisk->Matching) {
                         if (position.RealmGroup != prev.RealmGroup) {
                             for (; realmGroupBegin < res.size(); ++realmGroupBegin) {
@@ -316,9 +327,9 @@ namespace NKikimr::NBsController {
             {
             }
 
-            bool FillInGroup(double maxScore, TUndoLog& undo, TGroup& group, const TGroupConstraints& constraints) {
+            bool FillInGroup(double maxScore, TUndoLog& undo, TGroup& group, TSlotSizeUnits::E slotSizeUnits, const TGroupConstraints& constraints) {
                 // determine PDisks that fit our requirements (including score)
-                auto v = SetupMatchingDisks(maxScore);
+                auto v = SetupMatchingDisks(maxScore, slotSizeUnits);
 
                 // find which entities we need to allocate -- whole group, some realms, maybe some domains within specific realms?
                 bool isEmptyGroup = true;
@@ -589,7 +600,7 @@ namespace NKikimr::NBsController {
             }
 
             bool SetupNavigation(const TGroup& group) {
-                TPDiskByPosition matchingDisks = SetupMatchingDisks(::Max<double>());
+                TPDiskByPosition matchingDisks = SetupMatchingDisks(::Max<double>(), SlotSizeUnits);
                 const ui32 totalFailRealmsNum = Topology.GetTotalFailRealmsNum();
                 const ui32 numFailDomainsPerFailRealm = Topology.GetNumFailDomainsPerFailRealm();
                 const ui32 numDisksPerFailRealm = numFailDomainsPerFailRealm * Topology.GetNumVDisksPerFailDomain();
@@ -699,7 +710,7 @@ namespace NKikimr::NBsController {
             }
 
             void SetupCandidates(double maxScore) {
-                TPDiskByPosition matchingDisks = SetupMatchingDisks(maxScore);
+                TPDiskByPosition matchingDisks = SetupMatchingDisks(maxScore, SlotSizeUnits);
                 DomainCandidates.clear();
                 DiskCandidates.clear();
 
@@ -987,7 +998,7 @@ namespace NKikimr::NBsController {
             std::vector<double> scores;
             for (const auto& [pdiskId, pdisk] : PDisks) {
                 if (allocator.DiskIsUsable(pdisk)) {
-                    scores.push_back(pdisk.GetPickerScore());
+                    scores.push_back(pdisk.GetPickerScore(slotSizeUnits));
                 }
             }
             std::sort(scores.begin(), scores.end());
@@ -999,7 +1010,7 @@ namespace NKikimr::NBsController {
             while (begin < end) {
                 const ui32 mid = begin + (end - begin) / 2;
                 TAllocator::TUndoLog undo;
-                if (allocator.FillInGroup(scores[mid], undo, group, groupConstraints)) {
+                if (allocator.FillInGroup(scores[mid], undo, group, slotSizeUnits, groupConstraints)) {
                     result = group;
                     allocator.Revert(undo, group, 0);
                     end = mid;
@@ -1090,7 +1101,7 @@ namespace NKikimr::NBsController {
             std::vector<double> scores;
             for (const auto& [pdiskId, pdisk] : PDisks) {
                 if (sanitizer.DiskIsUsable(pdisk)) {
-                    scores.push_back(pdisk.GetPickerScore());
+                    scores.push_back(pdisk.GetPickerScore(slotSizeUnits));
                 }
             }
             std::sort(scores.begin(), scores.end());

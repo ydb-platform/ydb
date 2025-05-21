@@ -191,9 +191,9 @@ class TestLogScenario(object):
                                                       date_from=0,
                                                       date_to=2678400000)  # Sunday, 1 February 1970, 0:00:00
         ydb_workload.create_table(self.table_name)
-        ydb_workload.bulk_upsert(seconds=10, threads=10, rows=500, wait=True)
+        ydb_workload.bulk_upsert(seconds=wait_time, threads=10, rows=1, wait=True)
         logging.info(f"Count rows after insert {self.get_row_count()} before wait")
-
+        
         assert self.get_row_count() != 0
 
         prev_count: int = self.get_row_count()

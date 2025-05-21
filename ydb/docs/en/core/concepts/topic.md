@@ -155,7 +155,7 @@ Sequence numbers are not used if [no-deduplication mode](#no-dedup) is enabled.
 | Type     | Example | Description                                                                                                                        |
 |----------| --- |------------------------------------------------------------------------------------------------------------------------------------|
 | File     | Offset of transferred data from the beginning of a file | You can't delete lines from the beginning of a file, since this will lead to skipping some data as duplicates or losing some data. |
-| DB table | Auto-increment record ID |
+| DB table | Auto-increment record ID | |
 
 ## Message Retention Period {#retention-time}
 
@@ -172,9 +172,9 @@ Supported codecs are explicitly listed in each topic. When making an attempt to 
 | `raw`  | No compression.                                         |
 | `gzip` | [Gzip](https://en.wikipedia.org/wiki/Gzip) compression. |
 {% if audience != "external" %}
-`lzop` | [lzop](https://en.wikipedia.org/wiki/Lzop) compression.
+| `lzop` | [lzop](https://en.wikipedia.org/wiki/Lzop) compression. |
 {% endif %}
-`zstd` | [zstd](https://en.wikipedia.org/wiki/Zstd) compression.
+| `zstd` | [zstd](https://en.wikipedia.org/wiki/Zstd) compression. |
 
 ## Consumer {#consumer}
 

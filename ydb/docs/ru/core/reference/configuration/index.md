@@ -196,7 +196,7 @@ domains_config:
 
 ## domains_config — домен кластера {#domains-config}
 
-Данный раздел содержит конфигурацию кластера {{ ydb-short-name }}, включая [конфигурации Blob Storage](#domains-blob) (хранилища бинарных объектов), [State Storage](#domains-state) (хранилища состояний) и [настройки безопасности](#security).
+Данный раздел содержит конфигурацию кластера {{ ydb-short-name }}, включая [конфигурации Blob Storage](#domains-blob) (хранилища бинарных объектов) и [State Storage](#domains-state) (хранилища состояний).
 
 {% note info %}
 

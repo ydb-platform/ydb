@@ -17,7 +17,7 @@ await connection.ExecuteAsync("""
                                   Id Int32,
                                   Name Text,
                                   Email Text,
-                                  PRIMARY KEY (Id)   
+                                  PRIMARY KEY (Id)
                               );
                               """);
 
@@ -43,7 +43,7 @@ internal class User
 
 За дополнительной информацией обратитесь к официальной [документации](https://www.learndapper.com/).
 
-### Важные аспекты
+## Важные аспекты
 
 Для того чтобы Dapper интерпретировал `DateTime` как {{ ydb-short-name }} тип `Datetime`. Выполните следующий код:
 

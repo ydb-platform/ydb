@@ -2,6 +2,7 @@
 #include "schemeshard_export_uploaders.h"
 
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/datashard/export_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export_helpers.h>
@@ -461,34 +462,21 @@ private:
     }
 
     bool AddSchemaMappingJson() {
-        TString content;
-        TStringOutput ss(content);
-        NJson::TJsonWriter writer(&ss, false);
-
-        writer.OpenMap();
-        writer.WriteKey("exportedObjects");
-        writer.OpenMap();
+        NBackup::TSchemaMapping schemaMapping;
         for (const auto& item : ExportMetadata.GetSchemaMapping()) {
-            writer.WriteKey(item.GetSourcePath());
-            writer.OpenMap();
-            writer.Write("exportPrefix", item.GetDestinationPrefix());
-            if (item.HasIV()) {
-                writer.Write("iv", NBackup::TEncryptionIV::FromBinaryString(item.GetIV()).GetHexString());
-            }
-            writer.CloseMap();
+            schemaMapping.Items.emplace_back(NBackup::TSchemaMapping::TItem{
+                .ExportPrefix = item.GetDestinationPrefix(),
+                .ObjectPath = item.GetSourcePath(),
+                .IV = item.HasIV() ? TMaybe<NBackup::TEncryptionIV>(NBackup::TEncryptionIV::FromBinaryString(item.GetIV())) : Nothing()
+            });
         }
-        writer.CloseMap();
-        writer.CloseMap();
-
-        writer.Flush();
-        ss.Flush();
 
         TMaybe<NBackup::TEncryptionIV> iv;
         if (IV) {
             iv = NBackup::TEncryptionIV::Combine(*IV, NBackup::EBackupFileType::SchemaMapping, 0, 0);
         }
 
-        return AddFile("SchemaMapping/mapping.json", content, iv, Key);
+        return AddFile("SchemaMapping/mapping.json", schemaMapping.Serialize(), iv, Key);
     }
 
     void ProcessQueue() {

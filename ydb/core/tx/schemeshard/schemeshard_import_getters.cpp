@@ -19,6 +19,8 @@
 
 #include <util/string/subst.h>
 
+#include <algorithm>
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -31,18 +33,43 @@ using namespace Aws;
 
 static constexpr TDuration MaxDelay = TDuration::Minutes(10);
 
+struct TGetterSettings {
+    NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
+    ui32 Retries;
+    TMaybe<NBackup::TEncryptionKey> Key;
+    TMaybe<NBackup::TEncryptionIV> IV;
+
+    static TGetterSettings FromImportInfo(const TImportInfo::TPtr& importInfo, TMaybe<NBackup::TEncryptionIV> iv) {
+        TGetterSettings settings;
+        settings.ExternalStorageConfig.reset(new NWrappers::NExternalStorage::TS3ExternalStorageConfig(importInfo->Settings));
+        settings.Retries = importInfo->Settings.number_of_retries();
+        if (importInfo->Settings.has_encryption_settings()) {
+            settings.Key = NBackup::TEncryptionKey(importInfo->Settings.encryption_settings().symmetric_key().key());
+        }
+        settings.IV = std::move(iv);
+        return settings;
+    }
+
+    static TGetterSettings FromRequest(const TEvImport::TEvListObjectsInS3ExportRequest::TPtr& ev) {
+        TGetterSettings settings;
+        settings.ExternalStorageConfig.reset(new NWrappers::NExternalStorage::TS3ExternalStorageConfig(ev->Get()->Record.settings()));
+        settings.Retries = ev->Get()->Record.settings().number_of_retries();
+        if (ev->Get()->Record.settings().has_encryption_settings()) {
+            settings.Key = NBackup::TEncryptionKey(ev->Get()->Record.settings().encryption_settings().symmetric_key().key());
+        }
+        return settings;
+    }
+};
+
 template <class TDerived>
 class TGetterFromS3 : public TActorBootstrapped<TDerived> {
 protected:
-    explicit TGetterFromS3(TImportInfo::TPtr importInfo, TMaybe<NBackup::TEncryptionIV> iv)
-        : ImportInfo(std::move(importInfo))
-        , ExternalStorageConfig(new NWrappers::NExternalStorage::TS3ExternalStorageConfig(ImportInfo->Settings))
-        , IV(std::move(iv))
-        , Retries(ImportInfo->Settings.number_of_retries())
+    explicit TGetterFromS3(TGetterSettings&& settings)
+        : ExternalStorageConfig(std::move(settings.ExternalStorageConfig))
+        , Key(std::move(settings.Key))
+        , IV(std::move(settings.IV))
+        , Retries(settings.Retries)
     {
-        if (ImportInfo->Settings.has_encryption_settings()) {
-            Key = NBackup::TEncryptionKey(ImportInfo->Settings.encryption_settings().symmetric_key().key());
-        }
     }
 
     void HeadObject(const TString& key, bool autoAddEncSuffix = true) {
@@ -89,7 +116,7 @@ protected:
     }
 
     TString GetKey(TString key, bool autoAddEncSuffix = true) {
-        if (autoAddEncSuffix && ImportInfo->Settings.has_encryption_settings()) {
+        if (autoAddEncSuffix && Key) {
             key += ".enc";
         }
         return key;
@@ -114,8 +141,26 @@ protected:
             Delay = Min(Delay * ++Attempt, MaxDelay);
             this->Schedule(Delay, new TEvents::TEvWakeup());
         } else {
-            Reply(false, TStringBuilder() << "S3 error: " << error.GetMessage().c_str());
+            Reply(error.ShouldRetry() ? Ydb::StatusIds::EXTERNAL_ERROR : Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "S3 error: " << error.GetMessage().c_str());
         }
+    }
+
+    template <typename TResult>
+    bool IsNoSuchKeyError(const TResult& result) {
+        if (result.IsSuccess()) {
+            return false;
+        }
+        const auto& err = result.GetError();
+        if (err.GetErrorType() == Aws::S3::S3Errors::NO_SUCH_KEY) {
+            return true;
+        }
+        if (err.GetErrorType() == Aws::S3::S3Errors::RESOURCE_NOT_FOUND) {
+            return true;
+        }
+        if (err.GetExceptionName() == "NoSuchKey") {
+            return true;
+        }
+        return false;
     }
 
     void ResetRetries() {
@@ -132,7 +177,7 @@ protected:
                 result.assign(buffer.Data(), buffer.Size());
                 return true;
             } catch (const std::exception& ex) {
-                Reply(false, ex.what());
+                Reply(Ydb::StatusIds::BAD_REQUEST, ex.what());
                 return false;
             }
         }
@@ -148,7 +193,7 @@ protected:
                 result.assign(buffer.Data(), buffer.Size());
                 return true;
             } catch (const std::exception& ex) {
-                Reply(false, ex.what());
+                Reply(Ydb::StatusIds::BAD_REQUEST, ex.what());
                 return false;
             }
         }
@@ -156,10 +201,9 @@ protected:
         return true;
     }
 
-    virtual void Reply(bool success = true, const TString& error = TString()) = 0;
+    virtual void Reply(Ydb::StatusIds::StatusCode statusCode = Ydb::StatusIds::SUCCESS, const TString& error = TString()) = 0;
 
 protected:
-    TImportInfo::TPtr ImportInfo;
     NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
     TActorId Client;
     TMaybe<NBackup::TEncryptionKey> Key;
@@ -372,7 +416,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         if (IsView(SchemeKey)) {
             item.CreationQuery = content;
         } else if (!google::protobuf::TextFormat::ParseFromString(content, &item.Scheme)) {
-            return Reply(false, "Cannot parse scheme");
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse scheme");
         }
 
         auto nextStep = [this]() {
@@ -416,7 +460,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
         Ydb::Scheme::ModifyPermissionsRequest permissions;
         if (!google::protobuf::TextFormat::ParseFromString(content, &permissions)) {
-            return Reply(false, "Cannot parse permissions");
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse permissions");
         }
         item.Permissions = std::move(permissions);
 
@@ -445,7 +489,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
         TString expectedChecksum = msg.Body.substr(0, msg.Body.find(' '));
         if (expectedChecksum != CurrentObjectChecksum) {
-            return Reply(false, TStringBuilder() << "Checksum mismatch for " << CurrentObjectKey
+            return Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Checksum mismatch for " << CurrentObjectKey
                 << " expected# " << expectedChecksum
                 << ", got# " << CurrentObjectChecksum);
         }
@@ -479,7 +523,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
         Ydb::Table::ChangefeedDescription changefeed;
         if (!google::protobuf::TextFormat::ParseFromString(content, &changefeed)) {
-            return Reply(false, "Cannot parse сhangefeed");
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse changefeed");
         }
 
         *item.Changefeeds.MutableChangefeeds(IndexDownloadedChangefeed)->MutableChangefeed() = std::move(changefeed);
@@ -522,7 +566,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
         Ydb::Topic::DescribeTopicResult topic;
         if (!google::protobuf::TextFormat::ParseFromString(content, &topic)) {
-            return Reply(false, "Cannot parse topic");
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "Cannot parse topic");
         }
         *item.Changefeeds.MutableChangefeeds(IndexDownloadedChangefeed)->MutableTopic() = std::move(topic);
 
@@ -577,10 +621,10 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         } else {
             Reply();
         }
-
     }
 
-    void Reply(bool success = true, const TString& error = TString()) override {
+    void Reply(Ydb::StatusIds::StatusCode statusCode = Ydb::StatusIds::SUCCESS, const TString& error = TString()) override {
+        const bool success = (statusCode == Ydb::StatusIds::SUCCESS);
         LOG_I("Reply"
             << ": self# " << SelfId()
             << ", success# " << success
@@ -645,7 +689,8 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
 public:
     explicit TSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx, TMaybe<NBackup::TEncryptionIV> iv)
-        : TGetterFromS3<TSchemeGetter>(std::move(importInfo), std::move(iv))
+        : TGetterFromS3<TSchemeGetter>(TGetterSettings::FromImportInfo(importInfo, std::move(iv)))
+        , ImportInfo(std::move(importInfo))
         , ReplyTo(replyTo)
         , ItemIdx(itemIdx)
         , MetadataKey(MetadataKeyFromSettings(*ImportInfo, itemIdx))
@@ -723,6 +768,7 @@ public:
     }
 
 private:
+    TImportInfo::TPtr ImportInfo;
     const TActorId ReplyTo;
     const ui32 ItemIdx;
 
@@ -836,14 +882,15 @@ class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
         ImportInfo->SchemaMapping.ConstructInPlace();
         TString error;
         if (!ImportInfo->SchemaMapping->Deserialize(content, error)) {
-            Reply(false, error);
+            Reply(Ydb::StatusIds::BAD_REQUEST, error);
             return;
         }
 
         Reply();
     }
 
-    void Reply(bool success = true, const TString& error = TString()) override {
+    void Reply(Ydb::StatusIds::StatusCode statusCode = Ydb::StatusIds::SUCCESS, const TString& error = TString()) override {
+        const bool success = (statusCode == Ydb::StatusIds::SUCCESS);
         LOG_I("Reply"
             << ": self# " << SelfId()
             << ", success# " << success
@@ -870,12 +917,12 @@ class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
     bool ProcessMetadata(const TString& content) {
         NJson::TJsonValue json;
         if (!NJson::ReadJsonTree(content, &json)) {
-            Reply(false, "Failed to parse metadata json");
+            Reply(Ydb::StatusIds::BAD_REQUEST, "Failed to parse metadata json");
             return false;
         }
         const NJson::TJsonValue& kind = json["kind"];
         if (kind.GetString() != "SchemaMappingV0") {
-            Reply(false, TStringBuilder() << "Unknown kind of metadata json: " << kind.GetString());
+            Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Unknown kind of metadata json: " << kind.GetString());
             return false;
         }
         return true;
@@ -883,7 +930,8 @@ class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
 
 public:
     TSchemaMappingGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo)
-        : TGetterFromS3<TSchemaMappingGetter>(std::move(importInfo), Nothing())
+        : TGetterFromS3<TSchemaMappingGetter>(TGetterSettings::FromImportInfo(importInfo, Nothing()))
+        , ImportInfo(std::move(importInfo))
         , ReplyTo(replyTo)
         , MetadataKey(SchemaMappingMetadataKeyFromSettings(*ImportInfo))
         , SchemaMappingKey(SchemaMappingKeyFromSettings(*ImportInfo))
@@ -916,10 +964,275 @@ public:
     }
 
 private:
+    TImportInfo::TPtr ImportInfo;
     const TActorId ReplyTo;
     const TString MetadataKey;
     const TString SchemaMappingKey;
 }; // TSchemaMappingGetter
+
+class TListObjectsInS3ExportGetter : public TGetterFromS3<TListObjectsInS3ExportGetter> {
+    class TPathFilter {
+    public:
+        void Build(const Ydb::Import::ListObjectsInS3ExportSettings& settings) {
+            for (const auto& item : settings.items()) {
+                TString path = NBackup::NormalizeItemPath(item.path());
+                if (path) {
+                    Paths.emplace(path);
+                    PathPrefixes.emplace_back(path + "/");
+                }
+            }
+        }
+
+        bool Match(const TString& path) const {
+            if (Paths.empty()) {
+                return true;
+            }
+
+            if (Paths.contains(path)) {
+                return true;
+            }
+
+            for (const TString& prefix : PathPrefixes) {
+                if (path.StartsWith(prefix)) { // So this path is contained in a directory that is specified by user in request
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+    private:
+        std::vector<TString> PathPrefixes;
+        THashSet<TString> Paths;
+    };
+public:
+    TListObjectsInS3ExportGetter(TEvImport::TEvListObjectsInS3ExportRequest::TPtr&& ev)
+        : TGetterFromS3<TListObjectsInS3ExportGetter>(TGetterSettings::FromRequest(ev))
+        , Request(std::move(ev))
+    {
+    }
+
+    void Bootstrap() {
+        if (ParseParameters()) {
+            CreateClient();
+            DownloadSchemaMapping();
+        }
+    }
+
+    bool ParseParameters() {
+        const auto& req = Request->Get()->Record;
+        if (req.GetPageSize() < 0) {
+            Reply(Ydb::StatusIds::BAD_REQUEST, "Page size should be greater than or equal to 0");
+            return false;
+        }
+        PageSize = static_cast<size_t>(req.GetPageSize());
+        if (req.GetPageToken()) {
+            if (!TryFromString(req.GetPageToken(), StartPos)) {
+                Reply(Ydb::StatusIds::BAD_REQUEST, "Failed to parse page token");
+                return false;
+            }
+            if (req.GetPageSize() == 0) {
+                Reply(Ydb::StatusIds::BAD_REQUEST, "Page size should be greater than 0");
+                return false;
+            }
+        }
+        if (NBackup::NormalizeExportPrefix(Request->Get()->Record.GetSettings().prefix()).empty()) {
+            Reply(Ydb::StatusIds::BAD_REQUEST, "Empty S3 prefix specified");
+            return false;
+        }
+        return true;
+    }
+
+    void DownloadSchemaMapping() {
+        ResetRetries();
+        Download(GetSchemaMappingKey());
+        Become(&TThis::StateDownloadSchemaMapping);
+    }
+
+    void HandleSchemaMapping(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+
+        LOG_D("HandleSchemaMapping TEvExternalStorage::TEvHeadObjectResponse"
+            << ": self# " << SelfId()
+            << ", result# " << result);
+
+        if (IsNoSuchKeyError(result)) {
+            return ListObjectsInS3Prefix();
+        }
+
+        if (!CheckResult(result, "HeadObject")) {
+            return;
+        }
+
+        GetObject(GetSchemaMappingKey(), result.GetResult().GetContentLength());
+    }
+
+    void HandleSchemaMapping(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
+        const auto& msg = *ev->Get();
+        const auto& result = msg.Result;
+
+        LOG_D("HandleSchemaMapping TEvExternalStorage::TEvGetObjectResponse"
+            << ": self# " << SelfId()
+            << ", result# " << result);
+
+        if (IsNoSuchKeyError(result)) {
+            return ListObjectsInS3Prefix();
+        }
+
+        if (!CheckResult(result, "GetObject")) {
+            return;
+        }
+
+        TString content;
+        if (!MaybeDecryptAndSaveIV(msg.Body, content)) {
+            return;
+        }
+
+        LOG_T("Trying to parse schema mapping"
+            << ": self# " << SelfId()
+            << ", schemaMappingKey# " << GetSchemaMappingKey()
+            << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
+
+        TString error;
+        NBackup::TSchemaMapping schemaMapping;
+        if (!schemaMapping.Deserialize(content, error)) {
+            Reply(Ydb::StatusIds::BAD_REQUEST, error);
+            return;
+        }
+
+        ProcessItemsAndReply(std::move(schemaMapping.Items));
+    }
+
+    void ListObjectsInS3Prefix() {
+        ResetRetries();
+        ListObjects(GetExportPrefix());
+        Become(&TThis::StateListObjects);
+    }
+
+    void HandleListObjects(TEvExternalStorage::TEvListObjectsResponse::TPtr& ev) {
+        const auto& result = ev.Get()->Get()->Result;
+        LOG_D("HandleListObjects TEvExternalStorage::TEvListObjectResponse"
+            << ": self# " << SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, "ListObjects")) {
+            return;
+        }
+
+        const auto& objects = result.GetResult().GetContents();
+        const TString prefix = GetExportPrefix();
+        const TString suffix = TString("/metadata.json") + (Key ? ".enc" : "");
+        std::vector<NBackup::TSchemaMapping::TItem> items;
+        items.reserve(objects.size());
+        for (const auto& obj : objects) {
+            TStringBuf key(obj.GetKey());
+            // Skip prefix
+            // Prefix also may be added with the bucket name here, so cut bucket name also
+            size_t prefixPos = key.find(prefix);
+            if (prefixPos == TStringBuf::npos) {
+                LOG_D("Unexpected key found: " << key);
+                continue;
+            }
+            key = key.SubString(prefixPos + prefix.size(), TStringBuf::npos);
+
+            // Every backup object has metadata.json.
+            // Process only keys with metadata.json suffix.
+            if (key.ChopSuffix(suffix)) {
+                TString keyStr(key);
+                items.emplace_back(NBackup::TSchemaMapping::TItem{
+                    .ExportPrefix = keyStr,
+                    .ObjectPath = keyStr,
+                });
+            }
+        }
+
+        ProcessItemsAndReply(std::move(items));
+    }
+
+    STATEFN(StateDownloadSchemaMapping) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleSchemaMapping);
+            hFunc(TEvExternalStorage::TEvGetObjectResponse, HandleSchemaMapping);
+
+            sFunc(TEvents::TEvWakeup, DownloadSchemaMapping);
+        }
+    }
+
+    STATEFN(StateListObjects) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvListObjectsResponse, HandleListObjects);
+
+            sFunc(TEvents::TEvWakeup, ListObjectsInS3Prefix);
+            sFunc(TEvents::TEvPoisonPill, PassAway);
+        }
+    }
+
+    void Reply(Ydb::StatusIds::StatusCode statusCode = Ydb::StatusIds::SUCCESS, const TString& error = TString()) override {
+        LOG_I("Reply"
+            << ": self# " << SelfId()
+            << ", status# " << static_cast<int>(statusCode)
+            << ", error# " << error);
+
+        auto result = MakeHolder<TEvImport::TEvListObjectsInS3ExportResponse>();
+        result->Record.set_status(statusCode);
+        if (error) {
+            result->Record.add_issues()->set_message(error);
+        }
+        if (statusCode == Ydb::StatusIds::SUCCESS) {
+            result->Record.mutable_result()->Swap(&Result);
+        }
+        Send(Request->Sender, std::move(result));
+        PassAway();
+    }
+
+    TString GetSchemaMappingKey() const {
+        return TStringBuilder() << NBackup::NormalizeExportPrefix(Request->Get()->Record.GetSettings().prefix()) << "/SchemaMapping/mapping.json";
+    }
+
+    TString GetExportPrefix() const {
+        return NBackup::NormalizeExportPrefix(Request->Get()->Record.GetSettings().prefix()) + "/";
+    }
+
+    void ProcessItemsAndReply(std::vector<NBackup::TSchemaMapping::TItem>&& items) {
+        std::sort(items.begin(), items.end(), [](const NBackup::TSchemaMapping::TItem& i1, const NBackup::TSchemaMapping::TItem& i2) {
+            return i1.ObjectPath < i2.ObjectPath;
+        });
+
+        PathFilter.Build(Request->Get()->Record.GetSettings());
+
+        size_t pos = 0;
+        for (const auto& item : items) {
+            if (!PathFilter.Match(item.ObjectPath)) {
+                continue;
+            }
+
+            if (PageSize && pos >= StartPos + PageSize) { // Calc only items that suit filter
+                NextPos = pos;
+                break;
+            }
+
+            if (pos >= StartPos) {
+                auto* result = Result.add_items();
+                result->set_path(item.ObjectPath);
+                result->set_prefix(item.ExportPrefix);
+            }
+
+            ++pos;
+        }
+        if (NextPos) {
+            Result.set_next_page_token(ToString(NextPos));
+        }
+        Reply();
+    }
+
+private:
+    TEvImport::TEvListObjectsInS3ExportRequest::TPtr Request;
+    Ydb::Import::ListObjectsInS3ExportResult Result;
+    size_t StartPos = 0;
+    size_t PageSize = 0;
+    size_t NextPos = 0;
+    TPathFilter PathFilter;
+};
 
 IActor* CreateSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx, TMaybe<NBackup::TEncryptionIV> iv) {
     return new TSchemeGetter(replyTo, std::move(importInfo), itemIdx, std::move(iv));
@@ -927,6 +1240,10 @@ IActor* CreateSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo
 
 IActor* CreateSchemaMappingGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo) {
     return new TSchemaMappingGetter(replyTo, std::move(importInfo));
+}
+
+IActor* CreateListObjectsInS3ExportGetter(TEvImport::TEvListObjectsInS3ExportRequest::TPtr&& ev) {
+    return new TListObjectsInS3ExportGetter(std::move(ev));
 }
 
 } // NSchemeShard

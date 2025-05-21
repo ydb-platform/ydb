@@ -57,6 +57,10 @@ private:
     TMaybeFail<ui64> Version;
 };
 
+TString NormalizeItemPath(const TString& path);
+TString NormalizeItemPrefix(TString prefix);
+TString NormalizeExportPrefix(TString prefix);
+
 class TSchemaMapping {
 public:
     struct TItem {
@@ -67,6 +71,7 @@ public:
 
     TSchemaMapping() = default;
 
+    TString Serialize() const;
     bool Deserialize(const TString& jsonContent, TString& error);
 
 public:

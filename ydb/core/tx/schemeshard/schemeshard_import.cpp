@@ -1,6 +1,7 @@
 #include "schemeshard_import.h"
 #include "schemeshard_import_helpers.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_import_getters.h"
 
 #include <util/generic/xrange.h>
 
@@ -260,6 +261,10 @@ void TSchemeShard::Handle(TEvImport::TEvForgetImportRequest::TPtr& ev, const TAc
 
 void TSchemeShard::Handle(TEvImport::TEvListImportsRequest::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxListImports(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvImport::TEvListObjectsInS3ExportRequest::TPtr& ev, const TActorContext&) {
+    Register(CreateListObjectsInS3ExportGetter(std::move(ev)));
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvImportSchemeReady::TPtr& ev, const TActorContext& ctx) {

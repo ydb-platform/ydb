@@ -17,7 +17,7 @@ class WorkloadSelectPartition(WorkloadBase):
         while not self.is_stop_requested():
             # del where after https://github.com/ydb-platform/ydb/pull/18404
             sql_select = """
-                SELECT * FROM `.sys/partition_stats` 
+                SELECT * FROM `.sys/partition_stats`
                 WHERE Path = '/Root/oltp_workload/insert_delete_all_types/table'
             """
             result_set = self.client.query(sql_select, False)

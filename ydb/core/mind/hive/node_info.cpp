@@ -425,8 +425,10 @@ double TNodeInfo::GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbou
     auto maximum = GetResourceMaximumValues();
     TResourceRawValues nodeValues = GetResourceCurrentValues();
     TResourceRawValues tabletValues = tablet.GetResourceCurrentValues();
-    auto estimateUsageValues = cast_like(maximum * tablet.UsageImpact, tabletValues);
-    tabletValues = piecewise_max(tabletValues, estimateUsageValues);
+    if (Hive.GetUseTabletUsageEstimate()) {
+        auto estimateUsageValues = cast_like(maximum * tablet.UsageImpact, tabletValues);
+        tabletValues = piecewise_max(tabletValues, estimateUsageValues);
+    }
     tablet.FilterRawValues(nodeValues);
     tablet.FilterRawValues(tabletValues);
     auto current = tablet.IsAliveOnLocal(Local) ? nodeValues : nodeValues + tabletValues;

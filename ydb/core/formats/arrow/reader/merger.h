@@ -131,9 +131,6 @@ public:
         Y_ABORT_UNLESS(SortSchema);
         Y_ABORT_UNLESS(SortSchema->num_fields());
         Y_ABORT_UNLESS(!DataSchema || DataSchema->num_fields());
-        if (MaxVersion) {
-            MaxVersion->ValidateSchema(*SortSchema, VersionColumnNames);
-        }
     }
 
     void PutControlPoint(const TSortableBatchPosition& point, const bool deepCopy);
@@ -172,8 +169,12 @@ public:
         const bool isDenyFilter = filter && filter->IsTotalDenyFilter();
         auto filterImpl = (!filter || filter->IsTotalAllowFilter()) ? nullptr : filter;
         static const arrow::Schema emptySchema = arrow::Schema(arrow::FieldVector());
-        SortHeap.Push(TBatchIterator(batch, filterImpl, *SortSchema,
-            (!isDenyFilter && DataSchema) ? *DataSchema : emptySchema, Reverse, VersionColumnNames, sourceId));
+        TBatchIterator iterator(
+            batch, filterImpl, *SortSchema, (!isDenyFilter && DataSchema) ? *DataSchema : emptySchema, Reverse, VersionColumnNames, sourceId);
+        if (MaxVersion) {
+            MaxVersion->ValidateSchema(*iterator.GetVersionColumns().GetSorting());
+        }
+        SortHeap.Push(std::move(iterator));
     }
 
     bool IsEmpty() const {

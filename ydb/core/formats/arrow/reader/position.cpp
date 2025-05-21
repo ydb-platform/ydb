@@ -266,6 +266,15 @@ std::partial_ordering TCursor::Compare(const TCursor& item) const {
     return std::partial_ordering::equivalent;
 }
 
+void TCursor::ValidateSchema(const TSortableScanData& position) const {
+    AFL_VERIFY(position.GetFields().size() == PositionAddress.size());
+    for (ui64 i = 0; i < PositionAddress.size(); ++i) {
+        const auto& posType = position.GetFields()[i]->type();
+        const auto& cursorType = PositionAddress[i].GetArray()->type();
+        AFL_VERIFY(posType->Equals(cursorType))("pos", posType->ToString())("cursor", cursorType->ToString());
+    }
+}
+
 void TCursor::AppendPositionTo(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, ui64* recordSize) const {
     AFL_VERIFY(builders.size() == PositionAddress.size());
     for (ui32 i = 0; i < PositionAddress.size(); ++i) {

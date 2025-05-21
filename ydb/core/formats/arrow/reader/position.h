@@ -57,15 +57,7 @@ public:
     std::partial_ordering Compare(const TSortableScanData& item, const ui64 itemPosition) const;
     std::partial_ordering Compare(const TCursor& item) const;
 
-    void ValidateSchema(const arrow::Schema& schema, const std::vector<std::string>& columnNames) const {
-        AFL_VERIFY(columnNames.size() == PositionAddress.size())("cursor", PositionAddress.size())("schema", columnNames.size());
-        for (ui64 i = 0; i < PositionAddress.size(); ++i) {
-            const std::shared_ptr<arrow::DataType>& cursorField = PositionAddress[i].GetArray()->type();
-            const std::shared_ptr<arrow::Field>& schemaField = schema.GetFieldByName(columnNames[i]);
-            AFL_VERIFY(schemaField)("name", columnNames[i]);
-            AFL_VERIFY(cursorField->Equals(schemaField->type()))("i", i)("cursor", cursorField->ToString())("schema", schemaField->ToString());
-        }
-    }
+    void ValidateSchema(const TSortableScanData& position) const;
 };
 
 class TSortableScanData {

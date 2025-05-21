@@ -26,4 +26,4 @@ struct TContext {
 };
 
 std::tuple<ui32, ibv_gid_entry, NInterconnect::NRdma::TRdmaCtx*> GetRdmaCtx(ui32 gidIndex);
-void SendRdmaReadWr(TContext& ctx, ui64 wrId, ibv_mr* mr, void* dstAddr, ui32 dstRkey, ui32 dstSize);
+void SendRdmaReadWr(TContext& ctx, ui64 wrId, void* mrAddr, ui32 mrlKey, void* dstAddr, ui32 dstRkey, ui32 dstSize);

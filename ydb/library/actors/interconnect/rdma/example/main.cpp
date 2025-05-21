@@ -94,8 +94,7 @@ void serverLogic(int sockfd, TContext& ctx) {
                 RecvRkey(sockfd, wrId, rkey, addr, size);
                 std::lock_guard<std::mutex> lock(workItems[wrId].Mtx);
                 workItems[wrId].Mr = std::move(ctx.MemPool->Alloc(size));
-                ibv_mr* mr = workItems[wrId].Mr->GetMr(ctx.DeviceIndex);
-                SendRdmaReadWr(ctx, wrId, mr, addr, rkey, size);
+                SendRdmaReadWr(ctx, wrId, workItems[wrId].Mr->GetAddr(), workItems[wrId].Mr->GetLKey(ctx.DeviceIndex), addr, rkey, size);
                 break;
             }
             case ECommand::Finish:
@@ -112,10 +111,10 @@ void clientLogic(int sockfd, TContext& ctx) {
     for (ui32 wrId = 0; wrId < INFLYGHT; ++wrId) {
         Cerr << "Send Rkey: " << wrId << Endl;
         workItems[wrId].Mr = std::move(ctx.MemPool->Alloc(BUF_SIZE));
-        Cerr << workItems[wrId].Mr->IsEmpty() << Endl;
-        ibv_mr* mr = workItems[wrId].Mr->GetMr(ctx.DeviceIndex);
-        ((char*)mr->addr)[0] = (ui8)wrId;
-        SendRkey(sockfd, wrId, mr->rkey, mr->addr, BUF_SIZE);
+        void* addr = workItems[wrId].Mr->GetAddr();
+        ui32 rkey = workItems[wrId].Mr->GetRKey(ctx.DeviceIndex);
+        ((char*)addr)[0] = (ui8)wrId;
+        SendRkey(sockfd, wrId, rkey, addr, BUF_SIZE);
     }
 
     while (true) {
@@ -128,9 +127,10 @@ void clientLogic(int sockfd, TContext& ctx) {
                 Cerr << "Receive Done: " << wrId << Endl;
 
                 workItems[wrId].Mr = ctx.MemPool->Alloc(BUF_SIZE);
-                ibv_mr* mr = workItems[wrId].Mr->GetMr(ctx.DeviceIndex);
-                ((char*)mr->addr)[0] = (ui8)wrId;
-                SendRkey(sockfd, wrId, mr->rkey, mr->addr, BUF_SIZE);
+                void* addr = workItems[wrId].Mr->GetAddr();
+                ui32 rkey = workItems[wrId].Mr->GetRKey(ctx.DeviceIndex);
+                ((char*)addr)[0] = (ui8)wrId;
+                SendRkey(sockfd, wrId, rkey, addr, BUF_SIZE);
                 break;
             }
             case ECommand::Finish: {
@@ -173,7 +173,6 @@ int main(int argc, char *argv[]) {
     ctx.InitQp();
     auto [dstGidEntry, dstQpNum, dstLid] = ExchangeRdmaConnectionInfo(sockfd, entry, ctx.Qp->qp_num, ctx.PortAttr.lid);
     ctx.MoveQpToRTS(dstGidEntry, dstQpNum, dstLid);
-    
 
     if (isServer) {
         serverLogic(sockfd, ctx);

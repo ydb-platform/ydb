@@ -157,11 +157,11 @@ std::tuple<ui32, ibv_gid_entry, NInterconnect::NRdma::TRdmaCtx*> GetRdmaCtx(ui32
 }
 
 
-void SendRdmaReadWr(TContext& ctx, ui64 wrId, ibv_mr* mr, void* dstAddr, ui32 dstRkey, ui32 dstSize) {
+void SendRdmaReadWr(TContext& ctx, ui64 wrId, void* mrAddr, ui32 mrlKey, void* dstAddr, ui32 dstRkey, ui32 dstSize) {
     ibv_sge sg = {
-        .addr = (ui64)mr->addr,
+        .addr = (ui64)mrAddr,
         .length = dstSize,
-        .lkey = mr->lkey,
+        .lkey = mrlKey,
     };
     ibv_send_wr wr {
         .wr_id = wrId,

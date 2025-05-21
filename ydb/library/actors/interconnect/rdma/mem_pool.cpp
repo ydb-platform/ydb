@@ -11,26 +11,14 @@
 
 
 namespace NInterconnect::NRdma {
-    TMemRegion::TMemRegion(std::vector<ibv_mr*>&& mrs, std::weak_ptr<IMemPool> memPool) noexcept
+    TChunk::TChunk(std::vector<ibv_mr*>&& mrs, std::weak_ptr<IMemPool> pool) noexcept
         : MRs(std::move(mrs))
-        , MemPool(memPool)
+        , MemPool(pool)
     {
     }
 
-    TMemRegion::~TMemRegion() {
-        if (MRs.empty()) {
-            return;
-        }
-        if (auto memPool = MemPool.lock()) {
-            memPool->Free(std::move(*this));
-            return;
-        } else {
-            std::move(*this).Free();
-        }
-    }
-
-    void TMemRegion::Free() && {
-        if (MRs.empty()) {
+    TChunk::~TChunk() {
+        if (Empty()) {
             return;
         }
         auto addr = MRs.front()->addr;
@@ -41,65 +29,118 @@ namespace NInterconnect::NRdma {
         MRs.clear();
     }
 
-    bool TMemRegion::IsEmpty() const {
-        return MRs.empty();
-    }
-
-    ibv_mr* TMemRegion::GetMr(size_t deviceIndex) {
+    ibv_mr* TChunk::GetMr(size_t deviceIndex) {
+        if (Y_UNLIKELY(deviceIndex >= MRs.size())) {
+            return nullptr;
+        }
         return MRs[deviceIndex];
     }
 
-    void* TMemRegion::GetAddr() const {
-        if (MRs.empty()) {
-            return nullptr;
+    void TChunk::Free(TMemRegion&& mr) noexcept {
+        if (auto memPool = MemPool.lock()) {
+            memPool->Free(std::move(mr), *this);
         }
-        return MRs.front()->addr;
     }
 
-    class TDummyMemPool: public IMemPool, public std::enable_shared_from_this<TDummyMemPool> {
+    bool TChunk::Empty() const {
+        return MRs.empty();
+    }
+
+
+    TMemRegion::TMemRegion(TChunkPtr chunk, uint32_t offset, uint32_t size) noexcept 
+        : Chunk(std::move(chunk))
+        , Offset(offset)
+        , Size(size)
+    {
+        Y_ABORT_UNLESS(Chunk);
+        Y_ABORT_UNLESS(!Chunk->Empty(), "Chunk is empty");
+    }
+
+    TMemRegion::~TMemRegion() {
+        Chunk->Free(std::move(*this));
+    }
+
+    void* TMemRegion::GetAddr() const {
+        auto* mr = Chunk->GetMr(0);
+        if (Y_UNLIKELY(!mr)) {
+            return nullptr;
+        }
+        return static_cast<char*>(mr->addr) + Offset;
+    }
+    uint32_t TMemRegion::GetSize() const {
+        return Size;
+    }
+
+    uint32_t TMemRegion::GetLKey(size_t deviceIndex) const {
+        auto* mr = Chunk->GetMr(deviceIndex);
+        if (Y_UNLIKELY(!mr)) {
+            return 0;
+        }
+        return mr->lkey;
+    }
+    uint32_t TMemRegion::GetRKey(size_t deviceIndex) const {
+        auto* mr = Chunk->GetMr(deviceIndex);
+        if (Y_UNLIKELY(!mr)) {
+            return 0;
+        }
+        return mr->rkey;
+    }
+
+    void* allocateMemory(size_t size, size_t alignment) {
+        if (size % alignment != 0) {
+            return nullptr;
+        }
+        return std::aligned_alloc(alignment, size);
+    }
+
+    std::vector<ibv_mr*> registerMemory(void* addr, size_t size, const NInterconnect::NRdma::NLinkMgr::TCtxsMap& ctxs) {
+        std::vector<ibv_mr*> res;
+        res.reserve(ctxs.size());
+        for (const auto& [_, ctx]: ctxs) {
+            ibv_mr* mr = ibv_reg_mr(
+                ctx->GetProtDomain(), addr, size,
+                IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
+            );
+            if (!mr) {
+                std::free(addr);
+                return {};
+            }
+            res.push_back(mr);
+        }
+        return res;
+    }
+
+    class TMemPoolBase: public IMemPool, public std::enable_shared_from_this<TMemPoolBase> {
         static constexpr size_t ALIGNMENT = 4096;
     public:
-        TDummyMemPool()
+        TMemPoolBase()
             : Ctxs(NInterconnect::NRdma::NLinkMgr::GetAllCtxs())
         {
         }
+    protected:
+        TMemRegionPtr AllocNewPage(int size) {
+            void* ptr = allocateMemory(size, ALIGNMENT);
+            if (!ptr) {
+                return nullptr;
+            }
+            auto mrs = registerMemory(ptr, size, Ctxs);
+            TChunkPtr chunk = std::make_shared<TChunk>(std::move(mrs), shared_from_this());
+            return std::make_unique<TMemRegion>(chunk, 0, size);
+        }
+
+        const NInterconnect::NRdma::NLinkMgr::TCtxsMap Ctxs;
+    };
+
+    class TDummyMemPool: public TMemPoolBase {
+        static constexpr size_t ALIGNMENT = 4096;
+    public:
+        using TMemPoolBase::TMemPoolBase;
 
         TMemRegionPtr Alloc(int size) override {
             return AllocNewPage(size);
         }
 
-        void Free(TMemRegion&& mr) override {
-            std::move(mr).Free();
-        }
-    
-    private:
-    TMemRegionPtr AllocNewPage(int size) {
-            if (size % ALIGNMENT != 0) {
-                return {};
-            }
-            void* ptr = std::aligned_alloc(ALIGNMENT, size);
-            if (!ptr) {
-                return {};
-            }
-            std::vector<ibv_mr*> res;
-            res.reserve(Ctxs.size());
-            for (const auto& [_, ctx]: Ctxs) {
-                ibv_mr* mr = ibv_reg_mr(
-                    ctx->GetProtDomain(), ptr, size,
-                    IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_READ | IBV_ACCESS_REMOTE_WRITE
-                );
-                if (!mr) {
-                    std::free(ptr);
-                    return {};
-                }
-                res.push_back(mr);
-            }
-            return std::make_shared<TMemRegion>(std::move(res), shared_from_this());
-        }
-
-    private:
-        const NInterconnect::NRdma::NLinkMgr::TCtxsMap Ctxs;
-        std::weak_ptr<IMemPool> Self;
+        void Free(TMemRegion&&, TChunk&) noexcept override {}
     };
 
     std::shared_ptr<IMemPool> CreateDummyMemPool() {

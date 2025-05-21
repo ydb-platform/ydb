@@ -494,6 +494,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
                 }
             }
         }
+
         if (SelectionReplicaCache) {
             return TConstArrayRef<TActorId>(&SelectionReplicaCache.front(), SelectionReplicaCache.size());
         } else {
@@ -706,6 +707,37 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         }
     }
 
+    bool CheckQuorum(TVector<ui32> &replicaRepliesCounter, TActorId foundReplica) {
+        ui32 quorumCnt = 0;
+        for (const auto& ringGroup : GroupInfo->RingGroups) {
+            if (!ringGroup.WriteOnly) {
+                ++quorumCnt;
+            }
+        }
+        TVector<bool> quorum(GroupInfo->RingGroups.size());
+
+        for (ui32 ringGroupIndex : xrange(GroupInfo->RingGroups.size())) {
+            const auto& ringGroup = GroupInfo->RingGroups[ringGroupIndex];
+            if (ringGroup.WriteOnly) {
+                continue;
+            }
+            for (const auto& ring : ringGroup.Rings) {
+                for (const auto& replica : ring.Replicas) {
+                    if (replica == foundReplica 
+                        && ++replicaRepliesCounter[ringGroupIndex] > (ringGroup.NToSelect / 2) 
+                        && !quorum[ringGroupIndex]) {
+                        quorum[ringGroupIndex] = true;
+                        --quorumCnt;
+                        if (quorumCnt == 0) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return quorumCnt == 0;
+    }
+
     void Handle(NSchemeshardEvents::TEvUpdateAck::TPtr& ev) {
         const auto& record = ev->Get()->Record;
 
@@ -728,37 +760,9 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         while (pathIt != it->second.PathAcks.end()
                && pathIt->first.first == pathId
                && pathIt->first.second <= version) {
-            auto checkQuorum = [&]() {
-                ui32 quorumCnt = 0;
-                for (const auto& ringGroup : GroupInfo->RingGroups) {
-                    if (!ringGroup.WriteOnly) {
-                        ++quorumCnt;
-                    }
-                }
-                TVector<bool> quorum(GroupInfo->RingGroups.size());
-                TActorId* foundReplica = ReplicaToReplicaPopulatorBackMap.FindPtr(ev->Sender);
-                Y_ABORT_UNLESS(foundReplica != nullptr);
-                for (ui32 ringGroupIndex : xrange(GroupInfo->RingGroups.size())) {
-                    const auto& ringGroup = GroupInfo->RingGroups[ringGroupIndex];
-                    for (const auto& ring : ringGroup.Rings) {
-                        for (const auto& replica : ring.Replicas) {
-                            if (replica == *foundReplica) {
-                                if (++pathIt->second[ringGroupIndex] > (ringGroup.NToSelect / 2) && !quorum[ringGroupIndex]) {
-                                    quorum[ringGroupIndex] = true;
-                                    if (!ringGroup.WriteOnly) {
-                                        --quorumCnt;
-                                        if (quorumCnt == 0) {
-                                            return true;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                return quorumCnt == 0;
-            };
-            if (checkQuorum()) {
+            TActorId* foundReplica = ReplicaToReplicaPopulatorBackMap.FindPtr(ev->Sender);
+            Y_ABORT_UNLESS(foundReplica != nullptr);
+            if (CheckQuorum(pathIt->second, *foundReplica)) {
                 SBP_LOG_N("Ack update"
                     << ": ack to# " << it->second.AckTo
                     << ", cookie# " << ev->Cookie

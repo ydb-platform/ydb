@@ -23,7 +23,6 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
         }
 
     def test_vecot_index_large_levels_and_clusters(self):
-        table_path = self.table_name
         prefix_data = {"String": lambda i: f"{i}"}
         vector = {"String": lambda i: f"{i}"}
         all_types = {
@@ -51,7 +50,7 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
             for vector_dimension in vector_dimension_data:
                 print(f"vector_type: {vector_type}, vector_dimension: {vector_dimension}")
                 create_table_sql = create_table_sql_request(
-                    table_name=table_path,
+                    table_name=self.table_name,
                     columns=columns,
                     pk_colums=pk_columns,
                     index_colums={},
@@ -60,7 +59,7 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
                 )
                 self.query(create_table_sql)
                 self.vector_index._upsert_values(
-                    table_name=table_path,
+                    table_name=self.table_name,
                     all_types=all_types,
                     prefix=prefix_data,
                     pk_types=pk_types,
@@ -75,11 +74,8 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
                     for prefix in prefixs:
                         for levels, clusters in dimensions:
                             for distance in distance_data:
-                                print(
-                                    f"cover: {cover}, prefix: {prefix}, levels: {levels}, clusters: {clusters}, distance: {distance}"
-                                )
                                 self._check_loop(
-                                    table_path=table_path,
+                                    table_path=self.table_name,
                                     function="distance",
                                     distance=distance,
                                     vector_type=vector_type,
@@ -95,11 +91,8 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
                     for prefix in prefixs:
                         for levels, clusters in dimensions:
                             for similarity in similarity_data:
-                                print(
-                                    f"cover: {cover}, prefix: {prefix}, levels: {levels}, clusters: {clusters}, similarity: {similarity}"
-                                )
                                 self._check_loop(
-                                    table_path=table_path,
+                                    table_path=self.table_name,
                                     function="similarity",
                                     distance=similarity,
                                     vector_type=vector_type,
@@ -110,7 +103,7 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
                                     prefix=prefix,
                                     cover=cover,
                                 )
-                self._drop_table(table_path)
+                self.vector_index._drop_table(self.table_name)
 
     def _create_index(
         self, table_path, function, distance, vector_type, vector_dimension, levels, clusters, prefix, cover
@@ -161,7 +154,7 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
             prefix=prefix,
             vector_dimension=vector_dimension,
         )
-        self._drop_index(table_path)
+        self.vector_index._drop_index(table_path, self.index_name)
 
     def create_statements(self, all_types):
         return [f"col_{type_name}" for type_name in all_types.keys()]
@@ -253,16 +246,3 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
             cur = row[0]
             for val in row.values():
                 assert cur == val, f"""incorrect data after the selection: cur {cur}, received {val}"""
-
-    def _drop_index(self, table_path):
-        drop_index_sql = f"""
-            ALTER TABLE `{table_path}`
-            DROP INDEX `{self.index_name}`;
-        """
-        self.query(drop_index_sql)
-
-    def _drop_table(self, table_path):
-        drop_table_sql = f"""
-            DROP TABLE `{table_path}`;
-        """
-        self.query(drop_table_sql)

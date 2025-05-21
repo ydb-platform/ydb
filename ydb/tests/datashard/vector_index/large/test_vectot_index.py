@@ -2,15 +2,15 @@ import logging
 import random
 import time
 
-from ydb.tests.stress.common.common import WorkloadBase
-from ydb.tests.datashard.lib.vector_index import BinaryStringConverter
+from ydb.tests.datashard.lib.vector_base import VectorBase
+from ydb.tests.datashard.lib.vector_index import BinaryStringConverter, VectorIndexOperations
 
 logger = logging.getLogger("VectorIndexWorkload")
 
 
-class WorkloadVectorIndex(WorkloadBase):
-    def __init__(self, client, prefix, stop):
-        super().__init__(client, prefix, "vector_index", stop)
+class TestVectorIndex(VectorBase):
+    def setup_method(self):
+        self.vector_index = VectorIndexOperations(self)
         self.table_name = "table"
         self.index_name = "vector_idx"
         self.rows_count = 100
@@ -64,22 +64,7 @@ class WorkloadVectorIndex(WorkloadBase):
                 PRIMARY KEY(pk)
             );
         """
-        self.client.query(create_table_sql, True)
-
-    def _drop_table(self, table_path):
-        logger.info(f"Drop table {table_path}")
-        drop_table_sql = f"""
-            DROP TABLE `{table_path}`;
-        """
-        self.client.query(drop_table_sql, True)
-
-    def _drop_index(self, table_path):
-        logger.info(f"Drop index {self.index_name}")
-        drop_index_sql = f"""
-            ALTER TABLE `{table_path}`
-            DROP INDEX `{self.index_name}`;
-        """
-        self.client.query(drop_index_sql, True)
+        self.query(create_table_sql, True)
 
     def _create_index(self, table_path, vector_type,
                       vector_dimension, levels, clusters,
@@ -114,7 +99,7 @@ class WorkloadVectorIndex(WorkloadBase):
                 );
             """
         logger.info(create_index_sql)
-        self.client.query(create_index_sql, True)
+        self.query(create_index_sql, True)
 
     def _upsert_values(self, table_path, vector_type, vector_dimension):
         logger.info("Upsert values")
@@ -133,7 +118,7 @@ class WorkloadVectorIndex(WorkloadBase):
             UPSERT INTO `{table_path}` (pk, embedding)
             VALUES {",".join(values)};
         """
-        self.client.query(upsert_sql, False)
+        self.query(upsert_sql, False)
 
     def _select(self, table_path, vector_type,
                 vector_dimension, distance, similarity):
@@ -154,7 +139,7 @@ class WorkloadVectorIndex(WorkloadBase):
             ORDER BY {target}(embedding, $Target) {order}
             LIMIT {self.limit};
         """
-        return self.client.query(select_sql, False)
+        return self.query(select_sql, False)
 
     def _select_top(self, table_path, vector_type,
                     vector_dimension, distance, similarity):
@@ -228,11 +213,10 @@ class WorkloadVectorIndex(WorkloadBase):
             distance=distance,
             similarity=similarity
         )
-        self._drop_index(table_path)
+        self.vector_index._drop_index(table_path, self.index_name)
         logger.info('check was completed successfully')
 
-    def _loop(self):
-        table_path = self.get_table_path(self.table_name)
+    def test_vector_index(self):
         distance_data = ["cosine"]  # "cosine", "manhattan", "euclidean"
         similarity_data = ["cosine"]  # "inner_product", "cosine"
         vector_type_data = ["float", "int8"]
@@ -243,10 +227,10 @@ class WorkloadVectorIndex(WorkloadBase):
         try:
             for vector_type in vector_type_data:
                 for vector_dimension in vector_dimension_data:
-                    self._create_table(table_path)
+                    self._create_table(self.table_name)
 
                     self._upsert_values(
-                        table_path=table_path,
+                        table_path=self.table_name,
                         vector_type=vector_type,
                         vector_dimension=vector_dimension
                     )
@@ -255,7 +239,7 @@ class WorkloadVectorIndex(WorkloadBase):
                         for clusters in clusters_data:
                             for distance in distance_data:
                                 self._check_loop(
-                                    table_path=table_path,
+                                    table_path=self.table_name,
                                     vector_type=vector_type,
                                     vector_dimension=vector_dimension,
                                     levels=levels,
@@ -267,7 +251,7 @@ class WorkloadVectorIndex(WorkloadBase):
                         for clusters in clusters_data:
                             for similarity in similarity_data:
                                 self._check_loop(
-                                    table_path=table_path,
+                                    table_path=self.table_name,
                                     vector_type=vector_type,
                                     vector_dimension=vector_dimension,
                                     levels=levels,
@@ -275,12 +259,6 @@ class WorkloadVectorIndex(WorkloadBase):
                                     similarity=similarity
                                 )
 
-                    self._drop_table(table_path)
+                    self.vector_index._drop_table(self.table_name)
         except Exception as ex:
             logger.info(f"ERRROR {ex}")
-
-    def get_stat(self):
-        return ""
-
-    def get_workload_thread_funcs(self):
-        return [self._loop]

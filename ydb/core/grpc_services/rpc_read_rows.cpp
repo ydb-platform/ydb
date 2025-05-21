@@ -312,14 +312,10 @@ public:
                 MaxKey = key;
             } else {
                 // For all next keys
-                if (CompareTypedCellVectors(key.data(), MinKey.data(),
-                                            KeyColumnTypes.data(),
-                                            key.size(), MinKey.size()) < 0)
+                if (CompareKeys(key, MinKey, KeyColumnTypes) < 0)
                 {
                     MinKey = key;
-                } else if (CompareTypedCellVectors(key.data(), MaxKey.data(),
-                                                   KeyColumnTypes.data(),
-                                                   key.size(), MaxKey.size()) > 0)
+                } else if (CompareKeys(key, MaxKey, KeyColumnTypes) > 0)
                 {
                     MaxKey = key;
                 }
@@ -592,7 +588,7 @@ public:
             }
             case NScheme::NTypeIds::Decimal: {
                 return NYdb::TTypeBuilder().Decimal(NYdb::TDecimalType(
-                        typeInfo.GetDecimalType().GetPrecision(), 
+                        typeInfo.GetDecimalType().GetPrecision(),
                         typeInfo.GetDecimalType().GetScale()))
                     .Build();
             }

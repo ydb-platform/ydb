@@ -396,14 +396,14 @@ private:
             if (!cp) {
                 return TConclusionStatus::Fail(Sprintf("Unknown column: %s", name.c_str()));
             }
-            i32 pgTypeMod = -1;            
+            i32 pgTypeMod = -1;
             const ui32 colId = *cp;
             auto& ci = *entry.Columns.FindPtr(colId);
 
             TString columnTypeName = NScheme::TypeName(ci.PType, ci.PTypeMod);
 
             const Ydb::Type& typeInProto = (*reqColumns)[pos].second;
-            
+
             TString parseProtoError;
             NScheme::TTypeInfoMod inTypeInfoMod;
             if (!NScheme::TypeInfoFromProto(typeInProto, inTypeInfoMod, parseProtoError)){
@@ -891,15 +891,9 @@ private:
                 MaxKey = serializedKey;
             } else {
                 // For all next keys
-                if (CompareTypedCellVectors(serializedKey.GetCells().data(), MinKey.GetCells().data(),
-                                            KeyColumnTypes.data(),
-                                            serializedKey.GetCells().size(), MinKey.GetCells().size()) < 0)
-                {
+                if (CompareKeys(serializedKey.GetCells(), MinKey.GetCells(), KeyColumnTypes) < 0) {
                     MinKey = serializedKey;
-                } else if (CompareTypedCellVectors(serializedKey.GetCells().data(), MaxKey.GetCells().data(),
-                                                   KeyColumnTypes.data(),
-                                                   serializedKey.GetCells().size(), MaxKey.GetCells().size()) > 0)
-                {
+                } else if (CompareKeys(serializedKey.GetCells(), MaxKey.GetCells(), KeyColumnTypes) > 0) {
                     MaxKey = serializedKey;
                 }
             }

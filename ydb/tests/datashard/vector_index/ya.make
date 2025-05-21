@@ -1,4 +1,3 @@
 RECURSE(
     medium
     large
-)

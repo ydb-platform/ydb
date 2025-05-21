@@ -13,7 +13,7 @@ You can generate three types of load:
 {% include [load-actors-params](../_includes/load-actors-params.md) %}
 
 | Parameter | Description |
---- | ---
+| --- | --- |
 | `DurationSeconds` | Load duration. The timer starts upon completion of the initial data allocation. |
 | `Tablets` | The load is generated on behalf of a tablet with the following parameters:<ul><li>`TabletId`: Tablet ID. It must be unique for each load actor across all the cluster nodes. This parameter and `TabletName` are mutually exclusive.</li><li>`TabletName`: Tablet name. If the parameter is set, tablets' IDs will be assigned automatically, tablets launched on the same node with the same name will be given the same ID, tablets launched on different nodes will be given different IDs.</li><li>`Channel`: Tablet channel.</li><li>`GroupId`: ID of the storage group to get loaded.</li><li>`Generation`: Tablet generation.</li></ul> |
 | `WriteSizes` | Size of the data to write. It is selected randomly for each request from the `Min`-`Max` range. You can set multiple `WriteSizes` ranges, in which case a value from a specific range will be selected based on its `Weight`. |
@@ -32,7 +32,7 @@ You can generate three types of load:
 ### Write requests class {#write-class}
 
 | Class | Description |
---- | ---
+| --- | --- |
 | `TabletLog` | The highest priority of write operation. |
 | `AsyncBlob` | Used for writing SSTables and their parts. |
 | `UserData` | Used for writing user data as separate blobs. |
@@ -40,7 +40,7 @@ You can generate three types of load:
 ### Read requests class {#read-class}
 
 | Class | Description |
---- | ---
+| --- | --- |
 | `AsyncRead` | Used for reading compacted tablets' data. |
 | `FastRead` | Used for fast reads initiated by user. |
 | `Discover` | Reads from Discover query. |
@@ -53,14 +53,14 @@ You can generate three types of load:
 ### Parameters of load with hard rate {#hard-rate-dispatcher}
 
 | Parameter | Description |
---- | ---
+| --- | --- |
 | `RequestRateAtStart` | Requests per second at the moment of load start. If load duration limit is not set then the request rate will remain the same and equal to the value of this parameter. |
 | `RequestRateOnFinish` | Requests per second at the moment of load finish. |
 
 ### Parameters of initial data allocation {#initial-allocation}
 
 | Parameter | Description |
---- | ---
+| --- | --- |
 | `TotalSize` | Total size of allocated data. This parameter and `BlobsNumber` are mutually exclusive. |
 | `BlobsNumber` | Total number of allocated blobs. |
 | `BlobSizes` | Size of the blobs to write. It is selected randomly for each request from the `Min`-`Max` range. You can set multiple `WriteSizes` ranges, in which case a value from a specific range will be selected based on its `Weight`. |

@@ -7,7 +7,7 @@ Generates a write-only load on the VDisk. Simulates a Distributed Storage Proxy.
 {% include [load-actors-params](../_includes/load-actors-params.md) %}
 
 | Parameter | Description |
---- | ---
+| --- | --- |
 | `VDiskId` | Parameters of the VDisk used to generate load.<ul><li>`GroupID`: Group ID.</li><li>`GroupGeneration`: Group generation.</li><li>`Ring`: Group ring ID.</li><li>`Domain`: Ring fail domain ID.</li><li>`VDisk`: Index of the VDisk in the fail domain.</li></ul> |
 | `GroupInfo` | Description of the group hosting the loaded VDisk (of the appropriate generation). |
 | `TabletId` | ID of the tablet that generates the load. It must be unique for each load actor. |

@@ -52,7 +52,7 @@ WITH
 |#|Manufacturer|Model|Price|Year|
 |-|-|-|-|-|
 |1|Man_1|Model_1|3000|1997|
-|2|Man_2|Model_2|4900|1999
+|2|Man_2|Model_2|4900|1999|
 
 
 {% endcut %}
@@ -93,7 +93,7 @@ WITH
 |#|Manufacturer|Model|Price|Year|
 |-|-|-|-|-|
 |1|Man_1|Model_1|3000|1997|
-|2|Man_2|Model_2|4900|1999
+|2|Man_2|Model_2|4900|1999|
 
 
 {% endcut %}
@@ -153,7 +153,7 @@ WITH
 |#|Manufacturer|Model|Price|Year|
 |-|-|-|-|-|
 |1|Man_1|Model_1|3000|1997|
-|2|Man_2|Model_2|4900|1999
+|2|Man_2|Model_2|4900|1999|
 
 
 {% endcut %}

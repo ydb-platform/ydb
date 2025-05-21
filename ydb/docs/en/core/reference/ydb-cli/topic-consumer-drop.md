@@ -20,7 +20,7 @@ View the description of the delete consumer command:
 ## Parameters of the subcommand {#options}
 
 | Name | Description |
----|---
+| ---|--- |
 | `--consumer VAL` | Name of the consumer to be deleted. |
 
 ## Examples {#examples}

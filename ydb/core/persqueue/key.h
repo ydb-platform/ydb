@@ -232,6 +232,7 @@ public:
     }
 
     bool IsHead() const;
+    bool IsFastWrite() const;
 
     static constexpr ui32 KeySize() {
         return UnmarkedSize() + 1 + 20 + 1 + 5 + 1 + 10 + 1 + 5;
@@ -242,6 +243,8 @@ public:
     {
         return Size() == key.Size() && strncmp(Data(), key.Data(), Size()) == 0;
     }
+
+    void SetFastWrite();
 
 private:
     TKey(EType type, const TPartitionId& partition, const ui64 offset, const ui16 partNo, const ui32 count, const ui16 internalPartsCount, const TMaybe<char> suffix)

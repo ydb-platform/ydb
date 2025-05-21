@@ -6,6 +6,7 @@
 
 #include <ydb/core/keyvalue/keyvalue_flat_impl.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -206,6 +207,7 @@ namespace NPQ {
                         Y_ABORT_UNLESS(outBlobs[pos].Value.empty());
                         outBlobs[pos].Value = r->GetValue();
                     } else {
+                        DBGTRACE_LOG("unknown key " << outBlobs[i].Key.ToString());
                         LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Got Error response " << r->GetStatus()
                                         << " for " << i << "'s blob from " << resp.ReadResultSize() << " blobs");
                         error = TErrorInfo(r->GetStatus() == NKikimrProto::NODATA ? NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET

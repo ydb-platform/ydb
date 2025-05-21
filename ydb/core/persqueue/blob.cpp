@@ -4,6 +4,7 @@
 #include <util/string/builder.h>
 #include <util/string/escape.h>
 #include <util/system/unaligned_mem.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -668,7 +669,9 @@ ui32 THead::GetCount() const
         return 0;
 
     //how much offsets before last batch and how much offsets in last batch
-    Y_ABORT_UNLESS(Batches.front().GetOffset() == Offset);
+    Y_ABORT_UNLESS(Batches.front().GetOffset() == Offset,
+                   "front.Offset=%" PRIu64 ", offset=%" PRIu64,
+                   Batches.front().GetOffset(), Offset);
 
     return Batches.back().GetOffset() - Offset + Batches.back().GetCount();
 }
@@ -780,6 +783,7 @@ TPartitionedBlob& TPartitionedBlob::operator=(const TPartitionedBlob& x)
     GlueNewHead = x.GlueNewHead;
     NeedCompactHead = x.NeedCompactHead;
     MaxBlobSize = x.MaxBlobSize;
+    FastWrite = x.FastWrite;
     return *this;
 }
 
@@ -805,11 +809,12 @@ TPartitionedBlob::TPartitionedBlob(const TPartitionedBlob& x)
     , GlueNewHead(x.GlueNewHead)
     , NeedCompactHead(x.NeedCompactHead)
     , MaxBlobSize(x.MaxBlobSize)
+    , FastWrite(x.FastWrite)
 {}
 
 TPartitionedBlob::TPartitionedBlob(const TPartitionId& partition, const ui64 offset, const TString& sourceId, const ui64 seqNo, const ui16 totalParts,
                                     const ui32 totalSize, THead& head, THead& newHead, bool headCleared, bool needCompactHead, const ui32 maxBlobSize,
-                                    const ui16 nextPartNo)
+                                    const ui16 nextPartNo, const bool fastWrite)
     : Partition(partition)
     , Offset(offset)
     , InternalPartsCount(0)
@@ -829,7 +834,15 @@ TPartitionedBlob::TPartitionedBlob(const TPartitionId& partition, const ui64 off
     , GlueNewHead(true)
     , NeedCompactHead(needCompactHead)
     , MaxBlobSize(maxBlobSize)
+    , FastWrite(fastWrite)
 {
+    if (!(NewHead.Offset == Head.GetNextOffset() && NewHead.PartNo == 0 || headCleared || needCompactHead || Head.PackedSize == 0)) {
+        DBGTRACE_LOG("NewHead.Offset=" << NewHead.Offset << ", Head.GetNextOffset()=" << Head.GetNextOffset());
+        DBGTRACE_LOG("NewHead.PartNo=" << NewHead.PartNo);
+        DBGTRACE_LOG("headCleared=" << headCleared);
+        DBGTRACE_LOG("needCompactHead=" << needCompactHead);
+        DBGTRACE_LOG("Head.PackedSize=" << Head.PackedSize);
+    }
     Y_ABORT_UNLESS(NewHead.Offset == Head.GetNextOffset() && NewHead.PartNo == 0 || headCleared || needCompactHead || Head.PackedSize == 0); // if head not cleared, then NewHead is going after Head
     if (!headCleared) {
         HeadSize = Head.PackedSize + NewHead.PackedSize;
@@ -885,8 +898,15 @@ auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optio
 
     Y_ABORT_UNLESS(NewHead.GetNextOffset() >= (GlueHead ? Head.Offset : NewHead.Offset));
 
-    auto tmpKey = TKey::ForBody(TKeyPrefix::TypeTmpData, Partition, StartOffset, StartPartNo, count, InternalPartsCount);
-    auto dataKey = TKey::ForBody(TKeyPrefix::TypeData, Partition, StartOffset, StartPartNo, count, InternalPartsCount);
+    TKey tmpKey, dataKey;
+
+    if (FastWrite) {
+        tmpKey = TKey::ForFastWrite(TKeyPrefix::TypeTmpData, Partition, StartOffset, StartPartNo, count, InternalPartsCount);
+        dataKey = TKey::ForFastWrite(TKeyPrefix::TypeData, Partition, StartOffset, StartPartNo, count, InternalPartsCount);
+    } else {
+        tmpKey = TKey::ForBody(TKeyPrefix::TypeTmpData, Partition, StartOffset, StartPartNo, count, InternalPartsCount);
+        dataKey = TKey::ForBody(TKeyPrefix::TypeData, Partition, StartOffset, StartPartNo, count, InternalPartsCount);
+    }
 
     StartOffset = Offset;
     StartPartNo = NextPartNo;
@@ -917,7 +937,9 @@ auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optio
 
 auto TPartitionedBlob::Add(TClientBlob&& blob) -> std::optional<TFormedBlobInfo>
 {
-    Y_ABORT_UNLESS(NewHead.Offset >= Head.Offset);
+    Y_ABORT_UNLESS(NewHead.Offset >= Head.Offset,
+                   "Head.Offset=%" PRIu64 ", NewHead.Offset=%" PRIu64,
+                   Head.Offset, NewHead.Offset);
     ui32 size = blob.GetBlobSize();
     Y_ABORT_UNLESS(InternalPartsCount < 1000); //just check for future packing
     if (HeadSize + BlobsSize + size + GetMaxHeaderSize() > MaxBlobSize) {

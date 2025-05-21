@@ -7,6 +7,7 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 
 TABLE_NAME = "tli_table"
 
+
 class TestStatisticsTLI(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
@@ -37,7 +38,6 @@ class TestStatisticsTLI(RestartToAnotherVersionFixture):
 
         driver.stop()
 
-
     def read_data(self):
         def operation(session):
             for _ in range(100):
@@ -56,7 +56,7 @@ class TestStatisticsTLI(RestartToAnotherVersionFixture):
                     f"UPSERT INTO {TABLE_NAME} (key, value) SELECT key, value FROM {TABLE_NAME} WHERE key > 800 AND key <= 1000;"
                     f"SELECT value FROM {TABLE_NAME} WHERE key > 800 AND key <= 1000;"
                 ]
-              
+
                 for query in queries:
                     session.transaction().execute(query, commit_tx=True)
 
@@ -65,14 +65,13 @@ class TestStatisticsTLI(RestartToAnotherVersionFixture):
                 database='/Root',
                 endpoint=self.endpoint
             )
-        ) 
+        )
         driver.wait()
 
         with ydb.QuerySessionPool(driver) as session_pool:
             session_pool.retry_operation_sync(operation)
 
         driver.stop()
-
 
     def generate_tli(self):
         # Create threads for write and read operations
@@ -87,16 +86,14 @@ class TestStatisticsTLI(RestartToAnotherVersionFixture):
 
         # Wait for all threads to complete
         for thread in threads:
-            thread.join()    
-
+            thread.join()
 
     def check_partition_stats(self):
         with ydb.QuerySessionPool(self.driver) as session_pool:
-            query = f"""SELECT * FROM `.sys/partition_stats`;"""
+            query = """SELECT * FROM `.sys/partition_stats`;"""
             result_sets = session_pool.execute_with_retries(query)
 
             assert len(result_sets[0].rows) > 0
-
 
     def create_table(self):
         with ydb.QuerySessionPool(self.driver) as session_pool:
@@ -107,7 +104,6 @@ class TestStatisticsTLI(RestartToAnotherVersionFixture):
                     PRIMARY KEY (key)
                 ) """
             session_pool.execute_with_retries(query)
-
 
     def test_statistics_tli(self):
         self.create_table()

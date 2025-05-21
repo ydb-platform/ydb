@@ -254,6 +254,8 @@ namespace NKikimr::NGRpcProxy::V1 {
                 passwordHash = MD5::Data(pair.second);
                 passwordHash.to_lower();
                 hasPassword = true;
+            } else {
+                return TMsgPqCodes(TStringBuilder() << "Consumer attribute " << pair.first << " is not supported", Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
             }
         }
         if (serviceType.empty()) {
@@ -543,7 +545,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                         return Ydb::StatusIds::BAD_REQUEST;
                     }
                 }
-            }  else if (pair.first == "_message_group_seqno_retention_period_ms") {
+            } else if (pair.first == "_message_group_seqno_retention_period_ms") {
                 partConfig->SetSourceIdLifetimeSeconds(NKikimrPQ::TPartitionConfig().GetSourceIdLifetimeSeconds());
                 if (!pair.second.empty()) {
                     try {

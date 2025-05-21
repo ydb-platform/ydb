@@ -595,6 +595,10 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
             Partition()->DeletedKeys.emplace_back(k.ToString());
             continue;
         }
+        if (GetContext().StartOffset && (k.GetOffset() < *GetContext().StartOffset)) {
+            Partition()->DeletedKeys.emplace_back(k.ToString());
+            continue;
+        }
         if (dataKeysBody.empty()) { //no data - this is first pair of first range
             head.Offset = endOffset = startOffset = k.GetOffset();
             if (k.GetPartNo() > 0) {

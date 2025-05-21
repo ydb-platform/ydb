@@ -5768,7 +5768,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
     Y_UNIT_TEST(DirectAccessToIndexImplTable) {
         NKikimrConfig::TFeatureFlags featureFlags;
-        featureFlags.SetEnableAccessToImplIndexTables(true);
+        featureFlags.SetEnableAccessToIndexImplTables(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);        
         auto db = kikimr.GetTableClient();

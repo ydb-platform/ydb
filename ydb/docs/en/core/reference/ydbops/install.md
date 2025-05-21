@@ -4,7 +4,7 @@
 
 ## Download the binary from the releases page
 
-You can download binary releases from [{#T}](../../downloads/index.md#ydbops).
+You can download binary releases from [{#T}](../../downloads/ydb-ops.md).
 
 ## Building from source
 
@@ -60,7 +60,7 @@ Invoke this command in the repository root folder:
 make build-in-docker
 ```
 
-The `ydbops` executables will be available in the `bin` folder. Binary files are generated for Linux and macOS (arm64, amd64).  
+The `ydbops` executables will be available in the `bin` folder. Binary files are generated for Linux and macOS (arm64, amd64).
 
 | Binary name            | Platform      |
 |------------------------|--------------|

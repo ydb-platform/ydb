@@ -14,6 +14,7 @@ TEST_SRCS(
     test_compatibility.py
     test_stress.py
     test_statistics_tli.py
+    test_statistics_followers.py
     test_rolling.py
 )
 

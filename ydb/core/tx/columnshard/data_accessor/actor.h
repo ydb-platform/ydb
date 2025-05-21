@@ -22,7 +22,7 @@ private:
     }
 
     void Handle(TEvRegisterController::TPtr& ev) {
-        Manager->RegisterController(ev->Get()->ExtractController(), ev->Get()->GetTabletId(), ev->Get()->IsUpdate());
+        Manager->RegisterController(ev->Get()->ExtractController(), ev->Get()->IsUpdate());
     }
     void Handle(TEvUnregisterController::TPtr& ev) {
         Manager->UnregisterController(ev->Get()->GetTabletId(), ev->Get()->GetPathId());
@@ -36,7 +36,7 @@ private:
         Manager->RemovePortion(ev->Get()->GetTabletId(), ev->Get()->GetPortion());
     }
     void Handle(TEvAskServiceDataAccessors::TPtr& ev);
-    
+
 public:
     TActor(const ui64 tabletId, const TActorId& parent)
         : TabletId(tabletId)

@@ -53,7 +53,6 @@ class TEvRegisterController: public NActors::TEventLocal<TEvRegisterController, 
 private:
     std::unique_ptr<IGranuleDataAccessor> Controller;
     bool IsUpdateFlag = false;
-    TTabletId TabletId;
 
 public:
     bool IsUpdate() const {
@@ -64,12 +63,9 @@ public:
         return std::move(Controller);
     }
 
-    TTabletId GetTabletId() const { return TabletId;}
-
-    TEvRegisterController(std::unique_ptr<IGranuleDataAccessor>&& accessor, const TTabletId tabletId, const bool isUpdate)
+    TEvRegisterController(std::unique_ptr<IGranuleDataAccessor>&& accessor, const bool isUpdate)
         : Controller(std::move(accessor))
         , IsUpdateFlag(isUpdate)
-        , TabletId(tabletId)
     {
     }
 };

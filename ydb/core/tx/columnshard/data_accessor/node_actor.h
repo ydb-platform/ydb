@@ -20,7 +20,7 @@ private:
     }
 
     void Handle(TEvRegisterController::TPtr& ev) {
-        Manager->RegisterController(ev->Get()->ExtractController(), ev->Get()->GetTabletId(), ev->Get()->IsUpdate());
+        Manager->RegisterController(ev->Get()->ExtractController(), ev->Get()->IsUpdate());
     }
     void Handle(TEvUnregisterController::TPtr& ev) {
         Manager->UnregisterController(ev->Get()->GetTabletId(), ev->Get()->GetPathId());
@@ -34,11 +34,11 @@ private:
         Manager->RemovePortion(ev->Get()->GetTabletId(), ev->Get()->GetPortion());
     }
     void Handle(TEvAskServiceDataAccessors::TPtr& ev);
-    
+
 public:
 
     static inline TActorId MakeActorId(ui32 nodeId) {
-        char x[12] = {'s', 'h', 'a', 'r', 'e', 
+        char x[12] = {'s', 'h', 'a', 'r', 'e',
             'd', 'm', 'e', 't', 'a', 'd', 't'};
         return TActorId(nodeId, TStringBuf(x, 12));
     }

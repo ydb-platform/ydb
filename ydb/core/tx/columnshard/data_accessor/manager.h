@@ -35,7 +35,7 @@ public:
 class IDataAccessorsManager {
 private:
     virtual void DoAskData(const TTabletId tabletId, const std::shared_ptr<TDataAccessorsRequest>& request) = 0;
-    virtual void DoRegisterController(std::unique_ptr<IGranuleDataAccessor>&& controller, const TTabletId tabletId, const bool update) = 0;
+    virtual void DoRegisterController(std::unique_ptr<IGranuleDataAccessor>&& controller, const bool update) = 0;
     virtual void DoUnregisterController(const TTabletId tabletId, const TInternalPathId pathId) = 0;
     virtual void DoAddPortion(const TTabletId tabletId, const TPortionDataAccessor& accessor) = 0;
     virtual void DoRemovePortion(const TTabletId tabletId, const TPortionInfo::TConstPtr& portion) = 0;
@@ -63,9 +63,9 @@ public:
         AFL_VERIFY(request->HasSubscriber());
         return DoAskData(tabletId, request);
     }
-    void RegisterController(std::unique_ptr<IGranuleDataAccessor>&& controller, const TTabletId tabletId, const bool update) {
+    void RegisterController(std::unique_ptr<IGranuleDataAccessor>&& controller, const bool update) {
         AFL_VERIFY(controller);
-        return DoRegisterController(std::move(controller), tabletId, update);
+        return DoRegisterController(std::move(controller), update);
     }
     void UnregisterController(const TTabletId tabletId, const TInternalPathId pathId) {
         return DoUnregisterController(tabletId, pathId);
@@ -88,8 +88,8 @@ private:
     virtual void DoAskData(const TTabletId tabletId, const std::shared_ptr<TDataAccessorsRequest>& request) override {
         NActors::TActivationContext::Send(ActorId, std::make_unique<TEvAskServiceDataAccessors>(tabletId, request));
     }
-    virtual void DoRegisterController(std::unique_ptr<IGranuleDataAccessor>&& controller, const TTabletId tabletId, const bool update) override {
-        NActors::TActivationContext::Send(ActorId, std::make_unique<TEvRegisterController>(std::move(controller), tabletId, update));
+    virtual void DoRegisterController(std::unique_ptr<IGranuleDataAccessor>&& controller, const bool update) override {
+        NActors::TActivationContext::Send(ActorId, std::make_unique<TEvRegisterController>(std::move(controller), update));
     }
     virtual void DoUnregisterController(TTabletId tabletId, const TInternalPathId pathId) override {
         NActors::TActivationContext::Send(ActorId, std::make_unique<TEvUnregisterController>(tabletId, pathId));
@@ -114,12 +114,11 @@ class TLocalManager: public IDataAccessorsManager {
 private:
     using TBase = IDataAccessorsManager;
     using TManagerKey = std::pair<TTabletId, TInternalPathId>;
+    using TPortionId = ui64;
+    using TUniquePortionId = std::pair<TManagerKey, TPortionId>;
 
-    static TManagerKey makeManagerKey(TTabletId tabletId, const TInternalPathId pathId) {
-        return std::make_pair(tabletId, pathId);
-    }
     THashMap<TManagerKey, std::unique_ptr<IGranuleDataAccessor>> Managers;
-    THashMap<ui64, std::vector<std::shared_ptr<TDataAccessorsRequest>>> RequestsByPortion;
+    THashMap<TUniquePortionId, std::vector<std::shared_ptr<TDataAccessorsRequest>>> RequestsByPortion;
     TAccessorSignals Counters;
     const std::shared_ptr<IAccessorCallback> AccessorCallback;
 
@@ -139,19 +138,19 @@ private:
         }
     };
 
-    std::deque<TPortionToAsk> PortionsAsk;
+    std::deque<std::pair<TManagerKey, TPortionToAsk>> PortionsAsk;
     TPositiveControlInteger PortionsAskInFlight;
 
-    void DrainQueue(const TTabletId tabletId);
+    void DrainQueue();
 
     virtual void DoAskData(TTabletId tabletId, const std::shared_ptr<TDataAccessorsRequest>& request) override;
-    virtual void DoRegisterController(std::unique_ptr<IGranuleDataAccessor>&& controller, TTabletId tabletId, const bool update) override;
+    virtual void DoRegisterController(std::unique_ptr<IGranuleDataAccessor>&& controller, const bool update) override;
     virtual void DoUnregisterController(TTabletId tabletId, const TInternalPathId pathId) override {
-        AFL_VERIFY(Managers.erase(makeManagerKey(tabletId, pathId)));
+        AFL_VERIFY(Managers.erase(TManagerKey{tabletId, pathId}));
     }
     virtual void DoAddPortion(const TTabletId tabletId, const TPortionDataAccessor& accessor) override;
     virtual void DoRemovePortion(TTabletId tabletId, const TPortionInfo::TConstPtr& portionInfo) override {
-        auto it = Managers.find(makeManagerKey(tabletId, portionInfo->GetPathId()));
+        auto it = Managers.find(TManagerKey{tabletId, portionInfo->GetPathId()});
         AFL_VERIFY(it != Managers.end());
         it->second->ModifyPortions({}, { portionInfo->GetPortionId() });
     }

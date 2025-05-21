@@ -7,17 +7,10 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 
 TABLE_NAME = "tli_table"
 
-class TestExampleRestartToAnotherVersion(RestartToAnotherVersionFixture):
+class TestStatisticsTLI(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        #
-        # Setup cluster
-        #
         yield from self.setup_cluster(
-            # # Some feature flags can be passed. And other KikimrConfigGenerator options
-            # extra_feature_flags={
-            #     "some_feature_flag": True,
-            # }
         )
 
     def write_data(self):
@@ -116,7 +109,7 @@ class TestExampleRestartToAnotherVersion(RestartToAnotherVersionFixture):
             session_pool.execute_with_retries(query)
 
 
-    def test_example(self):
+    def test_statistics_tli(self):
         self.create_table()
 
         self.generate_tli()

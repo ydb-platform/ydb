@@ -590,6 +590,7 @@ public:
         out << "<th>Storage</th>";
         out << "<th>Read</th>";
         out << "<th>Write</th>";
+        out << "<th>Usage impact</th>";
         out << "</tr>";
         out << "</thead>";
 
@@ -602,6 +603,7 @@ public:
             out << "<tr title='" << tablet.GetResourceValues().DebugString() << "'>";
             out << "<td data-text='" << index << "'><a href='../tablets?TabletID=" << id << "'>" << id << "</a></td>";
             out << GetResourceValuesHtml(tablet.GetResourceValues());
+            out << "<td>" << tablet.UsageImpact << "</td>";
             out << "</tr>";
         }
         out <<"</tbody>";
@@ -3795,6 +3797,7 @@ public:
         result["ResourceMetricsAggregates"] = MakeFrom(tablet.ResourceMetricsAggregates);
         result["ActorsToNotify"] = MakeFrom(tablet.ActorsToNotify);
         result["ActorsToNotifyOnRestart"] = MakeFrom(tablet.ActorsToNotifyOnRestart);
+        result["UsageImpact"] = tablet.UsageImpact;
         return result;
     }
 

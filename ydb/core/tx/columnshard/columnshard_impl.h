@@ -351,16 +351,7 @@ public:
         return shift | Counter.Inc();
     }
 
-    enum class EOverloadStatus {
-        ShardTxInFly /* "shard_tx" */,
-        ShardWritesInFly /* "shard_writes" */,
-        ShardWritesSizeInFly /* "shard_writes_size" */,
-        InsertTable /* "insert_table" */,
-        OverloadMetadata /* "overload_metadata" */,
-        Disk /* "disk" */,
-        None /* "none" */,
-        OverloadCompaction /* "overload_compaction" */
-    };
+    using EOverloadStatus = EOverloadStatus;
 
     // For syslocks
     void IncCounter(NDataShard::ECumulativeCounters counter, ui64 num = 1) const {

@@ -36,6 +36,7 @@ bool TWriteTasksQueue::Drain(const bool onWakeup, const TActorContext& ctx) {
     for (auto&& i : WriteTasks) {
         auto overloadStatus = Owner->CheckOverloadedWait(i.first);
         if (overloadStatus != TColumnShard::EOverloadStatus::None) {
+            Owner->Counters.GetCSCounters().OnWaitingOverload(overloadStatus);
             countTasks += i.second.size();
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "wait_overload")("status", overloadStatus)("path_id", i.first)(
                 "size", i.second.size());

@@ -730,29 +730,31 @@ class TPopulator: public TMonitorableActor<TPopulator> {
                && pathIt->first.second <= version) {
             auto checkQuorum = [&]() {
                 ui32 quorumCnt = 0;
-                for(auto& rg : GroupInfo->RingGroups) {
-                    if(!rg.WriteOnly)
-                        quorumCnt++;
+                for (const auto& ringGroup : GroupInfo->RingGroups) {
+                    if (!ringGroup.WriteOnly) {
+                        ++quorumCnt;
+                    }
                 }
                 TVector<bool> quorum(GroupInfo->RingGroups.size());
-                TActorId *foundReplica = ReplicaToReplicaPopulatorBackMap.FindPtr(ev->Sender);
+                TActorId* foundReplica = ReplicaToReplicaPopulatorBackMap.FindPtr(ev->Sender);
                 Y_ABORT_UNLESS(foundReplica != nullptr);
-                for(ui32 ringGroupIndex : xrange(GroupInfo->RingGroups.size())) {
-                    auto ringGroup = GroupInfo->RingGroups[ringGroupIndex];
-                    for(auto& ring : ringGroup.Rings)
-                        for(auto& replica : ring.Replicas) {
-                            if(replica == *foundReplica) {
-                                if(++pathIt->second[ringGroupIndex] > (ringGroup.NToSelect / 2) && !quorum[ringGroupIndex]) {
+                for (ui32 ringGroupIndex : xrange(GroupInfo->RingGroups.size())) {
+                    const auto& ringGroup = GroupInfo->RingGroups[ringGroupIndex];
+                    for (const auto& ring : ringGroup.Rings) {
+                        for (const auto& replica : ring.Replicas) {
+                            if (replica == *foundReplica) {
+                                if (++pathIt->second[ringGroupIndex] > (ringGroup.NToSelect / 2) && !quorum[ringGroupIndex]) {
                                     quorum[ringGroupIndex] = true;
-                                    if(!ringGroup.WriteOnly) {
+                                    if (!ringGroup.WriteOnly) {
                                         --quorumCnt;
-                                        if(quorumCnt == 0) {
+                                        if (quorumCnt == 0) {
                                             return true;
                                         }
                                     }
                                 }
                             }
                         }
+                    }
                 }
                 return quorumCnt == 0;
             };

@@ -43,6 +43,18 @@ FILE_INCLUDE NOTICE found in files: LICENSE at line 107, LICENSE at line 110, LI
     Files with this license:
         LICENSE [2:202]
 
+KEEP     MIT                  399584035c417b91040964779555dfac
+BELONGS ya.make
+    License text:
+        MIT License
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        THIRD-PARTY-LICENSES.txt [63:63]
+
 KEEP     BSD-3-Clause         39d39c929b62f4e97932945b56b0cafa
 BELONGS ya.make
     License text:
@@ -68,6 +80,17 @@ BELONGS ya.make
     Files with this license:
         include/aws/common/private/lookup3.inl [24:25]
 
+KEEP     MIT                  54575e81a786e9aa7d98337ec2e1ebb0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        THIRD-PARTY-LICENSES.txt [67:83]
+
 KEEP     Public-Domain        5b7627115f23e7c5f0d8e352a16d9353
 BELONGS ya.make
     License text:
@@ -90,6 +113,59 @@ BELONGS ya.make
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
         THIRD-PARTY-LICENSES.txt [40:56]
+
+KEEP     MIT                  60fed8d57ccebb86a5c50e3cc496aa8a
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: source/external/libcbor/allocators.c at line 5, source/external/libcbor/cbor.c at line 5, source/external/libcbor/cbor.h at line 5, source/external/libcbor/cbor/arrays.c at line 5, source/external/libcbor/cbor/arrays.h at line 5, source/external/libcbor/cbor/bytestrings.c at line 5, source/external/libcbor/cbor/bytestrings.h at line 5, source/external/libcbor/cbor/callbacks.c at line 5, source/external/libcbor/cbor/callbacks.h at line 5, source/external/libcbor/cbor/common.c at line 5, source/external/libcbor/cbor/common.h at line 5, source/external/libcbor/cbor/data.h at line 5, source/external/libcbor/cbor/encoding.c at line 5, source/external/libcbor/cbor/encoding.h at line 5, source/external/libcbor/cbor/floats_ctrls.c at line 5, source/external/libcbor/cbor/floats_ctrls.h at line 5, source/external/libcbor/cbor/internal/builder_callbacks.c at line 5, source/external/libcbor/cbor/internal/builder_callbacks.h at line 5, source/external/libcbor/cbor/internal/encoders.c at line 5, source/external/libcbor/cbor/internal/encoders.h at line 5, source/external/libcbor/cbor/internal/loaders.c at line 5, source/external/libcbor/cbor/internal/loaders.h at line 5, source/external/libcbor/cbor/internal/memory_utils.c at line 5, source/external/libcbor/cbor/internal/memory_utils.h at line 5, source/external/libcbor/cbor/internal/stack.c at line 5, source/external/libcbor/cbor/internal/stack.h at line 5, source/external/libcbor/cbor/internal/unicode.c at line 5, source/external/libcbor/cbor/internal/unicode.h at line 5, source/external/libcbor/cbor/ints.c at line 5, source/external/libcbor/cbor/ints.h at line 5, source/external/libcbor/cbor/maps.c at line 5, source/external/libcbor/cbor/maps.h at line 5, source/external/libcbor/cbor/serialization.c at line 5, source/external/libcbor/cbor/serialization.h at line 5, source/external/libcbor/cbor/streaming.c at line 5, source/external/libcbor/cbor/streaming.h at line 5, source/external/libcbor/cbor/strings.c at line 5, source/external/libcbor/cbor/strings.h at line 5, source/external/libcbor/cbor/tags.c at line 5, source/external/libcbor/cbor/tags.h at line 5
+    License text:
+         * libcbor is free software; you can redistribute it and/or modify
+         * it under the terms of the MIT license. See LICENSE for details.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        source/external/libcbor/allocators.c [4:5]
+        source/external/libcbor/cbor.c [4:5]
+        source/external/libcbor/cbor.h [4:5]
+        source/external/libcbor/cbor/arrays.c [4:5]
+        source/external/libcbor/cbor/arrays.h [4:5]
+        source/external/libcbor/cbor/bytestrings.c [4:5]
+        source/external/libcbor/cbor/bytestrings.h [4:5]
+        source/external/libcbor/cbor/callbacks.c [4:5]
+        source/external/libcbor/cbor/callbacks.h [4:5]
+        source/external/libcbor/cbor/common.c [4:5]
+        source/external/libcbor/cbor/common.h [4:5]
+        source/external/libcbor/cbor/data.h [4:5]
+        source/external/libcbor/cbor/encoding.c [4:5]
+        source/external/libcbor/cbor/encoding.h [4:5]
+        source/external/libcbor/cbor/floats_ctrls.c [4:5]
+        source/external/libcbor/cbor/floats_ctrls.h [4:5]
+        source/external/libcbor/cbor/internal/builder_callbacks.c [4:5]
+        source/external/libcbor/cbor/internal/builder_callbacks.h [4:5]
+        source/external/libcbor/cbor/internal/encoders.c [4:5]
+        source/external/libcbor/cbor/internal/encoders.h [4:5]
+        source/external/libcbor/cbor/internal/loaders.c [4:5]
+        source/external/libcbor/cbor/internal/loaders.h [4:5]
+        source/external/libcbor/cbor/internal/memory_utils.c [4:5]
+        source/external/libcbor/cbor/internal/memory_utils.h [4:5]
+        source/external/libcbor/cbor/internal/stack.c [4:5]
+        source/external/libcbor/cbor/internal/stack.h [4:5]
+        source/external/libcbor/cbor/internal/unicode.c [4:5]
+        source/external/libcbor/cbor/internal/unicode.h [4:5]
+        source/external/libcbor/cbor/ints.c [4:5]
+        source/external/libcbor/cbor/ints.h [4:5]
+        source/external/libcbor/cbor/maps.c [4:5]
+        source/external/libcbor/cbor/maps.h [4:5]
+        source/external/libcbor/cbor/serialization.c [4:5]
+        source/external/libcbor/cbor/serialization.h [4:5]
+        source/external/libcbor/cbor/streaming.c [4:5]
+        source/external/libcbor/cbor/streaming.h [4:5]
+        source/external/libcbor/cbor/strings.c [4:5]
+        source/external/libcbor/cbor/strings.h [4:5]
+        source/external/libcbor/cbor/tags.c [4:5]
+        source/external/libcbor/cbor/tags.h [4:5]
 
 KEEP     Apache-2.0           6c901454b872854c0dea3ec06b67701a
 BELONGS ya.make
@@ -126,7 +202,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        README.md [206:206]
+        README.md [209:209]
 
 KEEP     BSD-3-Clause         8bad928e3b305eb76775886df88d05d2
 BELONGS ya.make
@@ -203,7 +279,7 @@ BELONGS ya.make
         Match type      : TAG
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        generated/include/aws/common/config.h [6:6]
+        generated/include/aws/common/config-linux.h [6:6]
         include/aws/common/allocator.h [5:5]
         include/aws/common/array_list.h [6:6]
         include/aws/common/array_list.inl [6:6]
@@ -218,6 +294,7 @@ BELONGS ya.make
         include/aws/common/byte_order.h [6:6]
         include/aws/common/byte_order.inl [6:6]
         include/aws/common/cache.h [5:5]
+        include/aws/common/cbor.h [6:6]
         include/aws/common/clock.h [6:6]
         include/aws/common/clock.inl [6:6]
         include/aws/common/command_line_parser.h [5:5]
@@ -256,7 +333,7 @@ BELONGS ya.make
         include/aws/common/math.gcc_x64_asm.inl [6:6]
         include/aws/common/math.h [6:6]
         include/aws/common/math.inl [6:6]
-        include/aws/common/math.msvc.inl [6:6]
+        include/aws/common/math.msvc_x64.inl [6:6]
         include/aws/common/mutex.h [6:6]
         include/aws/common/package.h [6:6]
         include/aws/common/platform.h [6:6]
@@ -266,17 +343,17 @@ BELONGS ya.make
         include/aws/common/private/array_list.h [6:6]
         include/aws/common/private/byte_buf.h [5:5]
         include/aws/common/private/dlloads.h [5:5]
+        include/aws/common/private/external_module_impl.h [6:6]
         include/aws/common/private/hash_table_impl.h [6:6]
-        include/aws/common/private/json_impl.h [6:6]
         include/aws/common/private/system_info_priv.h [5:5]
         include/aws/common/private/thread_shared.h [5:5]
         include/aws/common/private/xml_parser_impl.h [6:6]
         include/aws/common/process.h [5:5]
-        include/aws/common/promise.h [3:3]
         include/aws/common/ref_count.h [6:6]
         include/aws/common/ring_buffer.h [5:5]
         include/aws/common/ring_buffer.inl [5:5]
         include/aws/common/rw_lock.h [6:6]
+        include/aws/common/shutdown_types.h [6:6]
         include/aws/common/statistics.h [6:6]
         include/aws/common/stdbool.h [8:8]
         include/aws/common/stdint.h [5:5]
@@ -340,7 +417,6 @@ BELONGS ya.make
         source/posix/time.c [3:3]
         source/priority_queue.c [3:3]
         source/process_common.c [3:3]
-        source/promise.c [3:3]
         source/ref_count.c [3:3]
         source/ring_buffer.c [3:3]
         source/statistics.c [3:3]

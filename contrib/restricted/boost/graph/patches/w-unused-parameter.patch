@@ -62,3 +62,14 @@
          {
              return boost::make_vector_property_map< boost::two_bit_color_type >(
                  index);
+--- a/include/boost/graph/boykov_kolmogorov_max_flow.hpp   (index)
++++ b/include/boost/graph/boykov_kolmogorov_max_flow.hpp   (working tree)
+@@ -32,6 +32,8 @@
+ #ifndef BOOST_BOYKOV_KOLMOGOROV_MAX_FLOW_HPP
+ #define BOOST_BOYKOV_KOLMOGOROV_MAX_FLOW_HPP
+ 
++#pragma clang system_header
++
+ #include <boost/config.hpp>
+ #include <boost/assert.hpp>
+ #include <vector>

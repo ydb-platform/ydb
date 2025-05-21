@@ -35,7 +35,7 @@ TConclusionStatus TOneCompactionCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
 TConclusionStatus TWaitCompactionCommand::DoExecute(TKikimrRunner& /*kikimr*/) {
     auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
     AFL_VERIFY(controller);
-    controller->WaitCompactions(TDuration::Seconds(5));
+    controller->WaitCompactions(TDuration::Seconds(15));
     return TConclusionStatus::Success();
 }
 

@@ -17,6 +17,15 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NLogLevel {
+    inline constexpr std::string_view Fatal = "fatal";
+    inline constexpr std::string_view Error = "error";
+    inline constexpr std::string_view Info = "info";
+    inline constexpr std::string_view Debug = "debug";
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 extern const TString DefaultHosts;
 extern const TString DefaultRemoteTempTablesDirectory;
 extern const TString DefaultRemoteTempFilesDirectory;

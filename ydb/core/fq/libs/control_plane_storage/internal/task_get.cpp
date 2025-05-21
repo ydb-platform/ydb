@@ -368,7 +368,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
 
     auto responseTasks = std::make_shared<TResponseTasks>();
 
-    auto prepareParams = [=, commonCounters=requestCounters.Common,
+    auto prepareParams = [=, this, commonCounters=requestCounters.Common,
                              actorSystem=NActors::TActivationContext::ActorSystem(),
                              responseTasks=responseTasks,
                              tenantInfo=ev->Get()->TenantInfo
@@ -431,7 +431,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
     const auto query = queryBuilder.Build();
     auto [readStatus, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo, TTxSettings::StaleRO());
     auto result = readStatus.Apply(
-        [=,
+        [=, this,
         resultSets=resultSets,
         requestCounters=requestCounters,
         debugInfo=debugInfo,
@@ -496,7 +496,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),
-        ev,
+        std::move(ev),
         startTime,
         requestCounters,
         prepare,

@@ -233,7 +233,7 @@ private:
     THashMap<TTableId, TTable> TablesById;
 };
 
-NUdf::TUnboxedValue MakeDefaultValueByType(const NKikimr::NMiniKQL::TType* type);
+NUdf::TUnboxedValue MakeDefaultValueByType(NKikimr::NMiniKQL::TType* type);
 
 TVector<TCell> MakeKeyCells(const NKikimr::NUdf::TUnboxedValue& value, const TVector<NScheme::TTypeInfo>& keyColumnTypes,
     const TVector<ui32>& keyColumnIndices, const NMiniKQL::TTypeEnvironment& typeEnv, bool copyValues);

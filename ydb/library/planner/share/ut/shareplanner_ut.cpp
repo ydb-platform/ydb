@@ -226,7 +226,7 @@ Y_UNIT_TEST_SUITE(SchedulingSharePlanner) {
         bool tooLoDebts = debt2 < minDebt && debt2 < minDebt;
         double repaySpeed = debt1 * GetRepaymentRate();
         bool tooHiSpeed = repaySpeed > 0.3 * GetMaxRepaymentSpeed();
-        auto tracegen = [=]() {
+        auto tracegen = [=, this]() {
                 return Sprintf("CheckRepayment: %s DenseLength=%g speed=%g maxspeed=%g debt1=%g debt2=%g dx=%g -%s%s-> %g < %g < %g",
                                desc.data(), Config.GetDenseLength(), repaySpeed, GetMaxRepaymentSpeed(),
                                debt1, debt2, dx,  tooLoDebts? "L": "-",  tooHiSpeed? "H": "-",

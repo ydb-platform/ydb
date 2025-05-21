@@ -3,6 +3,10 @@
 #include <ydb/core/base/appdata.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 
+namespace {
+    using NKikimrSysView::ESysViewType;
+}
+
 namespace NKikimr {
 namespace NSysView {
 
@@ -170,6 +174,11 @@ public:
         return view ? TMaybe<TSchema>(*view) : Nothing();
     }
 
+    TMaybe<TSchema> GetSystemViewSchema(ESysViewType viewType) const override final {
+        const TSchema* view = SystemViews.FindPtr(viewType);
+        return view ? TMaybe<TSchema>(*view) : Nothing();
+    }
+
     TVector<TString> GetSystemViewNames(ETarget target) const override {
         TVector<TString> result;
         switch (target) {
@@ -210,9 +219,10 @@ public:
 
 private:
     void RegisterPgTablesSystemViews() {
-        auto registerView = [&](TStringBuf tableName, const TVector<Schema::PgColumn>& columns) {
+        auto registerView = [&](TStringBuf tableName, ESysViewType type, const TVector<Schema::PgColumn>& columns) {
             auto& dsv  = DomainSystemViews[tableName];
             auto& sdsv = SubDomainSystemViews[tableName];
+            auto& sv = SystemViews[type];
             for (const auto& column : columns) {
                 dsv.Columns[column._ColumnId + 1] = TSysTables::TTableColumnInfo(
                     column._ColumnName, column._ColumnId + 1, column._ColumnTypeInfo, "", -1
@@ -220,31 +230,39 @@ private:
                 sdsv.Columns[column._ColumnId + 1] = TSysTables::TTableColumnInfo(
                     column._ColumnName, column._ColumnId + 1, column._ColumnTypeInfo, "", -1
                 );
+                sv.Columns[column._ColumnId + 1] = TSysTables::TTableColumnInfo(
+                    column._ColumnName, column._ColumnId + 1, column._ColumnTypeInfo, "", -1
+                );
             }
         };
         registerView(
             PgTablesName,
+            ESysViewType::EPgTables,
             Singleton<Schema::PgTablesSchemaProvider>()->GetColumns(PgTablesName)
         );
         registerView(
             InformationSchemaTablesName,
+            ESysViewType::EInformationSchemaTables,
             Singleton<Schema::PgTablesSchemaProvider>()->GetColumns(InformationSchemaTablesName)
         );
         registerView(
             PgClassName,
+            ESysViewType::EPgClass,
             Singleton<Schema::PgTablesSchemaProvider>()->GetColumns(PgClassName)
         );
     }
 
     template <typename Table>
-    void RegisterSystemView(const TStringBuf& name) {
+    void RegisterSystemView(const TStringBuf& name, ESysViewType type) {
         TSchemaFiller<Table>::Fill(DomainSystemViews[name]);
         TSchemaFiller<Table>::Fill(SubDomainSystemViews[name]);
+        TSchemaFiller<Table>::Fill(SystemViews[type]);
     }
 
     template <typename Table>
-    void RegisterDomainSystemView(const TStringBuf& name) {
+    void RegisterDomainSystemView(const TStringBuf& name, ESysViewType type) {
         TSchemaFiller<Table>::Fill(DomainSystemViews[name]);
+        TSchemaFiller<Table>::Fill(SystemViews[type]);
     }
 
     template <typename Table>
@@ -258,29 +276,29 @@ private:
     }
 
     void RegisterSystemViews() {
-        RegisterSystemView<Schema::PartitionStats>(PartitionStatsName);
+        RegisterSystemView<Schema::PartitionStats>(PartitionStatsName, ESysViewType::EPartitionStats);
 
-        RegisterSystemView<Schema::Nodes>(NodesName);
+        RegisterSystemView<Schema::Nodes>(NodesName, ESysViewType::ENodes);
 
-        RegisterSystemView<Schema::QueryStats>(TopQueriesByDuration1MinuteName);
-        RegisterSystemView<Schema::QueryStats>(TopQueriesByDuration1HourName);
-        RegisterSystemView<Schema::QueryStats>(TopQueriesByReadBytes1MinuteName);
-        RegisterSystemView<Schema::QueryStats>(TopQueriesByReadBytes1HourName);
-        RegisterSystemView<Schema::QueryStats>(TopQueriesByCpuTime1MinuteName);
-        RegisterSystemView<Schema::QueryStats>(TopQueriesByCpuTime1HourName);
-        RegisterSystemView<Schema::QueryStats>(TopQueriesByRequestUnits1MinuteName);
-        RegisterSystemView<Schema::QueryStats>(TopQueriesByRequestUnits1HourName);
-        RegisterSystemView<Schema::QuerySessions>(QuerySessions);
+        RegisterSystemView<Schema::QueryStats>(TopQueriesByDuration1MinuteName, ESysViewType::ETopQueriesByDurationOneMinute);
+        RegisterSystemView<Schema::QueryStats>(TopQueriesByDuration1HourName, ESysViewType::ETopQueriesByDurationOneHour);
+        RegisterSystemView<Schema::QueryStats>(TopQueriesByReadBytes1MinuteName, ESysViewType::ETopQueriesByReadBytesOneMinute);
+        RegisterSystemView<Schema::QueryStats>(TopQueriesByReadBytes1HourName, ESysViewType::ETopQueriesByReadBytesOneHour);
+        RegisterSystemView<Schema::QueryStats>(TopQueriesByCpuTime1MinuteName, ESysViewType::ETopQueriesByCpuTimeOneMinute);
+        RegisterSystemView<Schema::QueryStats>(TopQueriesByCpuTime1HourName, ESysViewType::ETopQueriesByCpuTimeOneHour);
+        RegisterSystemView<Schema::QueryStats>(TopQueriesByRequestUnits1MinuteName, ESysViewType::ETopQueriesByRequestUnitsOneMinute);
+        RegisterSystemView<Schema::QueryStats>(TopQueriesByRequestUnits1HourName, ESysViewType::ETopQueriesByRequestUnitsOneHour);
+        RegisterSystemView<Schema::QuerySessions>(QuerySessions, ESysViewType::EQuerySessions);
 
-        RegisterDomainSystemView<Schema::PDisks>(PDisksName);
-        RegisterDomainSystemView<Schema::VSlots>(VSlotsName);
-        RegisterDomainSystemView<Schema::Groups>(GroupsName);
-        RegisterDomainSystemView<Schema::StoragePools>(StoragePoolsName);
-        RegisterDomainSystemView<Schema::StorageStats>(StorageStatsName);
+        RegisterDomainSystemView<Schema::PDisks>(PDisksName, ESysViewType::EPDisks);
+        RegisterDomainSystemView<Schema::VSlots>(VSlotsName, ESysViewType::EVSlots);
+        RegisterDomainSystemView<Schema::Groups>(GroupsName, ESysViewType::EGroups);
+        RegisterDomainSystemView<Schema::StoragePools>(StoragePoolsName, ESysViewType::EStoragePools);
+        RegisterDomainSystemView<Schema::StorageStats>(StorageStatsName, ESysViewType::EStorageStats);
 
-        RegisterDomainSystemView<Schema::Tablets>(TabletsName);
+        RegisterDomainSystemView<Schema::Tablets>(TabletsName, ESysViewType::ETablets);
 
-        RegisterSystemView<Schema::QueryMetrics>(QueryMetricsName);
+        RegisterSystemView<Schema::QueryMetrics>(QueryMetricsName, ESysViewType::EQueryMetricsOneMinute);
 
         RegisterOlapStoreSystemView<Schema::PrimaryIndexStats>(StorePrimaryIndexStatsName);
         RegisterOlapStoreSystemView<Schema::PrimaryIndexPortionStats>(StorePrimaryIndexPortionStatsName);
@@ -291,24 +309,24 @@ private:
         RegisterColumnTableSystemView<Schema::PrimaryIndexGranuleStats>(TablePrimaryIndexGranuleStatsName);
         RegisterColumnTableSystemView<Schema::PrimaryIndexOptimizerStats>(TablePrimaryIndexOptimizerStatsName);
 
-        RegisterSystemView<Schema::TopPartitions>(TopPartitionsByCpu1MinuteName);
-        RegisterSystemView<Schema::TopPartitions>(TopPartitionsByCpu1HourName);
-        RegisterSystemView<Schema::TopPartitionsTli>(TopPartitionsByTli1MinuteName);
-        RegisterSystemView<Schema::TopPartitionsTli>(TopPartitionsByTli1HourName);
+        RegisterSystemView<Schema::TopPartitions>(TopPartitionsByCpu1MinuteName, ESysViewType::ETopPartitionsByCpuOneMinute);
+        RegisterSystemView<Schema::TopPartitions>(TopPartitionsByCpu1HourName, ESysViewType::ETopPartitionsByCpuOneHour);
+        RegisterSystemView<Schema::TopPartitionsTli>(TopPartitionsByTli1MinuteName, ESysViewType::ETopPartitionsByTliOneMinute);
+        RegisterSystemView<Schema::TopPartitionsTli>(TopPartitionsByTli1HourName, ESysViewType::ETopPartitionsByTliOneHour);
 
         RegisterPgTablesSystemViews();
 
-        RegisterSystemView<Schema::ResourcePoolClassifiers>(ResourcePoolClassifiersName);
-        RegisterSystemView<Schema::ResourcePools>(ResourcePoolsName);
+        RegisterSystemView<Schema::ResourcePoolClassifiers>(ResourcePoolClassifiersName, ESysViewType::EResourcePoolClassifiers);
+        RegisterSystemView<Schema::ResourcePools>(ResourcePoolsName, ESysViewType::EResourcePools);
 
         {
             using namespace NAuth;
-            RegisterSystemView<Schema::AuthUsers>(UsersName);
-            RegisterSystemView<Schema::AuthGroups>(NAuth::GroupsName);
-            RegisterSystemView<Schema::AuthGroupMembers>(GroupMembersName);
-            RegisterSystemView<Schema::AuthOwners>(OwnersName);
-            RegisterSystemView<Schema::AuthPermissions>(PermissionsName);
-            RegisterSystemView<Schema::AuthPermissions>(EffectivePermissionsName);
+            RegisterSystemView<Schema::AuthUsers>(UsersName, ESysViewType::EAuthUsers);
+            RegisterSystemView<Schema::AuthGroups>(NAuth::GroupsName, ESysViewType::EAuthGroups);
+            RegisterSystemView<Schema::AuthGroupMembers>(GroupMembersName, ESysViewType::EAuthGroupMembers);
+            RegisterSystemView<Schema::AuthOwners>(OwnersName, ESysViewType::EAuthOwners);
+            RegisterSystemView<Schema::AuthPermissions>(PermissionsName, ESysViewType::EAuthPermissions);
+            RegisterSystemView<Schema::AuthPermissions>(EffectivePermissionsName, ESysViewType::EAuthEffectivePermissions);
         }
     }
 
@@ -317,6 +335,7 @@ private:
     THashMap<TString, TSchema> SubDomainSystemViews;
     THashMap<TString, TSchema> OlapStoreSystemViews;
     THashMap<TString, TSchema> ColumnTableSystemViews;
+    THashMap<ESysViewType, TSchema> SystemViews;
 };
 
 class TSystemViewRewrittenResolver : public ISystemViewResolver {
@@ -344,6 +363,11 @@ public:
         Y_UNUSED(target);
         const TSchema* view = SystemViews.FindPtr(viewName);
         return view ? TMaybe<TSchema>(*view) : Nothing();
+    }
+
+    TMaybe<TSchema> GetSystemViewSchema(ESysViewType sysViewType) const override final {
+        Y_UNUSED(sysViewType);
+        return Nothing();
     }
 
     TVector<TString> GetSystemViewNames(ETarget target) const override {

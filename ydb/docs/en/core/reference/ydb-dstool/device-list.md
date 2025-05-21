@@ -20,7 +20,7 @@ ydb-dstool device list --help
 ## Subcommand options {#options}
 
 | Option | Description |
----|---
+| --- | --- |
 | `-H`, `--human-readable` | Output data in human-readable format. |
 | `--sort-by` | Sort column.<br/>Use one of the values: `SerialNumber`, `FQDN`, `Path`, `Type`, `StorageStatus`, or `NodeId:PDiskId`. |
 | `--reverse` | Use a reverse sort order. |

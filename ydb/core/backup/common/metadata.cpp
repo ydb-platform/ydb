@@ -1,5 +1,7 @@
 #include "metadata.h"
 
+#include <ydb/core/base/path.h>
+
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/json/json_reader.h>
 
@@ -53,6 +55,31 @@ TMetadata TMetadata::Deserialize(const TString& metadata) {
     return result;
 }
 
+TString TSchemaMapping::Serialize() const {
+    TString content;
+    TStringOutput ss(content);
+    NJson::TJsonWriter writer(&ss, false);
+
+    writer.OpenMap();
+    writer.WriteKey("exportedObjects");
+    writer.OpenMap();
+    for (const auto& item : Items) {
+        writer.WriteKey(item.ObjectPath);
+        writer.OpenMap();
+        writer.Write("exportPrefix", item.ExportPrefix);
+        if (item.IV) {
+            writer.Write("iv", item.IV->GetHexString());
+        }
+        writer.CloseMap();
+    }
+    writer.CloseMap();
+    writer.CloseMap();
+
+    writer.Flush();
+    ss.Flush();
+    return content;
+}
+
 bool TSchemaMapping::Deserialize(const TString& jsonContent, TString& error) {
     NJson::TJsonValue json;
     if (!NJson::ReadJsonTree(jsonContent, &json)) {
@@ -95,6 +122,37 @@ bool TSchemaMapping::Deserialize(const TString& jsonContent, TString& error) {
         }
     }
     return true;
+}
+
+TString NormalizeItemPath(const TString& path) {
+    TString result = CanonizePath(path);
+    if (result.size() > 1 && result.front() == '/') {
+        result.erase(0, 1);
+    }
+    return result;
+}
+
+TString NormalizeItemPrefix(TString prefix) {
+    // Cut slshes from the beginning and from the end
+    size_t toCut = 0;
+    while (toCut < prefix.size() && prefix[toCut] == '/') {
+        ++toCut;
+    }
+    if (toCut) {
+        prefix.erase(0, toCut);
+    }
+
+    while (prefix && prefix.back() == '/') {
+        prefix.pop_back();
+    }
+    return prefix;
+}
+
+TString NormalizeExportPrefix(TString prefix) {
+    while (prefix && prefix.back() == '/') {
+        prefix.pop_back();
+    }
+    return prefix;
 }
 
 }

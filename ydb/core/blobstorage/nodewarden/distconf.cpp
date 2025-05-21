@@ -1,6 +1,7 @@
 #include "distconf.h"
 #include "node_warden_impl.h"
 #include <ydb/core/mind/dynamic_nameserver.h>
+#include <ydb/core/protos/bridge.pb.h>
 #include <ydb/library/yaml_config/yaml_config_helpers.h>
 #include <ydb/library/yaml_config/yaml_config.h>
 #include <library/cpp/streams/zstd/zstd.h>
@@ -100,6 +101,23 @@ namespace NKikimr::NStorage {
             SelfManagementEnabled = (!IsSelfStatic || BaseConfig.GetSelfManagementConfig().GetEnabled()) &&
                 config.GetSelfManagementConfig().GetEnabled() &&
                 config.GetGeneration();
+
+            if (config.HasClusterState()) {
+                const auto& state = config.GetClusterState();
+                bool found = false;
+                for (const auto& node : config.GetAllNodes()) {
+                    if (node.GetNodeId() == SelfNode.NodeId() && node.HasBridgePileId()) {
+                        IsPrimary = node.GetBridgePileId() == state.GetPrimaryPile();
+                        IsBeingPromoted = !IsPrimary && node.GetBridgePileId() == state.GetPromotedPile();
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    // TODO(alexvru): think about better handling of node removal
+                    IsPrimary = IsBeingPromoted = false;
+                }
+            }
 
             StorageConfig.emplace(config);
             if (ProposedStorageConfig && ProposedStorageConfig->GetGeneration() <= StorageConfig->GetGeneration()) {
@@ -308,7 +326,8 @@ namespace NKikimr::NStorage {
         const NKikimrBlobStorage::TStorageConfig *proposedConfig = ProposedStorageConfig && SelfManagementEnabled
             ? &ProposedStorageConfig.value()
             : nullptr;
-        auto ev = std::make_unique<TEvNodeWardenStorageConfig>(*config, proposedConfig, SelfManagementEnabled);
+        auto ev = std::make_unique<TEvNodeWardenStorageConfig>(*config, proposedConfig, SelfManagementEnabled,
+            IsPrimary, IsBeingPromoted);
         Send(wardenId, ev.release(), 0, cookie);
     }
 

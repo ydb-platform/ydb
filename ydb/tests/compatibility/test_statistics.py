@@ -102,7 +102,11 @@ class TestStatisticsTLI(RestartToAnotherVersionFixture):
                     key Int64 NOT NULL,
                     value Utf8 NOT NULL,
                     PRIMARY KEY (key)
-                ) """
+                )
+                WITH (
+                    PARTITION_AT_KEYS=(0, 300, 600, 900)
+                )
+                """
             session_pool.execute_with_retries(query)
 
     def test_statistics_tli(self):

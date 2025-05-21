@@ -1,6 +1,4 @@
 #include "columnshard.h"
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/base/counters.h>
 
 #include <ydb/library/actors/core/log.h>
 
@@ -11,19 +9,12 @@ TCSCounters::TCSCounters()
     , WritingCounters(std::make_shared<TWriteCounters>(*this))
     , Initialization(*this)
     , TxProgress(*this) {
-
-    WaitingOverloads.resize(GetEnumItemsCount<EOverloadStatus>());
-    WriteOverloadCount.resize(GetEnumItemsCount<EOverloadStatus>());
-    WriteOverloadBytes.resize(GetEnumItemsCount<EOverloadStatus>());
     for (auto&& i : GetEnumAllValues<EOverloadStatus>()) {
-        AFL_VERIFY((ui32)i < WaitingOverloads.size());
+        AFL_VERIFY((ui32)i == WaitingOverloads.size());
         auto overloadCounters = CreateSubGroup("overload_type", ::ToString(i));
-        WaitingOverloads[(ui32)i] = overloadCounters.GetDeriviative("Overload/Waiting/Count");
-        WriteOverloadCount[(ui32)i] = overloadCounters.GetDeriviative("Overload/Write/Count");
-        WriteOverloadBytes[(ui32)i] = overloadCounters.GetDeriviative("Overload/Write/Bytes");
-    }
-    for (auto&& i : WriteOverloadCount) {
-        AFL_VERIFY(i);
+        WaitingOverloads.emplace_back(overloadCounters.GetDeriviative("Overload/Waiting/Count"));
+        WriteOverloadCount.emplace_back(overloadCounters.GetDeriviative("Overload/Write/Count"));
+        WriteOverloadBytes.emplace_back(overloadCounters.GetDeriviative("Overload/Write/Bytes"));
     }
     StartBackgroundCount = TBase::GetDeriviative("StartBackground/Count");
     TooEarlyBackgroundCount = TBase::GetDeriviative("TooEarlyBackground/Count");
@@ -87,6 +78,17 @@ void TCSCounters::OnFailedWriteResponse(const EWriteFailReason reason) const {
     auto it = FailedWriteRequests.find(reason);
     AFL_VERIFY(it != FailedWriteRequests.end());
     it->second->Add(1);
+}
+
+void TCSCounters::OnWaitingOverload(const EOverloadStatus status) const {
+    AFL_VERIFY((ui64)status < WaitingOverloads.size());
+    WaitingOverloads[(ui64)status]->Inc();
+}
+
+void TCSCounters::OnWriteOverload(const EOverloadStatus status, const ui32 size) const {
+    AFL_VERIFY((ui64)status < WriteOverloadCount.size());
+    WriteOverloadCount[(ui64)status]->Inc();
+    WriteOverloadBytes[(ui64)status]->Add(size);
 }
 
 }

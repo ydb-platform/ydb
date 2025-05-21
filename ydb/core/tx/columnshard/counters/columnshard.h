@@ -2,7 +2,6 @@
 #include "initialization.h"
 #include "tx_progress.h"
 
-#include <ydb/core/tx/columnshard/counters/tablet_counters.h>
 #include <ydb/core/tx/data_events/common/signals_flow.h>
 
 #include <ydb/library/signals/owner.h>
@@ -137,16 +136,9 @@ public:
     const TCSInitialization Initialization;
     TTxProgressCounters TxProgress;
 
-    void OnWaitingOverload(const EOverloadStatus status) const {
-        AFL_VERIFY((ui64)status < WaitingOverloads.size());
-        WaitingOverloads[(ui64)status]->Inc();
-    }
+    void OnWaitingOverload(const EOverloadStatus status) const;
 
-    void OnWriteOverload(const EOverloadStatus status, const ui32 size) const {
-        AFL_VERIFY((ui64)status < WriteOverloadCount.size());
-        WriteOverloadCount[(ui64)status]->Inc();
-        WriteOverloadBytes[(ui64)status]->Add(size);
-    }
+    void OnWriteOverload(const EOverloadStatus status, const ui32 size) const;
 
     void OnStartWriteRequest() const {
         WriteRequests->Add(1);

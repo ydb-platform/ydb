@@ -75,26 +75,28 @@ void TTxScan::Complete(const TActorContext& ctx) {
         read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
         read.TableName = table;
 
-        const TString defaultReader =
-            [&]() {
-            const TString defGlobal =
-                AppDataVerified().ColumnShardConfig.GetReaderClassName() ? AppDataVerified().ColumnShardConfig.GetReaderClassName() : "PLAIN";
-            if (Self->HasIndex()) {
-                return Self->GetIndexAs<TColumnEngineForLogs>()
-                    .GetVersionedIndex()
-                    .GetLastSchema()
-                    ->GetIndexInfo()
-                    .GetScanReaderPolicyName()
-                    .value_or(defGlobal);
-            } else {
-                return defGlobal;
+        const TString defaultClassName = AppDataVerified().FeatureFlags.GetEnableDuplicateFilterInColumnShard() ? "SIMPLE" : "PLAIN";
+        const std::optional<TString> readerExt = [&]() -> std::optional<TString> {
+            if (request.GetCSScanPolicy()) {
+                return request.GetCSScanPolicy();
             }
+            if (Self->HasIndex()) {
+                if (const std::optional<TString> reader =
+                        Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex().GetLastSchema()->GetIndexInfo().GetScanReaderPolicyName()) {
+                    return reader;
+                }
+            }
+            if (AppDataVerified().ColumnShardConfig.GetReaderClassName()) {
+                return AppDataVerified().ColumnShardConfig.GetReaderClassName();
+            }
+            return std::nullopt;
         }();
+        read.DeduplicationPolicy = (readerExt == "SIMPLE") ? EDeduplicationPolicy::ALLOW_DUPLICATES : EDeduplicationPolicy::NO_DUPLICATES;
+
         std::unique_ptr<IScannerConstructor> scannerConstructor = [&]() {
             auto sysViewPolicy = NSysView::NAbstract::ISysViewPolicy::BuildByPath(read.TableName);
             if (!sysViewPolicy) {
-                auto constructor = NReader::IScannerConstructor::TFactory::MakeHolder(
-                    request.GetCSScanPolicy() ? request.GetCSScanPolicy() : defaultReader, context);
+                auto constructor = NReader::IScannerConstructor::TFactory::MakeHolder(readerExt.value_or(defaultClassName), context);
                 if (!constructor) {
                     return std::unique_ptr<IScannerConstructor>();
                 }

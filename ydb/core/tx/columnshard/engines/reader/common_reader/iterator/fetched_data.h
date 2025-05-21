@@ -157,6 +157,10 @@ public:
         Table->Clear();
     }
 
+    NArrow::TColumnFilter FullToDataFilter(NArrow::TColumnFilter filter) const {
+        return Table->FullToDataFilter(std::move(filter));
+    }
+
     void AddFilter(const std::shared_ptr<NArrow::TColumnFilter>& filter) {
         if (!filter) {
             return;

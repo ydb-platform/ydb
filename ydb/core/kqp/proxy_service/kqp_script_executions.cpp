@@ -2091,10 +2091,8 @@ public:
                 Finish(Ydb::StatusIds::BAD_REQUEST, "Results are not ready");
                 return;
             }
-            if (!meta.finished()) {
-                MaxNumberRows = meta.number_rows();
-                HasMoreResults = true;
-            }
+            HasMoreResults = !meta.finished();
+            NumberOfSavedRows = meta.number_rows();
         }
 
         *ResultSet.mutable_columns() = meta.columns();
@@ -2112,7 +2110,7 @@ public:
             DECLARE $execution_id AS Text;
             DECLARE $result_set_id AS Int32;
             DECLARE $offset AS Int64;
-            DECLARE $number_rows AS Int64;
+            DECLARE $max_row_id AS Int64;
             DECLARE $limit AS Uint64;
 
             SELECT database, execution_id, result_set_id, row_id, result_set
@@ -2121,7 +2119,7 @@ public:
               AND execution_id = $execution_id
               AND result_set_id = $result_set_id
               AND row_id >= $offset
-              AND row_id < $number_rows
+              AND row_id < $max_row_id
             ORDER BY database, execution_id, result_set_id, row_id
             LIMIT $limit;
         )";
@@ -2140,8 +2138,8 @@ public:
             .AddParam("$offset")
                 .Int64(Offset)
                 .Build()
-            .AddParam("$number_rows")
-                .Int64(MaxNumberRows)
+            .AddParam("$max_row_id")
+                .Int64(NumberOfSavedRows)
                 .Build()
             .AddParam("$limit")
                 .Uint64(RowsLimit ? RowsLimit + 1 : std::numeric_limits<ui64>::max())
@@ -2221,7 +2219,7 @@ private:
     const i64 SizeLimit;
     const TInstant Deadline;
 
-    i64 MaxNumberRows = std::numeric_limits<i64>::max();
+    i64 NumberOfSavedRows = std::numeric_limits<i64>::max();
     i64 ResultSetSize = 0;
     i64 AdditionalRowSize = 0;
     Ydb::ResultSet ResultSet;

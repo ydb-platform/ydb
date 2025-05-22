@@ -4,6 +4,9 @@ on:
   pull_request_review:
     types:
       - submitted
+    branches:
+      - main
+      - 'stable-*'
   workflow_dispatch:
     inputs:
         pr_number: 
@@ -19,8 +22,9 @@ jobs:
   create-issues-for-muted-tests:
     runs-on: ubuntu-latest
     if: |
+        (github.event_name == 'pull_request_review' && 
         github.event.review.state == 'approved' && 
-        contains(github.event.pull_request.labels.*.name, 'mute-unmute') || 
+        contains(github.event.pull_request.labels.*.name, 'mute-unmute')) || 
         github.event_name == 'workflow_dispatch'
 
     steps:
@@ -59,7 +63,6 @@ jobs:
       
       - name: Comment PR
         uses: actions/github-script@v7
-        
         with:
           github-token: ${{ env.GH_TOKEN }}
           script: |
@@ -67,12 +70,12 @@ jobs:
             const path = require('path');
             
             const workflowUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
-            const filePath = ${{ steps.create_issues.outputs.created_issues_file }}
+            const filePath = '${{ steps.create_issues.outputs.created_issues_file }}';
             const bodyText = fs.readFileSync(filePath, 'utf8');
             const completeBody = `Collected in workflow [#${{ github.run_number }}](${workflowUrl})\n\n${bodyText}`;
       
             github.rest.issues.createComment({
-              issue_number: ${{ github.event.pull_request.number || github.event.inputs.pr_number  }},
+              issue_number: ${{ github.event.pull_request.number || github.event.inputs.pr_number }},
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: completeBody

@@ -534,8 +534,13 @@ void TCommandWithPath::AdjustPath(const TClientCommand::TConfig& config) {
     if (!Path) {
         throw TMisuseException() << "Missing required argument <path>";
     }
-
+    if (config.IsVerbose()) {
+        Cerr << "Path before adjusting: \"" << Path << '"' << Endl;
+    }
     NConsoleClient::AdjustPath(Path, config);
+    if (config.IsVerbose()) {
+        Cerr << "Path after adjusting: \"" << Path << '"' << Endl;
+    }
 }
 
 void TCommandWithTopicName::ParseTopicName(const TClientCommand::TConfig &config, const size_t argPos) {

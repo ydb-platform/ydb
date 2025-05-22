@@ -282,7 +282,6 @@ class TDataShard
     friend class TValidatedDataTx;
     friend class TValidatedWriteTx;
     friend class TEngineBay;
-    friend class NMiniKQL::TKqpScanComputeContext;
     friend class TSnapshotManager;
     friend class TSchemaSnapshotManager;
     friend class TVolatileTxManager;

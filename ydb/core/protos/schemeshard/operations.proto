@@ -173,7 +173,10 @@ enum EOperationType {
     ESchemeOpAlterTransfer = 113;
     ESchemeOpDropTransfer = 114;
     ESchemeOpDropTransferCascade = 115;
-    
-    
+
+    // SysView
+    ESchemeOpCreateSysView = 116;
+    ESchemeOpDropSysView = 117;
+
     // Some entries are grouped by semantics, so are out of order
 }

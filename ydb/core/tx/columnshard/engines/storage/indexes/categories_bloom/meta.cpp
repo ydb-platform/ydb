@@ -3,6 +3,7 @@
 
 #include <ydb/core/formats/arrow/hash/calcer.h>
 #include <ydb/core/tx/columnshard/engines/protos/index.pb.h>
+#include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
@@ -88,10 +89,12 @@ public:
     }
 };
 
-TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*recordsCount*/) const {
-    std::deque<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> dataOwners;
-    TCategoriesBuilder categories;
-    for (reader.Start(); reader.IsCorrect();) {
+std::vector<std::shared_ptr<IPortionDataChunk>> TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*recordsCount*/) const {
+    std::vector<std::shared_ptr<IPortionDataChunk>> result;
+    ui32 chunkIdx = 0;
+    for (reader.Start(); reader.IsCorrect(); reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount())) {
+        std::deque<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> dataOwners;
+        TCategoriesBuilder categories;
         AFL_VERIFY(reader.GetColumnsCount() == 1);
         for (auto&& i : reader) {
             dataOwners.emplace_back(i.GetCurrentChunk());
@@ -100,53 +103,56 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*r
                 categories.AddHash(hitInfo.first, hitInfo.second);
             }
         }
-        reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount());
-    }
-    auto filtersBuilder = categories.Finalize(HashesCount, 1024);
-    while (dataOwners.size()) {
-        GetDataExtractor()->VisitAll(
-            dataOwners.front(),
-            [&](const std::shared_ptr<arrow::Array>& arr, const ui64 hashBase) {
-                auto& filterBits = filtersBuilder.MutableFilter(hashBase);
-                const ui32 size = filterBits.Size();
-                const auto pred = [&](const ui64 hash, const ui32 /*idx*/) {
-                    filterBits.Set(hash % size);
-                };
-                for (ui64 i = 0; i < HashesCount; ++i) {
-                    NArrow::NHash::TXX64::CalcForAll(arr, i, pred);
-                }
-            },
-            [&](const std::string_view data, const ui64 hashBase) {
-                auto& filterBits = filtersBuilder.MutableFilter(hashBase);
-                const ui32 size = filterBits.Size();
-                for (ui64 i = 0; i < HashesCount; ++i) {
-                    const ui64 hash = NArrow::NHash::TXX64::CalcSimple(data, i);
-                    filterBits.Set(hash % size);
-                }
-            });
-        dataOwners.pop_front();
-    }
-    NKikimrTxColumnShard::TIndexCategoriesDescription protoDescription;
-    std::vector<TString> filterDescriptions;
-    ui32 filtersSumSize = 0;
-    for (auto&& i : filtersBuilder.MutableBuilders()) {
-        filterDescriptions.emplace_back(GetBitsStorageConstructor()->Build(std::move(i.MutableFilter()))->SerializeToString());
-        filtersSumSize += filterDescriptions.back().size();
-        auto* category = protoDescription.AddCategories();
-        category->SetFilterSize(filterDescriptions.back().size());
-        for (auto&& h : i.GetCategories()) {
-            category->AddHashes(h);
+        auto filtersBuilder = categories.Finalize(HashesCount, 1024);
+        while (dataOwners.size()) {
+            GetDataExtractor()->VisitAll(
+                dataOwners.front(),
+                [&](const std::shared_ptr<arrow::Array>& arr, const ui64 hashBase) {
+                    auto& filterBits = filtersBuilder.MutableFilter(hashBase);
+                    const ui32 size = filterBits.Size();
+                    const auto pred = [&](const ui64 hash, const ui32 /*idx*/) {
+                        filterBits.Set(hash % size);
+                    };
+                    for (ui64 i = 0; i < HashesCount; ++i) {
+                        NArrow::NHash::TXX64::CalcForAll(arr, i, pred);
+                    }
+                },
+                [&](const std::string_view data, const ui64 hashBase) {
+                    auto& filterBits = filtersBuilder.MutableFilter(hashBase);
+                    const ui32 size = filterBits.Size();
+                    for (ui64 i = 0; i < HashesCount; ++i) {
+                        const ui64 hash = NArrow::NHash::TXX64::CalcSimple(data, i);
+                        filterBits.Set(hash % size);
+                    }
+                });
+            dataOwners.pop_front();
         }
-    }
-    auto protoString = protoDescription.SerializeAsString();
-    TString result;
-    result.reserve(sizeof(ui32) + protoString.size() + filtersSumSize);
-    TStringOutput so(result);
-    const ui32 protoSize = protoString.size();
-    so.Write(&protoSize, sizeof(ui32));
-    so.Write(protoString.data(), protoString.size());
-    for (auto&& i : filterDescriptions) {
-        so.Write(i.data(), i.size());
+        NKikimrTxColumnShard::TIndexCategoriesDescription protoDescription;
+        std::vector<TString> filterDescriptions;
+        ui32 filtersSumSize = 0;
+        for (auto&& i : filtersBuilder.MutableBuilders()) {
+            filterDescriptions.emplace_back(GetBitsStorageConstructor()->Build(std::move(i.MutableFilter()))->SerializeToString());
+            filtersSumSize += filterDescriptions.back().size();
+            auto* category = protoDescription.AddCategories();
+            category->SetFilterSize(filterDescriptions.back().size());
+            for (auto&& h : i.GetCategories()) {
+                category->AddHashes(h);
+            }
+        }
+        auto protoString = protoDescription.SerializeAsString();
+        TString indexData;
+        {
+            indexData.reserve(sizeof(ui32) + protoString.size() + filtersSumSize);
+            TStringOutput so(indexData);
+            const ui32 protoSize = protoString.size();
+            so.Write(&protoSize, sizeof(ui32));
+            so.Write(protoString.data(), protoString.size());
+            for (auto&& i : filterDescriptions) {
+                so.Write(i.data(), i.size());
+            }
+        }
+        result.emplace_back(std::make_shared<NChunks::TPortionIndexChunk>(
+            TChunkAddress(GetIndexId(), chunkIdx++), reader.begin()->GetCurrentChunk()->GetRecordsCount(), indexData.size(), indexData));
     }
     return result;
 }

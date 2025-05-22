@@ -96,7 +96,7 @@
     defined(BOOST_NO_CXX11_UNIFIED_INITIALISATION_SYNTAX) || \
     defined(BOOST_NO_CXX11_VARIADIC_TEMPLATES) || \
     defined(BOOST_NO_HDR_ATOMIC) || \
-    defined(BOOST_NO_HDR_TUPLE) 
+    defined(BOOST_NO_HDR_TUPLE)
 # define BOOST_CONTEXT_NO_CXX11
 #endif
 

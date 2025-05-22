@@ -48,7 +48,13 @@ public:
     }
 
     void WriteLog() {
-        ::NActors::MemLogAdapter(Ctx, Priority, Component, std::move(*StrStream));
+        ::NActors::MemLogAdapter(
+            Ctx,
+            Priority,
+            Component,
+            __FILE_NAME__,
+            __LINE__,
+            std::move(*StrStream));
     }
 };
 

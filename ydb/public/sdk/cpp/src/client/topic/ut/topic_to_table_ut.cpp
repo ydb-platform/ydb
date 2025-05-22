@@ -355,7 +355,7 @@ protected:
     void SplitPartition(const TString& topicPath,
                         ui32 partitionId,
                         const TString& boundary);
-  
+
     virtual bool GetEnableOltpSink() const;
     virtual bool GetEnableOlapSink() const;
     virtual bool GetEnableHtapTx() const;
@@ -1515,9 +1515,7 @@ ui64 TFixture::GetTopicTabletId(const TActorId& actorId, const TString& topicPat
 std::vector<std::string> TFixture::GetTabletKeys(const TActorId& actorId,
                                                  ui64 tabletId)
 {
-    using TEvKeyValue = NKikimr::TEvKeyValue;
-
-    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+    auto request = std::make_unique<NKikimr::TEvKeyValue::TEvRequest>();
     request->Record.SetCookie(12345);
 
     auto cmd = request->Record.AddCmdReadRange();
@@ -1532,7 +1530,7 @@ std::vector<std::string> TFixture::GetTabletKeys(const TActorId& actorId,
     auto& runtime = Setup->GetRuntime();
 
     runtime.SendToPipe(tabletId, actorId, request.release());
-    auto response = runtime.GrabEdgeEvent<TEvKeyValue::TEvResponse>();
+    auto response = runtime.GrabEdgeEvent<NKikimr::TEvKeyValue::TEvResponse>();
 
     UNIT_ASSERT(response->Record.HasCookie());
     UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), 12345);
@@ -2211,16 +2209,14 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_10_Query, TFixtureQuery)
 NPQ::TWriteId TFixture::GetTransactionWriteId(const TActorId& actorId,
                                               ui64 tabletId)
 {
-    using TEvKeyValue = NKikimr::TEvKeyValue;
-
-    auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+    auto request = std::make_unique<NKikimr::TEvKeyValue::TEvRequest>();
     request->Record.SetCookie(12345);
     request->Record.AddCmdRead()->SetKey("_txinfo");
 
     auto& runtime = Setup->GetRuntime();
 
     runtime.SendToPipe(tabletId, actorId, request.release());
-    auto response = runtime.GrabEdgeEvent<TEvKeyValue::TEvResponse>();
+    auto response = runtime.GrabEdgeEvent<NKikimr::TEvKeyValue::TEvResponse>();
 
     UNIT_ASSERT(response->Record.HasCookie());
     UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), 12345);
@@ -2256,16 +2252,14 @@ void TFixture::WaitForTheTabletToDeleteTheWriteInfo(const TActorId& actorId,
                                                     const NPQ::TWriteId& writeId)
 {
     while (true) {
-        using TEvKeyValue = NKikimr::TEvKeyValue;
-
-        auto request = std::make_unique<TEvKeyValue::TEvRequest>();
+        auto request = std::make_unique<NKikimr::TEvKeyValue::TEvRequest>();
         request->Record.SetCookie(12345);
         request->Record.AddCmdRead()->SetKey("_txinfo");
 
         auto& runtime = Setup->GetRuntime();
 
         runtime.SendToPipe(tabletId, actorId, request.release());
-        auto response = runtime.GrabEdgeEvent<TEvKeyValue::TEvResponse>();
+        auto response = runtime.GrabEdgeEvent<NKikimr::TEvKeyValue::TEvResponse>();
 
         UNIT_ASSERT(response->Record.HasCookie());
         UNIT_ASSERT_VALUES_EQUAL(response->Record.GetCookie(), 12345);

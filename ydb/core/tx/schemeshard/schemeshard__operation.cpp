@@ -1262,6 +1262,12 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxDropBackupCollection:
         return CreateDropBackupCollection(NextPartId(), txState);
 
+    // SysView
+    case TTxState::ETxType::TxCreateSysView:
+        return CreateNewSysView(NextPartId(), txState);
+    case TTxState::ETxType::TxDropSysView:
+        return CreateDropSysView(NextPartId(), txState);
+
     case TTxState::ETxType::TxInvalid:
         Y_UNREACHABLE();
     }
@@ -1560,6 +1566,12 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         return CreateBackupIncrementalBackupCollection(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpRestoreBackupCollection:
         return CreateRestoreBackupCollection(op.NextPartId(), tx, context);
+
+    // SysView
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView:
+        return {CreateNewSysView(op.NextPartId(), tx)};
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView:
+        return {CreateDropSysView(op.NextPartId(), tx)};
     }
 
     Y_UNREACHABLE();

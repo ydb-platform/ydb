@@ -68,7 +68,7 @@ TMaybe<TString> GetPool(
     if (auto val = settings->Pool.Get(execCtx.Cluster_)) {
         pool = *val;
     }
-    else if (auto val = settings->StaticPool.Get()) {
+    else if (auto val = settings->StaticPool.Get(execCtx.Cluster_)) {
         pool = *val;
     }
     else if (settings->Auth.Get().GetOrElse(TString()).empty()) {
@@ -337,7 +337,7 @@ void FillSpec(NYT::TNode& spec,
         if (auto val = settings->IntermediateAccount.Get(cluster)) {
             spec["intermediate_data_account"] = *val;
         }
-        else if (auto tmpFolder = GetTablesTmpFolder(*settings)) {
+        else if (auto tmpFolder = GetTablesTmpFolder(*settings, cluster)) {
             auto attrs = entry->Tx->Get(tmpFolder + "/@", NYT::TGetOptions().AttributeFilter(NYT::TAttributeFilter().AddAttribute(TString("account"))));
             if (attrs.HasKey("account")) {
                 spec["intermediate_data_account"] = attrs["account"];
@@ -634,7 +634,7 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
         }
     }
 
-    const TString binTmpFolder = settings->BinaryTmpFolder.Get().GetOrElse(TString());
+    const TString binTmpFolder = settings->BinaryTmpFolder.Get(cluster).GetOrElse(TString());
     const TString binCacheFolder = settings->_BinaryCacheFolder.Get(cluster).GetOrElse(TString());
     if (!localRun && (binTmpFolder || binCacheFolder)) {
         TString bin = mrJobBin.empty() ? GetPersistentExecPath() : mrJobBin;
@@ -727,7 +727,7 @@ void FillOperationOptionsImpl(NYT::TOperationOptions& opOpts,
 {
     opOpts.UseTableFormats(true);
     opOpts.CreateOutputTables(false);
-    if (TString tmpFolder = settings->TmpFolder.Get().GetOrElse(TString())) {
+    if (TString tmpFolder = settings->TmpFolder.Get(entry->Cluster).GetOrElse(TString())) {
         opOpts.FileStorage(tmpFolder);
 
         if (!entry->CacheTxId.IsEmpty()) {

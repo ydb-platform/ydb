@@ -6,6 +6,7 @@
 #include <library/cpp/histogram/hdr/histogram.h>
 
 #include <util/generic/serialized_enum.h>
+#include <util/system/info.h>
 #include <util/system/hp_timer.h>
 
 #include <atomic>
@@ -198,8 +199,9 @@ void TCommandLatency::Config(TConfig& config) {
 void TCommandLatency::Parse(TConfig& config) {
     TClientCommand::Parse(config);
 
-    if (MaxInflight >= 4) {
+    if (MaxInflight >= 2) {
         config.IsNetworkIntensive = true;
+        config.UsePerChannelTcpConnection = true;
     }
 
     if (Percentiles.empty()) {
@@ -208,45 +210,71 @@ void TCommandLatency::Parse(TConfig& config) {
 }
 
 int TCommandLatency::Run(TConfig& config) {
-    TDriver driver = CreateDriver(config);
-
     SetInterruptHandlers();
 
-    auto debugClient = std::make_shared<NDebug::TDebugClient>(driver);
-    auto queryClient = std::make_shared<NQuery::TQueryClient>(driver);
+    const size_t cpuCount = NSystemInfo::CachedNumberOfCpus();
+    const size_t driverCount = std::min(MaxInflight, int(cpuCount));
 
-    auto plainGrpcPingFactory = [debugClient] () {
+    std::vector<TDriver> drivers;
+    for (size_t i = 0; i < driverCount; ++i) {
+        drivers.emplace_back(CreateDriver(config));
+    }
+
+    // share driver in RR manner
+    std::atomic<size_t> currentDriver{0};
+    auto getDebugClient = [&currentDriver, &drivers, driverCount] () {
+        auto driverIndex = currentDriver.fetch_add(1, std::memory_order_relaxed) % driverCount;
+        auto debugClient = std::make_shared<NDebug::TDebugClient>(drivers[driverIndex]);
+        return debugClient;
+    };
+    auto getqueryClient = [&currentDriver, &drivers, driverCount] () {
+        auto driverIndex = currentDriver.fetch_add(1, std::memory_order_relaxed) % driverCount;
+        auto queryClient = std::make_shared<NQuery::TQueryClient>(drivers[driverIndex]);
+        return queryClient;
+    };
+
+    // note that each thread (normally) will have own driver: we enforce each thread to has own gRPC channel and own
+    // TCP connection (config.IsNetworkIntensive set). This helps to avoid bottleneck here, in the client,
+    // in case of low latency network between the client and the server
+
+    auto plainGrpcPingFactory = [&getDebugClient] () {
+        auto debugClient = getDebugClient();
         return [debugClient] () {
             return TCommandPing::PingPlainGrpc(*debugClient);
         };
     };
 
-    auto grpcPingFactory = [debugClient] () {
+    auto grpcPingFactory = [&getDebugClient] () {
+        auto debugClient = getDebugClient();
         return [debugClient] () {
             return TCommandPing::PingGrpcProxy(*debugClient);
         };
     };
 
-    auto plainKqpPingFactory = [debugClient] () {
+    auto plainKqpPingFactory = [&getDebugClient] () {
+        auto debugClient = getDebugClient();
         return [debugClient] () {
             return TCommandPing::PingPlainKqp(*debugClient);
         };
     };
 
-    auto schemeCachePingFactory = [debugClient] () {
+    auto schemeCachePingFactory = [&getDebugClient] () {
+        auto debugClient = getDebugClient();
         return [debugClient] () {
             return TCommandPing::PingSchemeCache(*debugClient);
         };
     };
 
-    auto txProxyPingFactory = [debugClient] () {
+    auto txProxyPingFactory = [&getDebugClient] () {
+        auto debugClient = getDebugClient();
         return [debugClient] () {
             return TCommandPing::PingTxProxy(*debugClient);
         };
     };
 
-    auto select1Factory = [queryClient] () {
-        // note, that each thread has own session
+    auto select1Factory = [&getqueryClient] () {
+        auto queryClient = getqueryClient();
+        // note, that each thread has own session (as well as queryClient / connection)
         auto session = std::make_shared<NQuery::TSession>(queryClient->GetSession().GetValueSync().GetSession());
         return [session] () {
             return TCommandPing::PingKqpSelect1(*session, QUERY);
@@ -254,7 +282,8 @@ int TCommandLatency::Run(TConfig& config) {
     };
 
     auto chainConfig = *ChainConfig;
-    auto txActorChainPingFactory = [debugClient, chainConfig] () {
+    auto txActorChainPingFactory = [&getDebugClient, chainConfig] () {
+        auto debugClient = getDebugClient();
         return [debugClient, chainConfig] () {
             return TCommandPing::PingActorChain(*debugClient, chainConfig);
         };

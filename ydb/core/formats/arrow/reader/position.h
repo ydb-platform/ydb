@@ -56,6 +56,8 @@ public:
 
     std::partial_ordering Compare(const TSortableScanData& item, const ui64 itemPosition) const;
     std::partial_ordering Compare(const TCursor& item) const;
+
+    void ValidateSchema(const TSortableScanData& position) const;
 };
 
 class TSortableScanData {
@@ -122,6 +124,9 @@ public:
         BuildPosition(position);
     }
 
+    TSortableScanData(const ui64 position, const ui64 recordsCount, const std::vector<std::shared_ptr<arrow::Array>>& columns,
+        const std::vector<std::shared_ptr<arrow::Field>>& fields);
+
     const NAccessor::IChunkedArray::TFullDataAddress& GetPositionAddress(const ui32 colIdx) const {
         AFL_VERIFY(colIdx < PositionAddress.size());
         return PositionAddress[colIdx];
@@ -172,15 +177,15 @@ public:
         return arrow::Table::Make(std::make_shared<arrow::Schema>(Fields), slicedArrays, count);
     }
 
-    bool IsSameSchema(const std::shared_ptr<arrow::Schema>& schema) const {
-        if (Fields.size() != (size_t)schema->num_fields()) {
+    bool IsSameSchema(const arrow::Schema& schema) const {
+        if (Fields.size() != (size_t)schema.num_fields()) {
             return false;
         }
         for (ui32 i = 0; i < Fields.size(); ++i) {
-            if (!Fields[i]->type()->Equals(schema->field(i)->type())) {
+            if (!Fields[i]->type()->Equals(schema.field(i)->type())) {
                 return false;
             }
-            if (Fields[i]->name() != schema->field(i)->name()) {
+            if (Fields[i]->name() != schema.field(i)->name()) {
                 return false;
             }
         }
@@ -357,8 +362,15 @@ public:
 
     TRWSortableBatchPosition BuildRWPosition(std::shared_ptr<arrow::RecordBatch> batch, const ui32 position) const;
 
-    bool IsSameSortingSchema(const std::shared_ptr<arrow::Schema>& schema) const {
+    bool IsSameSortingSchema(const arrow::Schema& schema) const {
         return Sorting->IsSameSchema(schema);
+    }
+
+    bool IsSameDataSchema(const arrow::Schema& schema) const {
+        if (!Data) {
+            return schema.num_fields() == 0;
+        }
+        return Data->IsSameSchema(schema);
     }
 
     template <class TRecords>
@@ -389,6 +401,21 @@ public:
         AFL_VERIFY(Position < RecordsCount)("position", Position)("count", RecordsCount);
         Sorting = std::make_shared<TSortableScanData>(Position, batch);
         Y_DEBUG_ABORT_UNLESS(batch->ValidateFull().ok());
+        Y_ABORT_UNLESS(Sorting->GetColumns().size());
+    }
+
+    TSortableBatchPosition(const std::vector<std::shared_ptr<arrow::Field>>& fields, const std::vector<std::shared_ptr<arrow::Array>>& columns,
+        const ui32 position, const bool reverseSort)
+        : Position(position)
+        , ReverseSort(reverseSort) {
+        Y_ABORT_UNLESS(columns.size());
+        Y_ABORT_UNLESS(columns.front()->length());
+        for (ui32 i = 1; i < columns.size(); ++i) {
+            AFL_VERIFY(columns.front()->length() == columns[i]->length());
+        }
+        RecordsCount = columns.front()->length();
+        AFL_VERIFY(Position < RecordsCount)("position", Position)("count", RecordsCount);
+        Sorting = std::make_shared<TSortableScanData>(Position, RecordsCount, columns, fields);
         Y_ABORT_UNLESS(Sorting->GetColumns().size());
     }
 

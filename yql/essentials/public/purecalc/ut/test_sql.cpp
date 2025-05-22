@@ -202,4 +202,24 @@ Y_UNIT_TEST_SUITE(TestSql) {
             factory->MakePullListProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
         }());
     }
+
+    Y_UNIT_TEST(TestUseDefineSubquery) {
+        auto factory = MakeProgramFactory();
+
+        auto sql = TString(R"(
+            DEFINE SUBQUERY $source() AS
+                PROCESS Input;
+            END DEFINE;
+
+            DEFINE SUBQUERY $handler($input) AS
+                PROCESS $input();
+            END DEFINE;
+
+            PROCESS $handler($source);
+        )");
+
+        UNIT_ASSERT_NO_EXCEPTION([&](){
+            factory->MakePullListProgram(FakeIS(), FakeOS(), sql, ETranslationMode::SQL);
+        }());
+    }
 }

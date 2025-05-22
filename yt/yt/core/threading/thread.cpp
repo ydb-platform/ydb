@@ -23,7 +23,7 @@ namespace NYT::NThreading {
 YT_DEFINE_THREAD_LOCAL(TThreadId, CurrentUniqueThreadId) ;
 static std::atomic<TThreadId> UniqueThreadIdGenerator;
 
-static constexpr auto& Logger = ThreadingLogger;
+constinit const auto Logger = ThreadingLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -214,7 +214,7 @@ YT_PREVENT_TLS_CACHING void TThread::ThreadMainTrampoline()
     public:
         ~TExitInterceptor()
         {
-            if (Armed_ && !std::uncaught_exceptions()) {
+            if (Armed_ && std::uncaught_exceptions() == 0) {
                 if (auto* logFile = TryGetShutdownLogFile()) {
                     ::fprintf(logFile, "%s\tThread exit interceptor triggered (ThreadId: %" PRISZT ")\n",
                         GetInstant().ToString().c_str(),

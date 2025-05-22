@@ -208,12 +208,12 @@ TConclusionStatus TLeakedBlobsNormalizer::LoadPortionBlobIds(
     const NColumnShard::TTablesManager& tablesManager, NIceDb::TNiceDb& db, THashSet<TLogoBlobID>& result) {
     TDbWrapper wrapper(db.GetDatabase(), nullptr);
     if (Portions.empty()) {
-        THashMap<ui64, TPortionInfoConstructor> portionsLocal;
-        if (!wrapper.LoadPortions({}, [&](TPortionInfoConstructor&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
+        THashMap<ui64, std::unique_ptr<TPortionInfoConstructor>> portionsLocal;
+        if (!wrapper.LoadPortions({}, [&](std::unique_ptr<TPortionInfoConstructor>&& portion, const NKikimrTxColumnShard::TIndexPortionMeta& metaProto) {
                 const TIndexInfo& indexInfo =
-                    portion.GetSchema(tablesManager.GetPrimaryIndexAsVerified<TColumnEngineForLogs>().GetVersionedIndex())->GetIndexInfo();
-                AFL_VERIFY(portion.MutableMeta().LoadMetadata(metaProto, indexInfo, DsGroupSelector));
-                const ui64 portionId = portion.GetPortionIdVerified();
+                    portion->GetSchema(tablesManager.GetPrimaryIndexAsVerified<TColumnEngineForLogs>().GetVersionedIndex())->GetIndexInfo();
+                AFL_VERIFY(portion->MutableMeta().LoadMetadata(metaProto, indexInfo, DsGroupSelector));
+                const ui64 portionId = portion->GetPortionIdVerified();
                 AFL_VERIFY(portionsLocal.emplace(portionId, std::move(portion)).second);
             })) {
             return TConclusionStatus::Fail("repeated read db");
@@ -271,7 +271,7 @@ TConclusionStatus TLeakedBlobsNormalizer::LoadPortionBlobIds(
             indexes = std::move(itIndexes->second);
         }
         TPortionDataAccessor accessor =
-            TPortionAccessorConstructor::BuildForLoading(i.second.Build(), std::move(itRecords->second), std::move(indexes));
+            TPortionAccessorConstructor::BuildForLoading(i.second->Build(), std::move(itRecords->second), std::move(indexes));
         THashMap<TString, THashSet<TUnifiedBlobId>> blobIdsByStorage;
         accessor.FillBlobIdsByStorage(blobIdsByStorage, tablesManager.GetPrimaryIndexAsVerified<TColumnEngineForLogs>().GetVersionedIndex());
         auto it = blobIdsByStorage.find(NBlobOperations::TGlobal::DefaultStorageId);

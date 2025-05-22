@@ -38,6 +38,7 @@ struct TExecutionOptions {
 
     std::vector<TString> ScriptQueries;
     TString SchemeQuery;
+    std::unordered_map<TString, Ydb::TypedValue> Params;
     bool UseTemplates = false;
 
     ui32 LoopCount = 1;
@@ -115,7 +116,8 @@ struct TExecutionOptions {
             .UserSID = GetValue(index, UserSIDs, TString(BUILTIN_ACL_ROOT)),
             .Database = GetValue(index, Databases, TString()),
             .Timeout = GetValue(index, Timeouts, TDuration::Zero()),
-            .QueryId = queryId
+            .QueryId = queryId,
+            .Params = Params
         };
     }
 
@@ -323,6 +325,10 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& r
     }
 
     const size_t numberQueries = executionOptions.ScriptQueries.size();
+    if (!numberQueries) {
+        return;
+    }
+
     const size_t numberLoops = executionOptions.LoopCount;
     for (size_t queryId = 0; queryId < numberQueries * numberLoops || numberLoops == 0; ++queryId) {
         size_t id = queryId % numberQueries;
@@ -462,6 +468,25 @@ protected:
 
                 if (!Templates.emplace(variable, value).second) {
                     ythrow yexception() << "Got duplicated template variable name '" << variable << "'";
+                }
+            });
+
+        options.AddLongOption("param", "Add query parameter from file to -p queries, use name@file (param value is protobuf Ydb::TypedValue)")
+            .RequiredArgument("name@file")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                TStringBuf name;
+                TStringBuf filePath;
+                TStringBuf(option->CurVal()).Split('@', name, filePath);
+                if (name.empty() || filePath.empty()) {
+                    ythrow yexception() << "Incorrect query parameter, expected form name@file";
+                }
+
+                Ydb::TypedValue value;
+                if (!google::protobuf::TextFormat::ParseFromString(LoadFile(TString(filePath)), &value)) {
+                    ythrow yexception() << "Failed to parse query parameter from file '" << filePath << "'";
+                }
+                if (!ExecutionOptions.Params.emplace(TStringBuilder() << "$" << name, value).second) {
+                    ythrow yexception() << "Got duplicated parameter name '" << name << "'";
                 }
             });
 
@@ -713,6 +738,16 @@ protected:
                     ythrow yexception() << "Number of nodes less than one";
                 }
                 return nodeCount;
+            });
+
+        options.AddLongOption("dc-count", "Number of data centers")
+            .RequiredArgument("uint")
+            .DefaultValue(1)
+            .StoreMappedResultT<ui32>(&RunnerOptions.YdbSettings.DcCount, [](ui32 dcCount) {
+                if (dcCount < 1) {
+                    ythrow yexception() << "Number of data centers less than one";
+                }
+                return dcCount;
             });
 
         options.AddLongOption('E', "emulate-yt", "Emulate YT tables (use file gateway instead of native gateway)")

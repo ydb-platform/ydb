@@ -1,5 +1,7 @@
 /*=============================================================================
     Copyright (c) 2001-2014 Joel de Guzman
+    Copyright (c) 2017 wanghan02
+    Copyright (c) 2024 Nana Sakisaka
 
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -8,6 +10,7 @@
 #define BOOST_SPIRIT_X3_SEQUENCE_JAN_06_2013_1015AM
 
 #include <boost/spirit/home/x3/support/traits/attribute_of_binary.hpp>
+#include <boost/spirit/home/x3/support/expectation.hpp>
 #include <boost/spirit/home/x3/core/parser.hpp>
 #include <boost/spirit/home/x3/operator/detail/sequence.hpp>
 #include <boost/spirit/home/x3/directive/expect.hpp>
@@ -29,10 +32,20 @@ namespace boost { namespace spirit { namespace x3
             Iterator& first, Iterator const& last
           , Context const& context, RContext& rcontext, unused_type) const
         {
-            Iterator save = first;
+            Iterator const save = first;
+
             if (this->left.parse(first, last, context, rcontext, unused)
                 && this->right.parse(first, last, context, rcontext, unused))
                 return true;
+
+        #if !BOOST_SPIRIT_X3_THROW_EXPECTATION_FAILURE
+            if (has_expectation_failure(context))
+            {
+                // don't rollback iterator (mimicking exception-like behavior)
+                return false;
+            }
+        #endif
+
             first = save;
             return false;
         }

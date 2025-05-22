@@ -1,6 +1,7 @@
 #pragma once
 
 #include "c3i.h"
+#include "pipeline.h"
 
 #include <yql/essentials/sql/v1/complete/text/word.h>
 
@@ -15,53 +16,35 @@
 
 namespace NSQLComplete {
 
-    template <class Lexer, class Parser>
-    struct TAntlrGrammar {
-        using TLexer = Lexer;
-        using TParser = Parser;
-
-        TAntlrGrammar() = delete;
-    };
-
     template <class G>
     class TC3Engine: public IC3Engine {
     public:
         explicit TC3Engine(TConfig config)
-            : Chars()
-            , Lexer(&Chars)
-            , Tokens(&Lexer)
-            , Parser(&Tokens)
-            , CompletionCore(&Parser)
+            : Chars_()
+            , Lexer_(&Chars_)
+            , Tokens_(&Lexer_)
+            , Parser_(&Tokens_)
+            , CompletionCore_(&Parser_)
         {
-            Lexer.removeErrorListeners();
-            Parser.removeErrorListeners();
+            Lexer_.removeErrorListeners();
+            Parser_.removeErrorListeners();
 
-            CompletionCore.ignoredTokens = std::move(config.IgnoredTokens);
-            CompletionCore.preferredRules = std::move(config.PreferredRules);
+            CompletionCore_.ignoredTokens = std::move(config.IgnoredTokens);
+            CompletionCore_.preferredRules = std::move(config.PreferredRules);
         }
 
-        TC3Candidates Complete(TCompletionInput input) override {
-            auto prefix = input.Text.Head(input.CursorPosition);
-            Assign(prefix);
-            const auto caretTokenIndex = CaretTokenIndex(prefix);
-            auto candidates = CompletionCore.collectCandidates(caretTokenIndex);
+        TC3Candidates Complete(TStringBuf text, size_t caretTokenIndex) override {
+            Assign(text);
+            auto candidates = CompletionCore_.collectCandidates(caretTokenIndex);
             return Converted(std::move(candidates));
         }
 
     private:
         void Assign(TStringBuf prefix) {
-            Chars.load(prefix.Data(), prefix.Size(), /* lenient = */ false);
-            Lexer.reset();
-            Tokens.setTokenSource(&Lexer);
-            Tokens.fill();
-        }
-
-        size_t CaretTokenIndex(TStringBuf prefix) {
-            const auto tokensCount = Tokens.size();
-            if (2 <= tokensCount && !LastWord(prefix).Empty()) {
-                return tokensCount - 2;
-            }
-            return tokensCount - 1;
+            Chars_.load(prefix.Data(), prefix.Size(), /* lenient = */ false);
+            Lexer_.reset();
+            Tokens_.setTokenSource(&Lexer_);
+            Tokens_.fill();
         }
 
         static TC3Candidates Converted(c3::CandidatesCollection candidates) {
@@ -76,11 +59,11 @@ namespace NSQLComplete {
             return converted;
         }
 
-        antlr4::ANTLRInputStream Chars;
-        G::TLexer Lexer;
-        antlr4::BufferedTokenStream Tokens;
-        G::TParser Parser;
-        c3::CodeCompletionCore CompletionCore;
+        antlr4::ANTLRInputStream Chars_;
+        G::TLexer Lexer_;
+        antlr4::BufferedTokenStream Tokens_;
+        G::TParser Parser_;
+        c3::CodeCompletionCore CompletionCore_;
     };
 
 } // namespace NSQLComplete

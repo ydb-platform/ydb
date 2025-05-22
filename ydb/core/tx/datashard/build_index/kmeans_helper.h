@@ -44,7 +44,7 @@ Y_PURE_FUNCTION TTriWayDotProduct<TRes> CosineImpl(const ui8* lhs, const ui8* rh
     return {static_cast<TRes>(ll), static_cast<TRes>(lr), static_cast<TRes>(rr)};
 }
 
-TTableRange CreateRangeFrom(const TUserTable& table, NTableIndex::TClusterId parent, TCell& from, TCell& to);
+TTableRange CreateRangeFrom(const TUserTable& table, TClusterId parent, TCell& from, TCell& to);
 
 NTable::TLead CreateLeadFrom(const TTableRange& range);
 
@@ -138,15 +138,17 @@ struct TMaxInnerProductSimilarity : TMetric<TCoord> {
     }
 };
 
-void AddRowMain2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row);
+void AddRowToLevel(TBufferData& buffer, TClusterId parent, TClusterId child, const TString& embedding, bool isPostingLevel);
 
-void AddRowMain2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
+void AddRowMainToBuild(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row);
+
+void AddRowMainToPosting(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
                         ui32 dataPos);
 
-void AddRowBuild2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
+void AddRowBuildToBuild(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
                        ui32 prefixColumns = 1);
 
-void AddRowBuild2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
+void AddRowBuildToPosting(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
                          ui32 dataPos, ui32 prefixColumns = 1);
 
 TTags MakeUploadTags(const TUserTable& table, const TProtoStringType& embedding,
@@ -410,16 +412,16 @@ public:
         return true;
     }
 
-    ui32 FindCluster(TArrayRef<const TCell> row, NTable::TPos embeddingPos)
+    std::optional<ui32> FindCluster(TArrayRef<const TCell> row, NTable::TPos embeddingPos)
     {
         Y_ASSERT(embeddingPos < row.size());
         const auto embedding = row.at(embeddingPos).AsRef();
         if (!IsExpectedSize<TCoord>(embedding, Dimensions)) {
-            return Max<ui32>();
+            return {};
         }
         
         auto min = TMetric::Init();
-        ui32 closest = Max<ui32>();
+        std::optional<ui32> closest = {};
         for (size_t i = 0; const auto& cluster : Clusters) {
             auto distance = TMetric::Distance(cluster.data(), embedding.data(), Dimensions);
             if (distance < min) {

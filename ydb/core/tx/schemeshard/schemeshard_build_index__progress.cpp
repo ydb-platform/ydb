@@ -45,12 +45,13 @@ class TUploadSampleK: public TActorBootstrapped<TUploadSampleK> {
 
 protected:
     TString LogPrefix;
-    TString TargetTable;
+    const TString TargetTable;
+    const bool IsPostingLevel;
 
     const NKikimrIndexBuilder::TIndexBuildScanSettings ScanSettings;
 
-    TActorId ResponseActorId;
-    ui64 BuildIndexId = 0;
+    const TActorId ResponseActorId;
+    const ui64 BuildIndexId = 0;
     TIndexBuildInfo::TSample::TRows Init;
 
     std::shared_ptr<NTxProxy::TUploadTypes> Types;
@@ -59,13 +60,14 @@ protected:
     TActorId Uploader;
     ui32 RetryCount = 0;
     ui32 RowsBytes = 0;
-    NTableIndex::TClusterId Parent = 0;
+    const NTableIndex::TClusterId Parent = 0;
     NTableIndex::TClusterId Child = 0;
 
     NDataShard::TUploadStatus UploadStatus;
 
 public:
     TUploadSampleK(TString targetTable,
+                   bool isPostingLevel,
                    const NKikimrIndexBuilder::TIndexBuildScanSettings& scanSettings,
                    const TActorId& responseActorId,
                    ui64 buildIndexId,
@@ -73,6 +75,7 @@ public:
                    NTableIndex::TClusterId parent,
                    NTableIndex::TClusterId child)
         : TargetTable(std::move(targetTable))
+        , IsPostingLevel(isPostingLevel)
         , ScanSettings(scanSettings)
         , ResponseActorId(responseActorId)
         , BuildIndexId(buildIndexId)
@@ -108,16 +111,23 @@ public:
     void Bootstrap() {
         Rows = std::make_shared<NTxProxy::TUploadRows>();
         Rows->reserve(Init.size());
-        std::array<TCell, 2> PrimaryKeys;
-        PrimaryKeys[0] = TCell::Make(Parent);
+        std::array<TCell, 2> pk;
+        pk[0] = TCell::Make(Parent);
         for (auto& [_, row] : Init) {
             RowsBytes += row.size();
-            PrimaryKeys[1] = TCell::Make(Child++);
+            auto child = Child++;
+            if (IsPostingLevel) {
+                child = SetPostingParentFlag(child);
+            } else {
+                EnsureNoPostingParentFlag(child);
+            }
+            pk[1] = TCell::Make(child);
+
             // TODO(mbkkt) we can avoid serialization of PrimaryKeys every iter
-            Rows->emplace_back(TSerializedCellVec{PrimaryKeys}, std::move(row));
+            Rows->emplace_back(TSerializedCellVec{pk}, std::move(row));
         }
         Init = {}; // release memory
-        RowsBytes += Rows->size() * TSerializedCellVec::SerializedSize(PrimaryKeys);
+        RowsBytes += Rows->size() * TSerializedCellVec::SerializedSize(pk);
 
         Types = std::make_shared<NTxProxy::TUploadTypes>(3);
         Ydb::Type type;
@@ -298,6 +308,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     auto path = TPath::Init(buildInfo.TablePathId, ss);
     const auto& tableInfo = ss->Tables.at(path->PathId);
     NTableIndex::TTableColumns implTableColumns;
+    THashSet<TString> indexDataColumns;
     {
         buildInfo.SerializeToProto(ss, modifyScheme.MutableInitiateIndexBuild());
         const auto& indexDesc = modifyScheme.GetInitiateIndexBuild().GetIndex();
@@ -311,6 +322,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
         implTableColumns.Columns.emplace(indexKeys.KeyColumns.back());
         modifyScheme.ClearInitiateIndexBuild();
+        indexDataColumns = THashSet<TString>(buildInfo.DataColumns.begin(), buildInfo.DataColumns.end());
+        indexDataColumns.insert(indexKeys.KeyColumns.back());
     }
 
     using namespace NTableIndex::NTableVectorKmeansTreeIndex;
@@ -343,7 +356,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
 
         return propose;
     }
-    op = CalcVectorKmeansTreePostingImplTableDesc({}, tableInfo, tableInfo->PartitionConfig(), implTableColumns, {}, suffix);
+    op = NTableIndex::CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, {}, suffix);
     const auto [count, parts, step] = ComputeKMeansBoundaries(*tableInfo, buildInfo);
 
     auto& policy = *resetPartitionsSettings();
@@ -497,7 +510,7 @@ struct TSchemeShard::TIndexBuilder::TTxProgress: public TSchemeShard::TIndexBuil
 private:
     TIndexBuildId BuildId;
 
-    TDeque<std::tuple<TTabletId, ui64, THolder<IEventBase>>> ToTabletSend;
+    TMap<TTabletId, THolder<IEventBase>> ToTabletSend;
 
     template <bool WithSnapshot = true, typename Record>
     TTabletId CommonFillRecord(Record& record, TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -551,9 +564,9 @@ private:
 
         auto shardId = CommonFillRecord(ev->Record, shardIdx, buildInfo);
         ev->Record.SetSeed(ui64(shardId));
-        LOG_D("TTxBuildProgress: TEvSampleKRequest: " << ev->Record.ShortDebugString());
+        LOG_N("TTxBuildProgress: TEvSampleKRequest: " << ev->Record.ShortDebugString());
 
-        ToTabletSend.emplace_back(shardId, ui64(BuildId), std::move(ev));
+        ToTabletSend.emplace(shardId, std::move(ev));
     }
 
     void SendKMeansReshuffleRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -595,9 +608,9 @@ private:
             r.ClearClusters();
             return r.ShortDebugString();
         };
-        LOG_D("TTxBuildProgress: TEvReshuffleKMeansRequest: " << toDebugStr(ev->Record));
+        LOG_N("TTxBuildProgress: TEvReshuffleKMeansRequest: " << toDebugStr(ev->Record));
 
-        ToTabletSend.emplace_back(shardId, ui64(BuildId), std::move(ev));
+        ToTabletSend.emplace(shardId, std::move(ev));
     }
 
     void SendKMeansLocalRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -644,9 +657,9 @@ private:
 
         auto shardId = CommonFillRecord(ev->Record, shardIdx, buildInfo);
         ev->Record.SetSeed(ui64(shardId));
-        LOG_D("TTxBuildProgress: TEvLocalKMeansRequest: " << ev->Record.ShortDebugString());
+        LOG_N("TTxBuildProgress: TEvLocalKMeansRequest: " << ev->Record.ShortDebugString());
 
-        ToTabletSend.emplace_back(shardId, ui64(BuildId), std::move(ev));
+        ToTabletSend.emplace(shardId, std::move(ev));
     }
 
     void SendPrefixKMeansRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -685,9 +698,9 @@ private:
 
         auto shardId = CommonFillRecord<false>(ev->Record, shardIdx, buildInfo);
         ev->Record.SetSeed(ui64(shardId));
-        LOG_D("TTxBuildProgress: TEvPrefixKMeansRequest: " << ev->Record.ShortDebugString());
+        LOG_N("TTxBuildProgress: TEvPrefixKMeansRequest: " << ev->Record.ShortDebugString());
 
-        ToTabletSend.emplace_back(shardId, ui64(BuildId), std::move(ev));
+        ToTabletSend.emplace(shardId, std::move(ev));
     }
 
     void SendBuildSecondaryIndexRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -736,28 +749,31 @@ private:
 
         auto shardId = CommonFillRecord(ev->Record, shardIdx, buildInfo);
 
-        LOG_D("TTxBuildProgress: TEvBuildIndexCreateRequest: " << ev->Record.ShortDebugString());
+        LOG_N("TTxBuildProgress: TEvBuildIndexCreateRequest: " << ev->Record.ShortDebugString());
 
-        ToTabletSend.emplace_back(shardId, ui64(BuildId), std::move(ev));
+        ToTabletSend.emplace(shardId, std::move(ev));
     }
 
     void SendUploadSampleKRequest(TIndexBuildInfo& buildInfo) {
         buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
         auto path = GetBuildPath(Self, buildInfo, NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
         Y_ASSERT(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
-        auto actor = new TUploadSampleK(path.PathString(),
+        auto actor = new TUploadSampleK(path.PathString(), !buildInfo.KMeans.NeedsAnotherLevel(),
             buildInfo.ScanSettings, Self->SelfId(), ui64(BuildId),
             buildInfo.Sample.Rows, buildInfo.KMeans.Parent, buildInfo.KMeans.Child);
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
         buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
+
+        LOG_N("TTxBuildProgress: TUploadSampleK: " << buildInfo);
     }
 
     void ClearAfterFill(const TActorContext& ctx, TIndexBuildInfo& buildInfo) {
         buildInfo.DoneShards = {};
         buildInfo.InProgressShards = {};
         buildInfo.ToUploadShards = {};
-
+        
+        ToTabletSend.clear();
         Self->IndexBuildPipes.CloseAll(BuildId, ctx);
     }
 
@@ -791,6 +807,9 @@ private:
     }
 
     void AddAllShards(TIndexBuildInfo& buildInfo) {
+        ToTabletSend.clear();
+        Self->IndexBuildPipes.CloseAll(BuildId, Self->ActorContext());
+
         for (const auto& [idx, status] : buildInfo.Shards) {
             AddShard(buildInfo, idx, status);
         }
@@ -1102,7 +1121,8 @@ public:
         Y_ABORT_UNLESS(buildInfoPtr);
         auto& buildInfo = *buildInfoPtr->Get();
 
-        LOG_I("TTxBuildProgress: Execute: " << BuildId << " " << buildInfo.State << " " << buildInfo);
+        LOG_N("TTxBuildProgress: Execute: " << BuildId << " " << buildInfo.State);
+        LOG_D("TTxBuildProgress: Execute: " << BuildId << " " << buildInfo.State << " " << buildInfo);
 
         switch (buildInfo.State) {
         case TIndexBuildInfo::EState::Invalid:
@@ -1390,8 +1410,8 @@ public:
     }
 
     void DoComplete(const TActorContext& ctx) override {
-        for (auto& x: ToTabletSend) {
-            Self->IndexBuildPipes.Create(BuildId, std::get<0>(x), std::move(std::get<2>(x)), ctx);
+        for (auto& [shardId, ev]: ToTabletSend) {
+            Self->IndexBuildPipes.Send(BuildId, shardId, std::move(ev), ctx);
         }
         ToTabletSend.clear();
     }
@@ -1466,7 +1486,7 @@ public:
         const auto& tabletId = PipeRetry.TabletId;
         const auto& shardIdx = Self->GetShardIdx(tabletId);
 
-        LOG_I("TTxReply : PipeRetry, id# " << buildId
+        LOG_N("TTxReply : PipeRetry, id# " << buildId
               << ", tabletId# " << tabletId
               << ", shardIdx# " << shardIdx);
 
@@ -2416,8 +2436,8 @@ public:
               << ", BuildIndexId: " << buildInfo.Id
               << ", status: " << Ydb::StatusIds::StatusCode_Name(status)
               << ", error: " << buildInfo.Issue
-              << ", replyTo: " << buildInfo.CreateSender.ToString());
-        LOG_D("Message:\n" << responseEv->Record.ShortDebugString());
+              << ", replyTo: " << buildInfo.CreateSender.ToString()
+              << ", message: " << responseEv->Record.ShortDebugString());
 
         Send(buildInfo.CreateSender, std::move(responseEv), 0, buildInfo.SenderCookie);
     }

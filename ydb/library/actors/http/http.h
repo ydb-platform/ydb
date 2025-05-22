@@ -128,6 +128,7 @@ struct THeadersBuilder : THeaders {
     THeadersBuilder();
     THeadersBuilder(TStringBuf headers);
     THeadersBuilder(const THeadersBuilder& builder);
+    THeadersBuilder(std::initializer_list<std::pair<TString, TString>> headers);
     void Set(TStringBuf name, TStringBuf data);
     void Erase(TStringBuf name);
 };
@@ -152,6 +153,11 @@ public:
     // non-destructive version of AsString
     TString AsString() const {
         return TString(Data(), Size());
+    }
+
+    size_t Advance(size_t size) {
+        TBuffer::Advance(size);
+        return size;
     }
 };
 
@@ -341,7 +347,25 @@ public:
         return result;
     }
 
-    void Advance(size_t len);
+    [[nodiscard]] size_t AdvancePartial(size_t len);
+
+    void Advance(size_t len) {
+        while (len > 0) {
+            len -= AdvancePartial(len);
+        }
+    }
+
+    void TruncateToHeaders() {
+        if (HasHeaders()) {
+            auto begin = Data();
+            auto end = Data() + Size();
+            auto desiredEnd = HeaderType::Headers.data() + HeaderType::Headers.size();
+            if (begin < desiredEnd && desiredEnd < end) {
+                Resize(desiredEnd - begin);
+            }
+        }
+    }
+
     void ConnectionClosed();
 
     size_t GetBodySizeFromTotalSize() const {
@@ -362,6 +386,14 @@ public:
 
     bool IsError() const {
         return Stage == EParseStage::Error;
+    }
+
+    bool IsStartOfChunk() const {
+        return Stage == EParseStage::ChunkLength;
+    }
+
+    bool HasNewDataChunk() const {
+        return IsStartOfChunk() && !Content.empty();
     }
 
     TStringBuf GetErrorText() const {
@@ -425,6 +457,10 @@ public:
     }
 
     bool HaveBody() const { return HasBody(); } // deprecated, use HasBody() instead
+
+    bool IsChunkedEncoding() const {
+        return TEqNoCase()(HeaderType::TransferEncoding, "chunked");
+    }
 
     bool EnsureEnoughSpaceAvailable(size_t need = TSocketBuffer::BUFFER_MIN_STEP) {
         bool result = TSocketBuffer::EnsureEnoughSpaceAvailable(need);
@@ -713,12 +749,9 @@ protected:
 class THttpDataChunk : public TSocketBuffer {
 public:
     bool EndOfData = false;
+    size_t DataSize = 0;
 
     THttpDataChunk() = default;
-
-    THttpDataChunk(TStringBuf data) {
-        SetData(data);
-    }
 
     bool EnsureEnoughSpaceAvailable(size_t need = TSocketBuffer::BUFFER_MIN_STEP) {
         return TSocketBuffer::EnsureEnoughSpaceAvailable(need);
@@ -729,9 +762,16 @@ public:
         TSocketBuffer::Append(text.data(), text.size());
     }
 
+    bool IsEndOfData() const {
+        return EndOfData;
+    }
+
     void SetData(TStringBuf data) {
-        EnsureEnoughSpaceAvailable(data.size() + 4/*crlfcrlf*/ + 16);
-        Append(ToHex(data.size()) + "\r\n");
+        TSocketBuffer::Clear();
+        EndOfData = false;
+        DataSize = data.size();
+        EnsureEnoughSpaceAvailable(DataSize + 4/*crlfcrlf*/ + 16);
+        Append(ToHex(DataSize) + "\r\n");
         Append(TStringBuf(data));
         Append("\r\n");
     }
@@ -741,10 +781,6 @@ public:
             Append("0\r\n\r\n");
             EndOfData = true;
         }
-    }
-
-    bool IsEndOfData() const {
-        return EndOfData;
     }
 };
 

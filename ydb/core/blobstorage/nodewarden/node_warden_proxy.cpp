@@ -3,6 +3,7 @@
 
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
 #include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
+#include <ydb/core/blobstorage/dsproxy/bridge/bridge.h>
 #include <ydb/core/blob_depot/agent/agent.h>
 
 using namespace NKikimr;
@@ -66,6 +67,8 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                 case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MAX_SENTINEL_DO_NOT_USE_:
                     Y_UNREACHABLE();
             }
+        } else if (info->IsBridged()) {
+            proxy.reset(CreateBridgeProxyActor(info));
         } else {
             // create proxy with configuration
             proxy.reset(CreateBlobStorageGroupProxyConfigured(TIntrusivePtr<TBlobStorageGroupInfo>(info),

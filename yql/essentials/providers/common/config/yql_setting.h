@@ -12,7 +12,17 @@ namespace NCommon {
 
 const TString ALL_CLUSTERS = "$all";
 
-template <typename TType, bool RUNTIME = true>
+enum class EConfSettingType {
+    Static,
+    StaticPerCluster,
+    Dynamic,
+};
+
+#ifdef YQL_BETTER_CONF_SETTING_API
+template <typename TType, EConfSettingType SettingType = EConfSettingType::Dynamic>
+#else
+template <typename TType, bool RUNTIME = true, bool PERCLUSTER = false>
+#endif
 class TConfSetting {
 public:
     TConfSetting() = default;
@@ -24,7 +34,11 @@ public:
     ~TConfSetting() = default;
 
     bool IsRuntime() const {
+#ifdef YQL_BETTER_CONF_SETTING_API
+        return SettingType == EConfSettingType::Dynamic;
+#else
         return RUNTIME;
+#endif
     }
 
     TType& operator[](const TString& cluster) {
@@ -80,7 +94,11 @@ private:
 };
 
 template <typename TType>
-class TConfSetting<TType, false> {
+#ifdef YQL_BETTER_CONF_SETTING_API
+class TConfSetting<TType, EConfSettingType::Static> {
+#else
+class TConfSetting<TType, false, false> {
+#endif
 public:
     TConfSetting() = default;
     TConfSetting(const TType& value)
@@ -97,7 +115,7 @@ public:
 
     TType& operator[](const TString& cluster) {
         if (cluster != ALL_CLUSTERS) {
-            ythrow yexception() << "Static setting cannot be set for specific cluster";
+            ythrow yexception() << "Global static setting cannot be set for specific cluster";
         }
         Value.ConstructInPlace();
         return Value.GetRef();

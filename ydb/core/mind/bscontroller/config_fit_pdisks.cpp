@@ -328,7 +328,8 @@ namespace NKikimr {
                             NKikimrBlobStorage::EDriveStatus::ACTIVE, /* statusTimestamp */ TInstant::Zero(),
                             NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE, NBsController::TPDiskMood::Normal,
                             disk.Serial, disk.LastSeenSerial, disk.LastSeenPath, staticSlotUsage,
-                            true /* assume shred completed for this disk */);
+                            true /* assume shred completed for this disk */,
+                            NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST);
 
                     // Set PDiskId and Guid in DrivesSerials
                     if (auto info = state.DrivesSerials.FindForUpdate(disk.Serial)) {

@@ -308,6 +308,7 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
         UNIT_ASSERT_TOKENIZED(lexer, "FROM", "FROM EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "from", "FROM(from) EOF");
         UNIT_ASSERT_TOKENIZED(lexer, " UPSERT ", "WS( ) UPSERT WS( ) EOF");
+        UNIT_ASSERT_TOKENIZED(lexer, "ERROR", "ERROR EOF");
     }
 
     Y_UNIT_TEST_ON_EACH_LEXER(KeywordSkip) {
@@ -356,6 +357,12 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
         UNIT_ASSERT_TOKENIZED(lexer, "123.45E10", "REAL(123.45E10) EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "123.45E+10", "REAL(123.45E+10) EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "1E+10", "REAL(1E+10) EOF");
+        UNIT_ASSERT_TOKENIZED(lexer, "123l", "INTEGER_VALUE(123l) EOF");
+        UNIT_ASSERT_TOKENIZED(lexer, "0b01u", "INTEGER_VALUE(0b01u) EOF");
+        UNIT_ASSERT_TOKENIZED(lexer, "0xfful", "INTEGER_VALUE(0xfful) EOF");
+        UNIT_ASSERT_TOKENIZED(lexer, "0o7ut", "INTEGER_VALUE(0o7ut) EOF");
+        UNIT_ASSERT_TOKENIZED(lexer, "456s", "INTEGER_VALUE(456s) EOF");
+        UNIT_ASSERT_TOKENIZED(lexer, "1.2345f", "REAL(1.2345f) EOF");
     }
 
     Y_UNIT_TEST_ON_EACH_LEXER(SingleLineString) {

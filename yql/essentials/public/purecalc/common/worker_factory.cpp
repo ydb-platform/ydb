@@ -302,7 +302,8 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
             CountersProvider_,
             NativeYtTypeFlags_,
             DeterministicTimeProviderSeed_,
-            langver
+            langver,
+            true
         );
 
         with_lock (graph.ScopedAlloc_) {
@@ -320,7 +321,11 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
                             ? PurecalcBlockInputCallableName
                             : PurecalcInputCallableName);
 
-    TTransformationPipeline pipeline(typeContext);
+    TTypeAnnCallableFactory typeAnnCallableFactory = [&]() {
+        return MakeTypeAnnotationTransformer(typeContext, InputTypes_, RawInputTypes_, processorMode, selfName);
+    };
+
+    TTransformationPipeline pipeline(typeContext, typeAnnCallableFactory);
 
     pipeline.Add(MakeTableReadsReplacer(InputTypes_, UseSystemColumns_, processorMode, selfName),
                  "ReplaceTableReads", EYqlIssueCode::TIssuesIds_EIssueCode_DEFAULT_ERROR,
@@ -329,7 +334,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     pipeline.AddPreTypeAnnotation();
     pipeline.AddExpressionEvaluation(*FuncRegistry_, calcTransformer.Get());
     pipeline.AddIOAnnotation();
-    pipeline.AddTypeAnnotationTransformer(MakeTypeAnnotationTransformer(typeContext, InputTypes_, RawInputTypes_, processorMode, selfName));
+    pipeline.AddTypeAnnotationTransformer();
     pipeline.AddPostTypeAnnotation();
     pipeline.Add(CreateFunctorTransformer(
         [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
@@ -516,7 +521,7 @@ TString TWorkerFactory<TBase>::GetCompiledProgram() {
         NKikimr::NMiniKQL::TTypeEnvironment env(alloc);
 
         auto rootNode = CompileMkql(ExprRoot_, ExprContext_, *FuncRegistry_, env, UserData_);
-        return NKikimr::NMiniKQL::SerializeRuntimeNode(rootNode, env);
+        return NKikimr::NMiniKQL::SerializeRuntimeNode(rootNode, env.GetNodeStack());
     }
 
     return SerializedProgram_;

@@ -26,8 +26,6 @@ TCheckpointStoragePtr GetCheckpointStorage(const char* tablePrefix, IEntityIdGen
     
     NConfig::TCheckpointCoordinatorConfig config;
     auto& checkpointStorageConfig = *config.MutableStorage();
-
-    NConfig::TYdbStorageConfig checkpointStorageConfig;
     checkpointStorageConfig.SetEndpoint(GetEnv("YDB_ENDPOINT"));
     checkpointStorageConfig.SetDatabase(GetEnv("YDB_DATABASE"));
     checkpointStorageConfig.SetToken("");

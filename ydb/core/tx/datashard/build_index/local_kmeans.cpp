@@ -23,7 +23,7 @@ namespace NKikimr::NDataShard {
 using namespace NKMeans;
 
 /*
- * TEvLocalKMeans executes a "local" (single-shard) K-means job.
+ * TEvLocalKMeans executes a "local" (single-shard) K-means job across a single table shard.
  * It scans either a MAIN or BUILD table shard, while the output rows go to the BUILD or POSTING table.
  *
  * Request:
@@ -33,23 +33,19 @@ using namespace NKMeans;
  *   - Child, serving as the base ID for the new cluster IDs computed in this local stage
  *   - The embedding column name and additional data columns to be used for K-means
  *   - K (number of clusters), initial random seed, and the vector dimensionality
- *   - The names of "level" and "posting" tables for writing out cluster centroids and row data
- *   - An upload mode that determines how results are stored (for example, main-to-build or build-to-posting)
+ *   - The names of "level" and output tables for writing out cluster centroids and row data
+ *   - Upload mode (MAIN_TO_BUILD, MAIN_TO_POSTING, BUILD_TO_BUILD or BUILD_TO_POSTING)
+ *     determining input and output layouts
+ *   - Names of target tables for centroids ("level") and row results ("posting" or "build")
  *
- * Data Flow:
- * - A TLocalKMeansScan is created, operating in three phases (SAMPLE, KMEANS, UPLOAD)
- *   on each input cluster (one cluster has same parent for BUILD and the whole shard for MAIN):
- *   - SAMPLE: Gathers a random sample of embeddings to initialize cluster centers
- *   - KMEANS: Runs iterative clustering, refining centroids by scanning rows within the specified key range
+ * Execution Flow:
+ * - A TLocalKMeansScan iterates over the table shard in key order, processing one rows group
+ *   of each input cluster (one cluster has same parent for BUILD and the whole shard for MAIN):
+ *   - SAMPLE: Samples embeddings to initialize cluster centers for this group
+ *   - KMEANS: Performs iterative refinement of cluster centroids
  *   - UPLOAD: When final centroids are computed
- *     - Centroids are written to the "level" (BUILD) table
- *     - Each input row's cluster membership is written to the "posting" (POSTING) table
- *     - Any specified data columns are also written to the posting results
- *
- * Response:
- * - Upon completion, a TEvLocalKMeansResponse is returned to the requester
- * - It provides a status (for example, DONE or BAD_REQUEST), the number of rows read, bytes processed,
- *   and any error messages
+ *     - Level: centroid vectors with assigned cluster IDs
+ *     - Output: rows annotated with cluster IDs and optional data columns
  */
 
 class TLocalKMeansScanBase: public TActor<TLocalKMeansScanBase>, public NTable::IScan {

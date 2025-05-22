@@ -22,6 +22,35 @@
 namespace NKikimr::NDataShard {
 using namespace NKMeans;
 
+/*
+ * TPrefixKMeansScan executes a "prefix-aware" K-means clustering job across a single table shard.
+ * It performs clustering separately for each distinct prefix (based on specified prefix length).
+ * It scans a BUILD table shard, while the output rows go to the BUILD or POSTING table.
+ *
+ * Request:
+ * - The client sends TEvPrefixKMeansRequest with:
+*   - Child: base ID from which new cluster IDs are assigned within this request.
+ *     - Each prefix group processed will be assigned cluster IDs starting at Child + 1.
+ *     - For a request with K clusters per prefix, the IDs used for the first prefix group are
+ *       (Child + 1) to (Child + K), and the parent ID for these is Child.
+ *     - The next prefix group will increment the parent/child cluster ID range accordingly,
+ *       allowing consistent hierarchical labeling.
+ *   - The embedding column name and optional data columns used during clustering
+ *   - K (number of clusters per prefix group), random seed, and vector dimensionality
+ *   - Upload mode (BUILD_TO_BUILD or BUILD_TO_POSTING), determining output layout
+ *   - Names of target tables for centroids ("level"), row results ("posting" or "build"), and the prefix mapping ("prefix")
+ *
+ * Execution Flow:
+ * - TPrefixKMeansScan iterates over the table shard in key order, processing one prefix group at a time:
+ *   - SAMPLE: Samples embeddings to initialize cluster centers for this prefix group
+ *   - KMEANS: Performs iterative refinement of cluster centroids
+ *   - UPLOAD: Writes results to designated tables:
+ *     - Level: centroid vectors with assigned cluster IDs
+ *     - Output: rows annotated with cluster IDs and optional data columns
+ *     - Prefix: records the (prefix key, parent cluster ID) mapping
+ */
+
+
 class TPrefixKMeansScanBase: public TActor<TPrefixKMeansScanBase>, public NTable::IScan {
 protected:
     using EState = NKikimrTxDataShard::EKMeansState;

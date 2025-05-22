@@ -22,7 +22,8 @@
 namespace NKikimr::NDataShard {
 using namespace NKMeans;
 
-// This scan needed to run kmeans reshuffle which is part of global kmeans run.
+// TODO
+
 class TReshuffleKMeansScanBase: public TActor<TReshuffleKMeansScanBase>, public NTable::IScan {
 protected:
     using EState = NKikimrTxDataShard::EKMeansState;

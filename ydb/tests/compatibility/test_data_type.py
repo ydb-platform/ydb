@@ -41,7 +41,7 @@ class TestDataType(RestartToAnotherVersionFixture):
         queries = []
         for i in range(1, self.count_rows):
             queries.append(
-                f"SELECT * FROM {TABLE_NAME} WHARE pk_Int64 = {i}"
+                f"SELECT * FROM {TABLE_NAME} WHERE pk_Int64 = {i}"
             )
 
         with ydb.QuerySessionPool(self.driver) as session_pool:

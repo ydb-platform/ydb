@@ -100,11 +100,10 @@ message TTopicOperationsRequest {
 }
 
 message TKafkaApiOperationsRequest {
-    optional string TransactionalId = 1;
-    optional int64 ProducerId = 2;
-    optional int32 ProducerEpoch = 3;
-    repeated TKafkaApiOperationsRequest.KafkaApiPartitionInTxn PartitionsInTxn = 4;
-    repeated TKafkaApiOperationsRequest.KafkaApiOffsetInTxn OffsetsInTxn = 5;
+    optional int64 ProducerId = 1;
+    optional int32 ProducerEpoch = 2;
+    repeated TKafkaApiOperationsRequest.KafkaApiPartitionInTxn PartitionsInTxn = 3;
+    repeated TKafkaApiOperationsRequest.KafkaApiOffsetInTxn OffsetsInTxn = 4;
 
     message KafkaApiPartitionInTxn {
         optional string TopicPath = 1;
@@ -115,8 +114,7 @@ message TKafkaApiOperationsRequest {
         optional string TopicPath = 1;
         optional uint32 PartitionId = 2;
         optional string ConsumerName = 3;
-        optional int64 ConsumerGeneration = 4;
-        optional int64 Offset = 5;
+        optional int64 Offset = 4;
     }
 }
 
@@ -124,6 +122,9 @@ message TTopicOperationsResponse {
     message TWriteId {
         optional uint64 NodeId = 1;
         optional uint64 KeyId = 2;
+        optional bool KafkaTransaction = 3 [default = false];
+        optional int64 KafkaProducerId = 4;
+        optional int32 KafkaProducerEpoch = 5;
     }
 
     optional TWriteId WriteId = 1;

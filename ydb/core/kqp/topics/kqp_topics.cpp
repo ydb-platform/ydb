@@ -3,6 +3,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/persqueue/utils.h>
+#include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
 #include <ydb/library/actors/core/log.h>
 
 #include <util/generic/set.h>
@@ -15,7 +16,21 @@ static void UpdateSupportivePartition(TMaybe<ui32>& lhs, const TMaybe<ui32>& rhs
 {
     if (lhs) {
         if ((rhs != Nothing()) && (rhs != lhs)) {
+            // we set this to make sure PQ Tablet will not find relevant partition and will abort the transaction
             lhs = Max<ui32>();
+        }
+    } else {
+        lhs = rhs;
+    }
+}
+
+static void UpdateKafkaProducerInstanceId(TMaybe<NKafka::TProducerInstanceId>& lhs, const TMaybe<NKafka::TProducerInstanceId>& rhs)
+{
+    if (lhs) {
+        if ((rhs != Nothing()) && (rhs != lhs)) {
+            // we set this to make sure PQ Tablet will not find relevant Kafka producer instance and will abort the transaction and log correct error
+            // ToDo: replace magic numbers with common constant
+            lhs = {-1, -1};
         }
     } else {
         lhs = rhs;
@@ -61,6 +76,13 @@ TString TConsumerOperations::GetReadSessionId() const
     return ReadSessionId_;
 }
 
+ui64 TConsumerOperations::GetKafkaCommitOffset() const
+{
+    Y_ABORT_UNLESS(KafkaCommitOffset_.Defined());
+
+    return *KafkaCommitOffset_;
+}
+
 void TConsumerOperations::AddOperation(const TString& consumer,
                                        const NKikimrKqp::TTopicOperationsRequest_TopicOffsets_PartitionOffsets_OffsetsRange& range,
                                        bool forceCommit,
@@ -77,6 +99,10 @@ void TConsumerOperations::Merge(const TConsumerOperations& rhs)
 {
     Y_ABORT_UNLESS(rhs.Consumer_.Defined());
     Y_ABORT_UNLESS(Consumer_.Empty() || Consumer_ == rhs.Consumer_);
+
+    if (IsKafkaApiOperation()) {
+        return;
+    }
 
     if (!rhs.Offsets_.Empty()) {
         for (auto& range : rhs.Offsets_) {
@@ -111,6 +137,18 @@ void TConsumerOperations::AddOperationImpl(const TString& consumer,
     KillReadSession_ = killReadSession;
     OnlyCheckCommitedToFinish_ = onlyCheckCommitedToFinish;
     ReadSessionId_ = readSessionId;
+}
+
+void TConsumerOperations::AddKafkaApiOffsetCommit(const TString& consumer, ui64 offset) {
+    if (Consumer_.Empty()) {
+        Consumer_ = consumer;
+    }
+
+    KafkaCommitOffset_ = offset;
+}
+
+bool TConsumerOperations::IsKafkaApiOperation() {
+    return KafkaCommitOffset_.Defined();
 }
 
 //
@@ -158,6 +196,32 @@ void TTopicPartitionOperations::AddOperation(const TString& topic, ui32 partitio
     HasWriteOperations_ = true;
 }
 
+void TTopicPartitionOperations::AddKafkaApiWriteOperation(const TString& topic, ui32 partition, const NKafka::TProducerInstanceId& producerInstanceId) {
+    Y_ABORT_UNLESS(Topic_.Empty() || Topic_ == topic);
+    Y_ABORT_UNLESS(Partition_.Empty() || Partition_ == partition);
+
+    if (Topic_.Empty()) {
+        Topic_ = topic;
+        Partition_ = partition;
+    }
+
+    UpdateKafkaProducerInstanceId(KafkaProducerInstanceId_, producerInstanceId);
+
+    HasWriteOperations_ = true;
+}
+
+void TTopicPartitionOperations::AddKafkaApiReadOperation(const TString& topic, ui32 partition, const TString& consumerName, ui64 offset) {
+    Y_ABORT_UNLESS(Topic_.Empty() || Topic_ == topic);
+    Y_ABORT_UNLESS(Partition_.Empty() || Partition_ == partition);
+
+    if (Topic_.Empty()) {
+        Topic_ = topic;
+        Partition_ = partition;
+    }
+
+    Operations_[consumerName].AddKafkaApiOffsetCommit(consumerName, offset);
+}
+
 void TTopicPartitionOperations::BuildTopicTxs(TTopicOperationTransactions& txs)
 {
     Y_ABORT_UNLESS(TabletId_.Defined());
@@ -167,23 +231,33 @@ void TTopicPartitionOperations::BuildTopicTxs(TTopicOperationTransactions& txs)
 
     for (auto& [consumer, operations] : Operations_) {
         NKikimrPQ::TPartitionOperation* o = t.tx.MutableOperations()->Add();
-        o->SetPartitionId(*Partition_);
-        auto [begin, end] = operations.GetOffsetsCommitRange();
-        o->SetCommitOffsetsBegin(begin);
-        o->SetCommitOffsetsEnd(end);
-        o->SetConsumer(consumer);
         o->SetPath(*Topic_);
-        o->SetKillReadSession(operations.GetKillReadSession());
-        o->SetForceCommit(operations.GetForceCommit());
-        o->SetOnlyCheckCommitedToFinish(operations.GetOnlyCheckCommitedToFinish());
-        o->SetReadSessionId(operations.GetReadSessionId());
+        o->SetPartitionId(*Partition_);
+        o->SetConsumer(consumer);
+        if (operations.IsKafkaApiOperation()) {
+            o->SetCommitOffsetsEnd(operations.GetKafkaCommitOffset());
+            o->SetKafkaTransaction(true);
+        } else {
+            auto [begin, end] = operations.GetOffsetsCommitRange();
+            o->SetCommitOffsetsBegin(begin);
+            o->SetCommitOffsetsEnd(end);
+            o->SetKillReadSession(operations.GetKillReadSession());
+            o->SetForceCommit(operations.GetForceCommit());
+            o->SetOnlyCheckCommitedToFinish(operations.GetOnlyCheckCommitedToFinish());
+            o->SetReadSessionId(operations.GetReadSessionId());
+        }
     }
 
     if (HasWriteOperations_) {
         NKikimrPQ::TPartitionOperation* o = t.tx.MutableOperations()->Add();
         o->SetPartitionId(*Partition_);
         o->SetPath(*Topic_);
-        if (SupportivePartition_.Defined()) {
+
+        if (KafkaProducerInstanceId_.Defined()) { // kafka transaction
+            o->SetKafkaProducerId(KafkaProducerInstanceId_->Id);
+            o->SetKafkaProducerEpoch(KafkaProducerInstanceId_->Epoch);
+            o->SetKafkaTransaction(true);
+        } else if (SupportivePartition_.Defined()) {
             o->SetSupportivePartition(*SupportivePartition_);
         }
         t.hasWrite = true;
@@ -285,6 +359,11 @@ bool TTopicOperations::HasWriteOperations() const
     return HasWriteOperations_;
 }
 
+bool TTopicOperations::HasKafkaOperations() const
+{
+    return HasKafkaOperations_;
+}
+
 bool TTopicOperations::HasWriteId() const
 {
     return WriteId_.GetLockId();
@@ -298,6 +377,13 @@ ui64 TTopicOperations::GetWriteId() const
 void TTopicOperations::SetWriteId(NLongTxService::TLockHandle handle)
 {
     WriteId_ = std::move(handle);
+}
+
+NKafka::TProducerInstanceId TTopicOperations::GetKafkaProducerInstanceId() {
+    Y_ABORT_UNLESS(HasKafkaOperations_);
+    Y_ABORT_UNLESS(KafkaProducerInstanceId_.Defined());
+
+    return *KafkaProducerInstanceId_;
 }
 
 bool TTopicOperations::TabletHasReadOperations(ui64 tabletId) const
@@ -339,6 +425,28 @@ void TTopicOperations::AddOperation(const TString& topic, ui32 partition,
     TTopicPartition key{topic, partition};
     Operations_[key].AddOperation(topic, partition, supportivePartition);
     HasWriteOperations_ = true;
+}
+
+void TTopicOperations::AddKafkaApiWriteOperation(const TString& topic, ui32 partition, const NKafka::TProducerInstanceId& producerInstanceId)
+{
+    Y_ABORT_UNLESS(!KafkaProducerInstanceId_ || *KafkaProducerInstanceId_ == producerInstanceId);
+
+    if (KafkaProducerInstanceId_.Empty()) {
+        KafkaProducerInstanceId_ = producerInstanceId;
+    }
+
+    TTopicPartition key{topic, partition};
+    Operations_[key].AddKafkaApiWriteOperation(topic, partition, producerInstanceId);
+    HasWriteOperations_ = true;
+    HasKafkaOperations_ = true;
+}
+
+void TTopicOperations::AddKafkaApiReadOperation(const TString& topic, ui32 partition, const TString& consumerName, ui64 offset)
+{
+    TTopicPartition key{topic, partition};
+    Operations_[key].AddKafkaApiReadOperation(topic, partition, consumerName, offset);
+    HasReadOperations_ = true;
+    HasKafkaOperations_ = true;
 }
 
 void TTopicOperations::FillSchemeCacheNavigate(NSchemeCache::TSchemeCacheNavigate& navigate,

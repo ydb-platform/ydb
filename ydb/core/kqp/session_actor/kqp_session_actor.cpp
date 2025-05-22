@@ -537,7 +537,7 @@ public:
             return;
         }
 
-        QueryState->AddOffsetsToTransaction();
+        QueryState->FillTopicOperations();
 
         auto navigate = QueryState->BuildSchemeCacheNavigate();
 

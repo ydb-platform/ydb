@@ -922,7 +922,9 @@ void TPersQueue::InitTxWrites(const NKikimrPQ::TTabletTxInfo& info,
             NextSupportivePartitionId = Max(NextSupportivePartitionId, shadowPartitionId.InternalPartitionId + 1);
         }
 
-        SubscribeWriteId(writeId, ctx);
+        if (writeId.IsTopicApiTransaction()) {
+            SubscribeWriteId(writeId, ctx);
+        }
     }
 
     NewSupportivePartitions.clear();
@@ -2728,7 +2730,7 @@ void TPersQueue::HandleEventForSupportivePartition(const ui64 responseCookie,
                                                std::shared_ptr<TEvPersQueue::TEvRequest>(event->Release().Release()),
                                                sender);
 
-        if (writeInfo.LongTxSubscriptionStatus == NKikimrLongTxService::TEvLockStatus::STATUS_UNSPECIFIED) {
+        if (writeId.IsTopicApiTransaction() && writeInfo.LongTxSubscriptionStatus == NKikimrLongTxService::TEvLockStatus::STATUS_UNSPECIFIED) {
             SubscribeWriteId(writeId, ctx);
         }
 
@@ -3242,11 +3244,30 @@ void TPersQueue::Handle(TEvPersQueue::TEvProposeTransaction::TPtr& ev, const TAc
 bool TPersQueue::CheckTxWriteOperation(const NKikimrPQ::TPartitionOperation& operation,
                                        const TWriteId& writeId) const
 {
-    TPartitionId partitionId(operation.GetPartitionId(),
-                             writeId,
-                             operation.GetSupportivePartition());
+    TPartitionId partitionId;
+    if (operation.GetKafkaTransaction()) {
+        auto txWriteInfoIt = TxWrites.find(writeId);
+        if (txWriteInfoIt == TxWrites.end()) {
+            return false;
+        }
+        auto it = txWriteInfoIt->second.Partitions.find(operation.GetPartitionId());
+        if (it == txWriteInfoIt->second.Partitions.end()) {
+            return false;
+        } else {
+            partitionId = it->second;
+        }
+    } else {
+        partitionId = TPartitionId{operation.GetPartitionId(),
+                                 writeId,
+                                 operation.GetSupportivePartition()};
+    }
     PQ_LOG_D("PartitionId " << partitionId << " for WriteId " << writeId);
     return Partitions.contains(partitionId);
+}
+
+static bool IsWriteTxOperation(const NKikimrPQ::TPartitionOperation& operation) {
+    bool isRead = operation.HasCommitOffsetsBegin() || (operation.GetKafkaTransaction() && operation.HasCommitOffsetsEnd());
+    return !isRead;
 }
 
 bool TPersQueue::CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBody) const
@@ -3258,11 +3279,7 @@ bool TPersQueue::CheckTxWriteOperations(const NKikimrPQ::TDataTransaction& txBod
     const TWriteId writeId = GetWriteId(txBody);
 
     for (auto& operation : txBody.GetOperations()) {
-        auto isWrite = [](const NKikimrPQ::TPartitionOperation& o) {
-            return !o.HasCommitOffsetsBegin();
-        };
-
-        if (isWrite(operation)) {
+        if (IsWriteTxOperation(operation)) {
             if (!CheckTxWriteOperation(operation, writeId)) {
                 return false;
             }
@@ -3997,7 +4014,7 @@ TMaybe<TPartitionId> TPersQueue::FindPartitionId(const NKikimrPQ::TDataTransacti
 {
     auto hasWriteOperation = [](const auto& txBody) {
         for (const auto& o : txBody.GetOperations()) {
-            if (!o.HasCommitOffsetsBegin()) {
+            if (!IsWriteTxOperation(o)) {
                 return true;
             }
         }
@@ -4049,6 +4066,7 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
             event = std::make_unique<TEvPQ::TEvTxCalcPredicate>(tx.Step, tx.TxId);
         }
 
+        // ToDo: add kafka offset commiting
         if (operation.HasCommitOffsetsBegin()) {
             event->AddOperation(operation.GetConsumer(),
                                 operation.GetCommitOffsetsBegin(),
@@ -4057,6 +4075,9 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
                                 operation.HasKillReadSession() ? operation.GetKillReadSession() : false,
                                 operation.HasOnlyCheckCommitedToFinish() ? operation.GetOnlyCheckCommitedToFinish() : false,
                                 operation.HasReadSessionId() ? operation.GetReadSessionId() : "");
+        }
+        if (operation.GetKafkaTransaction()) {
+            event->AddKafkaOffsetCommitOperation(operation.GetConsumer(), operation.GetCommitOffsetsEnd());
         }
     }
 

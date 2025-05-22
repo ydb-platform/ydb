@@ -400,7 +400,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
 
         ui32 NextColumnId = 1;
         ui64 AlterVersion = 0;
-        THashMap<ui32, TColumn> Columns;
+        TMap<ui32, TColumn> Columns;
         TVector<ui32> KeyColumnIds;
         bool IsBackup = false;
         bool IsRestore = false;
@@ -444,7 +444,7 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
     ui32 NextColumnId = 1;          // Next unallocated column id
     ui64 AlterVersion = 0;
     ui64 PartitioningVersion = 0;
-    THashMap<ui32, TColumn> Columns;
+    TMap<ui32, TColumn> Columns;
     TVector<ui32> KeyColumnIds;
     bool IsBackup = false;
     bool IsRestore = false;
@@ -3880,8 +3880,8 @@ struct TSysViewInfo : TSimpleRefCount<TSysViewInfo> {
 };
 
 bool ValidateTtlSettings(const NKikimrSchemeOp::TTTLSettings& ttl,
-    const THashMap<ui32, TTableInfo::TColumn>& sourceColumns,
-    const THashMap<ui32, TTableInfo::TColumn>& alterColumns,
+    const TMap<ui32, TTableInfo::TColumn>& sourceColumns,
+    const TMap<ui32, TTableInfo::TColumn>& alterColumns,
     const THashMap<TString, ui32>& colName2Id,
     const TSubDomainInfo& subDomain, TString& errStr);
 

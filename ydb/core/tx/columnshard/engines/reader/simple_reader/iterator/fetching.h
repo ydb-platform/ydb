@@ -223,7 +223,7 @@ private:
         TFetchingScriptCursor Step;
         NColumnShard::TCounterGuard TaskGuard;
 
-        virtual void OnFilterReady(const NArrow::TColumnFilter& filter) override;
+        virtual void OnFilterReady(NArrow::TColumnFilter&& filter) override;
         virtual void OnFailure(const TString& reason) override;
 
     public:

@@ -67,11 +67,6 @@ TMaybe<TPrefixLookup> RewriteReadToPrefixLookup(TKqlReadTableBase read, TExprCon
         return {};
     }
 
-    if (!read.Table().SysView().Value().empty()) {
-        // Can't lookup in system views
-        return {};
-    }
-
     if (auto indexRead = read.template Maybe<TKqlReadTableIndex>()) {
         indexName = indexRead.Cast().Index().StringValue();
         lookupTable = GetIndexMetadata(indexRead.Cast(), *kqpCtx.Tables, kqpCtx.Cluster)->Name;
@@ -80,6 +75,11 @@ TMaybe<TPrefixLookup> RewriteReadToPrefixLookup(TKqlReadTableBase read, TExprCon
     }
     const auto& rightTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, lookupTable);
     const auto& mainTableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path().StringValue());
+
+    if (!read.Table().SysView().Value().empty() || mainTableDesc.Metadata->Kind == EKikimrTableKind::SysView) {
+        // Can't lookup in system views
+        return {};
+    }
 
     auto from = read.Range().From();
     auto to = read.Range().To();

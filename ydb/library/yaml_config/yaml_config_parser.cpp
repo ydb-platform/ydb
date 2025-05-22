@@ -1424,7 +1424,6 @@ endDiskTypeCheck:   ;
     }
 
     static NProtoBuf::RepeatedPtrField<NKikimrTabletBase::TTabletChannelInfo> BuildDefaultChannels(NKikimrConfig::TEphemeralInputFields& ephemeralConfig) {
-        Y_ENSURE_BT(ephemeralConfig.HasStaticErasure(), "Cannot build default tablet channels: static_erasure is not provided.");
         const TString& erasureName = ephemeralConfig.GetStaticErasure();
         NProtoBuf::RepeatedPtrField<NKikimrTabletBase::TTabletChannelInfo> channelsInfo;
 

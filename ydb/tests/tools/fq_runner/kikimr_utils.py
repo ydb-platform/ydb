@@ -208,7 +208,7 @@ class YQv2Extension(ExtensionPoint):
                         },
                         'access_config': {
                             'external_sources_access_sid' : ['account@sa']
-                        } 
+                        }
                     }
                 }
             },

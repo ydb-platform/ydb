@@ -45,4 +45,3 @@ class TestClickHouse:
         assert result_set.rows[2].items[0].int32_value == 3
 
         fq_client.delete_connection(connection_id)
-

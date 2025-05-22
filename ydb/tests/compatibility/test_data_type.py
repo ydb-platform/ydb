@@ -8,27 +8,29 @@ from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, c
 TABLE_NAME = "table"
 
 
-class TestStatisticsFollowers(RestartToAnotherVersionFixture):
+class TestDataType(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
 
-        yield from self.setup_cluster()
+        yield from self.setup_cluster(extra_feature_flags={
+            "enable_parameterized_decimal": True,
+            "enable_table_datetime64": True,
+            })
 
     def write_data(self):
         values = []
-        self.count_rows = 30
         for key in range(1, self.count_rows + 1):
             values.append(
                 f'''(
-                    {", ".join([format_sql_value(key, type_name) for type_name in pk_types.keys()])},
-                    {", ".join([format_sql_value(key, type_name) for type_name in self.all_types.keys()])},
+                    {", ".join([format_sql_value(pk_types[type_name](key), type_name) for type_name in pk_types.keys()])},
+                    {", ".join([format_sql_value(self.all_types[type_name](key), type_name) for type_name in self.all_types.keys()])}
                     )
                     '''
             )
         upsert_sql = f"""
             UPSERT INTO `{TABLE_NAME}` (
                 {", ".join([f"pk_{cleanup_type_name(type_name)}" for type_name in pk_types.keys()])},
-                {", ".join([f"col_{cleanup_type_name(type_name)}" for type_name in self.all_types.keys()])},
+                {", ".join([f"col_{cleanup_type_name(type_name)}" for type_name in self.all_types.keys()])}
             )
             VALUES {",".join(values)};
         """
@@ -36,13 +38,11 @@ class TestStatisticsFollowers(RestartToAnotherVersionFixture):
             session_pool.execute_with_retries(upsert_sql)
 
     def check_table(self):
-        selected_columns = []
         queries = []
-        for prefix in self.columns.keys:
-            for type_name in self.columns[prefix].keys():
-                selected_columns.append(f"{prefix}_{cleanup_type_name(type_name)}")
         for i in range(1, self.count_rows):
-            queries.append(f"SELECT * FROM {TABLE_NAME} WHARE {" and ".join(selected_columns)}")
+            queries.append(
+                f"SELECT * FROM {TABLE_NAME} WHARE pk_Int64 = {i}"
+            )
 
         with ydb.QuerySessionPool(self.driver) as session_pool:
             for query in queries:
@@ -50,21 +50,22 @@ class TestStatisticsFollowers(RestartToAnotherVersionFixture):
                 assert len(result_sets[0].rows) == 1
 
     def create_table(self):
+        pk_columns = {
+            "pk_": pk_types.keys(),
+        }
+        query = create_table_sql_request(
+            TABLE_NAME, columns=self.columns, pk_colums=pk_columns, index_colums={}, unique="", sync=""
+        )
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            session_pool.execute_with_retries(query)
+
+    def test_data_type(self):
+        self.count_rows = 30
         self.all_types = {**pk_types, **non_pk_types}
         self.columns = {
             "pk_": pk_types.keys(),
             "col_": self.all_types.keys(),
         }
-        pk_columns = {
-            "pk_": pk_types.keys(),
-        }
-        query = create_table_sql_request(
-            TABLE_NAME, columns=self.columns, pk_columns=pk_columns, index_colums={}, unique="", sync=""
-        )
-        with ydb.QuerySessionPool(self.driver) as session_pool:
-            session_pool.execute_with_retries(query)
-
-    def test_statistics_followers(self):
         self.create_table()
 
         self.write_data()

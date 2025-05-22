@@ -1561,7 +1561,7 @@ message TEvLocalKMeansRequest {
     optional uint64 Child = 16;
 
     optional string LevelName = 17;
-    optional string PostingName = 18;
+    optional string OutputName = 18;
 
     optional string EmbeddingColumn = 19;
     repeated string DataColumns = 20;
@@ -1610,7 +1610,7 @@ message TEvReshuffleKMeansRequest {
     // centroids of clusters
     repeated string Clusters = 12;
 
-    optional string PostingName = 13;
+    optional string OutputName = 13;
 
     optional string EmbeddingColumn = 14;
     repeated string DataColumns = 15;
@@ -1658,7 +1658,7 @@ message TEvPrefixKMeansRequest {
     optional uint64 Child = 11;
 
     optional string LevelName = 12;
-    optional string PostingName = 13;
+    optional string OutputName = 13;
     optional string PrefixName = 14;
 
     optional string EmbeddingColumn = 15;

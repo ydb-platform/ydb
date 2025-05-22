@@ -47,7 +47,7 @@ protected:
     TBatchRowsUploader Uploader;
 
     TBufferData* LevelBuf = nullptr;
-    TBufferData* PostingBuf = nullptr;
+    TBufferData* OutputBuf = nullptr;
     TBufferData* PrefixBuf = nullptr;
 
     const ui32 Dimensions = 0;
@@ -100,10 +100,8 @@ public:
     {
         const auto& embedding = request.GetEmbeddingColumn();
         const auto& data = request.GetDataColumns();
-        // scan tags
         ScanTags = MakeUploadTags(table, embedding, data, EmbeddingPos, DataPos, EmbeddingTag);
         Lead.To(ScanTags, {}, NTable::ESeek::Lower);
-        // upload types
         {
             Ydb::Type type;
             auto levelTypes = std::make_shared<NTxProxy::TUploadTypes>(3);
@@ -114,8 +112,7 @@ public:
             (*levelTypes)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn, type};
             LevelBuf = Uploader.AddDestination(request.GetLevelName(), std::move(levelTypes));
         }
-        PostingBuf = Uploader.AddDestination(request.GetPostingName(), MakeUploadTypes(table, UploadState, embedding, data, PrefixColumns));
-        // prefix types
+        OutputBuf = Uploader.AddDestination(request.GetOutputName(), MakeOutputTypes(table, UploadState, embedding, data, PrefixColumns));
         {
             auto types = GetAllTypes(table);
 
@@ -439,14 +436,14 @@ private:
     void FeedUploadBuild2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
-            AddRowBuildToBuild(*PostingBuf, Child + *pos, key, row, PrefixColumns);
+            AddRowBuildToBuild(*OutputBuf, Child + *pos, key, row, PrefixColumns);
         }
     }
 
     void FeedUploadBuild2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
-            AddRowBuildToPosting(*PostingBuf, Child + *pos, key, row, DataPos, PrefixColumns);
+            AddRowBuildToPosting(*OutputBuf, Child + *pos, key, row, DataPos, PrefixColumns);
         }
     }
 
@@ -560,8 +557,8 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
     if (!request.HasLevelName()) {
         badRequest(TStringBuilder() << "Empty level table name");
     }
-    if (!request.HasPostingName()) {
-        badRequest(TStringBuilder() << "Empty posting table name");
+    if (!request.HasOutputName()) {
+        badRequest(TStringBuilder() << "Empty output table name");
     }
     if (!request.HasPrefixName()) {
         badRequest(TStringBuilder() << "Empty prefix table name");

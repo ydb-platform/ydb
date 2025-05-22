@@ -156,7 +156,7 @@ TTags MakeUploadTags(const TUserTable& table, const TProtoStringType& embedding,
                      ui32& dataPos, NTable::TTag& embeddingTag);
 
 std::shared_ptr<NTxProxy::TUploadTypes>
-MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::EKMeansState uploadState,
+MakeOutputTypes(const TUserTable& table, NKikimrTxDataShard::EKMeansState uploadState,
                 const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data,
                 ui32 prefixColumns = 0);
 

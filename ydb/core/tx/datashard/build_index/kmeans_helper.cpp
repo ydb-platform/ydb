@@ -116,24 +116,24 @@ TTags MakeUploadTags(const TUserTable& table, const TProtoStringType& embedding,
 }
 
 std::shared_ptr<NTxProxy::TUploadTypes>
-MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::EKMeansState uploadState,
+MakeOutputTypes(const TUserTable& table, NKikimrTxDataShard::EKMeansState uploadState,
                 const TProtoStringType& embedding, const google::protobuf::RepeatedPtrField<TProtoStringType>& data,
                 ui32 prefixColumns)
 {
     auto types = GetAllTypes(table);
 
-    auto uploadTypes = std::make_shared<NTxProxy::TUploadTypes>();
-    uploadTypes->reserve(1 + 1 + std::min((table.KeyColumnTypes.size() - prefixColumns) + data.size(), types.size()));
+    auto outputTypes = std::make_shared<NTxProxy::TUploadTypes>();
+    outputTypes->reserve(1 + 1 + std::min((table.KeyColumnTypes.size() - prefixColumns) + data.size(), types.size()));
 
     Ydb::Type type;
     type.set_type_id(NTableIndex::ClusterIdType);
-    uploadTypes->emplace_back(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type);
+    outputTypes->emplace_back(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type);
 
     auto addType = [&](const auto& column) {
         auto it = types.find(column);
         if (it != types.end()) {
             NScheme::ProtoFromTypeInfo(it->second, type);
-            uploadTypes->emplace_back(it->first, type);
+            outputTypes->emplace_back(it->first, type);
             types.erase(it);
         }
     };
@@ -158,7 +158,7 @@ MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::EKMeansState upload
             Y_ASSERT(false);
 
     }
-    return uploadTypes;
+    return outputTypes;
 }
 
 }

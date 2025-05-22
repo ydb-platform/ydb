@@ -596,7 +596,7 @@ private:
             *clusters.Add() = TSerializedCellVec::ExtractCell(row, 0).AsBuf();
         }
 
-        ev->Record.SetPostingName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
+        ev->Record.SetOutputName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
 
         ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
         *ev->Record.MutableDataColumns() = {
@@ -648,7 +648,7 @@ private:
             ev->Record.SetChild(childBegin);
         }
 
-        ev->Record.SetPostingName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
+        ev->Record.SetOutputName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
         path.Rise().Dive(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
         ev->Record.SetLevelName(path.PathString());
 
@@ -686,7 +686,7 @@ private:
         // about 2 * TableSize see comment in PrefixIndexDone
         ev->Record.SetChild(buildInfo.KMeans.ChildBegin + (2 * buildInfo.KMeans.TableSize) * shardIndex);
 
-        ev->Record.SetPostingName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
+        ev->Record.SetOutputName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
         path.Rise().Dive(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
         ev->Record.SetLevelName(path.PathString());
         path.Rise().Dive(NTableIndex::NTableVectorKmeansTreeIndex::PrefixTable);

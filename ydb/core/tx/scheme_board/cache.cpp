@@ -1546,6 +1546,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 break;
             case NKikimrSchemeOp::EPathTypeColumnTable:
                 Kind = TNavigate::KindColumnTable;
+                TableKind = PathSubTypeToTableKind(entryDesc.GetPathSubType());
                 if (Created) {
                     FillTableInfoFromColumnTable(pathDesc);
                 }

@@ -182,6 +182,7 @@ protected:
 
     bool WriteToTableShadow = false;
     bool AllowWriteToPrivateTable = false;
+    bool AllowWriteToIndexImplTable = false;
     bool DiskQuotaExceeded = false;
     bool UpsertIfExists = false;
 
@@ -704,7 +705,7 @@ private:
         if (!CheckAccess(accessCheckError)) {
             return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, accessCheckError, ctx);
         }
-        if (IsIndexImplTable) {
+        if (IsIndexImplTable && !AllowWriteToIndexImplTable) {
             return ReplyWithError(
                 Ydb::StatusIds::BAD_REQUEST,
                 "Writing to index implementation tables is not allowed.",
@@ -969,7 +970,7 @@ private:
         if (!CheckAccess(accessCheckError)) {
             return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, accessCheckError, ctx);
         }
-        if (IsIndexImplTable) {
+        if (IsIndexImplTable && !AllowWriteToIndexImplTable) {
             return ReplyWithError(
                 Ydb::StatusIds::BAD_REQUEST,
                 "Writing to index implementation tables is not allowed.",

@@ -191,7 +191,7 @@ namespace NKikimr {
                         auto& custom = *action.MutableCustomAction();
                         custom.SetName(actionName);
 
-                        auto factory = [=](TProbe *probe, const TCustomAction& /*action*/, TSession* /*trace*/) {
+                        auto factory = [=, this](TProbe *probe, const TCustomAction& /*action*/, TSession* /*trace*/) {
                             return new TTraceActionExecutor(probe, &Manager, name);
                         };
                         TraceManager.RegisterCustomAction(actionName, factory);

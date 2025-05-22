@@ -42,3 +42,7 @@ Install YDB python sdk:
 ```sh
 $ python -m pip install ydb
 ```
+
+## Development
+
+Instructions on `ydb-python-sdk` development are located in [BUILD.md](BUILD.md).

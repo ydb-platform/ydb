@@ -127,6 +127,7 @@ public:
         bool EnableSsl = false;
         bool SkipDiscovery = false;
         bool IsNetworkIntensive = false;
+        bool UsePerChannelTcpConnection = false;
         TString Oauth2KeyFile;
         TString Oauth2KeyParams;
 

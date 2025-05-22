@@ -716,7 +716,7 @@ def test_topic_data():
         'path': '{}/topic1'.format(dedicated_db),
         'partition': '0',
         'offset': '0',
-        'last_offset': '2',
+        'last_offset': '3',
         'limit': '5'
     })
 

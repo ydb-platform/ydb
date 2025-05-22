@@ -55,7 +55,8 @@ class TCommandCreateTable : public TTableCommand, public TCommandWithPath {
 public:
     TCommandCreateTable();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
+    virtual void Validate(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
@@ -78,7 +79,7 @@ class TCommandDropTable : public TTableCommand, public TCommandWithPath {
 public:
     TCommandDropTable();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 };
 
@@ -152,6 +153,7 @@ public:
     TCommandReadTable();
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 
 private:
@@ -182,6 +184,7 @@ public:
     );
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 protected:
     TString IndexName;
@@ -205,7 +208,7 @@ class TCommandIndexDrop : public TYdbCommand, public TCommandWithPath {
 public:
     TCommandIndexDrop();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 private:
     std::string IndexName;
@@ -215,7 +218,7 @@ class TCommandIndexRename : public TYdbCommand, public TCommandWithPath {
 public:
     TCommandIndexRename();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 private:
     TString IndexName;
@@ -227,7 +230,7 @@ class TCommandAttributeAdd : public TYdbCommand, public TCommandWithPath {
 public:
     TCommandAttributeAdd();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 private:
     std::unordered_map<std::string, std::string> Attributes;
@@ -237,7 +240,7 @@ class TCommandAttributeDrop : public TYdbCommand, public TCommandWithPath {
 public:
     TCommandAttributeDrop();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 private:
     TVector<TString> AttributeKeys;
@@ -247,7 +250,7 @@ class TCommandTtlSet : public TYdbCommand, public TCommandWithPath {
 public:
     TCommandTtlSet();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 private:
     TString ColumnName;
@@ -260,7 +263,7 @@ class TCommandTtlReset : public TYdbCommand, public TCommandWithPath {
 public:
     TCommandTtlReset();
     virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
+    virtual void ExtractParams(TConfig& config) override;
     virtual int Run(TConfig& config) override;
 };
 

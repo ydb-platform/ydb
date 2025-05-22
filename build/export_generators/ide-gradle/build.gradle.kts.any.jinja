@@ -30,6 +30,7 @@
 
 {%- if proto_template -%}
 {%-     include "[generator]/proto_vars.jinja" -%}
+{%-     include "[generator]/import.jinja" -%}
 {%-     include "[generator]/proto_import.jinja" -%}
 {%-     include "[generator]/proto_builddir.jinja" -%}
 {%-     include "[generator]/proto_plugins.jinja" -%}

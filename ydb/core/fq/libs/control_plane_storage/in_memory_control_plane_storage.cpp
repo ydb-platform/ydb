@@ -287,7 +287,7 @@ private:
                 NActors::TActivationContext::ActorSystem(),
                 NThreading::MakeFuture(NYdb::TStatus(NYdb::EStatus::SUCCESS, {})),
                 Self.SelfId(),
-                EventPtr,
+                std::move(EventPtr),
                 StartTime,
                 RequestCounters,
                 [response = Response] { return response; },

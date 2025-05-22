@@ -79,7 +79,7 @@ cdef class Encoder:
         wrapper.__wrapped = EncoderJson(wrapper.__stream.Get(), indent)
 
         return wrapper
-    
+
     @staticmethod
     cdef Encoder create_prometheus(object stream, bytes metricNameLabel):
         cdef Encoder wrapper = Encoder.__new__(Encoder)
@@ -200,13 +200,16 @@ def dumps(registry, format='spack', **kwargs):
     return s
 
 
-def load(fp, from_format='spack', to_format='json'):
+def load(fp, from_format='spack', to_format='json', **kwargs):
     """
     Converts metrics from one format to another.
 
     :param fp: File to load data from
     :param from_format: Source string format (allowed values: json, spack, unistat). Default: spack
     :param to_format: Target format (allowed values: json, spack). Default: json
+
+    Keyword arguments:
+    :param metric_name_label: Name of the label used as the prometheus metric name
     :returns: a string containing metrics in the specified format
     """
     if from_format == to_format:
@@ -222,6 +225,9 @@ def load(fp, from_format='spack', to_format='json'):
         encoder = Encoder.create_json(None, 0)
     elif to_format == 'spack':
         encoder = Encoder.create_spack(None, SECONDS, IDENTITY)
+    elif to_format == 'prometheus':
+        metric_name_label = kwargs.get('metric_name_label', 'sensor').encode()
+        encoder = Encoder.create_prometheus(None, metric_name_label)
     else:
         raise ValueError('Unsupported format ' + to_format)
 
@@ -243,13 +249,16 @@ def load(fp, from_format='spack', to_format='json'):
     return s
 
 
-def loads(s, from_format='spack', to_format='json', compression=Compression.Identity):
+def loads(s, from_format='spack', to_format='json', compression=Compression.Identity, **kwargs):
     """
     Converts metrics from one format to another.
 
     :param s: String to load from
     :param from_format: Source string format (allowed values: json, spack, unistat). Default: spack
     :param to_format: Target format (allowed values: json, spack). Default: json
+
+    Keyword arguments:
+    :param metric_name_label: Name of the label used as the prometheus metric name
     :returns: a string containing metrics in the specified format
     """
     if from_format == to_format:
@@ -265,6 +274,9 @@ def loads(s, from_format='spack', to_format='json', compression=Compression.Iden
     elif to_format == 'spack':
         comp = Compression.to_native(compression)
         encoder = Encoder.create_spack(None, SECONDS, comp)
+    elif to_format == 'prometheus':
+        metric_name_label = kwargs.get('metric_name_label', 'sensor').encode()
+        encoder = Encoder.create_prometheus(None, metric_name_label)
     else:
         raise ValueError('Unsupported format ' + to_format)
 

@@ -33,6 +33,18 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
+KEEP     CC0-1.0              03e44fc6d1b905b870bbd63f53b78be0
+BELONGS ya.make
+    License text:
+        - The class contains a copy of [Hedley](https://nemequ.github.io/hedley/) from Evan Nemerson which is licensed as [CC0-1.0](https://creativecommons.org/publicdomain/zero/1.0/).
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 95.00
+        Match type      : REFERENCE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        README.md [1335:1335]
+
 KEEP     MIT                  098c1e1a2b998a44b2dfa93ea519d45d
 BELONGS ya.make
     License text:
@@ -43,19 +55,7 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        README.md [1772:1772]
-
-SKIP     LicenseRef-scancode-free-unknown 09d2a3b4461c6f8aadc34ba913c9b62f
-BELONGS ya.make
-    License text:
-        <img align="right" src="https://opensource.org/trademarks/opensource/OSI-Approved-License-100x137.png">
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-free-unknown
-        Score           : 100.00
-        Match type      : REFERENCE
-        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
-    Files with this license:
-        README.md [1382:1382]
+        README.md [1752:1752]
 
 KEEP     MIT                  0de64830926d7b28059b0628b12a0676
 BELONGS ya.make
@@ -67,6 +67,7 @@ BELONGS ya.make
         Match type      : TAG
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
+        include/nlohmann/detail/input/lexer.hpp [7:7]
         include/nlohmann/detail/macro_scope.hpp [7:7]
         include/nlohmann/detail/output/binary_writer.hpp [7:7]
 
@@ -84,7 +85,7 @@ BELONGS ya.make
 
 KEEP     MIT                  1f7d5654f3b2a7966a91d59c5ed0ac05
 BELONGS ya.make
-FILE_INCLUDE LICENSE.MIT found in files: ChangeLog.md at line 1051
+FILE_INCLUDE LICENSE.MIT found in files: ChangeLog.md at line 1380
     License text:
         - Update LICENSE.MIT [\#2010](https://github.com/nlohmann/json/pull/2010) ([magamig](https://github.com/magamig))
     Scancode info:
@@ -93,7 +94,7 @@ FILE_INCLUDE LICENSE.MIT found in files: ChangeLog.md at line 1051
         Match type      : TAG
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        ChangeLog.md [1051:1051]
+        ChangeLog.md [1380:1380]
 
 KEEP     MIT                  2995454deea186f128a76b7a5322870b
 BELONGS ya.make
@@ -133,14 +134,27 @@ BELONGS ya.make
 KEEP     Apache-2.0           5c4ed081d4d7bdcc3ffd2786714646e5
 BELONGS ya.make
     License text:
-        The class contains parts of [Google Abseil](https://github.com/abseil/abseil-cpp) which is licensed under the [Apache 2.0 License](https://opensource.org/licenses/Apache-2.0).
+        - The class contains parts of [Google Abseil](https://github.com/abseil/abseil-cpp) which is licensed under the [Apache 2.0 License](https://opensource.org/licenses/Apache-2.0).
     Scancode info:
         Original SPDX id: Apache-2.0
         Score           : 100.00
         Match type      : REFERENCE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        README.md [1402:1402]
+        README.md [1336:1336]
+
+SKIP     LicenseRef-scancode-free-unknown 7c84fbd34743ac8b5ecf905fe1873b8f
+BELONGS ya.make
+    # Not a license, just some fancy banner
+    License text:
+        <img align="right" src="https://149753425.v2.pressablecdn.com/wp-content/uploads/2009/06/OSIApproved_100X125.png" alt="OSI approved license">
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-free-unknown
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
+    Files with this license:
+        README.md [1319:1319]
 
 KEEP     MIT                  8384d75c38c570f3edb87cf9f64f2ec2
 BELONGS ya.make
@@ -163,7 +177,6 @@ BELONGS ya.make
         include/nlohmann/detail/input/binary_reader.hpp [7:7]
         include/nlohmann/detail/input/input_adapters.hpp [7:7]
         include/nlohmann/detail/input/json_sax.hpp [7:7]
-        include/nlohmann/detail/input/lexer.hpp [7:7]
         include/nlohmann/detail/input/parser.hpp [7:7]
         include/nlohmann/detail/input/position_t.hpp [7:7]
         include/nlohmann/detail/iterators/internal_iterator.hpp [7:7]
@@ -189,12 +202,39 @@ BELONGS ya.make
         include/nlohmann/detail/output/serializer.hpp [8:8]
         include/nlohmann/detail/string_concat.hpp [7:7]
         include/nlohmann/detail/string_escape.hpp [7:7]
+        include/nlohmann/detail/string_utils.hpp [7:7]
         include/nlohmann/detail/value_t.hpp [7:7]
         include/nlohmann/json.hpp [7:7]
         include/nlohmann/json_fwd.hpp [7:7]
         include/nlohmann/ordered_map.hpp [7:7]
         include/nlohmann/thirdparty/hedley/hedley.hpp [10:10]
         include/nlohmann/thirdparty/hedley/hedley_undef.hpp [7:7]
+
+KEEP     CC0-1.0              8b9f565465b821b7c30af310191ebfd7
+BELONGS ya.make
+    License text:
+        - The class contains a copy of [Hedley](https://nemequ.github.io/hedley/) from Evan Nemerson which is licensed as [CC0-1.0](https://creativecommons.org/publicdomain/zero/1.0/).
+    Scancode info:
+        Original SPDX id: CC0-1.0
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
+    Files with this license:
+        README.md [1335:1335]
+
+KEEP     MIT                  a13268d00c6f0b9ba97d05f45f0ab821
+BELONGS ya.make
+FILE_INCLUDE LICENSE.MIT found in files: FILES.md at line 173, FILES.md at line 182
+    License text:
+        \### `LICENSE.MIT`
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        FILES.md [173:173]
+        FILES.md [182:182]
 
 KEEP     Apache-2.0           bae1ad0735f2d2672df1746ab73234b4
 BELONGS ya.make
@@ -208,18 +248,6 @@ BELONGS ya.make
     Files with this license:
         include/nlohmann/detail/meta/cpp_future.hpp [41:41]
 
-KEEP     CC0-1.0              c0bd5a10bf8b93a637d1ab75adbef600
-BELONGS ya.make
-    License text:
-        The class contains a copy of [Hedley](https://nemequ.github.io/hedley/) from Evan Nemerson which is licensed as [CC0-1.0](https://creativecommons.org/publicdomain/zero/1.0/).
-    Scancode info:
-        Original SPDX id: CC0-1.0
-        Score           : 80.00
-        Match type      : REFERENCE
-        Links           : http://creativecommons.org/publicdomain/zero/1.0/, http://creativecommons.org/publicdomain/zero/1.0/legalcode, https://spdx.org/licenses/CC0-1.0
-    Files with this license:
-        README.md [1400:1400]
-
 KEEP     MIT                  cf197bd5d4094c2d8f76ed82f4786aef
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
@@ -229,7 +257,7 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        README.md [1388:1392]
+        README.md [1325:1329]
 
 KEEP     MIT                  d51298dcb4641b6cc8391c423ab4c650
 BELONGS ya.make
@@ -240,20 +268,20 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        README.md [1396:1396]
-        README.md [1398:1398]
+        README.md [1333:1333]
+        README.md [1334:1334]
 
 KEEP     Apache-2.0           d683c8d4c18c5675d52bab6b519531d9
 BELONGS ya.make
     License text:
-        The class contains parts of [Google Abseil](https://github.com/abseil/abseil-cpp) which is licensed under the [Apache 2.0 License](https://opensource.org/licenses/Apache-2.0).
+        - The class contains parts of [Google Abseil](https://github.com/abseil/abseil-cpp) which is licensed under the [Apache 2.0 License](https://opensource.org/licenses/Apache-2.0).
     Scancode info:
         Original SPDX id: Apache-2.0
         Score           : 100.00
         Match type      : NOTICE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        README.md [1402:1402]
+        README.md [1336:1336]
 
 KEEP     MIT                  e73b9d3e815186df6ea3e59f2379e088
 BELONGS ya.make
@@ -277,4 +305,4 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        README.md [1384:1384]
+        README.md [1321:1321]

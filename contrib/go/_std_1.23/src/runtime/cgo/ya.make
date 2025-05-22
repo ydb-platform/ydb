@@ -39,7 +39,7 @@ IF (CGO_ENABLED)
         )
     ENDIF()
 
-    IF (ARCH_ARM7)
+    IF (ARCH_ARM6 OR ARCH_ARM7)
         SRCS(
             asm_arm.s
             gcc_arm.S
@@ -95,9 +95,9 @@ IF (CGO_ENABLED)
 
         IF (ARCH_ARM64 OR ARCH_X86_64)
             SRCS(
+                CGO_EXPORT gcc_sigaction.c
                 CGO_EXPORT gcc_mmap.c
                 mmap.go
-                CGO_EXPORT gcc_sigaction.c
                 sigaction.go
             )
         ENDIF()
@@ -114,7 +114,7 @@ IF (CGO_ENABLED)
             )
         ENDIF()
 
-        IF (ARCH_ARM7)
+        IF (ARCH_ARM6 OR ARCH_ARM7)
             SRCS(
                 CGO_EXPORT gcc_linux.c
             )

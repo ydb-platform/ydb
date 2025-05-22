@@ -1129,10 +1129,10 @@ public:
     }
 
     TGetTablePartitionsResult GetTablePartitions(TGetTablePartitionsOptions&& options) override {
-        const TString tmpFolder = GetTablesTmpFolder(*options.Config());
         auto res = TGetTablePartitionsResult();
         TVector<NYT::TRichYPath> paths;
         for (const auto& pathInfo: options.Paths()) {
+            const TString tmpFolder = GetTablesTmpFolder(*options.Config(), pathInfo->Table->Cluster);
             const auto tablePath = TransformPath(tmpFolder, pathInfo->Table->Name, pathInfo->Table->IsTemp, options.SessionId());
             NYT::TRichYPath richYtPath{NYT::AddPathPrefix(tablePath, NYT::TConfig::Get()->Prefix)};
             pathInfo->FillRichYPath(richYtPath);  // n.b. throws exception, if there is no RowSpec (we assume it is always there)
@@ -1190,6 +1190,18 @@ private:
         }
         if (attrs.AsMap().contains("schema_mode") && attrs["schema_mode"].AsString() == "weak") {
             info.Attrs["schema_mode"] = attrs["schema_mode"].AsString();
+        }
+        if (attrs.AsMap().contains("compression_codec") && attrs["compression_codec"].AsString() != "none") {
+            info.Attrs["compression_codec"] = attrs["compression_codec"].AsString();
+        }
+        if (attrs.AsMap().contains("primary_medium") && attrs["primary_medium"].AsString() != "default") {
+            info.Attrs["primary_medium"] = attrs["primary_medium"].AsString();
+        }
+        if (attrs.AsMap().contains("media") && (!attrs["media"].AsMap().contains("default") || attrs["media"].AsMap().size() != 1)) {
+            info.Attrs["media"] = NYT::NodeToYsonString(attrs["media"]);
+        }
+        if (info.IsDynamic && attrs.AsMap().contains("enable_dynamic_store_read") && NYT::GetBool(attrs["enable_dynamic_store_read"])) {
+            info.Attrs["enable_dynamic_store_read"] = "true";
         }
 
         NYT::TNode schemaAttrs;

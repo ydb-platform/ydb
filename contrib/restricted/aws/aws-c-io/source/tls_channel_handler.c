@@ -199,7 +199,6 @@ int aws_tls_ctx_options_init_client_mtls_with_pkcs11(
     int custom_key_result = AWS_OP_ERR;
 
     if (pkcs11_handler == NULL) {
-        aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
         goto finish;
     }
 
@@ -441,6 +440,8 @@ int aws_tls_ctx_options_init_default_server(
 }
 
 int aws_tls_ctx_options_set_alpn_list(struct aws_tls_ctx_options *options, const char *alpn_list) {
+    aws_string_destroy(options->alpn_list);
+
     options->alpn_list = aws_string_new_from_c_str(options->allocator, alpn_list);
     if (!options->alpn_list) {
         return AWS_OP_ERR;

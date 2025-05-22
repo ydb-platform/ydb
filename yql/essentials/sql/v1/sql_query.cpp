@@ -221,7 +221,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
     ParseStatementName(core, internalStatementName, humanStatementName);
     const auto& altCase = core.Alt_case();
     if (Mode == NSQLTranslation::ESqlMode::LIMITED_VIEW && (altCase >= TRule_sql_stmt_core::kAltSqlStmtCore4 &&
-        altCase != TRule_sql_stmt_core::kAltSqlStmtCore13)) {
+        altCase != TRule_sql_stmt_core::kAltSqlStmtCore13 && altCase != TRule_sql_stmt_core::kAltSqlStmtCore18)) {
         Error() << humanStatementName << " statement is not supported in limited views";
         return false;
     }
@@ -3200,6 +3200,12 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "orderedcolumns") {
             Ctx.OrderedColumns = true;
             Ctx.IncrementMonCounter("sql_pragma", "OrderedColumns");
+        } else if (normalizedPragma == "derivecolumnorder") {
+            Ctx.DeriveColumnOrder = true;
+            Ctx.IncrementMonCounter("sql_pragma", "DeriveColumnOrder");
+        } else if (normalizedPragma == "disablederivecolumnorder") {
+            Ctx.DeriveColumnOrder = false;
+            Ctx.IncrementMonCounter("sql_pragma", "DisableDeriveColumnOrder");
         } else if (normalizedPragma == "disableorderedcolumns") {
             Ctx.OrderedColumns = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableOrderedColumns");

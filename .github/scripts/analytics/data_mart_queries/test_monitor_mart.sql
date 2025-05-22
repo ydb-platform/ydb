@@ -24,21 +24,8 @@ SELECT
     previous_state_filtered, 
     state_change_date_filtered, 
     days_in_state_filtered,
-    CASE 
-        WHEN (state = 'Skipped' AND days_in_state > 14) THEN 'Skipped'
-        WHEN days_in_mute_state >= 30 THEN 'MUTED: delete candidate'
-        ELSE 'MUTED: in sla'
-    END as resolution,
-    String::ReplaceAll(owner, 'TEAM:@ydb-platform/', '') as owner_team,
-    CASE 
-        WHEN is_muted = 1 OR (state = 'Skipped' AND days_in_state > 14) THEN TRUE
-        ELSE FALSE
-    END as is_muted_or_skipped
+    String::ReplaceAll(owner, 'TEAM:@ydb-platform/', '') as owner_team
 FROM `test_results/analytics/tests_monitor`
-WHERE date_window >= CurrentUtcDate() - 30 * Interval("P1D")
+WHERE date_window >= CurrentUtcDate() - 1 * Interval("P1D") -- for init table better take 30* Interval("P1D")
 and ( branch = 'main' or branch like 'stable-%')
-and is_test_chunk = 0
-and (CASE 
-        WHEN is_muted = 1 OR (state = 'Skipped' AND days_in_state > 14) THEN TRUE
-        ELSE FALSE
-    END ) = TRUE
+

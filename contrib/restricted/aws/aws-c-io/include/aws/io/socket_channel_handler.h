@@ -7,6 +7,8 @@
 
 #include <aws/io/io.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_socket;
 struct aws_channel_handler;
 struct aws_channel_slot;
@@ -28,5 +30,6 @@ AWS_IO_API struct aws_channel_handler *aws_socket_handler_new(
 AWS_IO_API const struct aws_socket *aws_socket_handler_get_socket(const struct aws_channel_handler *handler);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_IO_SOCKET_CHANNEL_HANDLER_H */

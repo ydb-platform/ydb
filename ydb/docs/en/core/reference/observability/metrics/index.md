@@ -71,6 +71,8 @@ You can analyze a transaction's execution time using a histogram counter. The in
 | `table.datashard.bulk_upsert.bytes`<br/>`RATE`, bytes | The size of data that is added through a `BulkUpsert` gRPC API call to all partitions of all DB tables in a certain period of time. |
 | `table.datashard.erase.rows`<br/>`RATE`, pieces | The number of rows deleted from the database in a certain period of time. |
 | `table.datashard.erase.bytes`<br/>`RATE`, bytes | The size of data deleted from the database in a certain period of time. |
+| `table.datashard.cache_hit.bytes`<br/>`RATE`, bytes | The total amount of data successfully retrieved from memory (cache), indicating efficient cache utilization in serving frequently accessed data without accessing distributed storage. |
+| `table.datashard.cache_miss.bytes`<br/>`RATE`, bytes | The total amount of data that was requested but not found in memory (cache) and was read from distributed storage, highlighting potential areas for cache optimization. |
 
 ## Resource usage metrics (for Dedicated mode only) {#ydb_dedicated_resources}
 
@@ -101,8 +103,9 @@ You can analyze a transaction's execution time using a histogram counter. The in
 | `topic.read.lag_milliseconds`<br/>`HIST_RATE`, pieces | A histogram counter. The intervals are specified in milliseconds. It shows the number of messages where the difference between the reading time and the message creation time falls within the specified interval.<br/>Labels:<br/>- _topic_ – the name of the topic.<br/>- _consumer_ – the name of the consumer. |
 | `topic.write.bytes`<br/>`RATE`, bytes | The size of the written data.<br/>Labels:<br/>- _topic_ – the name of the topic. |
 | `topic.write.uncommited_bytes`<br/>`RATE`, bytes | The size of data written as part of ongoing transactions.<br/>Labels:<br/>- _topic_ — the name of the topic. |
-| `topic.write.uncompressed_bytes`<br/>`RATE`, bytes | The size of uncompressed written data.<br/>Метки:<br/>- _topic_ – the name of the topic.
+| `topic.write.uncompressed_bytes`<br/>`RATE`, bytes | The size of uncompressed written data.<br/>Метки:<br/>- _topic_ – the name of the topic. |
 | `topic.write.messages`<br/>`RATE`, pieces | The number of written messages.<br/>Labels:<br/>- _topic_ – the name of the topic. |
 | `topic.write.uncommitted_messages`<br/>`RATE`, pieces | The number of messages written as part of ongoing transactions.<br/>Labels:<br/>- _topic_ — the name of the topic. |
 | `topic.write.message_size_bytes`<br/>`HIST_RATE`, pieces | A histogram counter. The intervals are specified in bytes. It shows the number of messages which size falls within the boundaries of the interval.<br/>Labels:<br/>- _topic_ – the name of the topic. |
 | `topic.write.lag_milliseconds`<br/>`HIST_RATE`, pieces | A histogram counter. The intervals are specified in milliseconds. It shows the number of messages where the difference between the write time and the message creation time falls within the specified interval.<br/>Labels:<br/>- _topic_ – the name of the topic. |
+

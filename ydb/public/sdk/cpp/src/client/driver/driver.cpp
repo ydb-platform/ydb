@@ -34,6 +34,7 @@ public:
     size_t GetClientThreadsNum() const override { return ClientThreadsNum; }
     size_t GetMaxQueuedResponses() const override { return MaxQueuedResponses; }
     TSslCredentials GetSslCredentials() const override { return SslCredentials; }
+    bool GetUsePerChannelTcpConnection() const override { return UsePerChannelTcpConnection; }
     std::string GetDatabase() const override { return Database; }
     std::shared_ptr<ICredentialsProviderFactory> GetCredentialsProviderFactory() const override { return CredentialsProviderFactory; }
     EDiscoveryMode GetDiscoveryMode() const override { return DiscoveryMode; }
@@ -55,6 +56,7 @@ public:
     size_t ClientThreadsNum = 0;
     size_t MaxQueuedResponses = 0;
     TSslCredentials SslCredentials;
+    bool UsePerChannelTcpConnection = false;
     std::string Database;
     std::shared_ptr<ICredentialsProviderFactory> CredentialsProviderFactory = CreateInsecureCredentialsProviderFactory();
     EDiscoveryMode DiscoveryMode = EDiscoveryMode::Sync;
@@ -111,6 +113,11 @@ TDriverConfig& TDriverConfig::SetMaxClientQueueSize(size_t sz) {
 TDriverConfig& TDriverConfig::UseSecureConnection(const std::string& cert) {
     Impl_->SslCredentials.IsEnabled = true;
     Impl_->SslCredentials.CaCert = cert;
+    return *this;
+}
+
+TDriverConfig& TDriverConfig::SetUsePerChannelTcpConnection(bool usePerChannel) {
+    Impl_->UsePerChannelTcpConnection = usePerChannel;
     return *this;
 }
 
@@ -254,7 +261,7 @@ TDriverConfig TDriver::GetConfig() const {
     config.SetMaxOutboundMessageSize(Impl_->MaxOutboundMessageSize_);
     config.SetMaxMessageSize(Impl_->MaxMessageSize_);
     config.Impl_->Log = Impl_->Log;
-    
+
     return config;
 }
 

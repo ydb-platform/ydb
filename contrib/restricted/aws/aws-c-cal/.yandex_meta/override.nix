@@ -1,10 +1,10 @@
 pkgs: attrs: with pkgs; with attrs; rec {
-  version = "0.5.26";
+  version = "0.6.12";
 
   src = fetchFromGitHub {
     owner = "awslabs";
     repo = "aws-c-cal";
     rev = "v${version}";
-    hash = "sha256-X325dMH3mZBvRqZ540ZsmcJ/N5PbDxzGDf5Gi+XXP0c=";
+    hash = "sha256-aegK01wYdOc6RGNVf/dZKn1HkqQr+yEblcu6hnlMZE4=";
   };
 }

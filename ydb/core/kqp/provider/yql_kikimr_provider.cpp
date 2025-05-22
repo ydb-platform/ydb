@@ -204,6 +204,8 @@ TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster
     return Tables[std::make_pair(cluster, tablePath)];
 }
 
+
+
 TKikimrTableDescription& TKikimrTablesData::GetTable(const TString& cluster, const TString& table) {
     auto tablePath = table;
     if (TempTablesState) {
@@ -218,6 +220,26 @@ TKikimrTableDescription& TKikimrTablesData::GetTable(const TString& cluster, con
     YQL_ENSURE(desc, "Unexpected empty metadata, cluster '" << cluster << "', table '" << table << "'");
 
     return *desc;
+}
+
+bool TKikimrTablesData::IsTableImmutable(const TStringBuf& cluster, const TStringBuf& path) {
+    auto mainTableImpl = GetMainTableIfTableIsImplTableOfIndex(cluster, path);
+    if (mainTableImpl) {
+
+        for(const auto& index: mainTableImpl->Metadata->Indexes) {
+            if (index.Type != TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                continue;
+            }
+
+            for(const auto& implTable: index.GetImplTables()) {
+                TString implTablePath = TStringBuilder() << mainTableImpl->Metadata->Name << "/" << index.Name << "/" << implTable;
+                if (path == implTablePath)
+                    return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 const TKikimrTableDescription& TKikimrTablesData::ExistingTable(const TStringBuf& cluster,

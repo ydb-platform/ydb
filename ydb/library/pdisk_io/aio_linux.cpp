@@ -154,23 +154,33 @@ public:
     }
 
     EIoResult Destroy() override {
+        EIoResult result = EIoResult::Ok;
+
         int ret = io_destroy(IoContext);
         if (ret < 0) {
             switch (-ret) {
-                case EFAULT: return EIoResult::BadAddress;
-                case EINVAL: return EIoResult::InvalidArgument;
-                case ENOSYS: return EIoResult::FunctionNotImplemented;
-                default: Y_FAIL_S(PDiskInfo << " unexpected error in io_destroy, error# " << -ret
-                                 << " strerror# " << strerror(-ret));
+                case EFAULT: 
+                    result = EIoResult::BadAddress;
+                    break;
+                case EINVAL:
+                    result = EIoResult::InvalidArgument;
+                    break;
+                case ENOSYS:
+                    result = EIoResult::FunctionNotImplemented;
+                    break;
+                default: 
+                    Y_FAIL_S(PDiskInfo << " unexpected error in io_destroy, error# " << -ret << " strerror# " << strerror(-ret));
             }
         }
+
         if (File) {
             ret = File->Flock(LOCK_UN);
             Y_VERIFY_S(ret == 0, "Error in Flock(LOCK_UN), errno# " << errno << " strerror# " << strerror(errno));
             bool isOk = File->Close();
             Y_VERIFY_S(isOk, PDiskInfo << " error on file close, errno# " << errno << " strerror# " << strerror(errno));
         }
-        return EIoResult::Ok;
+
+        return result;
     }
 
     i64 GetEvents(ui64 minEvents, ui64 maxEvents, TAsyncIoOperationResult *events, TDuration timeout) override {
@@ -539,6 +549,7 @@ public:
                 case ENOSYS:    return EIoResult::FunctionNotImplemented;
                 case EILSEQ:    return EIoResult::InvalidSequence;
                 case ENODATA:   return EIoResult::NoData;
+                case ENOSPC:    return EIoResult::NoSpaceLeft;
                 default: Y_FAIL_S(PDiskInfo << " unexpected error in " << info << ", error# " << -ret
                                  << " strerror# " << strerror(-ret));
             }

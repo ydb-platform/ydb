@@ -1868,6 +1868,366 @@ ALTER SEQUENCE `/Root/test_show_create/_serial_column_Value1` START WITH 101 INC
         );
     }
 
+    Y_UNIT_TEST(ShowCreateTablePartitionPolicyIndexTable) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 Int64 NOT NULL,
+                Key2 Utf8 NOT NULL,
+                Key3 PgInt2 NOT NULL,
+                Value1 Utf8,
+                Value2 Bool,
+                Value3 String,
+                INDEX Index1 GLOBAL SYNC ON (Key2, Value1, Value2),
+                PRIMARY KEY (Key1, Key2, Key3)
+            );
+            ALTER TABLE test_show_create ALTER INDEX Index1 SET (
+                AUTO_PARTITIONING_BY_LOAD = ENABLED,
+                AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 5000
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key1` Int64 NOT NULL,
+    `Key2` Utf8 NOT NULL,
+    `Key3` pgint2 NOT NULL,
+    `Value1` Utf8,
+    `Value2` Bool,
+    `Value3` String,
+    INDEX `Index1` GLOBAL SYNC ON (`Key2`, `Value1`, `Value2`),
+    PRIMARY KEY (`Key1`, `Key2`, `Key3`)
+);
+
+ALTER TABLE `test_show_create`
+    ALTER INDEX `Index1` SET (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 5000)
+;
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 Int64 NOT NULL DEFAULT -100,
+                Key2 Utf8 NOT NULL,
+                Key3 BigSerial NOT NULL,
+                Value1 Utf8 FAMILY Family1,
+                Value2 Bool FAMILY Family2,
+                Value3 String FAMILY Family2,
+                INDEX Index1 GLOBAL ASYNC ON (Key2, Value1, Value2),
+                INDEX Index2 GLOBAL ASYNC ON (Key3, Value2) COVER (Value1, Value3),
+                PRIMARY KEY (Key1, Key2, Key3),
+                FAMILY Family1 (
+                    DATA = "test0",
+                    COMPRESSION = "off"
+                ),
+                FAMILY Family2 (
+                    DATA = "test1",
+                    COMPRESSION = "lz4"
+                )
+            ) WITH (
+                AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000
+            );
+            ALTER TABLE test_show_create ALTER INDEX Index1 SET (
+                AUTO_PARTITIONING_BY_LOAD = ENABLED,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2000
+            );
+            ALTER TABLE test_show_create ALTER INDEX Index2 SET (
+                AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 100
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key1` Int64 NOT NULL DEFAULT -100,
+    `Key2` Utf8 NOT NULL,
+    `Key3` Serial8 NOT NULL,
+    `Value1` Utf8 FAMILY `Family1`,
+    `Value2` Bool FAMILY `Family2`,
+    `Value3` String FAMILY `Family2`,
+    INDEX `Index1` GLOBAL ASYNC ON (`Key2`, `Value1`, `Value2`),
+    INDEX `Index2` GLOBAL ASYNC ON (`Key3`, `Value2`) COVER (`Value1`, `Value3`),
+    FAMILY `Family1` (DATA = 'test0', COMPRESSION = 'off'),
+    FAMILY `Family2` (DATA = 'test1', COMPRESSION = 'lz4'),
+    PRIMARY KEY (`Key1`, `Key2`, `Key3`)
+)
+WITH (
+    AUTO_PARTITIONING_BY_SIZE = ENABLED,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 1000
+);
+
+ALTER TABLE `test_show_create`
+    ALTER INDEX `Index1` SET (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2000)
+;
+
+ALTER TABLE `test_show_create`
+    ALTER INDEX `Index2` SET (AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 100)
+;
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 Int64 NOT NULL,
+                Key2 Utf8 NOT NULL,
+                Key3 PgInt2 NOT NULL,
+                Value1 Utf8,
+                Value2 Bool,
+                Value3 String,
+                INDEX Index1 GLOBAL SYNC ON (Key2, Value1, Value2),
+                INDEX Index2 GLOBAL ASYNC ON (Key3, Value1) COVER (Value2, Value3),
+                INDEX Index3 GLOBAL SYNC ON (Key1, Key2, Value1),
+                PRIMARY KEY (Key1, Key2, Key3)
+            );
+            ALTER TABLE test_show_create ALTER INDEX Index1 SET (
+                AUTO_PARTITIONING_BY_LOAD = ENABLED,
+                AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 5000,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1000
+            );
+            ALTER TABLE test_show_create ALTER INDEX Index2 SET (
+                AUTO_PARTITIONING_BY_SIZE = ENABLED,
+                AUTO_PARTITIONING_PARTITION_SIZE_MB = 10000,
+                AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 2700
+            );
+            ALTER TABLE test_show_create ALTER INDEX Index3 SET (
+                AUTO_PARTITIONING_BY_SIZE = DISABLED,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3500
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key1` Int64 NOT NULL,
+    `Key2` Utf8 NOT NULL,
+    `Key3` pgint2 NOT NULL,
+    `Value1` Utf8,
+    `Value2` Bool,
+    `Value3` String,
+    INDEX `Index1` GLOBAL SYNC ON (`Key2`, `Value1`, `Value2`),
+    INDEX `Index2` GLOBAL ASYNC ON (`Key3`, `Value1`) COVER (`Value2`, `Value3`),
+    INDEX `Index3` GLOBAL SYNC ON (`Key1`, `Key2`, `Value1`),
+    PRIMARY KEY (`Key1`, `Key2`, `Key3`)
+);
+
+ALTER TABLE `test_show_create`
+    ALTER INDEX `Index1` SET (AUTO_PARTITIONING_BY_LOAD = ENABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 1000, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 5000)
+;
+
+ALTER TABLE `test_show_create`
+    ALTER INDEX `Index2` SET (AUTO_PARTITIONING_BY_SIZE = ENABLED, AUTO_PARTITIONING_PARTITION_SIZE_MB = 10000, AUTO_PARTITIONING_MAX_PARTITIONS_COUNT = 2700)
+;
+
+ALTER TABLE `test_show_create`
+    ALTER INDEX `Index3` SET (AUTO_PARTITIONING_BY_SIZE = DISABLED, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 3500)
+;
+)"
+        );
+    }
+
+    Y_UNIT_TEST(ShowCreateTableColumnAlterColumn) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE `/Root/test_show_create` (
+                Col1 Uint64 NOT NULL,
+                Col2 JsonDocument,
+                Col3 Uint32,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `ENCODING.DICTIONARY.ENABLED`=`true`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `DEFAULT_VALUE`=`5`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`, `COMPRESSION.LEVEL`=`4`);
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Col1` Uint64 NOT NULL,
+    `Col2` JsonDocument,
+    `Col3` Uint32,
+    PRIMARY KEY (`Col1`)
+)
+PARTITION BY HASH (`Col1`)
+WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`, `ENCODING.DICTIONARY.ENABLED` = `true`, `SERIALIZER.CLASS_NAME` = `ARROW_SERIALIZER`, `COMPRESSION.TYPE` = `zstd`, `COMPRESSION.LEVEL` = `4`);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DEFAULT_VALUE` = `5`);
+)"
+        );
+    }
+
+    Y_UNIT_TEST(ShowCreateTableColumnUpsertOptions) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE `/Root/test_show_create` (
+                Col1 Uint64 NOT NULL,
+                Col2 JsonDocument,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`,
+                `COMPACTION_PLANNER.FEATURES`=`{"levels" : [{"class_name" : "Zero", "portions_live_duration" : "5s", "expected_blobs_size" : 1000000000000, "portions_count_available" : 2},
+                                {"class_name" : "Zero"}]}`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `METADATA_MEMORY_MANAGER.CLASS_NAME`=`local_db`,
+                    `METADATA_MEMORY_MANAGER.FEATURES`=`{"memory_cache_size" : 0}`);
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Col1` Uint64 NOT NULL,
+    `Col2` JsonDocument,
+    PRIMARY KEY (`Col1`)
+)
+PARTITION BY HASH (`Col1`)
+WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME` = 'SIMPLE', `COMPACTION_PLANNER.CLASS_NAME` = 'lc-buckets', `COMPACTION_PLANNER.FEATURES` = `{"levels":[{"portions_count_available":2,"portions_live_duration":"5.000000s","class_name":"Zero","expected_blobs_size":1000000000000},{"class_name":"Zero"}]}`, `METADATA_MEMORY_MANAGER.CLASS_NAME` = 'local_db', `METADATA_MEMORY_MANAGER.FEATURES` = `{"memory_cache_size":0,"fetch_on_start":false}`);
+)"
+        );
+    }
+
+    Y_UNIT_TEST(ShowCreateTableColumnUpsertIndex) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE `/Root/test_show_create` (
+                Col1 Uint64 NOT NULL,
+                Col2 Uint32 NOT NULL,
+                Col3 JsonDocument,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=count_min_sketch_index, TYPE=COUNT_MIN_SKETCH,
+                    FEATURES=`{"column_names" : ['Col2']}`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=bloom_ngramm_filter_index, TYPE=BLOOM_NGRAMM_FILTER,
+                FEATURES=`{"column_name" : "Col3", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 4096,
+                           "records_count" : 1024, "case_sensitive" : false, "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : '"b.c.d"'}}`);
+            ALTER OBJECT `Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=bloom_filter_index, TYPE=BLOOM_FILTER,
+                    FEATURES=`{"column_name" : "Col2", "false_positive_probability" : 0.01, "bits_storage_type": "BITSET"}`);
+            ALTER OBJECT `Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=max_index, TYPE=MAX, FEATURES=`{"column_name": "Col2"}`);
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Col1` Uint64 NOT NULL,
+    `Col2` Uint32 NOT NULL,
+    `Col3` JsonDocument,
+    PRIMARY KEY (`Col1`)
+)
+PARTITION BY HASH (`Col1`)
+WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = max_index, TYPE = MAX, FEATURES = `{"column_name":"Col2"}`);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = count_min_sketch_index, TYPE = COUNT_MIN_SKETCH, FEATURES = `{"column_names":["Col2"]}`);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = bloom_ngramm_filter_index, TYPE = BLOOM_NGRAMM_FILTER, FEATURES = `{"bits_storage_type":"SIMPLE_STRING","records_count":1024,"case_sensitive":false,"ngramm_size":3,"filter_size_bytes":4096,"data_extractor":{"class_name":"SUB_COLUMN","sub_column_name":"\\\"b.c.d\\\""},"hashes_count":2,"column_name":"Col3"}`);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = bloom_filter_index, TYPE = BLOOM_FILTER, FEATURES = `{"false_positive_probability":0.01,"data_extractor":{"class_name":"DEFAULT"},"bits_storage_type":"BITSET","column_name":"Col2"}`);
+)"
+        );
+    }
+
+    Y_UNIT_TEST(ShowCreateTableColumnAlterObject) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true, .EnableSparsedColumns = true, .EnableOlapCompression = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE `/Root/test_show_create` (
+                Col1 Uint64 NOT NULL,
+                Col2 Uint32 NOT NULL,
+                Col3 JsonDocument,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=count_min_sketch_index, TYPE=COUNT_MIN_SKETCH,
+                    FEATURES=`{"column_names" : ['Col2']}`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=bloom_ngramm_filter_index, TYPE=BLOOM_NGRAMM_FILTER,
+                FEATURES=`{"column_name" : "Col2", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 4096,
+                           "records_count" : 1024, "case_sensitive" : true, "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : "a"}}`);
+            ALTER OBJECT `Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=bloom_filter_index, TYPE=BLOOM_FILTER,
+                FEATURES=`{"column_name" : "Col2", "false_positive_probability" : 0.01}`);
+            ALTER OBJECT `Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=max_index, TYPE=MAX, FEATURES=`{"column_name": "Col2"}`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`,
+                `COMPACTION_PLANNER.FEATURES`=`{"levels" : [{"class_name" : "Zero", "portions_live_duration" : "180s", "expected_blobs_size" : 2048000},
+                               {"class_name" : "Zero", "expected_blobs_size" : 2048000}, {"class_name" : "Zero"}]}`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `METADATA_MEMORY_MANAGER.CLASS_NAME`=`local_db`,
+                    `METADATA_MEMORY_MANAGER.FEATURES`=`{"memory_cache_size" : 0}`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `FORCE_SIMD_PARSING`=`true`, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `OTHERS_ALLOWED_FRACTION`=`0.5`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `ENCODING.DICTIONARY.ENABLED`=`true`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DEFAULT_VALUE`=`100`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`lz4`);
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Col1` Uint64 NOT NULL,
+    `Col2` Uint32 NOT NULL,
+    `Col3` JsonDocument,
+    PRIMARY KEY (`Col1`)
+)
+PARTITION BY HASH (`Col1`)
+WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DEFAULT_VALUE` = `100`);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `SUB_COLUMNS`, `SPARSED_DETECTOR_KFF` = `20`, `COLUMNS_LIMIT` = `1024`, `MEM_LIMIT_CHUNK` = `52428800`, `OTHERS_ALLOWED_FRACTION` = `0.5`, `DATA_EXTRACTOR_CLASS_NAME` = `JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY` = `false`, `FORCE_SIMD_PARSING` = `true`, `ENCODING.DICTIONARY.ENABLED` = `true`, `SERIALIZER.CLASS_NAME` = `ARROW_SERIALIZER`, `COMPRESSION.TYPE` = `lz4`);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = max_index, TYPE = MAX, FEATURES = `{"column_name":"Col2"}`);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = count_min_sketch_index, TYPE = COUNT_MIN_SKETCH, FEATURES = `{"column_names":["Col2"]}`);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = bloom_ngramm_filter_index, TYPE = BLOOM_NGRAMM_FILTER, FEATURES = `{"bits_storage_type":"SIMPLE_STRING","records_count":1024,"case_sensitive":true,"ngramm_size":3,"filter_size_bytes":4096,"data_extractor":{"class_name":"SUB_COLUMN","sub_column_name":"a"},"hashes_count":2,"column_name":"Col2"}`);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_INDEX, NAME = bloom_filter_index, TYPE = BLOOM_FILTER, FEATURES = `{"false_positive_probability":0.01,"data_extractor":{"class_name":"DEFAULT"},"bits_storage_type":"SIMPLE_STRING","column_name":"Col2"}`);
+
+ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME` = 'SIMPLE', `COMPACTION_PLANNER.CLASS_NAME` = 'lc-buckets', `COMPACTION_PLANNER.FEATURES` = `{"levels":[{"portions_live_duration":"180.000000s","class_name":"Zero","expected_blobs_size":2048000},{"class_name":"Zero","expected_blobs_size":2048000},{"class_name":"Zero"}]}`, `METADATA_MEMORY_MANAGER.CLASS_NAME` = 'local_db', `METADATA_MEMORY_MANAGER.FEATURES` = `{"memory_cache_size":0,"fetch_on_start":false}`);
+)"
+        );
+    }
+
     Y_UNIT_TEST(Nodes) {
         TTestEnv env;
         CreateTenantsAndTables(env, false);
@@ -2594,7 +2954,9 @@ ALTER SEQUENCE `/Root/test_show_create/_serial_column_Value1` START WITH 101 INC
                     PutTabletLogLatency,
                     PutUserDataLatency,
                     StoragePoolId,
-                    LayoutCorrect
+                    LayoutCorrect,
+                    OperatingStatus,
+                    ExpectedStatus
                 FROM `/Root/.sys/ds_groups` WHERE GroupId >= 0x80000000;
             )").GetValueSync();
 
@@ -2610,7 +2972,7 @@ ALTER SEQUENCE `/Root/test_show_create/_serial_column_Value1` START WITH 101 INC
             }
         }
 
-        TYsonFieldChecker check(ysonString, 13);
+        TYsonFieldChecker check(ysonString, 15);
 
         check.Uint64(0u); // AllocatedSize
         check.Uint64GreaterOrEquals(0u); // AvailableSize
@@ -2625,6 +2987,8 @@ ALTER SEQUENCE `/Root/test_show_create/_serial_column_Value1` START WITH 101 INC
         check.Null(); // PutUserDataLatency
         check.Uint64(2u); // StoragePoolId
         check.Bool(true); // LayoutCorrect
+        check.String("DISINTEGRATED"); // OperatingStatus
+        check.String("DISINTEGRATED"); // ExpectedStatus
     }
 
     Y_UNIT_TEST(StoragePoolsFields) {

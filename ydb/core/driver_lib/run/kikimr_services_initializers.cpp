@@ -953,6 +953,9 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
     if (Config.HasSelfManagementConfig()) {
         nodeWardenConfig->SelfManagementConfig.emplace(Config.GetSelfManagementConfig());
     }
+    if (Config.HasBridgeConfig()) {
+        nodeWardenConfig->BridgeConfig.emplace(Config.GetBridgeConfig());
+    }
 
     if (Config.HasConfigDirPath()) {
         nodeWardenConfig->ConfigDirPath = Config.GetConfigDirPath();
@@ -2780,8 +2783,8 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
         );
         
         setup->LocalServices.emplace_back(
-            NKafka::MakeKafkaTransactionsServiceID(),
-            TActorSetupCmd(NKafka::CreateKafkaTransactionsCoordinator(),
+            NKafka::MakeTransactionsServiceID(),
+            TActorSetupCmd(NKafka::CreateTransactionsCoordinator(),
                 TMailboxType::HTSwap, appData->UserPoolId
             )
         );

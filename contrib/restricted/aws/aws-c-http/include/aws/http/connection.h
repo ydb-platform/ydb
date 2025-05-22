@@ -8,8 +8,11 @@
 
 #include <aws/http/http.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 struct aws_client_bootstrap;
 struct aws_socket_options;
+struct aws_socket_endpoint;
 struct aws_tls_connection_options;
 struct aws_http2_setting;
 struct proxy_env_var_settings;
@@ -269,7 +272,7 @@ struct aws_http_client_connection_options {
     /**
      * Required.
      */
-    uint16_t port;
+    uint32_t port;
 
     /**
      * Required.
@@ -303,6 +306,15 @@ struct aws_http_client_connection_options {
      * Configuration options related to connection health monitoring
      */
     const struct aws_http_connection_monitoring_options *monitoring_options;
+
+    /**
+     * Optional (ignored if 0).
+     * After a request is fully sent, if the server does not begin responding within N milliseconds,
+     * then fail with AWS_ERROR_HTTP_RESPONSE_FIRST_BYTE_TIMEOUT.
+     * This can be overridden per-request by aws_http_make_request_options.response_first_byte_timeout_ms.
+     * TODO: Only supported in HTTP/1.1 now, support it in HTTP/2
+     */
+    uint64_t response_first_byte_timeout_ms;
 
     /**
      * Set to true to manually manage the flow-control window of each stream.
@@ -398,6 +410,12 @@ struct aws_http_client_connection_options {
      * event loop group associated with the client bootstrap.
      */
     struct aws_event_loop *requested_event_loop;
+
+    /**
+     * Optional
+     * Host resolution override that allows the user to override DNS behavior for this particular connection.
+     */
+    const struct aws_host_resolution_config *host_resolution_config;
 };
 
 /* Predefined settings identifiers (RFC-7540 6.5.2) */
@@ -505,6 +523,12 @@ enum aws_http_version aws_http_connection_get_version(const struct aws_http_conn
  */
 AWS_HTTP_API
 struct aws_channel *aws_http_connection_get_channel(struct aws_http_connection *connection);
+
+/**
+ * Returns the remote endpoint of the HTTP connection.
+ */
+AWS_HTTP_API
+const struct aws_socket_endpoint *aws_http_connection_get_remote_endpoint(const struct aws_http_connection *connection);
 
 /**
  * Initialize an map copied from the *src map, which maps `struct aws_string *` to `enum aws_http_version`.
@@ -675,5 +699,6 @@ AWS_HTTP_API
 void aws_http2_connection_update_window(struct aws_http_connection *http2_connection, uint32_t increment_size);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_HTTP_CONNECTION_H */

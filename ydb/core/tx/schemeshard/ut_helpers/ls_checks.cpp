@@ -479,6 +479,13 @@ void IsBackupCollection(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeBackupCollection);
 }
 
+void IsSysView(const NKikimrScheme::TEvDescribeSchemeResult& record) {
+    UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrScheme::StatusSuccess);
+    const auto& pathDescr = record.GetPathDescription();
+    const auto& selfPath = pathDescr.GetSelf();
+    UNIT_ASSERT_VALUES_EQUAL(selfPath.GetPathType(), NKikimrSchemeOp::EPathTypeSysView);
+}
+
 TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns, bool strictCount) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         UNIT_ASSERT(record.HasPathDescription());

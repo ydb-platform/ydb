@@ -1952,6 +1952,28 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Read SysViews
+        {
+            auto rowset = db.Table<Schema::SysView>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                TLocalPathId localPathId = rowset.GetValue<Schema::SysView::PathId>();
+                TPathId pathId(selfId, localPathId);
+
+                auto& sysView = Self->SysViews[pathId] = new TSysViewInfo();
+                sysView->AlterVersion = rowset.GetValue<Schema::SysView::AlterVersion>();
+                sysView->Type = rowset.GetValue<Schema::SysView::SysViewType>();
+                Self->IncrementPathDbRefCount(pathId);
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
         // Resorce Pool
         {
             auto rowset = db.Table<Schema::ResourcePool>().Range().Select();
@@ -3410,7 +3432,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
-           // Read KesusAlters
+        // Read KesusAlters
         {
             TKesusAlterRows kesusAlterRows;
             if (!LoadKesusAlters(db, kesusAlterRows)) {
@@ -4503,12 +4525,19 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         item.Changefeeds = rowset.GetValue<Schema::ImportItems::Changefeeds>();
                     }
 
+                    if (rowset.HaveValue<Schema::ImportItems::Topic>()) {
+                        Ydb::Topic::CreateTopicRequest topic;
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(topic, rowset.GetValue<Schema::ImportItems::Topic>()));
+                        item.Topic = topic;
+                    }
+
                     item.State = static_cast<TImportInfo::EState>(rowset.GetValue<Schema::ImportItems::State>());
                     item.WaitTxId = rowset.GetValueOrDefault<Schema::ImportItems::WaitTxId>(InvalidTxId);
                     item.NextIndexIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextIndexIdx>(0);
                     item.NextChangefeedIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextChangefeedIdx>(0);
                     item.Issue = rowset.GetValueOrDefault<Schema::ImportItems::Issue>(TString());
                     item.SrcPrefix = rowset.GetValueOrDefault<Schema::ImportItems::SrcPrefix>(TString());
+                    item.SrcPath = rowset.GetValueOrDefault<Schema::ImportItems::SrcPath>(TString());
                     if (rowset.HaveValue<Schema::ImportItems::EncryptionIV>()) {
                         item.ExportItemIV = NBackup::TEncryptionIV::FromBinaryString(rowset.GetValue<Schema::ImportItems::EncryptionIV>());
                     }

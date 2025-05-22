@@ -2793,14 +2793,16 @@ namespace {
             const auto structType = itemType->Cast<TStructExprType>();
             for (const auto& item: structType->GetItems()) {
                 if (const auto res = members.insert({ item->GetName(), { item->GetItemType(), 1U } }); !res.second) {
-                    if (item->GetItemType()->GetKind() == ETypeAnnotationKind::Error) {
-                        continue;
-                    }
-
                     auto& p = res.first->second;
                     if (p.first->GetKind() == ETypeAnnotationKind::Error) {
                         continue;
                     }
+
+                    if (item->GetItemType()->GetKind() == ETypeAnnotationKind::Error) {
+                        p.first = item->GetItemType();
+                        continue;
+                    }
+
 
                     if (const auto commonType = CommonType<false, true>(input.Pos(), p.first, item->GetItemType(), ctx.Expr)) {
                         p.first = commonType;

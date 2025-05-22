@@ -508,6 +508,10 @@ void TPartitionTablesCommand::Register(TRegistrar registrar)
         .Default(true);
     registrar.Parameter("enable_cookies", &TThis::EnableCookies)
         .Default(false);
+    registrar.Parameter("use_new_slicing_implementation_in_ordered_pool", &TThis::UseNewSlicingImplementationInOrderedPool)
+        .Default(true);
+    registrar.Parameter("use_new_slicing_implementation_in_unordered_pool", &TThis::UseNewSlicingImplementationInUnorderedPool)
+        .Default(true);
 }
 
 void TPartitionTablesCommand::DoExecute(ICommandContextPtr context)
@@ -522,15 +526,11 @@ void TPartitionTablesCommand::DoExecute(ICommandContextPtr context)
     Options.EnableKeyGuarantee = EnableKeyGuarantee;
     Options.AdjustDataWeightPerPartition = AdjustDataWeightPerPartition;
     Options.EnableCookies = EnableCookies;
+    Options.UseNewSlicingImplementationInOrderedPool = UseNewSlicingImplementationInOrderedPool;
+    Options.UseNewSlicingImplementationInUnorderedPool = UseNewSlicingImplementationInUnorderedPool;
 
     auto partitions = WaitFor(context->GetClient()->PartitionTables(Paths, Options))
         .ValueOrThrow();
-
-    for (auto& partition : partitions.Partitions) {
-        if (partition.Cookie) {
-            context->GetDriver()->GetSignatureGenerator()->Resign(partition.Cookie.Underlying());
-        }
-    }
 
     context->ProduceOutputValue(ConvertToYsonString(partitions));
 }

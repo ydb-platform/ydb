@@ -2372,6 +2372,11 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             SELECT * FROM FollowersKv WHERE Key = 21;
         )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
+        UNIT_ASSERT_UNEQUAL(0, GetCumulativeCounterValue(
+            kikimr.GetTestServer(),
+            "/Root/FollowersKv",
+            "DataShard/TxUpdateFollowerReadEdge/ExecuteCPUTime"
+        ));
 
         CompareYson(R"(
             [
@@ -2385,6 +2390,11 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             SELECT * FROM FollowersKv WHERE Value != "One" ORDER BY Key;
         )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
+        UNIT_ASSERT_UNEQUAL(0, GetCumulativeCounterValue(
+            kikimr.GetTestServer(),
+            "/Root/FollowersKv",
+            "DataShard/TxUpdateFollowerReadEdge/ExecuteCPUTime"
+        ));
 
         CompareYson(R"(
             [
@@ -2400,6 +2410,11 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             SELECT * FROM TwoShard WHERE Key = 2;
         )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
+        UNIT_ASSERT_EQUAL(0, GetCumulativeCounterValue(
+            kikimr.GetTestServer(),
+            "/Root/TwoShard",
+            "DataShard/TxUpdateFollowerReadEdge/ExecuteCPUTime"
+        ));
 
         CompareYson(R"(
             [
@@ -2420,6 +2435,11 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
                 [[4000000001u];["BigOne"];[-1]]
             ]
         )", FormatResultSetYson(result.GetResultSet(0)));
+        UNIT_ASSERT_EQUAL(0, GetCumulativeCounterValue(
+            kikimr.GetTestServer(),
+            "/Root/TwoShard",
+            "DataShard/TxUpdateFollowerReadEdge/ExecuteCPUTime"
+        ));
     }
 
     Y_UNIT_TEST(StaleRO_Immediate) {
@@ -2440,6 +2460,66 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
                 [["BigOne"];[-1];[4000000001u]];
                 [["Three"];[1];[3u]];
                 [["One"];[-1];[1u]]
+            ]
+        )", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST_TWIN(StaleRO_IndexFollowers, EnableFollowers) {
+        auto kikimr = DefaultKikimrRunner();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+            CREATE TABLE `KeySubkey` (
+                Key Uint64,
+                Subkey Uint64,
+                Value String,
+                Order Uint32,
+                PRIMARY KEY (Key, Subkey)
+            );
+
+            ALTER TABLE `KeySubkey` ADD INDEX `idx` GLOBAL SYNC ON (`Key`, `Order`) COVER (`Value`);
+        )").GetValueSync());
+
+        if constexpr (EnableFollowers) {
+            AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `KeySubkey` ALTER INDEX `idx` SET READ_REPLICAS_SETTINGS "PER_AZ:1";
+            )").GetValueSync());
+        }
+
+        AssertSuccessResult(session.ExecuteDataQuery(R"(
+            --!syntax_v1
+
+            REPLACE INTO `KeySubkey` (`Key`, `Subkey`, `Value`, `Order`) VALUES
+                (1u, 2u, "One", 7u),
+                (1u, 3u, "Two", 4u),
+                (21u, 8u, "Three", 1u),
+                (31u, 0u, "Four", 8u);
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync());
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            SELECT * FROM `KeySubkey` VIEW `idx` WHERE Key = 1 ORDER BY `Order`;
+        )", TTxControl::BeginTx(TTxSettings::StaleRO()).CommitTx()).ExtractValueSync();
+        AssertSuccessResult(result);
+
+        const auto FollowerCpuTime = GetCumulativeCounterValue(
+            kikimr.GetTestServer(),
+            "/Root/KeySubkey/idx/indexImplTable",
+            "DataShard/TxUpdateFollowerReadEdge/ExecuteCPUTime"
+        );
+        if constexpr (EnableFollowers) {
+            UNIT_ASSERT_UNEQUAL(0, FollowerCpuTime);
+        } else {
+            UNIT_ASSERT_EQUAL(0, FollowerCpuTime);
+        }
+
+        CompareYson(R"(
+            [
+                [[1u];[4u];[3u];["Two"]];
+                [[1u];[7u];[2u];["One"]];
             ]
         )", FormatResultSetYson(result.GetResultSet(0)));
     }

@@ -343,7 +343,7 @@ public:
                     Self->DefaultMaxSlots, disks.GetValue<T::Status>(), disks.GetValue<T::Timestamp>(),
                     disks.GetValue<T::DecommitStatus>(), disks.GetValue<T::Mood>(), disks.GetValue<T::ExpectedSerial>(),
                     disks.GetValue<T::LastSeenSerial>(), disks.GetValue<T::LastSeenPath>(), staticSlotUsage,
-                    disks.GetValueOrDefault<T::ShredComplete>());
+                    disks.GetValueOrDefault<T::ShredComplete>(), disks.GetValueOrDefault<T::MaintenanceStatus>());
 
                 if (!disks.Next())
                     return false;
@@ -537,6 +537,17 @@ public:
         }
         for (const auto& key : vdiskMetricsToDelete) {
             db.Table<Schema::VDiskMetrics>().Key(key).Delete();
+        }
+
+        // issue all sys view updates just after the start
+        for (const auto& [pdiskId, _] : Self->PDisks) {
+            Self->SysViewChangedPDisks.insert(pdiskId);
+        }
+        for (const auto& [vdiskId, _] : Self->VSlots) {
+            Self->SysViewChangedVSlots.insert(vdiskId);
+        }
+        for (const auto& [groupId, _] : Self->GroupMap) {
+            Self->SysViewChangedGroups.insert(groupId);
         }
 
         return true;

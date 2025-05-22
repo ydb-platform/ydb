@@ -43,7 +43,7 @@ class THttpReplyBus
 public:
     THttpReplyBus(
         IResponseWriterPtr rsp,
-        TString endpointAddress,
+        std::string endpointAddress,
         IAttributeDictionaryPtr endpointAttributes,
         TNetworkAddress endpointNetworkAddress,
         const NLogging::TLogger& logger)
@@ -158,7 +158,7 @@ public:
 
 private:
     const IResponseWriterPtr Rsp_;
-    const TString EndpointAddress_;
+    const std::string EndpointAddress_;
     const IAttributeDictionaryPtr EndpointAttributes_;
     const TNetworkAddress EndpointNetworkAddress_;
     const NLogging::TLogger Logger;
@@ -175,7 +175,7 @@ class THttpHandler
     : public IHttpHandler
 {
 public:
-    THttpHandler(IServicePtr underlying, const TString& baseUrl, const NLogging::TLogger& logger)
+    THttpHandler(IServicePtr underlying, const std::string& baseUrl, const NLogging::TLogger& logger)
         : Underlying_(std::move(underlying))
         , BaseUrl_(baseUrl)
         , Logger(logger)
@@ -225,7 +225,7 @@ public:
 
 private:
     const IServicePtr Underlying_;
-    const TString BaseUrl_;
+    const std::string BaseUrl_;
     const NLogging::TLogger Logger;
 
     TError TranslateRequest(const IRequestPtr& req, NRpc::NProto::TRequestHeader* rpcHeader, TRequestId* requestId)
@@ -288,7 +288,7 @@ private:
 
         if (const auto* authorizationString = httpHeaders->Find(AuthorizationHeaderName)) {
             const TStringBuf Prefix = "OAuth ";
-            if (!authorizationString->StartsWith(Prefix)) {
+            if (!authorizationString->starts_with(Prefix)) {
                 return TError("Invalid \"Authorization\" header value");
             }
             getCredentialsExt()->set_token(TrimLeadingWhitespaces(authorizationString->substr(Prefix.length())));
@@ -305,13 +305,13 @@ private:
         if (const auto* cookieString = httpHeaders->Find(CookieHeaderName)) {
             auto cookieMap = ParseCookies(*cookieString);
 
-            static const TString SessionIdCookieName("Session_id");
+            static const std::string SessionIdCookieName("Session_id");
             auto sessionIdIt = cookieMap.find(SessionIdCookieName);
             if (sessionIdIt != cookieMap.end()) {
                 getCredentialsExt()->set_session_id(sessionIdIt->second);
             }
 
-            static const TString SessionId2CookieName("sessionid2");
+            static const std::string SessionId2CookieName("sessionid2");
             auto sslSessionIdIt = cookieMap.find(SessionId2CookieName);
             if (sslSessionIdIt != cookieMap.end()) {
                 getCredentialsExt()->set_ssl_session_id(sslSessionIdIt->second);
@@ -347,10 +347,10 @@ private:
         NRpc::NProto::TCustomMetadataExt customMetadataExt;
         bool hasCustomHeaders = false;
         for (const auto& [header, value] : DumpUnknownHeaders(httpHeaders)) {
-            if (!header.StartsWith("X-") && !header.StartsWith("x-")) {
+            if (!header.starts_with("X-") && !header.starts_with("x-")) {
                 continue;
             }
-            TString key = header.substr(2);
+            auto key = header.substr(2);
             (*customMetadataExt.mutable_entries())[key] = value;
             hasCustomHeaders = true;
         }
@@ -406,7 +406,7 @@ private:
 
         // COMPAT(babenko): remove this once fully migrated to new url scheme
         auto index = service->GetServiceId().ServiceName.find_last_of('.');
-        if (index != TString::npos) {
+        if (index != std::string::npos) {
             auto anotherBaseUrl = Format("/%v/", service->GetServiceId().ServiceName.substr(index + 1));
             HttpServer_->AddHandler(anotherBaseUrl, New<THttpHandler>(std::move(service), anotherBaseUrl, Logger));
         }

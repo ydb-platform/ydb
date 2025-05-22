@@ -1,0 +1,41 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:4:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple
+    	SELECT
+	^
+        <tmp_path>/program.sql:<main>:4:1: Error: At function: SqlProjectItem, At lambda
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:8:13: Error: At function: Apply, At function: Udf
+            	    String::HasPrefixIgnoreCase(value, "AS") AS icprefix,
+	            ^
+                <tmp_path>/program.sql:<main>:8:13: Error: UDF 'String.HasPrefixIgnoreCase' is not available after version 2025.01
+                	    String::HasPrefixIgnoreCase(value, "AS") AS icprefix,
+	            ^
+        <tmp_path>/program.sql:<main>:4:1: Error: At function: SqlProjectItem, At lambda
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:10:13: Error: At function: Apply, At function: Udf
+            	    String::StartsWithIgnoreCase(value, "AS") AS icstarts,
+	            ^
+                <tmp_path>/program.sql:<main>:10:13: Error: UDF 'String.StartsWithIgnoreCase' is not available after version 2025.01
+                	    String::StartsWithIgnoreCase(value, "AS") AS icstarts,
+	            ^
+        <tmp_path>/program.sql:<main>:4:1: Error: At function: SqlProjectItem, At lambda
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:12:13: Error: At function: Apply, At function: Udf
+            	    String::HasSuffixIgnoreCase(value, "AS") AS icsuffix,
+	            ^
+                <tmp_path>/program.sql:<main>:12:13: Error: UDF 'String.HasSuffixIgnoreCase' is not available after version 2025.01
+                	    String::HasSuffixIgnoreCase(value, "AS") AS icsuffix,
+	            ^
+        <tmp_path>/program.sql:<main>:4:1: Error: At function: SqlProjectItem, At lambda
+        	SELECT
+	^
+            <tmp_path>/program.sql:<main>:14:13: Error: At function: Apply, At function: Udf
+            	    String::EndsWithIgnoreCase(value, "AS") AS icends,
+	            ^
+                <tmp_path>/program.sql:<main>:14:13: Error: UDF 'String.EndsWithIgnoreCase' is not available after version 2025.01
+                	    String::EndsWithIgnoreCase(value, "AS") AS icends,
+	            ^

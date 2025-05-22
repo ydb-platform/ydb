@@ -12,8 +12,8 @@ namespace NKikimr::NBsController {
         struct TGroupContent {
             struct TVDiskInfo {
                 TVSlotId Location;
-                bool Faulty;
-                bool Bad;
+                bool RequiresReassignment;
+                bool UnavailabilityRisk;
                 bool Decommitted;
                 bool IsSelfHealReasonDecommit;
                 bool OnlyPhantomsRemain;

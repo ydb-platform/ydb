@@ -91,7 +91,7 @@ struct TTestRuntime {
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         NYdb::TDriver driver(NYdb::TDriverConfig{});
         auto ydbConnectionPtr = NewYdbConnection(config.GetStorage(), credFactory, driver);
-        CheckpointStorage = NewYdbCheckpointStorage(storageConfig, CreateEntityIdGenerator("id"), ydbConnectionPtr);
+        CheckpointStorage = NewYdbCheckpointStorage(config, CreateEntityIdGenerator("id"), ydbConnectionPtr);
         auto issues = CheckpointStorage->Init().GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
 

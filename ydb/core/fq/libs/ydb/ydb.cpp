@@ -135,13 +135,15 @@ TFuture<TStatus> UpsertGeneration(const TGenerationContextPtr& context) {
         PRAGMA TablePathPrefix("%s");
         DECLARE $pk AS String;
         DECLARE $generation AS Uint64;
+        DECLARE $expire_at AS Optional<Timestamp>;
 
-        UPSERT INTO %s (%s, %s) VALUES
-            ($pk, $generation);
+        UPSERT INTO %s (%s, %s, %s) VALUES
+            ($pk, $generation, $expire_at);
     )", context->TablePathPrefix.c_str(),
         context->Table.c_str(),
         context->PrimaryKeyColumn.c_str(),
-        context->GenerationColumn.c_str());
+        context->GenerationColumn.c_str(),
+        context->ExpireAtColumn.c_str());
 
     NYdb::TParamsBuilder params;
     params
@@ -150,6 +152,9 @@ TFuture<TStatus> UpsertGeneration(const TGenerationContextPtr& context) {
         .Build()
         .AddParam("$generation")
         .Uint64(context->Generation)
+        .Build()
+        .AddParam("$expire_at")
+        .OptionalTimestamp(context->ExpireAt)
         .Build();
 
     auto ttxControl = TTxControl::Tx(*context->Transaction);

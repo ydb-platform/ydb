@@ -355,8 +355,11 @@ bool TOrderingsStateMachine::TLogicalOrderings::HasState() const {
 }
 
 bool TOrderingsStateMachine::TLogicalOrderings::IsSubsetOf(const TLogicalOrderings& logicalOrderings) {
-    Y_ASSERT(DFSM == logicalOrderings.DFSM);
-    return HasState() && logicalOrderings.HasState() && IsSubset(DFSM->Nodes[State].NFSMNodesBitset, logicalOrderings.DFSM->Nodes[logicalOrderings.State].NFSMNodesBitset);
+    if (DFSM == nullptr || logicalOrderings.DFSM == nullptr) {
+        return false;
+    }
+
+    return (DFSM == logicalOrderings.DFSM) && HasState() && logicalOrderings.HasState() && IsSubset(DFSM->Nodes[State].NFSMNodesBitset, logicalOrderings.DFSM->Nodes[logicalOrderings.State].NFSMNodesBitset);
 }
 
 i64 TOrderingsStateMachine::TLogicalOrderings::GetState() const {

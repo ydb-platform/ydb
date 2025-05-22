@@ -1696,8 +1696,6 @@ protected:
         sids.emplace_back(permission + '@' + AccessServiceDomain);
         if (const TString databaseId = record.GetAttributeValue(permission, "database_id"); databaseId) {
             sids.emplace_back(permission + '-' + databaseId + '@' + AccessServiceDomain);
-        } else if (const TString folderId = record.GetAttributeValue(permission, "folder_id"); folderId) {
-            sids.emplace_back(permission + '-' + folderId + '@' + AccessServiceDomain);
         }
         if (const TString gizmoId = record.GetAttributeValue(permission, "gizmo_id"); gizmoId) {
             sids.emplace_back(permission + '-' + gizmoId + '@' + AccessServiceDomain);

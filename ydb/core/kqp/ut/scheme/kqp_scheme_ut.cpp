@@ -3400,11 +3400,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(decimalType.Scale, scale);
         };
 
-        checkColumn(0,22, 20);
-        checkColumn(3, 1, 0);
-        checkColumn(4, 2, 1);
-        checkColumn(5, 22,9);
-        checkColumn(6, 35, 10);
+        checkColumn(2, 1, 0);
+        checkColumn(3, 2, 1);
+        checkColumn(4, 22, 9);
+        checkColumn(5, 35, 10);
+        checkColumn(6, 22, 20);
     }
 
     Y_UNIT_TEST(AlterTableWithPgColumn) {

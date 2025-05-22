@@ -859,6 +859,49 @@
             "StartOffset": 0,
             "Truncated": false
         },
+        "response_last_offset": {
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0w",
+                    "Offset": 0,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 1,
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0x",
+                    "Offset": 1,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 2,
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                },
+                {
+                    "Codec": 0,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "bWVzc2FnZS0y",
+                    "Offset": 2,
+                    "OriginalSize": 9,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 3,
+                    "StorageSize": 9,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": false
+        },
         "response_metadata": {
             "EndOffset": 21,
             "Messages": [
@@ -900,68 +943,6 @@
                     "ProducerId": "not-zero-number-text",
                     "SeqNo": 21,
                     "StorageSize": 38,
-                    "TimestampDiff": "not-zero-number",
-                    "WriteTimestamp": "not-zero-number"
-                }
-            ],
-            "StartOffset": 0,
-            "Truncated": false
-        },
-        "response_truncated": {
-            "EndOffset": 21,
-            "Messages": [
-                {
-                    "Codec": 1,
-                    "CreateTimestamp": "not-zero-number",
-                    "Message": "Y29tcHI=",
-                    "Offset": 20,
-                    "OriginalSize": 20,
-                    "ProducerId": "not-zero-number-text",
-                    "SeqNo": 21,
-                    "StorageSize": 38,
-                    "TimestampDiff": "not-zero-number",
-                    "WriteTimestamp": "not-zero-number"
-                }
-            ],
-            "StartOffset": 0,
-            "Truncated": true
-        },
-        "response_last_offset": {
-            "EndOffset": 21,
-            "Messages": [
-                {
-                    "Codec": 0,
-                    "CreateTimestamp": "not-zero-number",
-                    "Message": "bWVzc2FnZS0w",
-                    "Offset": 0,
-                    "OriginalSize": 9,
-                    "ProducerId": "not-zero-number-text",
-                    "SeqNo": 1,
-                    "StorageSize": 9,
-                    "TimestampDiff": "not-zero-number",
-                    "WriteTimestamp": "not-zero-number"
-                },
-                {
-                    "Codec": 0,
-                    "CreateTimestamp": "not-zero-number",
-                    "Message": "bWVzc2FnZS0x",
-                    "Offset": 1,
-                    "OriginalSize": 9,
-                    "ProducerId": "not-zero-number-text",
-                    "SeqNo": 2,
-                    "StorageSize": 9,
-                    "TimestampDiff": "not-zero-number",
-                    "WriteTimestamp": "not-zero-number"
-                },
-                {
-                    "Codec": 0,
-                    "CreateTimestamp": "not-zero-number",
-                    "Message": "bWVzc2FnZS0y",
-                    "Offset": 2,
-                    "OriginalSize": 9,
-                    "ProducerId": "not-zero-number-text",
-                    "SeqNo": 3,
-                    "StorageSize": 9,
                     "TimestampDiff": "not-zero-number",
                     "WriteTimestamp": "not-zero-number"
                 }
@@ -1035,6 +1016,25 @@
             ],
             "StartOffset": 0,
             "Truncated": false
+        },
+        "response_truncated": {
+            "EndOffset": 21,
+            "Messages": [
+                {
+                    "Codec": 1,
+                    "CreateTimestamp": "not-zero-number",
+                    "Message": "Y29tcHI=",
+                    "Offset": 20,
+                    "OriginalSize": 20,
+                    "ProducerId": "not-zero-number-text",
+                    "SeqNo": 21,
+                    "StorageSize": 38,
+                    "TimestampDiff": "not-zero-number",
+                    "WriteTimestamp": "not-zero-number"
+                }
+            ],
+            "StartOffset": 0,
+            "Truncated": true
         }
     },
     "test.test_transfer_describe": {
@@ -2617,6 +2617,7 @@
                     "ConnectStatus": "Green",
                     "Connections": "not-zero-number",
                     "CpuUsage": "not-zero-number",
+                    "Database": "/Root",
                     "DiskSpaceUsage": "not-zero-number",
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",

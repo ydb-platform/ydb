@@ -808,6 +808,10 @@ private:
 }; // TSchemeGetter
 
 class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
+    static TString MetadataKeyFromSettings(const TImportInfo& importInfo) {
+        return TStringBuilder() << importInfo.Settings.source_prefix() << "/metadata.json";
+    }
+
     static TString SchemaMappingKeyFromSettings(const TImportInfo& importInfo) {
         return TStringBuilder() << importInfo.Settings.source_prefix() << "/SchemaMapping/mapping.json";
     }
@@ -827,7 +831,21 @@ class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
             return;
         }
 
-        GetObject(MetadataKey, result.GetResult().GetContentLength());
+        GetObject(MetadataKey, result.GetResult().GetContentLength(), false);
+    }
+
+    void HandleSchemaMappingMetadata(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+
+        LOG_D("HandleSchemaMappingMetadata TEvExternalStorage::TEvHeadObjectResponse"
+            << ": self# " << SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, "HeadObject")) {
+            return;
+        }
+
+        GetObject(SchemaMappingMetadataKey, result.GetResult().GetContentLength());
     }
 
     void HandleSchemaMapping(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
@@ -856,17 +874,45 @@ class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
             return;
         }
 
+        TString content = msg.Body;
+        LOG_T("Trying to parse metadata"
+            << ": self# " << SelfId()
+            << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
+
+        if (!ProcessMetadata(content)) {
+            return;
+        }
+
+        auto nextStep = [this]() {
+            StartDownloadingSchemaMappingMetadata();
+        };
+
+        nextStep();
+    }
+
+    void HandleSchemaMappingMetadata(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
+        const auto& msg = *ev->Get();
+        const auto& result = msg.Result;
+
+        LOG_D("HandleSchemaMappingMetadata TEvExternalStorage::TEvGetObjectResponse"
+            << ": self# " << SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, "GetObject")) {
+            return;
+        }
+
         TString content;
         if (!MaybeDecryptAndSaveIV(msg.Body, content)) {
             return;
         }
         ImportInfo->ExportIV = IV;
 
-        LOG_T("Trying to parse metadata"
+        LOG_T("Trying to parse schema mapping metadata"
             << ": self# " << SelfId()
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
-        if (!ProcessMetadata(content)) {
+        if (!ProcessSchemaMappingMetadata(content)) {
             return;
         }
 
@@ -921,11 +967,21 @@ class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
     }
 
     void DownloadMetadata() {
-        Download(MetadataKey);
+        Download(MetadataKey, false);
+    }
+
+    void DownloadSchemaMappingMetadata() {
+        Download(SchemaMappingMetadataKey);
     }
 
     void DownloadSchemaMapping() {
         Download(SchemaMappingKey);
+    }
+
+    void StartDownloadingSchemaMappingMetadata() {
+        ResetRetries();
+        DownloadSchemaMappingMetadata();
+        Become(&TThis::StateDownloadSchemaMappingMetadata);
     }
 
     void StartDownloadingSchemaMapping() {
@@ -941,8 +997,29 @@ class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
             return false;
         }
         const NJson::TJsonValue& kind = json["kind"];
-        if (kind.GetString() != "SchemaMappingV0") {
+        if (kind.GetString() != "SimpleExportV0") {
             Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Unknown kind of metadata json: " << kind.GetString());
+            return false;
+        }
+        const NJson::TJsonValue& checksum = json["checksum"];
+        if (!checksum.IsDefined()) {
+            NeedValidateChecksums = false; // No checksums in export
+        } else if (checksum.GetString() != "sha256") {
+            Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Unknown checksum type: " << checksum.GetString());
+            return false;
+        }
+        return true;
+    }
+
+    bool ProcessSchemaMappingMetadata(const TString& content) {
+        NJson::TJsonValue json;
+        if (!NJson::ReadJsonTree(content, &json)) {
+            Reply(Ydb::StatusIds::BAD_REQUEST, "Failed to parse schema mapping metadata json");
+            return false;
+        }
+        const NJson::TJsonValue& kind = json["kind"];
+        if (kind.GetString() != "SchemaMappingV0") {
+            Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Unknown kind of schema mapping metadata json: " << kind.GetString());
             return false;
         }
         return true;
@@ -953,7 +1030,8 @@ public:
         : TGetterFromS3<TSchemaMappingGetter>(TGetterSettings::FromImportInfo(importInfo, Nothing()))
         , ImportInfo(std::move(importInfo))
         , ReplyTo(replyTo)
-        , MetadataKey(SchemaMappingMetadataKeyFromSettings(*ImportInfo))
+        , MetadataKey(MetadataKeyFromSettings(*ImportInfo))
+        , SchemaMappingMetadataKey(SchemaMappingMetadataKeyFromSettings(*ImportInfo))
         , SchemaMappingKey(SchemaMappingKeyFromSettings(*ImportInfo))
     {
     }
@@ -973,6 +1051,16 @@ public:
         }
     }
 
+    STATEFN(StateDownloadSchemaMappingMetadata) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleSchemaMappingMetadata);
+            hFunc(TEvExternalStorage::TEvGetObjectResponse, HandleSchemaMappingMetadata);
+
+            sFunc(TEvents::TEvWakeup, DownloadSchemaMappingMetadata);
+            sFunc(TEvents::TEvPoisonPill, PassAway);
+        }
+    }
+
     STATEFN(StateDownloadSchemaMapping) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleSchemaMapping);
@@ -985,8 +1073,10 @@ public:
 
 private:
     TImportInfo::TPtr ImportInfo;
+    bool NeedValidateChecksums = true;
     const TActorId ReplyTo;
     const TString MetadataKey;
+    const TString SchemaMappingMetadataKey;
     const TString SchemaMappingKey;
 }; // TSchemaMappingGetter
 

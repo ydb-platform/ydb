@@ -34,6 +34,7 @@ namespace NDeprecatedUserData {
 static const ui32 MAX_USER_TS_CACHE_SIZE = 10'000;
 static const ui64 MIN_TIMESTAMP_MS = 1'000'000'000'000ll; // around 2002 year
 static const TString CLIENTID_WITHOUT_CONSUMER = "$without_consumer";
+static const TString CLIENTID_COMPACTION_CONSUMER = "__ydb_kafka_compaction_consumer";
 
 typedef TProtobufTabletLabeledCounters<EClientLabeledCounters_descriptor> TUserLabeledCounters;
 

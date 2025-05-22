@@ -21,7 +21,7 @@ View the description of the create topic command:
 ## Parameters of the subcommand {#options}
 
 | Name | Description |
----|---
+| ---|--- |
 | `--partitions-count` | The number of topic [partitions](../../concepts/topic.md#partitioning).<br/>The default value is `1`. |
 | `--retention-period-hours` | Data retention time in a topic, set in hours.<br/>The default value is `18`. |
 | `--partition-write-speed-kbps` | The maximum write speed to a [partition](../../concepts/topic.md#partitioning), specified in KB/s.<br/>The default value is `1024`. |

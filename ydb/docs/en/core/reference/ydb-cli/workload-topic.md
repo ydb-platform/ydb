@@ -28,7 +28,7 @@ Before executing the load, you need to initialize it. During initialization, you
 Subcommand options:
 
 | Option name | Option description |
----|---
+| ---|--- |
 | `--topic` | Topic name.<br/>Default value: `workload-topic`. |
 | `--partitions`, `-p` | Number of topic partitions.<br/>Default value: `128`. |
 | `--consumers`, `-c` | Number of topic consumers.<br/>Default value: `1`. |
@@ -62,7 +62,7 @@ View the description of the command that generates the write load:
 Subcommand options:
 
 | Option name | Option description |
----|---
+| ---|--- |
 | `--seconds`, `-s` | Test duration in seconds.<br/>Default value: `60`. |
 | `--window`, `-w` | Statistics window in seconds.<br/>Default value: `1`. |
 | `--quiet`, `-q` | Output only the final test result. |
@@ -134,7 +134,7 @@ View the description of the command to generate the read load:
 Subcommand options:
 
 | Option name | Option description |
----|---
+| ---|--- |
 | `--seconds`, `-s` | Test duration in seconds.<br/>Default value: `60`. |
 | `--window`, `-w` | Statistics window in seconds.<br/>Default value: `1`. |
 | `--quiet`, `-q` | Output only the final test result. |
@@ -200,7 +200,7 @@ View the description of the command to run the read and write load:
 Subcommand options:
 
 | Option name | Option description |
----|---
+| ---|--- |
 | `--seconds`, `-s` | Test duration in seconds.<br/>Default value: `60`. |
 | `--window`, `-w` | Statistics window in seconds.<br/>Default value: `1`. |
 | `--quiet`, `-q` | Output only the final test result. |
@@ -269,7 +269,7 @@ When the work is complete, you can delete the test topic: General format of the 
 Subcommand options:
 
 | Option name | Option description |
----|---
+| ---|--- |
 | `--topic` | Topic name.<br/>Default value: `workload-topic`. |
 
 To delete the `workload-topic` test topic, run the following command:

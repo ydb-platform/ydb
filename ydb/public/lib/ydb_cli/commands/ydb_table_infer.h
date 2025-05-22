@@ -29,7 +29,9 @@ private:
     bool ReadingFromStdin = false;
     TString ColumnNames;
     int RowsToAnalyze;
-    bool Header = false;
+    bool HeaderHasColumnNames = false;
+    bool GenerateColumnNames = false;
+    bool Execute = false;
 };
 
 }

@@ -725,7 +725,8 @@ class TPopulator: public TMonitorableActor<TPopulator> {
                 for (const auto& replica : ring.Replicas) {
                     if (replica == foundReplica 
                         && ++replicaRepliesCounter[ringGroupIndex] > (ringGroup.NToSelect / 2) 
-                        && !quorum[ringGroupIndex]) {
+                        && !quorum[ringGroupIndex])
+                    {
                         quorum[ringGroupIndex] = true;
                         --quorumCnt;
                         if (quorumCnt == 0) {

@@ -222,8 +222,8 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
             NKikimrBlobStorage::TConfigRequest request;
             auto *cmd = request.AddCommand();
             auto *us = cmd->MutableUpdateSettings();
-            us->AddEnableSelfHeal(true);
-            us->AddEnableGroupLayoutSanitizer(true);
+            us->SetEnableSelfHeal(true);
+            us->SetEnableGroupLayoutSanitizer(true);
             // us->AddAllowMultipleRealmsOccupation(allowMultipleRealmsOccupation);
             auto response = env->Invoke(request);
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());

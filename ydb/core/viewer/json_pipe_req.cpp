@@ -854,7 +854,7 @@ void TViewerPipeClient::RequestStateStorageEndpointsLookup(const TString& path) 
 }
 
 TViewerPipeClient::TRequestResponse<TEvStateStorage::TEvBoardInfo> TViewerPipeClient::MakeRequestStateStorageEndpointsLookup(const TString& path, ui64 cookie) {
-    TRequestResponse<TEvStateStorage::TEvBoardInfo> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, "BoardLookupActor"));
+    TRequestResponse<TEvStateStorage::TEvBoardInfo> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, "BoardLookupActor-Endpoints"));
     RegisterWithSameMailbox(CreateBoardLookupActor(MakeEndpointsBoardPath(path),
                                                    SelfId(),
                                                    EBoardLookupMode::Second, {}, cookie));
@@ -865,14 +865,16 @@ TViewerPipeClient::TRequestResponse<TEvStateStorage::TEvBoardInfo> TViewerPipeCl
     return response;
 }
 
-void TViewerPipeClient::RequestStateStorageMetadataCacheEndpointsLookup(const TString& path) {
-    if (!AppData()->DomainsInfo->Domain) {
-        return;
-    }
+TViewerPipeClient::TRequestResponse<TEvStateStorage::TEvBoardInfo> TViewerPipeClient::MakeRequestStateStorageMetadataCacheEndpointsLookup(const TString& path, ui64 cookie) {
+    TRequestResponse<TEvStateStorage::TEvBoardInfo> response(Span.CreateChild(TComponentTracingLevels::THttp::Detailed, "BoardLookupActor-MetadataCache"));
     RegisterWithSameMailbox(CreateBoardLookupActor(MakeDatabaseMetadataCacheBoardPath(path),
                                                    SelfId(),
-                                                   EBoardLookupMode::Second));
+                                                   EBoardLookupMode::Second, {}, cookie));
+    if (response.Span) {
+        response.Span.Attribute("path", path);
+    }
     ++DataRequests;
+    return response;
 }
 
 std::vector<TNodeId> TViewerPipeClient::GetNodesFromBoardReply(const TEvStateStorage::TEvBoardInfo& ev) {
@@ -913,6 +915,8 @@ void TViewerPipeClient::InitConfig(const TCgiParameters& params) {
     Proto2JsonConfig.MapAsObject = true;
     Proto2JsonConfig.ConvertAny = true;
     Proto2JsonConfig.WriteNanAsString = true;
+    Proto2JsonConfig.DoubleNDigits = 17;
+    Proto2JsonConfig.FloatNDigits = 9;
     Timeout = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("timeout"), Timeout.MilliSeconds()));
     UseCache = FromStringWithDefault<bool>(params.Get("use_cache"), UseCache);
 }
@@ -986,8 +990,8 @@ TString TViewerPipeClient::GetHTTPOKJSON(TString response, TInstant lastModified
 }
 
 TString TViewerPipeClient::GetHTTPOKJSON(const NJson::TJsonValue& response, TInstant lastModified) {
-    constexpr ui32 doubleNDigits = std::numeric_limits<double>::max_digits10;
-    constexpr ui32 floatNDigits = std::numeric_limits<float>::max_digits10;
+    constexpr ui32 doubleNDigits = 17;
+    constexpr ui32 floatNDigits = 9;
     constexpr EFloatToStringMode floatMode = EFloatToStringMode::PREC_NDIGITS;
     TStringStream content;
     NJson::WriteJson(&content, &response, {

@@ -61,7 +61,7 @@ If consumer name is not specified, message consumption will start from the first
 
 - Defaults to `none`.
 - Possible values:
-   `base64`: A message is transformed into [Base64](https://ru.wikipedia.org/wiki/Base64)
+   `base64`: A message is transformed into [Base64](https://en.wikipedia.org/wiki/Base64)
    `none`: The contents of a message are output byte by byte without transforming them.
 
 `--file VAL` (`-f VAL`): Write the messages read to the specified file. If not set, messages are output to `stdout`.

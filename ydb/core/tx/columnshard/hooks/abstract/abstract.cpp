@@ -10,7 +10,7 @@ TDuration ICSController::GetGuaranteeIndexationInterval() const {
 }
 
 TDuration ICSController::GetPeriodicWakeupActivationPeriod() const {
-    const TDuration defaultValue = NColumnShard::TSettings::DefaultPeriodicWakeupActivationPeriod;
+    const TDuration defaultValue = TDuration::MilliSeconds(GetConfig().GetPeriodicWakeupActivationPeriodMs());
     return DoGetPeriodicWakeupActivationPeriod(defaultValue);
 }
 
@@ -25,7 +25,7 @@ ui64 ICSController::GetGuaranteeIndexationStartBytesLimit() const {
 }
 
 bool ICSController::CheckPortionForEvict(const NOlap::TPortionInfo& portion) const {
-    return portion.HasRuntimeFeature(NOlap::TPortionInfo::ERuntimeFeature::Optimized) && !portion.HasInsertWriteId();
+    return portion.HasRuntimeFeature(NOlap::TPortionInfo::ERuntimeFeature::Optimized) && portion.GetPortionType() == NOlap::EPortionType::Compacted;
 }
 
 bool ICSController::CheckPortionsToMergeOnCompaction(const ui64 memoryAfterAdd, const ui32 /*currentSubsetsCount*/) {

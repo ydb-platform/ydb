@@ -60,6 +60,10 @@ def _getArgNames(spec):
 
     The name of * and ** arguments is normalized to "*args" and "**kwargs".
 
+    Return type annotations are omitted, since we don't constrain input methods
+    to have the same return type as output methods, nor output methods to have
+    the same output type.
+
     :param ArgSpec spec: A function to interrogate for a signature.
     :return: The set of all argument names in `func`s signature.
     :rtype: Set[str]
@@ -69,7 +73,7 @@ def _getArgNames(spec):
         + spec.kwonlyargs
         + (("*args",) if spec.varargs else ())
         + (("**kwargs",) if spec.varkw else ())
-        + spec.annotations
+        + tuple(a for a in spec.annotations if a[0] != "return")
     )
 
 

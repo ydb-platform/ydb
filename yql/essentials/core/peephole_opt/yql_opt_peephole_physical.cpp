@@ -2143,17 +2143,6 @@ TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) {
             dictKeyType = collectionType->Cast<TListExprType>()->GetItemType();
         }
     } else if (collectionType->GetKind() == ETypeAnnotationKind::Tuple) {
-        if (ansiIn && collectionType->Cast<TTupleExprType>()->GetSize()) {
-            return ctx.Builder(input->Pos())
-                .Callable("SqlIn")
-                    .Callable(0, "AsListStrict")
-                        .Add(collection->ChildrenList())
-                    .Seal()
-                    .Add(1, std::move(lookup))
-                    .Add(2, std::move(options))
-                .Seal()
-                .Build();
-        }
         YQL_CLOG(DEBUG, CorePeepHole) << "IN Tuple";
         dict = BuildDictOverTuple(std::move(collection), dictKeyType, ctx);
     } else if (collectionType->GetKind() == ETypeAnnotationKind::EmptyDict) {

@@ -853,6 +853,7 @@ message TStatusResponse {
 
         optional bool ReadingFinished = 10;
         optional uint64 CommitedLagMs = 11;
+        optional string CommittedMetadata = 12;
     }
 
 

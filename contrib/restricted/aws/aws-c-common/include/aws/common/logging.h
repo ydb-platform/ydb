@@ -58,9 +58,11 @@ enum aws_log_level {
 typedef uint32_t aws_log_subject_t;
 
 /* Each library gets space for 2^^10 log subject entries */
-#define AWS_LOG_SUBJECT_STRIDE_BITS 10
+enum {
+    AWS_LOG_SUBJECT_STRIDE_BITS = 10,
+};
 #define AWS_LOG_SUBJECT_STRIDE (1U << AWS_LOG_SUBJECT_STRIDE_BITS)
-#define AWS_LOG_SUBJECT_BEGIN_RANGE(x) ((x)*AWS_LOG_SUBJECT_STRIDE)
+#define AWS_LOG_SUBJECT_BEGIN_RANGE(x) ((x) * AWS_LOG_SUBJECT_STRIDE)
 #define AWS_LOG_SUBJECT_END_RANGE(x) (((x) + 1) * AWS_LOG_SUBJECT_STRIDE - 1)
 
 struct aws_log_subject_info {
@@ -70,7 +72,7 @@ struct aws_log_subject_info {
 };
 
 #define DEFINE_LOG_SUBJECT_INFO(id, name, desc)                                                                        \
-    { .subject_id = (id), .subject_name = (name), .subject_description = (desc) }
+    {.subject_id = (id), .subject_name = (name), .subject_description = (desc)}
 
 struct aws_log_subject_info_list {
     struct aws_log_subject_info *subject_list;
@@ -87,6 +89,7 @@ enum aws_common_log_subject {
     AWS_LS_COMMON_BUS,
     AWS_LS_COMMON_TEST,
     AWS_LS_COMMON_JSON_PARSER,
+    AWS_LS_COMMON_CBOR,
 
     AWS_LS_COMMON_LAST = AWS_LOG_SUBJECT_END_RANGE(AWS_C_COMMON_PACKAGE_ID)
 };

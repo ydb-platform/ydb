@@ -203,7 +203,7 @@ namespace NSchemeShardUT_Private {
 
     TEvSchemeShard::TEvModifySchemeTransaction* CreateModifyACLRequest(
         ui64 txId, ui64 schemeshard,
-        TString parentPath, TString name, 
+        TString parentPath, TString name,
         const TString& diffAcl, const TString& newOwner, const TApplyIf& applyIf
     )
     {
@@ -973,6 +973,11 @@ namespace NSchemeShardUT_Private {
     DROP_BY_PATH_ID_HELPERS(DropBackupCollection, NKikimrSchemeOp::EOperationType::ESchemeOpDropBackupCollection)
     GENERIC_HELPERS(BackupBackupCollection, NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection, &NKikimrSchemeOp::TModifyScheme::MutableBackupBackupCollection)
     GENERIC_HELPERS(BackupIncrementalBackupCollection, NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection, &NKikimrSchemeOp::TModifyScheme::MutableBackupIncrementalBackupCollection)
+
+    // sysview
+    GENERIC_HELPERS(CreateSysView, NKikimrSchemeOp::EOperationType::ESchemeOpCreateSysView, &NKikimrSchemeOp::TModifyScheme::MutableCreateSysView)
+    GENERIC_HELPERS(DropSysView, NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+    DROP_BY_PATH_ID_HELPERS(DropSysView, NKikimrSchemeOp::EOperationType::ESchemeOpDropSysView)
 
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
@@ -1783,6 +1788,9 @@ namespace NSchemeShardUT_Private {
                 if (cfg.GlobalIndexSettings.size() > 1) {
                     cfg.GlobalIndexSettings[1].SerializeTo(*settings.mutable_posting_table_settings());
                 }
+                if (cfg.GlobalIndexSettings.size() > 2) {
+                    cfg.GlobalIndexSettings[2].SerializeTo(*settings.mutable_prefix_table_settings());
+                }
             }
         } break;
         default:
@@ -1844,7 +1852,7 @@ namespace NSchemeShardUT_Private {
         TEvIndexBuilder::TEvCreateResponse* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
         UNIT_ASSERT(event);
 
-        Cerr << "BUILDINDEX RESPONSE CREATE: " << event->ToString() << Endl;
+        Cerr << "BUILDCOLUMN RESPONSE CREATE: " << event->ToString() << Endl;
         UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), expectedStatus,
                             "status mismatch"
                                 << " got " << Ydb::StatusIds::StatusCode_Name(event->Record.GetStatus())
@@ -2126,7 +2134,7 @@ namespace NSchemeShardUT_Private {
 
         AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release());
         TAutoPtr<IEventHandle> handle;
-        [[maybe_unused]]auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle); // wait()        
+        [[maybe_unused]]auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle); // wait()
     }
 
     void ChangeIsEnabledUser(TTestActorRuntime& runtime, ui64 txId, const TString& database, const TString& user, bool isEnabled) {

@@ -216,7 +216,7 @@ TColumnSchema& TColumnSchema::SetGroup(const std::optional<std::string>& value)
     return *this;
 }
 
-TColumnSchema& TColumnSchema::SetExpression(const std::optional<TString>& value)
+TColumnSchema& TColumnSchema::SetExpression(const std::optional<std::string>& value)
 {
     Expression_ = value;
     return *this;
@@ -1067,6 +1067,24 @@ TTableSchemaPtr TTableSchema::ToWrite() const
             {
                 columns.push_back(column);
             }
+        }
+    }
+    return New<TTableSchema>(
+        std::move(columns),
+        Strict_,
+        UniqueKeys_,
+        ETableSchemaModification::None,
+        DeletedColumns());
+}
+
+TTableSchemaPtr TTableSchema::ToCreate() const
+{
+    std::vector<TColumnSchema> columns;
+    for (const auto& column : Columns()) {
+        if (column.StableName().Underlying() != TabletIndexColumnName &&
+            column.StableName().Underlying() != RowIndexColumnName)
+        {
+            columns.push_back(column);
         }
     }
     return New<TTableSchema>(

@@ -240,6 +240,7 @@ namespace {
             entry.BlockStoreVolumeInfo.Drop();
             entry.FileStoreInfo.Drop();
             entry.BackupCollectionInfo.Drop();
+            entry.SysViewInfo.Drop();
         }
 
         static void SetErrorAndClear(TResolveContext* context, TResolve::TEntry& entry, const bool isDescribeDenied) {
@@ -759,6 +760,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             ViewInfo.Drop();
             ResourcePoolInfo.Drop();
             BackupCollectionInfo.Drop();
+            SysViewInfo.Drop();
         }
 
         void FillTableInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
@@ -873,6 +875,18 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             }
         }
 
+        void FillSystemViewInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
+            if (auto schema = Owner->SystemViewResolver->GetSystemViewSchema(pathDesc.GetSysViewDescription().GetType())) {
+                Columns = std::move(schema->Columns);
+                KeyColumnTypes = std::move(schema->KeyColumnTypes);
+                for (const auto& [id, column] : Columns) {
+                    if (column.IsNotNullColumn) {
+                        NotNullColumns.insert(column.Name);
+                    }
+                }
+            }
+        }
+
         static TResolve::EKind PathSubTypeToTableKind(NKikimrSchemeOp::EPathSubType subType) {
             switch (subType) {
             case NKikimrSchemeOp::EPathSubTypeSyncIndexImplTable:
@@ -893,7 +907,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 case NKikimrSchemeOp::EPathSubTypeSyncIndexImplTable:
                 case NKikimrSchemeOp::EPathSubTypeAsyncIndexImplTable:
                 case NKikimrSchemeOp::EPathSubTypeVectorKmeansTreeIndexImplTable:
-                    return true;
+                    return !AppData()->FeatureFlags.GetEnableAccessToIndexImplTables();
                 default:
                     return false;
                 }
@@ -1283,6 +1297,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             DESCRIPTION_PART(ViewInfo);
             DESCRIPTION_PART(ResourcePoolInfo);
             DESCRIPTION_PART(BackupCollectionInfo);
+            DESCRIPTION_PART(SysViewInfo);
 
             #undef DESCRIPTION_PART
 
@@ -1623,6 +1638,13 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 Kind = TNavigate::KindBackupCollection;
                 FillInfo(Kind, BackupCollectionInfo, std::move(*pathDesc.MutableBackupCollectionDescription()));
                 break;
+            case NKikimrSchemeOp::EPathTypeSysView:
+                Kind = TNavigate::KindSysView;
+                if (Created) {
+                    FillSystemViewInfo(pathDesc);
+                }
+                FillInfo(Kind, SysViewInfo, std::move(*pathDesc.MutableSysViewDescription()));
+                break;
             case NKikimrSchemeOp::EPathTypeInvalid:
                 Y_DEBUG_ABORT("Invalid path type");
                 break;
@@ -1701,6 +1723,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         break;
                     case NKikimrSchemeOp::EPathTypeBackupCollection:
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindBackupCollection);
+                        break;
+                    case NKikimrSchemeOp::EPathTypeSysView:
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindSysView);
                         break;
                     case NKikimrSchemeOp::EPathTypeTableIndex:
                     case NKikimrSchemeOp::EPathTypeInvalid:
@@ -1827,7 +1852,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 return SetError(context, entry, TNavigate::EStatus::LookupError);
             }
 
-            if (!entry.TableId.SysViewInfo.empty()) {
+            if (!entry.TableId.SysViewInfo.empty() && Kind != TNavigate::KindSysView) {
                 if (Kind == TNavigate::KindPath) {
                     auto split = SplitPath(Path);
                     if (split.size() == 1) {
@@ -1856,12 +1881,17 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 || Kind == TNavigate::KindView;
             const bool isTopic = Kind == TNavigate::KindTopic
                 || Kind == TNavigate::KindCdcStream;
+            const bool isSysView = Kind == TNavigate::KindSysView;
 
-            if (entry.Operation == TNavigate::OpTable && !isTable) {
+            if (entry.Operation == TNavigate::OpTable && !(isTable || isSysView)) {
                 return SetError(context, entry, TNavigate::EStatus::PathNotTable);
             }
 
-            if (!Created && (isTable || isTopic)) {
+            if (!Created && (isTable || isTopic || isSysView)) {
+                return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
+            }
+
+            if (isSysView && !Columns) {
                 return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
             }
 
@@ -1886,6 +1916,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             if (entry.RequestType == TNavigate::TEntry::ERequestType::ByPath) {
                 if (Kind == TNavigate::KindTable || Kind == TNavigate::KindColumnTable) {
                     entry.TableId = TTableId(PathId.OwnerId, PathId.LocalPathId, SchemaVersion);
+                } else if (Kind == TNavigate::KindSysView) {
+                    entry.TableId.PathId.OwnerId = PathId.OwnerId;
+                    entry.TableId.PathId.LocalPathId = PathId.LocalPathId;
                 } else {
                     entry.TableId = TTableId(PathId.OwnerId, PathId.LocalPathId);
                 }
@@ -1925,6 +1958,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.ViewInfo = ViewInfo;
             entry.ResourcePoolInfo = ResourcePoolInfo;
             entry.BackupCollectionInfo = BackupCollectionInfo;
+            entry.SysViewInfo = SysViewInfo;
         }
 
         bool CheckColumns(TResolveContext* context, TResolve::TEntry& entry,
@@ -2040,7 +2074,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 return SetError(context, entry, TResolve::EStatus::LookupError, TKeyDesc::EStatus::NotExists);
             }
 
-            if (!keyDesc.TableId.SysViewInfo.empty()) {
+            if (!keyDesc.TableId.SysViewInfo.empty() && Kind != TNavigate::KindSysView) {
                 if (Kind == TNavigate::KindPath) {
                     auto split = SplitPath(Path);
                     if (split.size() == 1) {
@@ -2122,7 +2156,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 }
             }
 
-            if (keyDesc.GetPartitions().empty()) {
+            const bool isSysView = Kind == TNavigate::KindSysView;
+            if (keyDesc.GetPartitions().empty() && !isSysView) {
                 entry.Status = TResolve::EStatus::TypeCheckError;
                 keyDesc.Status = TKeyDesc::EStatus::OperationNotSupported;
             }
@@ -2226,6 +2261,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         // BackupCollection specific
         TIntrusivePtr<TNavigate::TBackupCollectionInfo> BackupCollectionInfo;
+
+        // SysView specific
+        TIntrusivePtr<TNavigate::TSysViewInfo> SysViewInfo;
+
     }; // TCacheItem
 
     struct TMerger {

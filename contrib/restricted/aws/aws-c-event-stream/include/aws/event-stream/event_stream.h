@@ -13,18 +13,24 @@
 
 #include <stdio.h>
 
+AWS_PUSH_SANE_WARNING_LEVEL
+
 #define AWS_C_EVENT_STREAM_PACKAGE_ID 4
-/* max message size is 16MB */
-#define AWS_EVENT_STREAM_MAX_MESSAGE_SIZE (16 * 1024 * 1024)
+/* Current service-side max is 24 MB, likely to increase in future.
+ * This is encoded on the wire in 4 bytes, and could technically be larger (up to INT32_MAX). */
+#define AWS_EVENT_STREAM_MAX_MESSAGE_SIZE (24 * 1024 * 1024)
 
-/* max header size is 128kb */
-#define AWS_EVENT_STREAM_MAX_HEADERS_SIZE (128 * 1024)
+/* Max total size for headers.
+ * This is encoded on the wire in 4 bytes, and could technically be larger (up to INT32_MAX). */
+#define AWS_EVENT_STREAM_MAX_HEADERS_SIZE (AWS_EVENT_STREAM_MAX_MESSAGE_SIZE)
 
-/* Max header name length is 127 bytes */
+/* Max header name length is 127 bytes.
+ * This is encoded on the wire in 1 byte, it cannot change. */
 #define AWS_EVENT_STREAM_HEADER_NAME_LEN_MAX (INT8_MAX)
 
-/* Max header static value length is 16 bytes */
-#define AWS_EVENT_STREAM_HEADER_STATIC_VALUE_LEN_MAX (16)
+/* Max header value length is 32767 bytes.
+ * This is encoded on the wire in 2 bytes, it cannot change. */
+#define AWS_EVENT_STREAM_HEADER_VALUE_LEN_MAX (INT16_MAX)
 
 enum aws_event_stream_errors {
     AWS_ERROR_EVENT_STREAM_BUFFER_LENGTH_MISMATCH = AWS_ERROR_ENUM_BEGIN_RANGE(AWS_C_EVENT_STREAM_PACKAGE_ID),
@@ -63,9 +69,11 @@ struct aws_event_stream_message {
     struct aws_byte_buf message_buffer;
 };
 
-#define AWS_EVENT_STREAM_PRELUDE_LENGTH (uint32_t)(sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t))
+/* Prelude (12-bytes) = Total Byte Length (4-bytes) + Headers Byte Length (4-bytes) + Prelude CRC (4-bytes) */
+#define AWS_EVENT_STREAM_PRELUDE_LENGTH (uint32_t)(12)
 
-#define AWS_EVENT_STREAM_TRAILER_LENGTH (uint32_t)(sizeof(uint32_t))
+/* Trailer (4-bytes) = Message CRC (4-bytes) */
+#define AWS_EVENT_STREAM_TRAILER_LENGTH (uint32_t)(4)
 
 enum aws_event_stream_header_value_type {
     AWS_EVENT_STREAM_HEADER_BOOL_TRUE = 0,
@@ -81,14 +89,13 @@ enum aws_event_stream_header_value_type {
     AWS_EVENT_STREAM_HEADER_UUID
 };
 
-static const uint16_t UUID_LEN = 16U;
 struct aws_event_stream_header_value_pair {
     uint8_t header_name_len;
-    char header_name[INT8_MAX];
+    char header_name[AWS_EVENT_STREAM_HEADER_NAME_LEN_MAX];
     enum aws_event_stream_header_value_type header_value_type;
     union {
-        uint8_t *variable_len_val;
-        uint8_t static_val[AWS_EVENT_STREAM_HEADER_STATIC_VALUE_LEN_MAX];
+        uint8_t *variable_len_val; /* for variable-size types (STRING, BYTE_BUF)*/
+        uint8_t static_val[16];    /* largest fixed-size types are 16 bytes (INT64, UUID, TIMESTAMP) */
     } header_value;
 
     uint16_t header_value_len;
@@ -672,5 +679,6 @@ AWS_EVENT_STREAM_API void aws_event_stream_library_init(struct aws_allocator *al
 AWS_EVENT_STREAM_API void aws_event_stream_library_clean_up(void);
 
 AWS_EXTERN_C_END
+AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_EVENT_STREAM_H_ */

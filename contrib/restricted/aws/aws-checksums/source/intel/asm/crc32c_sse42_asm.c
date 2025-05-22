@@ -3,15 +3,23 @@
  * SPDX-License-Identifier: Apache-2.0.
  */
 
-#include <aws/checksums/private/crc_priv.h>
+#include <aws/checksums/private/crc32_priv.h>
+#include <aws/checksums/private/crc_util.h>
 
-#include <aws/common/cpuid.h>
+/* clang-format off */
 
 /* this implementation is only for the x86_64 intel architecture */
 #if defined(__x86_64__)
 #    if defined(__clang__)
 #        pragma clang diagnostic push
 #        pragma clang diagnostic ignored "-Wdollar-in-identifier-extension"
+#    endif
+
+/* use local labels, so that linker doesn't think these are functions it can deadstrip */
+#    ifdef __APPLE__
+#        define LABEL(label) "L_" #label "_%="
+#    else
+#        define LABEL(label) ".L_" #label "_%="
 #    endif
 
 /*
@@ -21,8 +29,7 @@
  * Utilizes xmm1, xmm2, xmm3, xmm4 as well as clobbering r8, r9, r11
  * Result is placed in ecx
  */
-#    define FOLD_K1K2(NAME, K1, K2)                                                                                    \
-        "fold_k1k2_" #NAME "_%=: \n"                                                                                   \
+#    define FOLD_K1K2(K1, K2)                                                                                          \
         "movl             " #K1 ", %%r8d    # Magic K1 constant \n"                                                    \
         "movl             " #K2 ", %%r9d    # Magic K2 constant \n"                                                    \
         "movq              %%rcx, %%xmm1   # crc0 into lower dword of xmm1 \n"                                         \
@@ -50,8 +57,6 @@
  */
 static inline uint32_t s_crc32c_sse42_clmul_256(const uint8_t *input, uint32_t crc) {
     __asm__ __volatile__(
-        "enter_256_%=:"
-
         "xor          %%r11, %%r11    # zero all 64 bits in r11, will track crc1 \n"
         "xor          %%r10, %%r10    # zero all 64 bits in r10, will track crc2 \n"
 
@@ -98,7 +103,7 @@ static inline uint32_t s_crc32c_sse42_clmul_256(const uint8_t *input, uint32_t c
         "crc32q   80(%[in]), %%rcx    # crc0 \n"
         "crc32q  168(%[in]), %%r11    # crc2 \n"
 
-        FOLD_K1K2(256, $0x1b3d8f29, $0x39d3b296) /* Magic Constants used to fold crc stripes into ecx */
+        FOLD_K1K2($0x1b3d8f29, $0x39d3b296) /* Magic Constants used to fold crc stripes into ecx */
 
         /* output registers
          [crc] is an input and and output so it is marked read/write (i.e. "+c")*/
@@ -121,14 +126,12 @@ static inline uint32_t s_crc32c_sse42_clmul_256(const uint8_t *input, uint32_t c
  */
 static inline uint32_t s_crc32c_sse42_clmul_1024(const uint8_t *input, uint32_t crc) {
     __asm__ __volatile__(
-        "enter_1024_%=:"
-
         "xor          %%r11, %%r11    # zero all 64 bits in r11, will track crc1 \n"
         "xor          %%r10, %%r10    # zero all 64 bits in r10, will track crc2 \n"
 
         "movl            $5, %%r8d    # Loop 5 times through 64 byte chunks in 3 parallel stripes \n"
 
-        "loop_1024_%=:"
+        LABEL(loop_1024) ": \n"
 
         "prefetcht0  128(%[in])       # \n"
         "prefetcht0  472(%[in])       # \n"
@@ -168,7 +171,7 @@ static inline uint32_t s_crc32c_sse42_clmul_1024(const uint8_t *input, uint32_t 
 
         "add            $64, %[in]    # \n"
         "sub             $1, %%r8d    # \n"
-        "jnz loop_1024_%=             # \n"
+        "jnz " LABEL(loop_1024) "     # \n"
 
         "crc32q    0(%[in]), %%rcx    # crc0 \n"
         "crc32q  344(%[in]), %%r11    # crc1 \n"
@@ -181,7 +184,7 @@ static inline uint32_t s_crc32c_sse42_clmul_1024(const uint8_t *input, uint32_t 
         "crc32q   16(%[in]), %%rcx    # crc0 \n"
         "crc32q  696(%[in]), %%r10    # crc2 \n"
 
-        FOLD_K1K2(1024, $0xe417f38a, $0x8f158014) /* Magic Constants used to fold crc stripes into ecx
+        FOLD_K1K2($0xe417f38a, $0x8f158014) /* Magic Constants used to fold crc stripes into ecx
 
                             output registers
                             [crc] is an input and and output so it is marked read/write (i.e. "+c")
@@ -205,14 +208,12 @@ static inline uint32_t s_crc32c_sse42_clmul_1024(const uint8_t *input, uint32_t 
  */
 static inline uint32_t s_crc32c_sse42_clmul_3072(const uint8_t *input, uint32_t crc) {
     __asm__ __volatile__(
-        "enter_3072_%=:"
-
         "xor          %%r11, %%r11    # zero all 64 bits in r11, will track crc1 \n"
         "xor          %%r10, %%r10    # zero all 64 bits in r10, will track crc2 \n"
 
         "movl           $16, %%r8d    # Loop 16 times through 64 byte chunks in 3 parallel stripes \n"
 
-        "loop_3072_%=:"
+        LABEL(loop_3072) ": \n"
 
         "prefetcht0  128(%[in])       # \n"
         "prefetcht0 1152(%[in])       # \n"
@@ -252,10 +253,9 @@ static inline uint32_t s_crc32c_sse42_clmul_3072(const uint8_t *input, uint32_t 
 
         "add            $64, %[in]    # \n"
         "sub             $1, %%r8d    # \n"
-        "jnz loop_3072_%=             # \n"
+        "jnz " LABEL(loop_3072) "     # \n"
 
         FOLD_K1K2(
-            3072,
             $0xa51b6135,
             $0x170076fa) /* Magic Constants used to fold crc stripes into ecx
 
@@ -272,9 +272,6 @@ static inline uint32_t s_crc32c_sse42_clmul_3072(const uint8_t *input, uint32_t 
     return crc;
 }
 
-static bool detection_performed = false;
-static bool detected_clmul = false;
-
 /*
  * Computes the Castagnoli CRC32c (iSCSI) of the specified data buffer using the Intel CRC32Q (64-bit quad word) and
  * PCLMULQDQ machine instructions (if present).
@@ -282,22 +279,15 @@ static bool detected_clmul = false;
  * Pass 0 in the previousCrc32 parameter as an initial value unless continuing to update a running CRC in a subsequent
  * call.
  */
-uint32_t aws_checksums_crc32c_hw(const uint8_t *input, int length, uint32_t previousCrc32) {
+uint32_t aws_checksums_crc32c_clmul_sse42(const uint8_t *input, int length, uint32_t previousCrc32) {
 
-    if (AWS_UNLIKELY(!detection_performed)) {
-        detected_clmul = aws_cpu_has_feature(AWS_CPU_FEATURE_CLMUL);
-        /* Simply setting the flag true to skip HW detection next time
-           Not using memory barriers since the worst that can
-           happen is a fallback to the non HW accelerated code. */
-        detection_performed = true;
-    }
-
+    /* this is called by a higher-level shim and previousCRC32 is already ~ */
     uint32_t crc = ~previousCrc32;
 
     /* For small input, forget about alignment checks - simply compute the CRC32c one byte at a time */
     if (AWS_UNLIKELY(length < 8)) {
         while (length-- > 0) {
-            __asm__("loop_small_%=: CRC32B (%[in]), %[crc]" : [ crc ] "+c"(crc) : [ in ] "r"(input));
+            __asm__("CRC32B (%[in]), %[crc]" : [ crc ] "+c"(crc) : [ in ] "r"(input));
             input++;
         }
         return ~crc;
@@ -314,12 +304,12 @@ uint32_t aws_checksums_crc32c_hw(const uint8_t *input, int length, uint32_t prev
 
     /* spin through the leading unaligned input bytes (if any) one-by-one */
     while (leading-- > 0) {
-        __asm__("loop_leading_%=: CRC32B (%[in]), %[crc]" : [ crc ] "+c"(crc) : [ in ] "r"(input));
+        __asm__("CRC32B (%[in]), %[crc]" : [ crc ] "+c"(crc) : [ in ] "r"(input));
         input++;
     }
 
     /* Using likely to keep this code inlined */
-    if (AWS_LIKELY(detected_clmul)) {
+    if (AWS_LIKELY(aws_cpu_has_clmul_cached())) {
 
         while (AWS_LIKELY(length >= 3072)) {
             /* Compute crc32c on each block, chaining each crc result */
@@ -344,34 +334,23 @@ uint32_t aws_checksums_crc32c_hw(const uint8_t *input, int length, uint32_t prev
     /* Spin through remaining (aligned) 8-byte chunks using the CRC32Q quad word instruction */
     while (AWS_LIKELY(length >= 8)) {
         /* Hardcoding %rcx register (i.e. "+c") to allow use of qword instruction */
-        __asm__ __volatile__("loop_8_%=: CRC32Q (%[in]), %%rcx" : [ crc ] "+c"(crc) : [ in ] "r"(input));
+        __asm__ __volatile__("CRC32Q (%[in]), %%rcx" : [ crc ] "+c"(crc) : [ in ] "r"(input));
         input += 8;
         length -= 8;
     }
 
     /* Finish up with any trailing bytes using the CRC32B single byte instruction one-by-one */
     while (length-- > 0) {
-        __asm__ __volatile__("loop_trailing_%=: CRC32B (%[in]), %[crc]" : [ crc ] "+c"(crc) : [ in ] "r"(input));
+        __asm__ __volatile__("CRC32B (%[in]), %[crc]" : [ crc ] "+c"(crc) : [ in ] "r"(input));
         input++;
     }
 
     return ~crc;
-}
-uint32_t aws_checksums_crc32_hw(const uint8_t *input, int length, uint32_t previousCrc32) {
-    return aws_checksums_crc32_sw(input, length, previousCrc32);
 }
 
 #    if defined(__clang__)
 #        pragma clang diagnostic pop
 #    endif
 
-#else
-uint32_t aws_checksums_crc32_hw(const uint8_t *input, int length, uint32_t previousCrc32) {
-    return aws_checksums_crc32_sw(input, length, previousCrc32);
-}
-
-uint32_t aws_checksums_crc32c_hw(const uint8_t *input, int length, uint32_t previousCrc32) {
-    return aws_checksums_crc32c_sw(input, length, previousCrc32);
-}
-
-#endif
+#endif /* x86_64 */
+/* clang-format on */

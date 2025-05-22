@@ -20,9 +20,9 @@
 
 ## Параметры подкоманды {#options}
 
-Имя | Описание
----|---
-`--format` | Формат вывода.<br/>Значение по умолчанию — `pretty`.<br/>Возможные значения:<ul><li>`pretty` — человекочитаемый формат;</li><li>`proto-json-base64` — вывод Protobuf в формате [JSON](https://ru.wikipedia.org/wiki/JSON), бинарные строки закодированы в [Base64](https://ru.wikipedia.org/wiki/Base64).</li></ul>
+| Имя | Описание |
+| ---|--- |
+| `--format` | Формат вывода.<br/>Значение по умолчанию — `pretty`.<br/>Возможные значения:<ul><li>`pretty` — человекочитаемый формат;</li><li>`proto-json-base64` — вывод Protobuf в формате [JSON](https://ru.wikipedia.org/wiki/JSON), бинарные строки закодированы в [Base64](https://ru.wikipedia.org/wiki/Base64).</li></ul> |
 
 ## Примеры {examples}
 

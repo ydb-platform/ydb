@@ -129,7 +129,7 @@ A source ID is an arbitrary string up to 2048 characters long. This is usually t
 #### Sample source IDs {#source-id-examples}
 
 | Type | ID | Description |
---- | --- | ---
+| --- | --- | --- |
 | File | Server ID | Files are used to store application logs. In this case, it's convenient to use the server ID as a source ID. |
 | User actions | ID of the class of user actions, such as "viewing a page", "making a purchase", and so on. | It's important to handle user actions in the order they were performed by the user. At the same time, there is no need to handle every single user action in one application. In this case, it's convenient to group user actions by class. |
 
@@ -140,7 +140,7 @@ A message group ID is an arbitrary string up to 2048 characters long. This is us
 #### Sample message group IDs {#group-id-examples}
 
 | Type | ID | Description |
---- | --- | ---
+| --- | --- | --- |
 | File | Full file path | All data from the server and the file it hosts will be sent to the same partition. |
 | User actions | User ID | It's important to handle user actions in the order they were performed. In this case, it's convenient to use the user ID as a source ID. |
 
@@ -153,9 +153,9 @@ Sequence numbers are not used if [no-deduplication mode](#no-dedup) is enabled.
 ### Sample message sequence numbers {#seqno-examples}
 
 | Type | Example | Description |
---- | --- | ---
+| --- | --- | --- |
 | File | Offset of transferred data from the beginning of a file | You can't delete lines from the beginning of a file, since this will lead to skipping some data as duplicates or losing some data. |
-| DB table | Auto-increment record ID |
+| DB table | Auto-increment record ID | |
 
 ## Message retention period {#retention-time}
 
@@ -168,13 +168,13 @@ When transferring data, the producer app indicates that a message can be compres
 Supported codecs are explicitly listed in each topic. When making an attempt to write data to a topic with a codec that is not supported, a write error occurs.
 
 | Codec | Description |
---- | ---
+| --- | --- |
 | `raw` | No compression. |
 | `gzip` | [Gzip](https://en.wikipedia.org/wiki/Gzip) compression. |
 {% if audience != "external" %}
-`lzop` | [lzop](https://en.wikipedia.org/wiki/Lzop) compression.
+| `lzop` | [lzop](https://en.wikipedia.org/wiki/Lzop) compression. |
 {% endif %}
-`zstd` | [zstd](https://en.wikipedia.org/wiki/Zstd) compression.
+| `zstd` | [zstd](https://en.wikipedia.org/wiki/Zstd) compression. |
 
 ## Consumer {#consumer}
 

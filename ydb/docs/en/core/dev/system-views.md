@@ -30,7 +30,7 @@ Cumulative fields (`RowReads`, `RowUpdates`, and so on) store the accumulated va
 Table structure:
 
 | Field | Description |
---- | ---
+| --- | --- |
 | `OwnerId` | ID of the SchemeShard serving the table.<br/>Type: `Uint64`.<br/>Key: `0`. |
 | `PathId` | ID of the SchemeShard path.<br/>Type: `Uint64`.<br/>Key: `1`. |
 | `PartIdx` | Partition sequence number.<br/>Type: `Uint64`.<br/>Key: `2`. |
@@ -102,7 +102,7 @@ Query text limit is 4 KB.
 All tables have the same set of fields:
 
 | Field | Description |
---- | ---
+| --- | --- |
 | `IntervalEnd` | The end of a one-minute or one-hour interval.<br/>Type: `Timestamp`.<br/>Key: `0`. |
 | `Rank` | Rank of a top query.<br/>Type: `Uint32`.<br/>Key: `1`. |
 | `QueryText` | Query text.<br/>Type: `Utf8`. |
@@ -181,7 +181,7 @@ Restrictions:
 Table structure:
 
 | Field | Description |
----|---
+| ---|--- |
 | `IntervalEnd` | The end of a one-minute interval.<br/>Type: `Timestamp`.<br/>Key: `0`. |
 | `Rank` | Query rank within an interval (by the SumCPUTime field).<br/>Type: `Uint32`.<br/>Key: `1`. |
 | `QueryText` | Query text.<br/>Type: `Utf8`. |
@@ -253,7 +253,7 @@ These tables contain partitions with peak loads of more than 70% (`CPUCores` > 0
 Both tables have the same set of fields:
 
 | Field | Description |
---- | ---
+| --- | --- |
 | `IntervalEnd` | The end of a one-minute or one-hour interval.<br/>Type: `Timestamp`.<br/>Key: `0`. |
 | `Rank` | Partition rank within an interval (by CPUCores).<br/>Type: `Uint32`.<br/>Key: `1`. |
 | `TabletId` | ID of the tablet serving the partition.<br/>Type: `Uint64`. |

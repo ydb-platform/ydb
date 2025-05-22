@@ -23,7 +23,7 @@ View the description of the update topic command:
 The command changes the values of parameters specified in the command line. The other parameter values remain unchanged.
 
 | Name | Description |
----|---
+| ---|--- |
 | `--partitions-count` | The number of topic [partitions](../../concepts/topic.md#partitioning). You can only increase the number of partitions. |
 | `--retention-period-hours` | The retention period for topic data, in hours. |
 | `--partition-write-speed-kbps` | The maximum write speed to a [partition](../../concepts/topic.md#partitioning), specified in KB/s.<br/>The default value is `1024`. |

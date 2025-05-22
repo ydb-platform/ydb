@@ -95,7 +95,7 @@ Notes on Re2::Options from the official [repository](https://github.com/google/r
 | NeverNl:Bool? | false | never match \n, even if it is in regexp |
 | PosixSyntax:Bool? | false | restrict regexps to POSIX egrep syntax |
 | Utf8:Bool? | true | text and pattern are UTF-8; otherwise Latin-1 |
-| The following options are only consulted when PosixSyntax == true. <bt>When PosixSyntax == false, these features are always enabled and cannot be turned off; to perform multi-line matching in that case, begin the regexp with (?m). |
+| The following options are only consulted when PosixSyntax == true. <bt>When PosixSyntax == false, these features are always enabled and cannot be turned off; to perform multi-line matching in that case, begin the regexp with (?m). | | |
 | PerlClasses:Bool? | false | allow Perl's \d \s \w \D \S \W |
 | WordBoundary:Bool? | false | allow Perl's \b \B (word boundary and not) |
 | OneLine:Bool? | false | ^ and $ only match beginning and end of text |

@@ -1450,7 +1450,7 @@ NMonitoring::IMonPage* TMon::RegisterActorPage(TRegisterActorPageFields fields) 
         fields.PreTag,
         fields.ActorSystem,
         fields.ActorId,
-        fields.AllowedSIDs ? fields.AllowedSIDs : Config.AllowedSIDs,
+        fields.AllowedSIDs.Defined() ? *fields.AllowedSIDs : Config.AllowedSIDs,
         fields.UseAuth ? Config.Authorizer : TRequestAuthorizer(),
         fields.MonServiceName);
     if (fields.Index) {

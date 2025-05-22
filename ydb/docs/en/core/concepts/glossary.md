@@ -6,6 +6,30 @@ This article is an overview of terms and definitions used in {{ ydb-short-name }
 
 This section explains terms that are useful to any person working with {{ ydb-short-name }} regardless of their role and use case.
 
+### AI database {#ai-database}
+
+An **AI database** like {{ ydb-short-name }} is a data-management system purpose-built to fuel artificial-intelligence (AI) and machine-learning (ML) workloads. It extends classical database functionality with features such as vector similarity search, real-time analytics, flexible schema handling, and massive horizontal scalability capabilities essential for consuming, processing, and retrieving the heterogeneous, high-volume data on which modern AI depends. Read more in [{#T}](ai-database.md).
+
+### Retrieval Augmented Generation (RAG) {#rag}
+
+**Retrieval Augmented Generation (RAG)** is an AI technique that combines information retrieval from a database with generative models to produce more accurate and contextually relevant responses. In RAG, the system first retrieves relevant data from a knowledge base and then uses a generative model to synthesize answers based on both the retrieved content and the input query. This approach enhances the quality and reliability of AI-generated outputs, especially for enterprise and knowledge-intensive applications. Read more in [{#T}](rag.md).
+
+### Distributed SQL {#distributed-sql}
+
+**Distributed SQL** describes a new generation of relational database systems that span multiple servers—sometimes multiple regions—while appearing to applications as a single, strongly consistent SQL database.  These systems retain full ACID transactions and the familiar relational model but add horizontal scalability, fault tolerance, and geo‑distribution. Read more in [{#T}](distributed-sql.md).
+
+### Hybrid Transactional/Analytical Processing {#htap}
+
+**Hybrid Transactional/Analytical Processing (HTAP)** refers to database systems that can efficiently handle both [transactional (OLTP)](https://en.wikipedia.org/wiki/Online_transaction_processing) and [analytical (OLAP)](https://en.wikipedia.org/wiki/Online_analytical_processing) workloads within a single engine. HTAP databases eliminate the need for separate systems for these workloads and complex ETL processes, enabling real-time analytics on fresh transactional data without impacting performance. Read more in [{#T}](htap.md).
+
+### Universal database {#universal-database}
+
+A **universal database** is a comprehensive data management system designed to natively support multiple data models (relational, document, key-value, time-series, vector) and diverse workloads (OLTP, OLAP, streaming, vector search, AI) within a single unified platform. Read more in [{#T}](universal-database.md).
+
+### Converged database {#converged-database}
+
+A **converged database** extends the [HTAP](#htap) vision by unifying *all* critical data capabilities—transactions, analytics, streams, vector search, graph, document, time‑series—within a single distributed platform. By collapsing multiple specialized engines into one strongly consistent, elastically scalable back‑end, a converged database removes the latency, integration cost, and governance risk that arise when data sprawls across purpose‑built systems. Read more in [{#T}](converged-database.md).
+
 ### Cluster {#cluster}
 
 A {{ ydb-short-name }} **cluster** is a set of interconnected {{ ydb-short-name }} [nodes](#node) that communicate with each other to serve user queries and reliably store user data. These nodes form one of the supported [cluster topologies](#topology), which directly affects the cluster's reliability and performance characteristics.

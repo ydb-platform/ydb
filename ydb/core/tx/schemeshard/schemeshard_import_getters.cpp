@@ -442,7 +442,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             }
             item.Table = request;
         } else {
-            return Reply(Ydb::StatusIds::BAD_REQUEST,("Unsupported scheme object type"));
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
         }
 
         auto nextStep = [this]() {

@@ -3,6 +3,7 @@
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/core/base/events.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include "kafka_messages.h"
 #include <ydb/library/aclib/aclib.h>
@@ -285,7 +286,7 @@ struct TEvTopicDescribeResponse : public NActors::TEventLocal<TEvTopicDescribeRe
     EKafkaErrors Status;
     TString Message;
     Ydb::Topic::DescribeTopicResult Response;
-
+    TIntrusiveConstPtr<NKikimr::NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> PQGroupInfo;
 };
 
 struct TEvAddOffsetsToTxnRequest : public TEventLocal<TEvAddOffsetsToTxnRequest, EvAddOffsetsToTxnRequest> {

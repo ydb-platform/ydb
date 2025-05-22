@@ -141,7 +141,7 @@ KCo31N1GAW1wyHCibwsi8jKVLMwvenkpU7XwNiyz/kR2bWzG69Qve5bIzg==
     strncpy(name, namemask, sizeof(name));
     int fd = mkstemp(name);
     Y_ABORT_UNLESS(fd > 0);
-    Y_ABORT_UNLESS(write(fd, ca.data(), ca.size()) == ca.size());
+    Y_ABORT_UNLESS(write(fd, ca.data(), ca.size()) == (ssize_t)ca.size());
     return TString(name);
 }
 

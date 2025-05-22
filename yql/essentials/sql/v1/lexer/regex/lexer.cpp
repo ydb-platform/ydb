@@ -13,6 +13,7 @@
 #include <util/generic/maybe.h>
 #include <util/string/subst.h>
 #include <util/string/ascii.h>
+#include <util/string/join.h>
 
 namespace NSQLTranslationV1 {
 
@@ -22,8 +23,8 @@ namespace NSQLTranslationV1 {
 
     size_t MatchANSIMultilineComment(TStringBuf remaining);
 
-    TTokenMatcher ANSICommentMatcher(TTokenMatcher defaultComment) {
-        return [defaultComment](TStringBuf prefix) -> TMaybe<TStringBuf> {
+    TTokenMatcher ANSICommentMatcher(TString name, TTokenMatcher defaultComment) {
+        return [defaultComment, name = std::move(name)](TStringBuf prefix) -> TMaybe<TGenericToken> {
             const auto basic = defaultComment(prefix);
             if (basic.Empty()) {
                 return Nothing();
@@ -36,12 +37,15 @@ namespace NSQLTranslationV1 {
             size_t ll1Length = MatchANSIMultilineComment(prefix);
             TStringBuf ll1Content = prefix.SubString(0, ll1Length);
 
-            Y_ENSURE(ll1Content == 0 || basic <= ll1Content);
+            Y_ENSURE(ll1Content == 0 || basic->Content <= ll1Content);
             if (ll1Content == 0) {
                 return basic;
             }
 
-            return ll1Content;
+            return TGenericToken{
+                .Name = name,
+                .Content = ll1Content,
+            };
         };
     }
 
@@ -89,38 +93,77 @@ namespace NSQLTranslationV1 {
         }
     }
 
+    TTokenMatcher KeywordMatcher(const NSQLReflect::TLexerGrammar& grammar) {
+        auto keyword = Compile("Keyword", KeywordPattern(grammar));
+        return [keyword = std::move(keyword)](TStringBuf content) -> TMaybe<TGenericToken> {
+            if (auto token = keyword(content)) {
+                return TGenericToken{
+                    .Name = TLexerGrammar::KeywordNameByBlock(token->Content),
+                    .Content = token->Content,
+                };
+            }
+            return Nothing();
+        };
+    }
+
+    TRegexPattern KeywordPattern(const NSQLReflect::TLexerGrammar& grammar) {
+        TVector<TRegexPattern> patterns;
+        patterns.reserve(grammar.KeywordNames.size());
+        for (const auto& keyword : grammar.KeywordNames) {
+            const TStringBuf content = TLexerGrammar::KeywordBlockByName(keyword);
+            patterns.push_back({
+                .Body = TString(content),
+                .IsCaseInsensitive = true,
+            });
+        }
+        return Merged(std::move(patterns));
+    }
+
+    TTokenMatcher PuntuationMatcher(const NSQLReflect::TLexerGrammar& grammar) {
+        THashMap<TString, TString> nameByBlock;
+        nameByBlock.reserve(grammar.PunctuationNames.size());
+        for (const auto& name : grammar.PunctuationNames) {
+            const auto& block = grammar.BlockByName.at(name);
+            nameByBlock[block] = name;
+        }
+
+        auto punct = Compile("Punctuation", PuntuationPattern(grammar));
+
+        return [nameByBlock = std::move(nameByBlock),
+                punct = std::move(punct)](TStringBuf content) -> TMaybe<TGenericToken> {
+            if (auto token = punct(content)) {
+                return TGenericToken{
+                    .Name = nameByBlock.at(token->Content),
+                    .Content = token->Content,
+                };
+            }
+            return Nothing();
+        };
+    }
+
+    TRegexPattern PuntuationPattern(const NSQLReflect::TLexerGrammar& grammar) {
+        TVector<TRegexPattern> patterns;
+        patterns.reserve(grammar.PunctuationNames.size());
+        for (const auto& name : grammar.PunctuationNames) {
+            patterns.push_back({RE2::QuoteMeta(grammar.BlockByName.at(name))});
+        }
+        return Merged(std::move(patterns));
+    }
+
     TGenericLexerGrammar MakeGenericLexerGrammar(
         bool ansi,
         const TLexerGrammar& grammar,
         const TVector<std::tuple<TString, TString>>& regexByOtherName) {
         TGenericLexerGrammar generic;
 
-        for (const auto& name : grammar.KeywordNames) {
-            auto matcher = Compile({
-                .Body = TString(TLexerGrammar::KeywordBlock(name)),
-                .IsCaseInsensitive = true,
-            });
-            generic.emplace_back(name, std::move(matcher));
-        }
-
-        for (const auto& name : grammar.PunctuationNames) {
-            generic.emplace_back(
-                name, Compile({RE2::QuoteMeta(grammar.BlockByName.at(name))}));
-        }
+        generic.emplace_back(KeywordMatcher(grammar));
+        generic.emplace_back(PuntuationMatcher(grammar));
 
         for (const auto& [name, regex] : regexByOtherName) {
-            auto matcher = Compile({
-                .Body = regex,
-            });
-            generic.emplace_back(name, std::move(matcher));
-        }
-
-        if (ansi) {
-            auto it = FindIf(generic, [](const auto& m) {
-                return m.TokenName == "COMMENT";
-            });
-            Y_ENSURE(it != std::end(generic));
-            it->Match = ANSICommentMatcher(it->Match);
+            generic.emplace_back(Compile(name, {regex}));
+            if (name == "COMMENT" && ansi) {
+                generic.back() = ANSICommentMatcher(name, std::move(generic.back()));
+            }
         }
 
         return generic;

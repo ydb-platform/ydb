@@ -4,6 +4,7 @@
 #include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
 #include <yql/essentials/sql/v1/complete/syntax/local.h>
 #include <yql/essentials/sql/v1/complete/syntax/format.h>
+#include <yql/essentials/sql/v1/complete/analysis/global/global.h>
 
 #include <util/generic/algorithm.h>
 #include <util/charset/utf8.h>
@@ -18,6 +19,7 @@ namespace NSQLComplete {
             ISqlCompletionEngine::TConfiguration configuration)
             : Configuration_(std::move(configuration))
             , SyntaxAnalysis_(MakeLocalSyntaxAnalysis(lexer))
+            , GlobalAnalysis_(MakeGlobalAnalysis())
             , Names_(std::move(names))
         {
         }
@@ -39,7 +41,9 @@ namespace NSQLComplete {
             TLocalSyntaxContext context = SyntaxAnalysis_->Analyze(input);
             auto keywords = context.Keywords;
 
-            TNameRequest request = NameRequestFrom(input, context);
+            TGlobalContext global = GlobalAnalysis_->Analyze(input);
+
+            TNameRequest request = NameRequestFrom(input, context, global);
             if (request.IsEmpty()) {
                 return NThreading::MakeFuture<TCompletion>({
                     .CompletedToken = GetCompletedToken(input, context.EditRange),
@@ -61,7 +65,10 @@ namespace NSQLComplete {
             };
         }
 
-        TNameRequest NameRequestFrom(TCompletionInput input, const TLocalSyntaxContext& context) const {
+        TNameRequest NameRequestFrom(
+            TCompletionInput input,
+            const TLocalSyntaxContext& context,
+            const TGlobalContext& global) const {
             TNameRequest request = {
                 .Prefix = TString(GetCompletedToken(input, context.EditRange).Content),
                 .Limit = Configuration_.Limit,
@@ -94,12 +101,19 @@ namespace NSQLComplete {
             }
 
             if (context.Object) {
-                request.Constraints.Object = TObjectNameConstraints{
-                    .Provider = context.Object->Provider,
-                    .Cluster = context.Object->Cluster,
-                    .Kinds = context.Object->Kinds,
-                };
+                request.Constraints.Object = TObjectNameConstraints();
+                request.Constraints.Object->Kinds = context.Object->Kinds;
                 request.Prefix = context.Object->Path;
+            }
+
+            if (context.Object && global.Use) {
+                request.Constraints.Object->Provider = global.Use->Provider;
+                request.Constraints.Object->Cluster = global.Use->Cluster;
+            }
+
+            if (context.Object && context.Object->HasCluster()) {
+                request.Constraints.Object->Provider = context.Object->Provider;
+                request.Constraints.Object->Cluster = context.Object->Cluster;
             }
 
             if (context.Cluster) {
@@ -170,14 +184,14 @@ namespace NSQLComplete {
 
                 if constexpr (std::is_base_of_v<TFolderName, T>) {
                     name.Indentifier.append('/');
-                    if (!context.Object->IsEnclosed) {
+                    if (!context.Object->IsQuoted) {
                         name.Indentifier = Quoted(std::move(name.Indentifier));
                     }
                     return {ECandidateKind::FolderName, std::move(name.Indentifier)};
                 }
 
                 if constexpr (std::is_base_of_v<TTableName, T>) {
-                    if (!context.Object->IsEnclosed) {
+                    if (!context.Object->IsQuoted) {
                         name.Indentifier = Quoted(std::move(name.Indentifier));
                     }
                     return {ECandidateKind::TableName, std::move(name.Indentifier)};
@@ -195,6 +209,7 @@ namespace NSQLComplete {
 
         TConfiguration Configuration_;
         ILocalSyntaxAnalysis::TPtr SyntaxAnalysis_;
+        IGlobalAnalysis::TPtr GlobalAnalysis_;
         INameService::TPtr Names_;
     };
 

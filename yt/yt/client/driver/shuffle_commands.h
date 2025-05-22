@@ -35,7 +35,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    NApi::TShuffleHandlePtr ShuffleHandle;
+    NApi::TSignedShuffleHandlePtr SignedShuffleHandle;
     int PartitionIndex;
     std::optional<int> WriterIndexBegin;
     std::optional<int> WriterIndexEnd;
@@ -54,7 +54,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    NApi::TShuffleHandlePtr ShuffleHandle;
+    NApi::TSignedShuffleHandlePtr SignedShuffleHandle;
     std::string PartitionColumn;
     i64 MaxRowBufferSize;
     std::optional<int> WriterIndex;

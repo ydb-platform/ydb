@@ -96,6 +96,7 @@ class DriverConfig(object):
         "grpc_lb_policy_name",
         "discovery_request_timeout",
         "compression",
+        "disable_discovery",
     )
 
     def __init__(
@@ -120,6 +121,7 @@ class DriverConfig(object):
         grpc_lb_policy_name="round_robin",
         discovery_request_timeout=10,
         compression=None,
+        disable_discovery=False,
     ):
         """
         A driver config to initialize a driver instance
@@ -140,6 +142,7 @@ class DriverConfig(object):
         If tracing aio ScopeManager must be ContextVarsScopeManager
         :param grpc_lb_policy_name: A load balancing policy to be used for discovery channel construction. Default value is `round_round`
         :param discovery_request_timeout: A default timeout to complete the discovery. The default value is 10 seconds.
+        :param disable_discovery: If True, endpoint discovery is disabled and only the start endpoint is used for all requests.
 
         """
         self.endpoint = endpoint
@@ -167,6 +170,7 @@ class DriverConfig(object):
         self.grpc_lb_policy_name = grpc_lb_policy_name
         self.discovery_request_timeout = discovery_request_timeout
         self.compression = compression
+        self.disable_discovery = disable_discovery
 
     def set_database(self, database):
         self.database = database

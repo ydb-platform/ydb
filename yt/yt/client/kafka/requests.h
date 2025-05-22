@@ -98,8 +98,8 @@ struct TRecord
     i32 OffsetDelta = 0;
 
     // Present in v1 and v2.
-    TString Key;
-    TString Value;
+    std::optional<TString> Key;
+    std::optional<TString> Value;
 
     std::vector<TRecordHeader> Headers;
 
@@ -189,7 +189,7 @@ struct TRspApiVersions
 struct TReqMetadataTopic
 {
     TGuid TopicId;
-    TString Topic;
+    TString Name;
     std::vector<TTaggedField> TagBuffer;
 
     void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
@@ -251,7 +251,7 @@ struct TRspMetadata
 {
     i32 ThrottleTimeMs = 0;
     std::vector<TRspMetadataBroker> Brokers;
-    std::optional<std::string> ClusterId;
+    std::optional<TString> ClusterId;
     i32 ControllerId = 0;
     std::vector<TRspMetadataTopic> Topics;
     std::vector<TTaggedField> TagBuffer;
@@ -668,7 +668,6 @@ struct TReqListOffsetsTopicPartition
 {
     i32 PartitionIndex = 0;
     i64 Timestamp = 0;
-    i32 MaxNumOffsets = 0;
 
     std::vector<TTaggedField> TagBuffer;
 
@@ -701,6 +700,7 @@ struct TRspListOffsetsTopicPartition
 {
     i32 PartitionIndex = 0;
     NKafka::EErrorCode ErrorCode = EErrorCode::None;
+    i64 Timestamp = 0;
     i64 Offset = 0;
 
     std::vector<TTaggedField> TagBuffer;

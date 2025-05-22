@@ -217,6 +217,10 @@ message TEvNodeConfigInvokeOnRoot {
         string SelfAssemblyUUID = 1;
     }
 
+    message TSwitchBridgeClusterState {
+        NKikimrBridge.TClusterState NewClusterState = 1;
+    }
+
     oneof Request {
         TUpdateConfig UpdateConfig = 1;
         TQueryConfig QueryConfig = 2;
@@ -228,6 +232,7 @@ message TEvNodeConfigInvokeOnRoot {
         TFetchStorageConfig FetchStorageConfig = 8;
         TReplaceStorageConfig ReplaceStorageConfig = 9;
         TBootstrapCluster BootstrapCluster = 10;
+        TSwitchBridgeClusterState SwitchBridgeClusterState = 11;
     }
 }
 

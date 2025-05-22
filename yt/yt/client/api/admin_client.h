@@ -185,7 +185,7 @@ struct TMaintenanceFilter
     // Empty means no filtering by id.
     std::vector<TMaintenanceId> Ids;
     std::optional<EMaintenanceType> Type;
-    std::variant<TByUser::TAll, TByUser::TMine, TString> User;
+    std::variant<TByUser::TAll, TByUser::TMine, std::string> User;
 };
 
 struct TRemoveMaintenanceOptions

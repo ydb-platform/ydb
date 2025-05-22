@@ -539,6 +539,17 @@ public:
             db.Table<Schema::VDiskMetrics>().Key(key).Delete();
         }
 
+        // issue all sys view updates just after the start
+        for (const auto& [pdiskId, _] : Self->PDisks) {
+            Self->SysViewChangedPDisks.insert(pdiskId);
+        }
+        for (const auto& [vdiskId, _] : Self->VSlots) {
+            Self->SysViewChangedVSlots.insert(vdiskId);
+        }
+        for (const auto& [groupId, _] : Self->GroupMap) {
+            Self->SysViewChangedGroups.insert(groupId);
+        }
+
         return true;
     }
 

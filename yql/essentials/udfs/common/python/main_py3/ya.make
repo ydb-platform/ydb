@@ -8,6 +8,6 @@ ADDINCL(
 
 SRCS(GLOBAL main.cpp)
 
-BUILDWITH_CYTHON_C(__main__.pyx --embed=RunPythonImpl)
+BUILDWITH_CYTHON_C(main.pyx --embed=RunPythonImpl)
 
 END()

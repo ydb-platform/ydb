@@ -466,7 +466,6 @@ protected:
         });
         options.AddLongOption('A', "action", "Query execute action")
             .RequiredArgument("action")
-            .DefaultValue("run")
             .Choices(queryAction.GetChoices())
             .Handler1([this, queryAction](const NLastGetopt::TOptsParser* option) {
                 TString choice(option->CurValOrDef());

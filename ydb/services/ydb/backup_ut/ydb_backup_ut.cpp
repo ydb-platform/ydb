@@ -2316,6 +2316,83 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
+    Y_UNIT_TEST(TestReplaceRestoreOptionOnNonExistingSchemeObjects) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        TKikimrWithGrpcAndRootSchema server(config);
+
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+
+        const auto endpoint = Sprintf("localhost:%u", server.GetPort());
+        auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetAuthToken("root@builtin"));
+
+        TTableClient tableClient(driver);
+        auto tableSession = tableClient.GetSession().ExtractValueSync().GetSession();
+        NQuery::TQueryClient queryClient(driver);
+        auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
+        NTopic::TTopicClient topicClient(driver);
+        TReplicationClient replicationClient(driver);
+        NCoordination::TClient nodeClient(driver);
+
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        auto cleanup = [&pathToBackup, &driver] {
+            TVector<TFsPath> children;
+            pathToBackup.List(children);
+            for (auto& i : children) {
+                i.ForceDelete();
+            }
+
+            const auto settings = NConsoleClient::TRemoveDirectoryRecursiveSettings().RemoveSelf(false);
+            RemoveDirectoryRecursive(driver, "/Root", settings);
+        };
+
+        constexpr const char* table = "/Root/table";
+        constexpr const char* topic = "/Root/topic";
+        constexpr const char* view = "/Root/view";
+        constexpr const char* externalTable = "/Root/externalTable";
+        constexpr const char* externalDataSource = "/Root/externalDataSource";
+        const std::string kesus = "/Root/kesus";
+
+        const auto restorationSettings = NDump::TRestoreSettings().Replace(true);
+
+        cleanup();
+        TestTableContentIsPreserved(table, tableSession,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings)
+        );
+
+        cleanup();
+        TestTopicSettingsArePreserved(topic, querySession, topicClient,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings)
+        );
+
+        cleanup();
+        TestViewOutputIsPreserved(view, querySession,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings)
+        );
+
+        cleanup();
+        TestExternalDataSourceSettingsArePreserved(externalDataSource, tableSession, querySession,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings)
+        );
+
+        cleanup();
+        TestExternalTableSettingsArePreserved(externalTable, externalDataSource, tableSession, querySession,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings)
+        );
+
+        cleanup();
+        TestCoordinationNodeSettingsArePreserved(kesus, nodeClient,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings)
+        );
+
+        cleanup();
+        TestReplicationSettingsArePreserved(endpoint, querySession, replicationClient,
+            CreateBackupLambda(driver, pathToBackup), CreateRestoreLambda(driver, pathToBackup, "/Root", restorationSettings), true
+        );
+    }
+
     Y_UNIT_TEST(PrefixedVectorIndex) {
         TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, true);
     }

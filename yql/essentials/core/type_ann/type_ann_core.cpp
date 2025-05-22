@@ -4443,6 +4443,10 @@ namespace NTypeAnnImpl {
         }
 
         const auto sourceType = input->Head().GetTypeAnn();
+        if (HasError(sourceType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
         const auto options = CastResult<Strong>(sourceType, targetType);
         if (!(options & NKikimr::NUdf::ECastOptions::Impossible)) {
             auto type = targetType;

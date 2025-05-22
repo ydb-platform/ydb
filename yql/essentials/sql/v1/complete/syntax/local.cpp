@@ -57,9 +57,18 @@ namespace NSQLComplete {
         }
 
         TLocalSyntaxContext Analyze(TCompletionInput input) override {
+            TMaterializedInput materialized = {
+                .Text = TString(input.Text),
+                .CursorPosition = input.CursorPosition,
+            };
+
+            // - ";" is for a correct stetement split
+            // - "-- `" is for a ilformed ID_QUOTED recovery
+            materialized.Text += "; -- `";
+
             TCompletionInput statement;
             size_t statement_position;
-            if (!GetStatement(Lexer_, input, statement, statement_position)) {
+            if (!GetStatement(Lexer_, materialized, statement, statement_position)) {
                 return {};
             }
 
@@ -234,7 +243,11 @@ namespace NSQLComplete {
 
             if (auto path = ObjectPath(context)) {
                 object.Path = *path;
-                object.IsEnclosed = true;
+            }
+
+            if (auto enclosing = context.Enclosing();
+                enclosing.Defined() && enclosing->Base->Name == "ID_QUOTED") {
+                object.IsQuoted = true;
             }
 
             return object;
@@ -245,8 +258,9 @@ namespace NSQLComplete {
                 TString path = enclosing->Base->Content;
                 if (enclosing->Base->Name == "ID_QUOTED") {
                     path = Unquoted(std::move(path));
+                    enclosing->Position += 1;
                 }
-                path.resize(context.Cursor.Position - enclosing->Position - 1);
+                path.resize(context.Cursor.Position - enclosing->Position);
                 return path;
             }
             return Nothing();

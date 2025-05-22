@@ -267,8 +267,8 @@ private:
 
         importInfo.Items.reserve(settings.items().size());
         for (ui32 itemIdx : xrange(settings.items().size())) {
-            const auto& dstPath = settings.items(itemIdx).destination_path();
-            if (!dstPaths.insert(dstPath).second) {
+            const TString& dstPath = settings.items(itemIdx).destination_path();
+            if (!dstPaths.insert(NBackup::NormalizeItemPath(dstPath)).second) {
                 explain = TStringBuilder() << "Duplicate destination_path: " << dstPath;
                 return false;
             }
@@ -278,8 +278,8 @@ private:
             }
 
             auto& item = importInfo.Items.emplace_back(dstPath);
-            item.SrcPrefix = settings.items(itemIdx).source_prefix();
-            item.SrcPath = settings.items(itemIdx).source_path();
+            item.SrcPrefix = NBackup::NormalizeExportPrefix(settings.items(itemIdx).source_prefix());
+            item.SrcPath = NBackup::NormalizeItemPath(settings.items(itemIdx).source_path());
         }
 
         return true;
@@ -1079,8 +1079,8 @@ private:
         } else {
             dstRoot = CanonizePath(importInfo->Settings.destination_path());
         }
-        TString sourcePrefix = importInfo->Settings.source_prefix();
-        if (sourcePrefix && sourcePrefix.back() != '/') {
+        TString sourcePrefix = NBackup::NormalizeExportPrefix(importInfo->Settings.source_prefix());
+        if (sourcePrefix) {
             sourcePrefix.push_back('/');
         }
         auto combineDstPath = [&](const TString& path) -> TString {
@@ -1092,9 +1092,7 @@ private:
             }
         };
         auto init = [&](const NBackup::TSchemaMapping::TItem& schemaMappingItem, NSchemeShard::TImportInfo::TItem& item) {
-            TStringBuf exportPrefix(schemaMappingItem.ExportPrefix);
-            exportPrefix.SkipPrefix("/");
-            item.SrcPrefix = TStringBuilder() << sourcePrefix << exportPrefix;
+            item.SrcPrefix = TStringBuilder() << sourcePrefix << NBackup::NormalizeItemPrefix(schemaMappingItem.ExportPrefix);
             item.SrcPath = schemaMappingItem.ObjectPath;
             item.ExportItemIV = schemaMappingItem.IV;
         };
@@ -1115,19 +1113,18 @@ private:
             TMapping schemaMappingObjectPathIndex;
             for (size_t i = 0; i < importInfo->SchemaMapping->Items.size(); ++i) {
                 const auto& schemaMappingItem = importInfo->SchemaMapping->Items[i];
-                schemaMappingPrefixIndex[schemaMappingItem.ExportPrefix] = i;
-                schemaMappingObjectPathIndex[CanonizePath(schemaMappingItem.ObjectPath)] = i;
+                schemaMappingPrefixIndex[NBackup::NormalizeItemPrefix(schemaMappingItem.ExportPrefix)] = i;
+                schemaMappingObjectPathIndex[NBackup::NormalizeItemPath(schemaMappingItem.ObjectPath)] = i;
             }
             for (auto& item : importInfo->Items) {
-                TString dstPath = CanonizePath(item.DstPathName);
                 TMapping::iterator mappingIt;
                 if (item.SrcPrefix) {
-                    mappingIt = schemaMappingPrefixIndex.find(item.SrcPrefix);
+                    mappingIt = schemaMappingPrefixIndex.find(NBackup::NormalizeItemPrefix(item.SrcPrefix));
                     if (mappingIt == schemaMappingPrefixIndex.end()) {
                         return CancelAndPersist(db, importInfo, -1, {}, TStringBuilder() << "cannot find prefix \"" << item.SrcPrefix << "\" in schema mapping");
                     }
                 } else if (item.SrcPath) {
-                    mappingIt = schemaMappingObjectPathIndex.find(CanonizePath(item.SrcPath));
+                    mappingIt = schemaMappingObjectPathIndex.find(NBackup::NormalizeItemPath(item.SrcPath));
                     if (mappingIt == schemaMappingObjectPathIndex.end()) {
                         return CancelAndPersist(db, importInfo, -1, {}, TStringBuilder() << "cannot find source path \"" << item.SrcPath << "\" in schema mapping");
                     }

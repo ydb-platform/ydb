@@ -28,14 +28,9 @@ PEERDIR(
     contrib/libs/zstd
 )
 
-IF (NOT EXPORT_CMAKE)
-    ADDINCL(
-        contrib/libs/c-ares/include
-    )
-ENDIF()
-
 ADDINCL(
     GLOBAL contrib/libs/curl/include
+    contrib/libs/c-ares/include
     contrib/libs/curl/lib
     contrib/libs/libssh2/include
     contrib/libs/ngtcp2/crypto/includes

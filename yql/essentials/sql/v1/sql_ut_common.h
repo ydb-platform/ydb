@@ -2957,6 +2957,114 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 #endif
     }
 
+    Y_UNIT_TEST(CreateTableAddIndexGlobalUnique) {
+        NYql::TAstParseResult result = SqlToYql(R"sql(USE plato;
+            CREATE TABLE table (
+                pk INT32 NOT NULL,
+                col String,
+                INDEX idx GLOBAL UNIQUE ON(col),
+                PRIMARY KEY (pk))
+                )sql");
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+        UNIT_ASSERT(result.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            Y_UNUSED(word);
+            UNIT_ASSERT_STRING_CONTAINS(line, R"('indexType 'syncGlobalUnique)");
+        };
+
+        TWordCountHive elementStat({TString("\'indexName \'\"idx\"")});
+        VerifyProgram(result, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'indexName \'\"idx\""]);
+    }
+
+    Y_UNIT_TEST(CreateTableAddIndexGlobalUniqueSync) {
+        NYql::TAstParseResult result = SqlToYql(R"sql(USE plato;
+            CREATE TABLE table (
+                pk INT32 NOT NULL,
+                col String,
+                INDEX idx GLOBAL UNIQUE SYNC ON(col),
+                PRIMARY KEY (pk))
+                )sql");
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+        UNIT_ASSERT(result.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            Y_UNUSED(word);
+            UNIT_ASSERT_STRING_CONTAINS(line, R"('indexType 'syncGlobalUnique)");
+        };
+
+        TWordCountHive elementStat({TString("\'indexName \'\"idx\"")});
+        VerifyProgram(result, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'indexName \'\"idx\""]);
+    }
+
+    Y_UNIT_TEST(CreateTableAddIndexGlobalUniqueAsync) {
+#if ANTLR_VER == 3
+        ExpectFailWithFuzzyError(R"sql(USE plato;
+            CREATE TABLE table (
+                pk INT32 NOT NULL,
+                col String,
+                INDEX idx GLOBAL UNIQUE ASYNC ON(col),
+                PRIMARY KEY (pk))
+                )sql",
+            "<main>:5:41: Error: unique: alternative is not implemented yet: \\d+:\\d+: global_index\\n");
+#else
+        ExpectFailWithError(R"sql(USE plato;
+            CREATE TABLE table (
+                pk INT32 NOT NULL,
+                col String,
+                INDEX idx GLOBAL UNIQUE ASYNC ON(col),
+                PRIMARY KEY (pk))
+                )sql",
+            "<main>:5:41: Error: unique: alternative is not implemented yet: \n");
+#endif
+    }
+
+    Y_UNIT_TEST(AlterTableAddIndexGlobalUnique) {
+        NYql::TAstParseResult result = SqlToYql(R"sql(USE plato;
+            ALTER TABLE table ADD INDEX idx GLOBAL UNIQUE ON(col))sql");
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+        UNIT_ASSERT(result.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            Y_UNUSED(word);
+            UNIT_ASSERT_STRING_CONTAINS(line, R"('indexType 'syncGlobalUnique)");
+        };
+
+        TWordCountHive elementStat({TString("\'indexName \'\"idx\"")});
+        VerifyProgram(result, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'indexName \'\"idx\""]);
+    }
+
+    Y_UNIT_TEST(AlterTableAddIndexGlobalUniqueSync) {
+        NYql::TAstParseResult result = SqlToYql(R"sql(USE plato;
+            ALTER TABLE table ADD INDEX idx GLOBAL UNIQUE SYNC ON(col))sql");
+        UNIT_ASSERT_C(result.IsOk(), result.Issues.ToString());
+        UNIT_ASSERT(result.Root);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            Y_UNUSED(word);
+            UNIT_ASSERT_STRING_CONTAINS(line, R"('indexType 'syncGlobalUnique)");
+        };
+
+        TWordCountHive elementStat({TString("\'indexName \'\"idx\"")});
+        VerifyProgram(result, elementStat, verifyLine);
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["\'indexName \'\"idx\""]);
+    }
+
+    Y_UNIT_TEST(AlterTableAddIndexGlobalUniqueAsync) {
+#if ANTLR_VER == 3
+        ExpectFailWithFuzzyError(R"sql(USE plato;
+            ALTER TABLE table ADD INDEX idx GLOBAL UNIQUE ASYNC ON(col))sql",
+            "<main>:2:59: Error: unique: alternative is not implemented yet: \\d+:\\d+: global_index\\n");
+#else
+        ExpectFailWithError(R"sql(USE plato;
+            ALTER TABLE table ADD INDEX idx GLOBAL UNIQUE ASYNC ON(col))sql",
+            "<main>:2:59: Error: unique: alternative is not implemented yet: \n");
+#endif
+    }
+
     Y_UNIT_TEST(CreateTableAddIndexVector) {
         const auto result = SqlToYql(R"(USE plato;
             CREATE TABLE table (

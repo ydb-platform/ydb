@@ -1,0 +1,10 @@
+hosts:
+- host: host1
+  drive:
+    - path: ydb.data
+- host: host2
+  drive:
+    - path: ydb.data
+domains_config:
+  domain:
+  - name: "Root"

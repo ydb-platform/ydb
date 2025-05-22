@@ -10,7 +10,7 @@
 
 namespace NYT::NConcurrency {
 
-static constexpr auto& Logger = ConcurrencyLogger;
+constinit const auto Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 

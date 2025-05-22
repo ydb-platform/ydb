@@ -264,6 +264,7 @@ class TestConfigMigrationToV2(object):
         # 13 step: remove unnecessary fields
         parsed_fetched_config["config"].pop("domains_config")
         parsed_fetched_config["config"].pop("blob_storage_config")
+        parsed_fetched_config["config"]["erasure"] = parsed_fetched_config["config"].pop("static_erasure")
         parsed_fetched_config["metadata"]["version"] = 2
 
         # 14 step: replace config

@@ -495,7 +495,7 @@ void TNodeWarden::HandleReadCache() {
             ex = std::current_exception();
         }
 
-        return [=] {
+        return [=, this] {
             NKikimrBlobStorage::TNodeWardenCache proto;
             try {
                 if (IgnoreCache) {
@@ -897,7 +897,7 @@ void TNodeWarden::SendDropDonorQuery(ui32 nodeId, ui32 pdiskId, ui32 vslotId, co
         } else {
             Send(DistributedConfigKeeperId, ev.release(), 0, cookie);
         }
-        InvokeCallbacks.emplace(cookie, [=](TEvNodeConfigInvokeOnRootResult& msg) {
+        InvokeCallbacks.emplace(cookie, [=, this](TEvNodeConfigInvokeOnRootResult& msg) {
             if (msg.Record.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
                 for (const auto& vdisk : StorageConfig.GetBlobStorageConfig().GetServiceSet().GetVDisks()) {
                     const TVDiskID currentVDiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());
@@ -946,7 +946,7 @@ void TNodeWarden::SendVDiskReport(TVSlotId vslotId, const TVDiskID &vDiskId,
         } else {
             Send(DistributedConfigKeeperId, ev.release(), 0, cookie);
         }
-        InvokeCallbacks.emplace(cookie, [=](TEvNodeConfigInvokeOnRootResult& msg) {
+        InvokeCallbacks.emplace(cookie, [=, this](TEvNodeConfigInvokeOnRootResult& msg) {
             if (msg.Record.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
                 for (const auto& vdisk : StorageConfig.GetBlobStorageConfig().GetServiceSet().GetVDisks()) {
                     const TVDiskID currentVDiskId = VDiskIDFromVDiskID(vdisk.GetVDiskID());

@@ -104,7 +104,7 @@ public:
 
     void Bootstrap() {
         Context->ConnectionId = SelfId();
-        Context->RequireAuthentication = NKikimr::AppData()->EnforceUserTokenRequirement;
+        Context->RequireAuthentication = NKikimr::AppData()->EnforceUserTokenRequirement || NKikimr::AppData()->PQConfig.GetRequireCredentialsInNewProtocol();
         // if no authentication required, then we can use local database as our target
         if (!Context->RequireAuthentication) {
             Context->DatabasePath = NKikimr::AppData()->TenantName;
@@ -531,7 +531,7 @@ protected:
             return;
         }
 
-        Context->RequireAuthentication = NKikimr::AppData()->EnforceUserTokenRequirement;
+        Context->RequireAuthentication = NKikimr::AppData()->EnforceUserTokenRequirement || NKikimr::AppData()->PQConfig.GetRequireCredentialsInNewProtocol();
         Context->UserToken = event->UserToken;
         Context->DatabasePath = event->DatabasePath;
         Context->AuthenticationStep = authStep;

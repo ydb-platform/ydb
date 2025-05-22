@@ -810,7 +810,7 @@ struct TIntervalSet {
             [=](TVec& vec) {
                 vec.Assign(begin, end); // just clear vector (do not reset storage)
             },
-            [=](TMap&) {
+            [=, this](TMap&) {
                 Var = TVec(begin, end); // use vector instead of map
             }
         }, Var);

@@ -289,7 +289,7 @@ private:
     TString Address_;
     bool Mine_ = false;
     bool All_ = false;
-    std::optional<TString> User_;
+    std::optional<std::string> User_;
     std::optional<NApi::TMaintenanceId> Id_;
     std::optional<std::vector<NApi::TMaintenanceId>> Ids_;
     std::optional<NApi::EMaintenanceType> Type_;

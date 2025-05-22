@@ -174,7 +174,7 @@ The query is executed as many times as there are parameter value sets received f
 A rule for separating parameter sets (framing) complements the `--input-format` option:
 
 | Name | Description |
----|---
+| --- | --- |
 | `--input-framing` | Input framing format. Defines how parameter sets are delimited on the input.<br/>Available options:<br/><ul><li>`no-framing` (default): Data from the input is taken as a single set of parameters.</li><li>`newline-delimited`: A newline character delimits parameter sets in the input and triggers processing according to the `--input-batch` option.</li></ul> |
 
 {% note warning %}

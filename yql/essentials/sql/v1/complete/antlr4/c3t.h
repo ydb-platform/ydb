@@ -1,6 +1,7 @@
 #pragma once
 
 #include "c3i.h"
+#include "pipeline.h"
 
 #include <yql/essentials/sql/v1/complete/text/word.h>
 
@@ -14,14 +15,6 @@
 #include <util/generic/vector.h>
 
 namespace NSQLComplete {
-
-    template <class Lexer, class Parser>
-    struct TAntlrGrammar {
-        using TLexer = Lexer;
-        using TParser = Parser;
-
-        TAntlrGrammar() = delete;
-    };
 
     template <class G>
     class TC3Engine: public IC3Engine {

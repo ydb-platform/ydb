@@ -62,7 +62,8 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
     }
 }
 
-void TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
+bool TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
+    const TGroupStatus prev = Status;
     Status = {NKikimrBlobStorage::TGroupStatus::FULL, NKikimrBlobStorage::TGroupStatus::FULL};
 
     if ((VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED ||
@@ -82,6 +83,8 @@ void TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
         }
         Status.MakeWorst(DeriveStatus(Topology.get(), failed), DeriveStatus(Topology.get(), failed | failedByPDisk));
     }
+
+    return Status != prev;
 }
 
 void TBlobStorageController::TGroupInfo::CalculateLayoutStatus(TBlobStorageController *self,

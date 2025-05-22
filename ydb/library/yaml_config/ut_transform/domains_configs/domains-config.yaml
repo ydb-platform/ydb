@@ -1,0 +1,7 @@
+hosts:
+- host: localhost
+  drive:
+    - path: ydb.data
+domains_config:
+  domain:
+  - name: "Root"

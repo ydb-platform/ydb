@@ -268,7 +268,7 @@ private:
     }
 
     TString GetRealTablePath(const TString& sessionId, const TString& cluster, const TString& path, TYtSettings::TConstPtr& config) {
-        auto richPath = Slave_->GetWriteTable(sessionId, cluster, path, GetTablesTmpFolder(*config));
+        auto richPath = Slave_->GetWriteTable(sessionId, cluster, path, GetTablesTmpFolder(*config, cluster));
         return richPath.Path_;
     }
 

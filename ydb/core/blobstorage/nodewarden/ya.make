@@ -11,6 +11,7 @@ SRCS(
     distconf_generate.cpp
     distconf_fsm.cpp
     distconf_invoke.h
+    distconf_invoke_bridge.cpp
     distconf_invoke_common.cpp
     distconf_invoke_state_storage.cpp
     distconf_invoke_static_group.cpp

@@ -129,3 +129,16 @@ message TListImportsResponse {
 message TEvListImportsResponse {
     optional TListImportsResponse Response = 1;
 }
+
+message TEvListObjectsInS3ExportRequest {
+    optional Ydb.Operations.OperationParams OperationParams = 1;
+    optional Ydb.Import.ListObjectsInS3ExportSettings Settings = 2;
+    optional int64 PageSize = 3;
+    optional string PageToken = 4;
+}
+
+message TEvListObjectsInS3ExportResponse {
+    optional Ydb.StatusIds.StatusCode Status = 1;
+    repeated Ydb.Issue.IssueMessage Issues = 2;
+    optional Ydb.Import.ListObjectsInS3ExportResult Result = 3;
+}

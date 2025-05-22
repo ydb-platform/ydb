@@ -285,11 +285,13 @@ TString MakeCreateExternalDataSourceQuery(
                     SOURCE_TYPE="Solomon",
                     LOCATION="{http_location}",
                     GRPC_LOCATION="{grpc_location}",
+                    USE_TLS="{use_tls}",
                     PROJECT="{project}",
                     CLUSTER="{cluster}"
                 )",
                 "http_location"_a = common.GetMonitoringEndpoint(),
                 "grpc_location"_a = common.GetMonitoringGrpcEndpoint(),
+                "use_tls"_a = connectionContent.setting().monitoring().use_tls() ? "true" : "false",
                 "project"_a = project,
                 "cluster"_a = cluster
             );

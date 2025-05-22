@@ -1,7 +1,5 @@
 #include "s3_backup_test_base.h"
 
-#include <util/generic/scope.h>
-
 using namespace NYdb;
 
 template <bool encryptionEnabled>
@@ -346,33 +344,6 @@ protected:
         UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("Key").GetUint32(), 1);
         UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("Value").GetOptionalUtf8(), "Encrypted hello world");
     }
-
-    void ModifyChecksumAndCheckThatImportFails(const TString& checksumFile, const NImport::TImportFromS3Settings& importSettings) {
-        const auto checksumFileIt = S3Mock().GetData().find(checksumFile);
-        UNIT_ASSERT_C(checksumFileIt != S3Mock().GetData().end(), "No checksum file: " << checksumFile);
-
-        // Automatic return to the previous state
-        const TString checksumValue = checksumFileIt->second;
-        Y_DEFER {
-            S3Mock().GetData()[checksumFile] = checksumValue;
-        };
-
-        TString value = checksumValue;
-        UNIT_ASSERT_GT(value.size(), 0);
-
-        char c = value.front();
-        value[0] = ++c;
-        S3Mock().GetData()[checksumFile] = value;
-
-        auto res = YdbImportClient().ImportFromS3(importSettings).GetValueSync();
-        WaitOpStatus(res, NYdb::EStatus::CANCELLED);
-    }
-
-    void ModifyChecksumAndCheckThatImportFails(const std::initializer_list<TString>& checksumFiles, const NImport::TImportFromS3Settings& importSettings) {
-        for (const TString& checksumFile : checksumFiles) {
-            ModifyChecksumAndCheckThatImportFails(checksumFile, importSettings);
-        }
-    }
 };
 
 Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
@@ -453,8 +424,11 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
 
             ValidateS3FileList({
                 "/test_bucket/Prefix/metadata.json",
+                "/test_bucket/Prefix/metadata.json.sha256",
                 "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
                 "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
                 "/test_bucket/Prefix/001/metadata.json.enc",
                 "/test_bucket/Prefix/001/metadata.json.sha256",
                 "/test_bucket/Prefix/001/scheme.pb.enc",
@@ -475,6 +449,9 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
             CheckRestoredData("/Root/Restored/EncryptedExportAndImportTable");
 
             ModifyChecksumAndCheckThatImportFails({
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
                 "/test_bucket/Prefix/001/metadata.json.sha256",
                 "/test_bucket/Prefix/001/scheme.pb.sha256",
                 "/test_bucket/Prefix/001/data_00.csv.sha256",
@@ -496,8 +473,11 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
 
             ValidateS3FileList({
                 "/test_bucket/Prefix/metadata.json",
+                "/test_bucket/Prefix/metadata.json.sha256",
                 "/test_bucket/Prefix/SchemaMapping/metadata.json.enc",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
                 "/test_bucket/Prefix/SchemaMapping/mapping.json.enc",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
                 "/test_bucket/Prefix/001/metadata.json.enc",
                 "/test_bucket/Prefix/001/metadata.json.sha256",
                 "/test_bucket/Prefix/001/scheme.pb.enc",
@@ -518,6 +498,9 @@ Y_UNIT_TEST_SUITE_F(EncryptedExportTest, TBackupEncryptionTestFixture) {
             CheckRestoredData("/Root/Restored/EncryptedExportAndImportTable");
 
             ModifyChecksumAndCheckThatImportFails({
+                "/test_bucket/Prefix/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/metadata.json.sha256",
+                "/test_bucket/Prefix/SchemaMapping/mapping.json.sha256",
                 "/test_bucket/Prefix/001/metadata.json.sha256",
                 "/test_bucket/Prefix/001/scheme.pb.sha256",
                 "/test_bucket/Prefix/001/data_00.csv.sha256",

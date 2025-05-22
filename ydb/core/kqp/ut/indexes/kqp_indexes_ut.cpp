@@ -5861,7 +5861,11 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
         {
             auto result = upsertImplTableQuery();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());   // TODO should fail
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
+                "Writing to index implementation tables is not allowed",
+                result.GetIssues().ToString()
+            );
         }
 
         // become superuser

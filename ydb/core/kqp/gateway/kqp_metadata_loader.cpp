@@ -166,6 +166,10 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
         }
     }
 
+    tableMeta->IsIndexImplTable = (entry.TableKind == NSchemeCache::ETableKind::KindSyncIndexTable
+        || entry.TableKind == NSchemeCache::ETableKind::KindAsyncIndexTable
+        || entry.TableKind == NSchemeCache::ETableKind::KindVectorIndexTable);
+
     tableMeta->Attributes = entry.Attributes;
 
     if (queryName) {

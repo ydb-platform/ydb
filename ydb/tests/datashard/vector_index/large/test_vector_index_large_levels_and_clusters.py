@@ -37,7 +37,12 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
             "Int32": lambda i: i,
             "Uint32": lambda i: i,
         }
-        columns = {"pk_": pk_types.keys(), "col_": all_types.keys(), "prefix_": prefix_data.keys(), "vec_": vector.keys()}
+        columns = {
+            "pk_": pk_types.keys(),
+            "col_": all_types.keys(),
+            "prefix_": prefix_data.keys(),
+            "vec_": vector.keys(),
+        }
         pk_columns = {"pk_": pk_types.keys()}
         dimensions = [(5, 10), (4, 50), (3, 100)]
         vector_dimension_data = [5]
@@ -174,7 +179,7 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
                     vector_dimension=vector_dimension,
                     to_binary_string_converters=self.to_binary_string_converters,
                     rows_count=self.rows_count,
-                    count_prefix=self.count_prefix
+                    count_prefix=self.count_prefix,
                 )
             except Exception:
                 return False
@@ -194,7 +199,7 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
                 vector_dimension=vector_dimension,
                 to_binary_string_converters=self.to_binary_string_converters,
                 rows_count=self.rows_count,
-                count_prefix=self.count_prefix
+                count_prefix=self.count_prefix,
             )
         except Exception as ex:
             assert str(ex) == "Global index", str(ex)
@@ -235,7 +240,7 @@ class TestVectorIndexLargeLevelsAndClusters(VectorBase):
             vector_dimension=vector_dimension,
             to_binary_string_converters=self.to_binary_string_converters,
             rows_count=self.rows_count,
-            count_prefix=self.count_prefix
+            count_prefix=self.count_prefix,
         )
 
         assert len(rows) != 0, "Query returned an empty set"

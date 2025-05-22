@@ -17,31 +17,20 @@ class TestVectorIndex(VectorBase):
         self.limit = 10
         self.to_binary_string_converters = {
             "float": BinaryStringConverter(
-                name="Knn::ToBinaryStringFloat",
-                data_type="Float",
-                vector_type="FloatVector"
+                name="Knn::ToBinaryStringFloat", data_type="Float", vector_type="FloatVector"
             ),
             "uint8": BinaryStringConverter(
-                name="Knn::ToBinaryStringUint8",
-                data_type="Uint8",
-                vector_type="Uint8Vector"
+                name="Knn::ToBinaryStringUint8", data_type="Uint8", vector_type="Uint8Vector"
             ),
-            "int8": BinaryStringConverter(
-                name="Knn::ToBinaryStringInt8",
-                data_type="Int8",
-                vector_type="Int8Vector"
-            ),
+            "int8": BinaryStringConverter(name="Knn::ToBinaryStringInt8", data_type="Int8", vector_type="Int8Vector"),
         }
         self.targets = {
-            "similarity": {
-                "inner_product": "Knn::InnerProductSimilarity",
-                "cosine": "Knn::CosineSimilarity"
-            },
+            "similarity": {"inner_product": "Knn::InnerProductSimilarity", "cosine": "Knn::CosineSimilarity"},
             "distance": {
                 "cosine": "Knn::CosineDistance",
                 "manhattan": "Knn::ManhattanDistance",
-                "euclidean": "Knn::EuclideanDistance"
-            }
+                "euclidean": "Knn::EuclideanDistance",
+            },
         }
 
     def _get_random_vector(self, type, size):
@@ -66,14 +55,16 @@ class TestVectorIndex(VectorBase):
         """
         self.query(create_table_sql, True)
 
-    def _create_index(self, table_path, vector_type,
-                      vector_dimension, levels, clusters,
-                      distance=None, similarity=None):
-        logger.info(f"""Create index vector_type={vector_type},
+    def _create_index(
+        self, table_path, vector_type, vector_dimension, levels, clusters, distance=None, similarity=None
+    ):
+        logger.info(
+            f"""Create index vector_type={vector_type},
                         vector_dimension={vector_dimension},
                         levels={levels}, clusters={clusters},
                         distance={distance},
-                        similarity={similarity}""")
+                        similarity={similarity}"""
+        )
         if distance is not None:
             create_index_sql = f"""
                 ALTER TABLE `{table_path}`
@@ -110,9 +101,7 @@ class TestVectorIndex(VectorBase):
             vector = self._get_random_vector(vector_type, vector_dimension)
             name = converter.name
             vector_type = converter.vector_type
-            values.append(
-                f'({key}, Untag({name}([{vector}]), "{vector_type}"))'
-            )
+            values.append(f'({key}, Untag({name}([{vector}]), "{vector_type}"))')
 
         upsert_sql = f"""
             UPSERT INTO `{table_path}` (pk, embedding)
@@ -120,8 +109,7 @@ class TestVectorIndex(VectorBase):
         """
         self.query(upsert_sql, False)
 
-    def _select(self, table_path, vector_type,
-                vector_dimension, distance, similarity):
+    def _select(self, table_path, vector_type, vector_dimension, distance, similarity):
         if distance is not None:
             target = self.targets["distance"][distance]
         else:
@@ -141,18 +129,16 @@ class TestVectorIndex(VectorBase):
         """
         return self.query(select_sql, False)
 
-    def _select_top(self, table_path, vector_type,
-                    vector_dimension, distance, similarity):
+    def _select_top(self, table_path, vector_type, vector_dimension, distance, similarity):
         logger.info("Select values from table")
         result_set = self._select(
             table_path=table_path,
             vector_type=vector_type,
             vector_dimension=vector_dimension,
             distance=distance,
-            similarity=similarity
+            similarity=similarity,
         )
-        if len(result_set) == 0:
-            raise Exception("Query returned an empty set")
+        assert len(result_set) != 0, "Query returned an empty set"
 
         rows = result_set[0].rows
         logger.info(f"Rows count {len(rows)}")
@@ -161,13 +147,11 @@ class TestVectorIndex(VectorBase):
         for row in rows:
             cur = row['target']
             condition = prev <= cur if distance is not None else prev >= cur
-            if not condition:
-                raise Exception(f"""The set of rows does not satisfy the
-                                    condition, prev: {prev}, cur: {cur}""")
+            assert condition, f"""The set of rows does not satisfy the
+                                    condition, prev: {prev}, cur: {cur}"""
             prev = cur
 
-    def _wait_inddex_ready(self, table_path, vector_type,
-                           vector_dimension, distance, similarity):
+    def _wait_inddex_ready(self, table_path, vector_type, vector_dimension, distance, similarity):
         for i in range(10):
             time.sleep(7)
 
@@ -177,19 +161,14 @@ class TestVectorIndex(VectorBase):
                     vector_type=vector_type,
                     vector_dimension=vector_dimension,
                     distance=distance,
-                    similarity=similarity
+                    similarity=similarity,
                 )
             except Exception as ex:
-                if "No global indexes for table" in str(ex):
-                    continue
-                raise ex
-            logger.info(f"Index {self.index_name} is ready")
+                assert "No global indexes for table" in str(ex), str(ex)
             return
-        raise Exception("Error getting index status")
+        assert False, "Error getting index status"
 
-    def _check_loop(self, table_path, vector_type,
-                    vector_dimension, levels, clusters,
-                    distance=None, similarity=None):
+    def _check_loop(self, table_path, vector_type, vector_dimension, levels, clusters, distance=None, similarity=None):
         self._create_index(
             table_path=table_path,
             vector_type=vector_type,
@@ -197,21 +176,21 @@ class TestVectorIndex(VectorBase):
             levels=levels,
             clusters=clusters,
             distance=distance,
-            similarity=similarity
+            similarity=similarity,
         )
         self._wait_inddex_ready(
             table_path=table_path,
             vector_type=vector_type,
             vector_dimension=vector_dimension,
             distance=distance,
-            similarity=similarity
+            similarity=similarity,
         )
         self._select_top(
             table_path=table_path,
             vector_type=vector_type,
             vector_dimension=vector_dimension,
             distance=distance,
-            similarity=similarity
+            similarity=similarity,
         )
         self.vector_index._drop_index(table_path, self.index_name)
         logger.info('check was completed successfully')
@@ -224,41 +203,36 @@ class TestVectorIndex(VectorBase):
         clusters_data = [1, 17]
         vector_dimension_data = [5]
 
-        try:
-            for vector_type in vector_type_data:
-                for vector_dimension in vector_dimension_data:
-                    self._create_table(self.table_name)
+        for vector_type in vector_type_data:
+            for vector_dimension in vector_dimension_data:
+                self._create_table(self.table_name)
 
-                    self._upsert_values(
-                        table_path=self.table_name,
-                        vector_type=vector_type,
-                        vector_dimension=vector_dimension
-                    )
+                self._upsert_values(
+                    table_path=self.table_name, vector_type=vector_type, vector_dimension=vector_dimension
+                )
 
-                    for levels in levels_data:
-                        for clusters in clusters_data:
-                            for distance in distance_data:
-                                self._check_loop(
-                                    table_path=self.table_name,
-                                    vector_type=vector_type,
-                                    vector_dimension=vector_dimension,
-                                    levels=levels,
-                                    clusters=clusters,
-                                    distance=distance
-                                )
+                for levels in levels_data:
+                    for clusters in clusters_data:
+                        for distance in distance_data:
+                            self._check_loop(
+                                table_path=self.table_name,
+                                vector_type=vector_type,
+                                vector_dimension=vector_dimension,
+                                levels=levels,
+                                clusters=clusters,
+                                distance=distance,
+                            )
 
-                    for levels in levels_data:
-                        for clusters in clusters_data:
-                            for similarity in similarity_data:
-                                self._check_loop(
-                                    table_path=self.table_name,
-                                    vector_type=vector_type,
-                                    vector_dimension=vector_dimension,
-                                    levels=levels,
-                                    clusters=clusters,
-                                    similarity=similarity
-                                )
+                for levels in levels_data:
+                    for clusters in clusters_data:
+                        for similarity in similarity_data:
+                            self._check_loop(
+                                table_path=self.table_name,
+                                vector_type=vector_type,
+                                vector_dimension=vector_dimension,
+                                levels=levels,
+                                clusters=clusters,
+                                similarity=similarity,
+                            )
 
-                    self.vector_index._drop_table(self.table_name)
-        except Exception as ex:
-            logger.info(f"ERRROR {ex}")
+                self.vector_index._drop_table(self.table_name)

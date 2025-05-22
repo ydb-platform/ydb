@@ -17,21 +17,6 @@
 
 namespace NYdb::NConsoleClient {
 
-    namespace {
-
-        bool IsQuoted(TStringBuf content) {
-            return content.StartsWith('`') && content.EndsWith('`') && 2 <= content.size();
-        }
-
-        TString Unquoted(TString content) {
-            Y_ENSURE(IsQuoted(content));
-            content.erase(0, 1);
-            content.pop_back();
-            return content;
-        }
-
-    } // namespace
-
     class TYQLCompleter: public IYQLCompleter {
     public:
         using TPtr = THolder<IYQLCompleter>;
@@ -83,18 +68,10 @@ namespace NYdb::NConsoleClient {
             replxx::Replxx::completions_t entries;
             entries.reserve(candidates.size());
             for (auto& candidate : candidates) {
-                auto& content = candidate.Content;
-
-                if (IsQuoted(content)) { // TODO(YQL-19747): do it on the sql/v1/complete side.
-                    content = Unquoted(std::move(content));
-                    if (AnyOf(content, NSQLComplete::IsWordBoundary)) {
-                        // Replxx does not support moving cursor back after a completion,
-                        // so we really want to suggest such candidates only when
-                        // the cursor is already enclosed by ID_QUOTED
-                        continue;
-                    }
+                if (candidate.Kind == NSQLComplete::ECandidateKind::FolderName && 
+                    candidate.Content.EndsWith('`')) {
+                    candidate.Content.pop_back();
                 }
-
                 entries.emplace_back(ReplxxCompletionOf(std::move(candidate)));
             }
             return entries;

@@ -39,7 +39,7 @@ public:
             return node;
         }
 
-        std::unordered_set<TStringBuf> extractMembers;
+        TSet<TStringBuf> extractMembers;
         for (auto member : extract.Members()) {
             extractMembers.insert(member.Value());
         }

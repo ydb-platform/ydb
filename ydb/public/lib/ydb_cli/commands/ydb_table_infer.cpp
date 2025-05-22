@@ -26,7 +26,7 @@ TCommandTableInferFile::TCommandTableInferFile()
 }
 
 TCommandTableInferCsv::TCommandTableInferCsv()
-    : TYdbCommand("csv", {}, "Infer table schema from CSV file")
+    : TYdbCommand("csv", {}, "Generate CREATE TABLE SQL query from CSV file")
 {}
 
 void TCommandTableInferCsv::Config(TConfig& config) {
@@ -36,13 +36,24 @@ void TCommandTableInferCsv::Config(TConfig& config) {
             "One or more file paths to infer from. Or CSV data can be passed to stdin instead");
     config.Opts->AddLongOption('p', "path", "Database path to table that should be created")
         .RequiredArgument("STRING").DefaultValue("table").StoreResult(&Path);
-    config.Opts->AddLongOption("header", "Use first row as header")
-        .NoArgument().SetFlag(&Header);
-    config.Opts->AddLongOption("columns", "Comma-separated list of column names")
+    config.Opts->AddLongOption("columns",
+        "Explicitly specifies the column names to be used, listed in a comma-separated format."
+        " By default, the command attempts to use the first row of the CSV as column names if possible."
+        " Otherwise, it generates column names automatically.")
         .RequiredArgument("NAMES").StoreResult(&ColumnNames);
+    config.Opts->AddLongOption("gen-columns",
+        "Explicitly indicates that column names should be generated automatically."
+        " By default, the command attempts to use the first row of the CSV as column names if possible.")
+        .NoArgument().SetFlag(&GenerateColumnNames);
+    config.Opts->AddLongOption("header", "Explicitly indicates that the first row in the CSV contains column names."
+        " By default, the command attempts to use the first row of the CSV as column names if possible anyway,"
+        " but this automatic detection may be inaccurate.")
+        .NoArgument().SetFlag(&HeaderHasColumnNames);
     config.Opts->AddLongOption("rows-to-analyze", "Number of rows to analyze. "
         "0 means unlimited. Reading will be stopped soon after this number of rows is read.")
         .DefaultValue(500000).StoreResult(&RowsToAnalyze);
+    config.Opts->AddLongOption("execute", "Execute CREATE TABLE request right after generation.")
+        .NoArgument().SetFlag(&Execute);
 }
 
 void TCommandTableInferCsv::Parse(TConfig& config) {
@@ -65,7 +76,7 @@ void TCommandTableInferCsv::Parse(TConfig& config) {
         }
     }
 
-    if (Header && !ColumnNames.empty()) {
+    if (HeaderHasColumnNames && !ColumnNames.empty()) {
         throw TMisuseException() << "Options --header and --columns are mutually exclusive."
             " Use --header if first row in the file  containscolumn names. Use --columns to list column names manually.";
     }
@@ -96,7 +107,7 @@ int TCommandTableInferCsv::Run(TConfig& config) {
             columnNames.push_back(columnName.data());
         }
         formatConfig->ReadOpts.column_names = columnNames;
-    } else if (!Header) {
+    } else if (!HeaderHasColumnNames) {
         formatConfig->ReadOpts.autogenerate_column_names = true;
     }
 

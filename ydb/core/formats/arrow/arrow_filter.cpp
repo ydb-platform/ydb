@@ -297,6 +297,9 @@ const std::vector<bool>& TColumnFilter::BuildSimpleFilter() const {
 class TMergePolicyAnd {
 private:
 public:
+    static bool HasValue(const bool /*a*/, const bool /*b*/) {
+        return true;
+    }
     static bool Calc(const bool a, const bool b) {
         return a && b;
     }
@@ -307,11 +310,17 @@ public:
             return TColumnFilter::BuildDenyFilter();
         }
     }
+    static TColumnFilter MergeWithSimple(const bool simpleValue, const TColumnFilter& filter) {
+        return MergeWithSimple(filter, simpleValue);
+    }
 };
 
 class TMergePolicyOr {
 private:
 public:
+    static bool HasValue(const bool /*a*/, const bool /*b*/) {
+        return true;
+    }
     static bool Calc(const bool a, const bool b) {
         return a || b;
     }
@@ -320,6 +329,34 @@ public:
             return TColumnFilter::BuildAllowFilter();
         } else {
             return filter;
+        }
+    }
+    static TColumnFilter MergeWithSimple(const bool simpleValue, const TColumnFilter& filter) {
+        return MergeWithSimple(filter, simpleValue);
+    }
+};
+
+class TMergePolicyApplyFilter {
+private:
+public:
+    static bool HasValue(const bool /*a*/, const bool b) {
+        return b;
+    }
+    static bool Calc(const bool a, const bool /*b*/) {
+        return a;
+    }
+    static TColumnFilter MergeWithSimple(const TColumnFilter& filter, const bool simpleValue) {
+        if (simpleValue) {
+            return filter;
+        } else {
+            return TColumnFilter::BuildAllowFilter();
+        }
+    }
+    static TColumnFilter MergeWithSimple(const bool simpleValue, const TColumnFilter& /*filter*/) {
+        if (simpleValue) {
+            return TColumnFilter::BuildAllowFilter();
+        } else {
+            return TColumnFilter::BuildDenyFilter();
         }
     }
 };
@@ -340,7 +377,7 @@ public:
         if (Filter1.empty() && Filter2.empty()) {
             return TColumnFilter(TMergePolicy::Calc(Filter1.DefaultFilterValue, Filter2.DefaultFilterValue));
         } else if (Filter1.empty()) {
-            return TMergePolicy::MergeWithSimple(Filter2, Filter1.DefaultFilterValue);
+            return TMergePolicy::MergeWithSimple(Filter1.DefaultFilterValue, Filter2);
         } else if (Filter2.empty()) {
             return TMergePolicy::MergeWithSimple(Filter1, Filter2.DefaultFilterValue);
         } else {
@@ -359,7 +396,7 @@ public:
 
             while (it1 != Filter1.Filter.cend() && it2 != Filter2.Filter.cend()) {
                 const ui32 delta = TColumnFilter::CrossSize(pos2, pos2 + *it2, pos1, pos1 + *it1);
-                if (delta) {
+                if (delta && TMergePolicy::HasValue(curValue1, curValue2)) {
                     if (!count || curCurrent != TMergePolicy::Calc(curValue1, curValue2)) {
                         resultFilter.emplace_back(delta);
                         curCurrent = TMergePolicy::Calc(curValue1, curValue2);
@@ -405,10 +442,15 @@ TColumnFilter TColumnFilter::Or(const TColumnFilter& extFilter) const {
     return TMergerImpl(*this, extFilter).Merge<TMergePolicyOr>();
 }
 
+TColumnFilter TColumnFilter::ApplyFilter(const TColumnFilter& extFilter) const {
+    ResetCaches();
+    return TMergerImpl(*this, extFilter).Merge<TMergePolicyApplyFilter>();
+}
+
 TColumnFilter TColumnFilter::CombineSequentialAnd(const TColumnFilter& extFilter) const {
     ResetCaches();
     if (Filter.empty()) {
-        return TMergePolicyAnd::MergeWithSimple(extFilter, DefaultFilterValue);
+        return TMergePolicyAnd::MergeWithSimple(DefaultFilterValue, extFilter);
     } else if (extFilter.Filter.empty()) {
         return TMergePolicyAnd::MergeWithSimple(*this, extFilter.DefaultFilterValue);
     } else {

@@ -286,7 +286,7 @@ private:
                 FeedBuildToPosting(key, row);
                 break;
             default:
-                Y_ASSERT(false);
+                Y_ENSURE(false);
         }
     }
 

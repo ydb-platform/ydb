@@ -40,7 +40,7 @@ public:
         cluster.SetName(name);
         cluster.SetCluster(properties.Value("location", ""));
         cluster.SetToken(token);
-        cluster.SetUseSsl(properties.Value("use_ssl", "true") == "true"sv);
+        cluster.SetUseSsl(properties.Value("use_tls", "true") == "true"sv);
 
         if (properties.Value("project", "") && properties.Value("cluster", "")) {
             cluster.SetClusterType(TSolomonClusterConfig::SCT_MONITORING);

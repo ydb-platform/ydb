@@ -109,6 +109,7 @@ void FillSolomonClusterConfig(NYql::TSolomonClusterConfig& clusterConfig,
     const TString& name,
     const TString& authToken,
     const TString& endpoint,
+    const TString& grpcEndpoint,
     const THashMap<TString, TString>& accountIdSignatures,
     const FederatedQuery::Monitoring& monitoring) {
     clusterConfig.SetName(name);
@@ -120,6 +121,11 @@ void FillSolomonClusterConfig(NYql::TSolomonClusterConfig& clusterConfig,
     clusterConfig.MutablePath()->SetProject(monitoring.project());
     clusterConfig.MutablePath()->SetCluster(monitoring.cluster());
     clusterConfig.SetUseSsl(useSsl);
+
+    auto grpcSetting = clusterConfig.MutableSettings()->Add();
+    grpcSetting->set_name("grpc_location");
+    grpcSetting->set_value(grpcEndpoint);
+
     FillClusterAuth(clusterConfig, monitoring.auth(), authToken, accountIdSignatures);
 }
 
@@ -223,12 +229,13 @@ NYql::TS3ClusterConfig CreateS3ClusterConfig(const TString& name,
 NYql::TSolomonClusterConfig CreateSolomonClusterConfig(const TString& name,
         const TString& authToken,
         const TString& endpoint,
+        const TString& grpcEndpoint,
         const TString& accountSignature,
         const FederatedQuery::Monitoring& monitoring) {
     NYql::TSolomonClusterConfig cluster;
     THashMap<TString, TString> accountIdSignatures;
     accountIdSignatures[monitoring.auth().service_account().id()] = accountSignature;
-    FillSolomonClusterConfig(cluster, name, authToken, endpoint, accountIdSignatures, monitoring);
+    FillSolomonClusterConfig(cluster, name, authToken, endpoint, grpcEndpoint, accountIdSignatures, monitoring);
     return cluster;
 }
 
@@ -236,6 +243,7 @@ void AddClustersFromConnections(
     const NConfig::TCommonConfig& common,
     const THashMap<TString, FederatedQuery::Connection>& connections,
     const TString& monitoringEndpoint,
+    const TString& monitoringGrpcEndpoint,
     const TString& authToken,
     const THashMap<TString, TString>& accountIdSignatures,
     TGatewaysConfig& gatewaysConfig,
@@ -295,7 +303,7 @@ void AddClustersFromConnections(
         case FederatedQuery::ConnectionSetting::kMonitoring: {
             const auto& monitoring = conn.content().setting().monitoring();
             auto* clusterCfg = gatewaysConfig.MutableSolomon()->AddClusterMapping();
-            FillSolomonClusterConfig(*clusterCfg, connectionName, authToken, monitoringEndpoint, accountIdSignatures, monitoring);
+            FillSolomonClusterConfig(*clusterCfg, connectionName, authToken, monitoringEndpoint, monitoringGrpcEndpoint, accountIdSignatures, monitoring);
             clusters.emplace(connectionName, SolomonProviderName);
             break;
         }

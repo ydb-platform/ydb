@@ -5,6 +5,7 @@
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NDataShard {
+using namespace NTableIndex;
 
 #define LOG_T(stream) LOG_TRACE_S (*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)
 #define LOG_D(stream) LOG_DEBUG_S (*TlsActivationContext, NKikimrServices::BUILD_INDEX, stream)

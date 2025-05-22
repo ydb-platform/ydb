@@ -444,40 +444,38 @@ private:
     void FeedUploadMain2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
-            AddRowMain2Build(*PostingBuf, Child + *pos, key, row);
+            AddRowMainToBuild(*PostingBuf, Child + *pos, key, row);
         }
     }
 
     void FeedUploadMain2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
-            AddRowMain2Posting(*PostingBuf, Child + *pos, key, row, DataPos);
+            AddRowMainToPosting(*PostingBuf, Child + *pos, key, row, DataPos);
         }
     }
 
     void FeedUploadBuild2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
-            AddRowBuild2Build(*PostingBuf, Child + *pos, key, row);
+            AddRowBuildToBuild(*PostingBuf, Child + *pos, key, row);
         }
     }
 
     void FeedUploadBuild2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
-            AddRowBuild2Posting(*PostingBuf, Child + *pos, key, row, DataPos);
+            AddRowBuildToPosting(*PostingBuf, Child + *pos, key, row, DataPos);
         }
     }
 
     void FormLevelRows()
     {
-        std::array<TCell, 2> pk;
-        std::array<TCell, 1> data;
+        const bool isPostingLevel = UploadState == NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING
+            || UploadState == NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING;
+
         for (NTable::TPos pos = 0; const auto& row : Clusters.GetClusters()) {
-            pk[0] = TCell::Make(Parent);
-            pk[1] = TCell::Make(Child + pos);
-            data[0] = TCell{row};
-            LevelBuf->AddRow(TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
+            AddRowToLevel(*LevelBuf, Parent, Child + pos, row, isPostingLevel);
             ++pos;
         }
     }

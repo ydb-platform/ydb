@@ -439,26 +439,23 @@ private:
     void FeedUploadBuild2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
-            AddRowBuild2Build(*PostingBuf, Child + *pos, key, row, PrefixColumns);
+            AddRowBuildToBuild(*PostingBuf, Child + *pos, key, row, PrefixColumns);
         }
     }
 
     void FeedUploadBuild2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         if (auto pos = Clusters.FindCluster(row, EmbeddingPos); pos) {
-            AddRowBuild2Posting(*PostingBuf, Child + *pos, key, row, DataPos, PrefixColumns);
+            AddRowBuildToPosting(*PostingBuf, Child + *pos, key, row, DataPos, PrefixColumns);
         }
     }
 
     void FormLevelRows()
     {
-        std::array<TCell, 2> pk;
-        std::array<TCell, 1> data;
+        const bool isPostingLevel = UploadState == NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING;
+
         for (NTable::TPos pos = 0; const auto& row : Clusters.GetClusters()) {
-            pk[0] = TCell::Make(Parent);
-            pk[1] = TCell::Make(Child + pos);
-            data[0] = TCell{row};
-            LevelBuf->AddRow(TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
+            AddRowToLevel(*LevelBuf, Parent, Child + pos, row, isPostingLevel);
             ++pos;
         }
     }

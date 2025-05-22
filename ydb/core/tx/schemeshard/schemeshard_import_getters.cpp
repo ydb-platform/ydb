@@ -289,7 +289,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
                 SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateTopic().FileName);
                 HeadObject(SchemeKey);
             }
-            return;
+            return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
         }
 
         if (!CheckResult(result, "HeadObject")) {
@@ -442,7 +442,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             }
             item.Table = request;
         } else {
-            Y_ABORT("Unsupported scheme object type");
+            return Reply(Ydb::StatusIds::BAD_REQUEST,("Unsupported scheme object type"));
         }
 
         auto nextStep = [this]() {

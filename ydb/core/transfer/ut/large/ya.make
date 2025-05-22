@@ -16,16 +16,13 @@ PEERDIR(
 )
 
 SRCS(
-    replication.cpp
-    transfer.cpp
-    transfer_columntable_ut.cpp
-    transfer_common.cpp
-    transfer_rowtable_ut.cpp
+    transfer_ut.cpp
 )
 
 INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/ydb_recipe/recipe.inc)
 
-SIZE(MEDIUM)
+SIZE(LARGE)
+TAG(ya:fat)
 
 IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:24 cpu:4)

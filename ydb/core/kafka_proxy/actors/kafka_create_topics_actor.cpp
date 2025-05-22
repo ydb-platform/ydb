@@ -16,7 +16,7 @@ ECleanupPolicy ConvertCleanupPolicy(const std::optional<TString>& policy) {
         return ECleanupPolicy::UNKNOWN;
     }
     if (policy.value() == "delete") {
-        return ECleanupPolicy::DELETE;
+        return ECleanupPolicy::REMOVE;
     } else if (policy.value() == "compact") {
         return ECleanupPolicy::COMPACT;
     }

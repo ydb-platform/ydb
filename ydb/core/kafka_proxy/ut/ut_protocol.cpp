@@ -2166,6 +2166,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Name.value(), topic1);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].Name.value(), topic2);
         }
+
         auto getConfigsMap = [&](const auto& describeResult) {
             THashMap<TString, TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult> configs;
             for (const auto& config : describeResult.Configs) {
@@ -2190,6 +2191,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(configs1.find("cleanup.policy")->second.Value->data(), "delete");
         }
     }
+
     Y_UNIT_TEST(TopicsWithCleaunpPolicyScenario) {
         TInsecureTestServer testServer("2");
         TKafkaTestClient client(testServer.Port);
@@ -3848,6 +3850,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         auto consumerInfo = kafkaClient.JoinAndSyncGroupAndWaitPartitions(topicsToSubscribe, consumerName, 3, protocolName, 3, 15000);
 
         kafkaClient.ValidateNoDataInTopics({{outputTopicName, {0}}});
+
         // move time forward after transaction timeout
         Sleep(TDuration::MilliSeconds(txnTimeoutMs));
 

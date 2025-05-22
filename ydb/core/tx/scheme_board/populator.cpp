@@ -707,7 +707,7 @@ class TPopulator: public TMonitorableActor<TPopulator> {
         }
     }
 
-    bool CheckQuorum(TVector<ui32> &replicaRepliesCounter, TActorId foundReplica) {
+    bool CheckQuorum(TVector<ui32> &replicaRepliesCounter, TActorId foundReplica) const {
         ui32 quorumCnt = 0;
         for (const auto& ringGroup : GroupInfo->RingGroups) {
             if (!ringGroup.WriteOnly) {

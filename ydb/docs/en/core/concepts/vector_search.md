@@ -12,7 +12,7 @@ Vector search is actively used in the following areas:
 * anomaly detection
 * classification systems
 
-In addition, **vector search** in {{ ydb-short-name }} is widely applied in machine learning (ML) and artificial intelligence (AI) tasks. It is particularly useful in Retrieval-Augmented Generation (RAG) approaches, which utilize vector search to retrieve relevant information from large volumes of data, significantly enhancing the quality of generative models.
+In addition, **vector search** in {{ ydb-short-name }} is widely applied in machine learning (ML) and artificial intelligence (AI) tasks. It is particularly useful in [Retrieval-Augmented Generation (RAG)](rag.md) approaches, which utilize vector search to retrieve relevant information from large volumes of data, significantly enhancing the quality of generative models. This capability is a fundamental component of {{ ydb-short-name }} as an [{#T}](ai-database.md).
 
 Methods for solving vector search tasks can be divided into three major categories:
 

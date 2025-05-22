@@ -1,10 +1,10 @@
 # Retrieval Augmented Generation (RAG)
 
-Retrieval Augmented Generation (RAG) is an approach that combines [large language models](https://en.wikipedia.org/wiki/Large_language_model) (LLMs)with information retrieval to produce more accurate, data-grounded outputs. Instead of relying solely on pre-trained knowledge, RAG systems retrieve relevant information from external sources like [AI databases](ai-database.md) to augment the generative model's context.
+Retrieval Augmented Generation (RAG) is an approach that combines [large language models](https://en.wikipedia.org/wiki/Large_language_model) (LLMs) with information retrieval to produce more accurate, data-grounded outputs. Instead of relying solely on pre-trained knowledge, RAG systems retrieve relevant information from external sources like [AI databases](ai-database.md) to augment the generative model's context.
 
 ## Motivation
 
-Large language models  have inherent limitations in their static training data. When queried about unseen or time-sensitive topics, they may generate incorrect information which is often referred to as *hallucination*. Retrieval Augmented Generation addresses this by implementing a retrieval step before generation: the system searches an authoritative knowledge source for relevant context before producing a response. This grounding in actual data reduces hallucinations, improves accuracy, and enables source traceability.
+LLMs have inherent limitations in their static training data. When queried about unseen or time-sensitive topics, they may generate incorrect information which is often referred to as *hallucination*. RAG addresses this by implementing a retrieval step before generation: the system searches an authoritative knowledge source for relevant context before producing a response. This grounding in actual data reduces hallucinations, improves accuracy, and enables source traceability.
 
 Common use cases where implementing a RAG pipeline significantly improves end-user experience:
 

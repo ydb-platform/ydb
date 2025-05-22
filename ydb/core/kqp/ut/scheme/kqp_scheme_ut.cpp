@@ -3255,6 +3255,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(AlterTableAddUniqIndexSql) {
+        //
+        // This test is under development
+        //
+
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableAddUniqueIndex(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
@@ -3266,39 +3270,50 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto db = kikimr.GetQueryClient();
 
         {
-            TString createQuery = R"(
+            TString createQuery = R"sql(
                 CREATE TABLE `/Root/TestTable` (
                     Key Uint64,
                     Value String,
                     PRIMARY KEY (Key)
                 );
-            )";
+            )sql";
             auto result = db.ExecuteQuery(createQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
-            TString alterQuery = R"(
+            TString alterQuery = R"sql(
                 ALTER TABLE `/Root/TestTable`
                 ADD INDEX uniq_value_idx GLOBAL UNIQUE ON (`Value`);
-            )";
+            )sql";
             auto result = db.ExecuteQuery(alterQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // TODO: write upserts in parallel
+        {
+            TString upsertQuery = R"sql(
+                UPSERT INTO `/Root/TestTable` (Key, Value) VALUES (1, "1"), (2, "2"), (3, "3");
+            )sql";
+            auto result = db.ExecuteQuery(upsertQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
 
     Y_UNIT_TEST(AlterTableAddUniqIndexPublicApi) {
+        //
+        // This test is under development
+        //
+
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableAddUniqueIndex(true);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_TRACE);
-        NYql::NDq::SetYqlLogLevels(NActors::NLog::PRI_TRACE);
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+        //kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
         {
             auto builder = TTableBuilder()
                 .AddNullableColumn("Key", EPrimitiveType::Uint64)
@@ -3309,6 +3324,26 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            // Fill table with values
+            size_t rows = 1000;
+            for (size_t i = 0; i < rows; ++i) {
+                TString upsertQuery = R"sql(
+                    UPSERT INTO `/Root/TestTable` (Key, Value) VALUES ($key, $value);
+                )sql";
+                TParamsBuilder params;
+                params.AddParam("$key").Uint64(i).Build();
+                params.AddParam("$value").String(ToString(i)).Build();
+                auto result = queryClient.ExecuteQuery(upsertQuery,
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+                    params.Build()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+        }
+
+        NYdb::TOperation::TOperationId alterOpId;
+        bool ready = false;
         {
             TAlterTableSettings settings;
             settings.AppendAddIndexes(TIndexDescription(
@@ -3317,7 +3352,32 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 {"Value"}
             ));
             auto op = session.AlterTableLong("/Root/TestTable", settings).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(op.Status().GetStatus(), EStatus::SUCCESS, op.Status().GetIssues().ToString());
+            alterOpId = op.Id();
+            ready = op.Ready();
+        }
+
+        for (size_t i = 0; i < 100; ++i) {
+            TString upsertQuery = R"sql(
+                UPSERT INTO `/Root/TestTable` (Key, Value) VALUES (1, "1"), (2, "2"), (3, "3");
+            )sql";
+            auto result = queryClient.ExecuteQuery(upsertQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            //Cerr << "Execute issues:\n" << result.GetIssues().ToString() << Endl;
+            //UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        while (!ready) {
+            Sleep(TDuration::MilliSeconds(100));
+            NYdb::NOperation::TOperationClient opClient(kikimr.GetDriver());
+            auto buildOp = opClient.Get<NYdb::NTable::TBuildIndexOperation>(alterOpId).GetValueSync();
+            ready = buildOp.Ready();
+        }
+
+        {
+            TString upsertQuery = R"sql(
+                UPSERT INTO `/Root/TestTable` (Key, Value) VALUES (1, "1"), (2, "2"), (3, "3");
+            )sql";
+            auto result = queryClient.ExecuteQuery(upsertQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
 
@@ -3333,23 +3393,23 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto db = kikimr.GetQueryClient();
 
         {
-            TString createQuery = R"(
+            TString createQuery = R"sql(
                 CREATE TABLE `/Root/TestTable` (
                     Key Uint64,
                     Value String,
                     PRIMARY KEY (Key)
                 );
-            )";
+            )sql";
             auto result = db.ExecuteQuery(createQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
-            TString alterQuery = R"(
+            TString alterQuery = R"sql(
                 ALTER TABLE `/Root/TestTable`
                 ADD INDEX uniq_value_idx GLOBAL UNIQUE ON (`Value`);
-            )";
+            )sql";
             auto result = db.ExecuteQuery(alterQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
@@ -3362,9 +3422,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         featureFlags.SetEnableAddUniqueIndex(false);
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
         TKikimrRunner kikimr(settings);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_TRACE);
-        NYql::NDq::SetYqlLogLevels(NActors::NLog::PRI_TRACE);
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

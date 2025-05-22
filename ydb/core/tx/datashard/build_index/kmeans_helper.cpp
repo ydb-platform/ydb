@@ -5,7 +5,7 @@
 
 namespace NKikimr::NDataShard::NKMeans {
 
-TTableRange CreateRangeFrom(const TUserTable& table, NTableIndex::TClusterId parent, TCell& from, TCell& to) {
+TTableRange CreateRangeFrom(const TUserTable& table, TClusterId parent, TCell& from, TCell& to) {
     if (parent == 0) {
         return table.GetTableRange();
     }
@@ -28,7 +28,26 @@ NTable::TLead CreateLeadFrom(const TTableRange& range) {
     return lead;
 }
 
-void AddRowMain2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row) {
+void AddRowToLevel(TBufferData& buffer, TClusterId parent, TClusterId child, const TString& embedding, bool isPostingLevel) {
+    if (isPostingLevel) {
+        child = SetPostingParentFlag(child);
+    } else {
+        EnsureNoPostingParentFlag(child);
+    }
+
+    std::array<TCell, 2> pk;
+    pk[0] = TCell::Make(parent);
+    pk[1] = TCell::Make(child);
+
+    std::array<TCell, 1> data;
+    data[0] = TCell{embedding};
+
+    buffer.AddRow(TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
+}
+
+void AddRowMainToBuild(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row) {
+    EnsureNoPostingParentFlag(parent);
+
     std::array<TCell, 1> cells;
     cells[0] = TCell::Make(parent);
     auto pk = TSerializedCellVec::Serialize(cells);
@@ -37,9 +56,11 @@ void AddRowMain2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArra
         TSerializedCellVec{key});
 }
 
-void AddRowMain2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
+void AddRowMainToPosting(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
                         ui32 dataPos)
 {
+    parent = SetPostingParentFlag(parent);
+
     std::array<TCell, 1> cells;
     cells[0] = TCell::Make(parent);
     auto pk = TSerializedCellVec::Serialize(cells);
@@ -48,9 +69,11 @@ void AddRowMain2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TAr
         TSerializedCellVec{key});
 }
 
-void AddRowBuild2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
+void AddRowBuildToBuild(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
                        ui32 prefixColumns)
 {
+    EnsureNoPostingParentFlag(parent);
+
     std::array<TCell, 1> cells;
     cells[0] = TCell::Make(parent);
     auto pk = TSerializedCellVec::Serialize(cells);
@@ -59,9 +82,11 @@ void AddRowBuild2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArr
         TSerializedCellVec{key});
 }
 
-void AddRowBuild2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
+void AddRowBuildToPosting(TBufferData& buffer, TClusterId parent, TArrayRef<const TCell> key, TArrayRef<const TCell> row,
                          ui32 dataPos, ui32 prefixColumns)
 {
+    parent = SetPostingParentFlag(parent);
+
     std::array<TCell, 1> cells;
     cells[0] = TCell::Make(parent);
     auto pk = TSerializedCellVec::Serialize(cells);

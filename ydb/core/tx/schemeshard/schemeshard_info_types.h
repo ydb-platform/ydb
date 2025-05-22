@@ -56,6 +56,7 @@
 
 namespace NKikimr {
 namespace NSchemeShard {
+using namespace NTableIndex;
 
 class TSchemeShard;
 

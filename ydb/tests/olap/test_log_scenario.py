@@ -22,14 +22,32 @@ logger = logging.getLogger(__name__)
 
 class YdbWorkloadLog:
     class PKMode(Enum):
-        TIMESTAMP_DEVIATION = 1,
+        TIMESTAMP_DEVIATION = (1,)
         UNIFORM = 2
 
-    def __init__(self, endpoint: str, database: str, table_name: str, timestamp_deviation: int | None = None, date_from: int | None = None, date_to: int | None = None):
+    def __init__(
+        self,
+        endpoint: str,
+        database: str,
+        table_name: str,
+        timestamp_deviation: int | None = None,
+        date_from: int | None = None,
+        date_to: int | None = None,
+    ):
         self.path: str = yatest.common.binary_path(os.environ["YDB_CLI_BINARY"])
         self.endpoint: str = endpoint
         self.database: str = database
-        self.begin_command: list[str] = [self.path, "-e", self.endpoint, "-d", self.database, "workload", "log", "--path", table_name]
+        self.begin_command: list[str] = [
+            self.path,
+            "-e",
+            self.endpoint,
+            "-d",
+            self.database,
+            "workload",
+            "log",
+            "--path",
+            table_name,
+        ]
         if timestamp_deviation is not None:
             if date_from is not None:
                 raise TypeError("timestamp_deviation and uniform PK mode should be applied mutual exclusively")
@@ -69,17 +87,9 @@ class YdbWorkloadLog:
             str(rows),
         ]
         if self.pk_mode == YdbWorkloadLog.PKMode.TIMESTAMP_DEVIATION:
-            command = command + [
-                "--timestamp_deviation",
-                str(self.timestamp_deviation)
-            ]
+            command = command + ["--timestamp_deviation", str(self.timestamp_deviation)]
         else:
-            command = command + [
-                "--date-from",
-                str(self.date_from),
-                "--date-to",
-                str(self.date_to)
-            ]
+            command = command + ["--date-from", str(self.date_from), "--date-to", str(self.date_to)]
         self._call(command=command, wait=wait)
 
     # seconds - Seconds to run workload
@@ -118,12 +128,8 @@ class TestLogScenario(object):
         ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
         config = KikimrConfigGenerator(
-            extra_feature_flags={
-                "enable_immediate_writing_on_bulk_upsert": True
-            },
-            additional_log_configs={
-                "TX_COLUMNSHARD_SCAN": LogLevels.TRACE
-            }
+            extra_feature_flags={"enable_immediate_writing_on_bulk_upsert": True},
+            additional_log_configs={"TX_COLUMNSHARD_SCAN": LogLevels.TRACE},
         )
         cls.cluster = KiKiMR(config)
         cls.cluster.start()
@@ -139,11 +145,17 @@ class TestLogScenario(object):
         while datetime.datetime.now() < deadline:
             hours: int = random.randint(1, 10)
             self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` ")
-            self.ydb_client.query(f"SELECT * FROM `{self.table_name}` WHERE timestamp < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})")
-            self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE timestamp < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})")
-            self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE " +
-                                  f"(timestamp >= CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours + 1})) AND " +
-                                  f"(timestamp <= CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours}))")
+            self.ydb_client.query(
+                f"SELECT * FROM `{self.table_name}` WHERE timestamp < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})"
+            )
+            self.ydb_client.query(
+                f"SELECT COUNT(*) FROM `{self.table_name}` WHERE timestamp < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})"
+            )
+            self.ydb_client.query(
+                f"SELECT COUNT(*) FROM `{self.table_name}` WHERE "
+                + f"(timestamp >= CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours + 1})) AND "
+                + f"(timestamp <= CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours}))"
+            )
 
     @pytest.mark.parametrize('timestamp_deviation', [3 * 60, 365 * 24 * 60 * 2])  # [3 hours, 2 years]
     def test_log_deviation(self, timestamp_deviation: int):
@@ -152,7 +164,12 @@ class TestLogScenario(object):
         wait_time: int = int(get_external_param("wait_seconds", "30"))
         self.table_name: str = "log"
 
-        ydb_workload: YdbWorkloadLog = YdbWorkloadLog(endpoint=self.ydb_client.endpoint, database=self.ydb_client.database, table_name=self.table_name, timestamp_deviation=timestamp_deviation)
+        ydb_workload: YdbWorkloadLog = YdbWorkloadLog(
+            endpoint=self.ydb_client.endpoint,
+            database=self.ydb_client.database,
+            table_name=self.table_name,
+            timestamp_deviation=timestamp_deviation,
+        )
         ydb_workload.create_table(self.table_name)
         ydb_workload.bulk_upsert(seconds=10, threads=10, rows=500, wait=True)
         logging.info(f"Count rows after insert {self.get_row_count()} before wait")
@@ -185,11 +202,13 @@ class TestLogScenario(object):
         wait_time: int = int(get_external_param("wait_seconds", "30"))
         self.table_name: str = "log"
 
-        ydb_workload: YdbWorkloadLog = YdbWorkloadLog(endpoint=self.ydb_client.endpoint,
-                                                      database=self.ydb_client.database,
-                                                      table_name=self.table_name,
-                                                      date_from=0,
-                                                      date_to=2678400000)  # Monday, 16 November 2054, 0:00:00 
+        ydb_workload: YdbWorkloadLog = YdbWorkloadLog(
+            endpoint=self.ydb_client.endpoint,
+            database=self.ydb_client.database,
+            table_name=self.table_name,
+            date_from=0,
+            date_to=2678400000,
+        )  # Monday, 16 November 2054, 0:00:00
         ydb_workload.create_table(self.table_name)
         ydb_workload.bulk_upsert(seconds=wait_time, threads=10, rows=1, wait=True)
         logging.info(f"Count rows after insert {self.get_row_count()} before wait")

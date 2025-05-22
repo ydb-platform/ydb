@@ -11,24 +11,33 @@
 
 namespace NKafka {
 
-std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ConvertCleanupPolicy(
-        const std::optional<TString>& configValue, std::optional<ECleanupPolicy>& cleanupPolicy
-) {
-    if (configValue.value_or("") == "delete") {
-        cleanupPolicy = ECleanupPolicy::REMOVE;
-        return std::nullopt;
-    } else if (configValue.value_or("") == "compact") {
-        cleanupPolicy = ECleanupPolicy::COMPACT;
-        return std::nullopt;
+
+ECleanupPolicy ConvertCleanupPolicy(const std::optional<TString>& policy) {
+    if (!policy) {
+        return ECleanupPolicy::UNKNOWN;
     }
-    auto result = MakeHolder<TEvKafka::TEvTopicModificationResponse>();
-    result->Status = EKafkaErrors::INVALID_REQUEST;
-    result->Message = TStringBuilder()
-        << "Topic-level config '"
-        << CLEANUP_POLICY
-        << "' has invalid/unsupported value: "
-        << configValue.value_or("");
-    return result;
+    if (policy.value() == "delete") {
+        return ECleanupPolicy::REMOVE;
+    } else if (policy.value() == "compact") {
+        return ECleanupPolicy::COMPACT;
+    }
+    return ECleanupPolicy::UNKNOWN;
+}
+
+std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ValidateCleanupPolicy(
+        std::optional<ECleanupPolicy> policy, const std::optional<TString>& origValue
+) {
+    if (policy && policy.value() == ECleanupPolicy::UNKNOWN) {
+        auto result = MakeHolder<TEvKafka::TEvTopicModificationResponse>();
+        result->Status = EKafkaErrors::INVALID_REQUEST;
+        result->Message = TStringBuilder()
+            << "Topic-level config '"
+            << CLEANUP_POLICY
+            << "' has invalid/unsupported value: "
+            << origValue.value_or("");
+        return result;
+    }
+    return std::nullopt;
 }
 
 class TCreateTopicActor : public NKikimr::NGRpcProxy::V1::TPQGrpcSchemaBase<TCreateTopicActor, TKafkaTopicRequestCtx> {
@@ -206,10 +215,8 @@ void TKafkaCreateTopicsActor::Bootstrap(const NActors::TActorContext& ctx) {
             } else if (config.Name.value() == RETENTION_BYTES_CONFIG_NAME) {
                 retentionBytes = config.Value;
             } else if (config.Name.value() == CLEANUP_POLICY) {
-                unsupportedConfigResponse = ConvertCleanupPolicy(config.Value, cleanupPolicy);
-                if (unsupportedConfigResponse.has_value()) {
-                    break;
-                }
+                cleanupPolicy = ConvertCleanupPolicy(config.Value);
+                unsupportedConfigResponse = ValidateCleanupPolicy(cleanupPolicy, config.Value);
             }
         }
 

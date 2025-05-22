@@ -48,7 +48,7 @@ public:
                       const TString& readSessionId = {});
     void AddKafkaApiOffsetCommit(const TString& consumer, ui64 offset);
     
-    bool IsKafkaApiOperation();
+    bool IsKafkaApiOperation() const;
 
     void Merge(const TConsumerOperations& rhs);
 
@@ -141,7 +141,7 @@ public:
     bool HasWriteId() const;
     ui64 GetWriteId() const;
     void SetWriteId(NLongTxService::TLockHandle handle);
-    NKafka::TProducerInstanceId GetKafkaProducerInstanceId();
+    NKafka::TProducerInstanceId GetKafkaProducerInstanceId() const;
 
     bool TabletHasReadOperations(ui64 tabletId) const;
 

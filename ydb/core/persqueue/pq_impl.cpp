@@ -3938,17 +3938,17 @@ void TPersQueue::ScheduleProposeTransactionResult(const TDistributedTransaction&
 {
     PQ_LOG_D("schedule TEvProposeTransactionResult(PREPARED)");
     auto event = std::make_unique<TEvPersQueue::TEvProposeTransactionResult>();
-
+    
     event->Record.SetOrigin(TabletID());
     event->Record.SetStatus(NKikimrPQ::TEvProposeTransactionResult::PREPARED);
     event->Record.SetTxId(tx.TxId);
     event->Record.SetMinStep(tx.MinStep);
     event->Record.SetMaxStep(tx.MaxStep);
-
+    
     if (ProcessingParams) {
         event->Record.MutableDomainCoordinators()->CopyFrom(ProcessingParams->GetCoordinators());
     }
-
+    
     RepliesToActor.emplace_back(tx.SourceActor, std::move(event));
 }
 
@@ -4066,7 +4066,6 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
             event = std::make_unique<TEvPQ::TEvTxCalcPredicate>(tx.Step, tx.TxId);
         }
 
-        // ToDo: add kafka offset commiting
         if (operation.HasCommitOffsetsBegin()) {
             event->AddOperation(operation.GetConsumer(),
                                 operation.GetCommitOffsetsBegin(),
@@ -4076,7 +4075,7 @@ void TPersQueue::SendEvTxCalcPredicateToPartitions(const TActorContext& ctx,
                                 operation.HasOnlyCheckCommitedToFinish() ? operation.GetOnlyCheckCommitedToFinish() : false,
                                 operation.HasReadSessionId() ? operation.GetReadSessionId() : "");
         }
-        if (operation.GetKafkaTransaction()) {
+        if (operation.GetKafkaTransaction() && operation.HasCommitOffsetsEnd()) {
             event->AddKafkaOffsetCommitOperation(operation.GetConsumer(), operation.GetCommitOffsetsEnd());
         }
     }

@@ -100,7 +100,8 @@ void TConsumerOperations::Merge(const TConsumerOperations& rhs)
     Y_ABORT_UNLESS(rhs.Consumer_.Defined());
     Y_ABORT_UNLESS(Consumer_.Empty() || Consumer_ == rhs.Consumer_);
 
-    if (IsKafkaApiOperation()) {
+    if (rhs.IsKafkaApiOperation()) {
+        KafkaCommitOffset_ = rhs.KafkaCommitOffset_;
         return;
     }
 
@@ -147,7 +148,8 @@ void TConsumerOperations::AddKafkaApiOffsetCommit(const TString& consumer, ui64 
     KafkaCommitOffset_ = offset;
 }
 
-bool TConsumerOperations::IsKafkaApiOperation() {
+bool TConsumerOperations::IsKafkaApiOperation() const 
+{
     return KafkaCommitOffset_.Defined();
 }
 
@@ -277,6 +279,7 @@ void TTopicPartitionOperations::Merge(const TTopicPartitionOperations& rhs)
     }
 
     UpdateSupportivePartition(SupportivePartition_, rhs.SupportivePartition_);
+    UpdateKafkaProducerInstanceId(KafkaProducerInstanceId_, rhs.KafkaProducerInstanceId_);
 
     for (auto& [key, value] : rhs.Operations_) {
         Operations_[key].Merge(value);
@@ -379,7 +382,8 @@ void TTopicOperations::SetWriteId(NLongTxService::TLockHandle handle)
     WriteId_ = std::move(handle);
 }
 
-NKafka::TProducerInstanceId TTopicOperations::GetKafkaProducerInstanceId() {
+NKafka::TProducerInstanceId TTopicOperations::GetKafkaProducerInstanceId() const
+{
     Y_ABORT_UNLESS(HasKafkaOperations_);
     Y_ABORT_UNLESS(KafkaProducerInstanceId_.Defined());
 
@@ -550,8 +554,10 @@ void TTopicOperations::Merge(const TTopicOperations& rhs)
         Operations_[key].Merge(value);
     }
 
+    UpdateKafkaProducerInstanceId(KafkaProducerInstanceId_, rhs.KafkaProducerInstanceId_);
     HasReadOperations_ |= rhs.HasReadOperations_;
     HasWriteOperations_ |= rhs.HasWriteOperations_;
+    HasKafkaOperations_ |= rhs.HasKafkaOperations_;
 }
 
 TSet<ui64> TTopicOperations::GetReceivingTabletIds() const

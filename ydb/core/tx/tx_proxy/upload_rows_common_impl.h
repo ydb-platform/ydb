@@ -140,6 +140,7 @@ private:
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
     TVector<NScheme::TTypeInfo> ValueColumnTypes;
     NSchemeCache::TSchemeCacheNavigate::EKind TableKind = NSchemeCache::TSchemeCacheNavigate::KindUnknown;
+    bool IsIndexImplTable = false;
     THashSet<TTabletId> ShardRepliesLeft;
     THashMap<TTabletId, TShardUploadRetryState> ShardUploadRetryStates;
     TUploadStatus Status;
@@ -592,6 +593,9 @@ private:
 
         TableKind = entry.Kind;
         const bool isColumnTable = (TableKind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
+        IsIndexImplTable = (entry.TableKind == NSchemeCache::ETableKind::KindSyncIndexTable
+            || entry.TableKind == NSchemeCache::ETableKind::KindAsyncIndexTable
+            || entry.TableKind == NSchemeCache::ETableKind::KindVectorIndexTable);
 
         if (entry.TableId.IsSystemView()) {
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "is not supported. Table is a system view", ctx);
@@ -701,6 +705,12 @@ private:
         TString accessCheckError;
         if (!CheckAccess(accessCheckError)) {
             return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, accessCheckError, ctx);
+        }
+        if (IsIndexImplTable) {
+            return ReplyWithError(
+                Ydb::StatusIds::BAD_REQUEST,
+                "Writing to index implementation tables is not allowed.",
+                ctx);
         }
 
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "starting LongTx");
@@ -960,6 +970,12 @@ private:
         TString accessCheckError;
         if (!CheckAccess(accessCheckError)) {
             return ReplyWithError(Ydb::StatusIds::UNAUTHORIZED, accessCheckError, ctx);
+        }
+        if (IsIndexImplTable) {
+            return ReplyWithError(
+                Ydb::StatusIds::BAD_REQUEST,
+                "Writing to index implementation tables is not allowed.",
+                ctx);
         }
 
         auto getShardsString = [] (const TVector<TKeyDesc::TPartitionInfo>& partitions) {

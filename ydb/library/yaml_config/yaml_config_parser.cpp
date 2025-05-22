@@ -927,7 +927,6 @@ endDiskTypeCheck:   ;
                     if (erasureName && !channel.HasErasureSpecies()) {
                         channel.SetErasureSpecies(erasureName.GetRef());
                     }
-                    Y_ENSURE_BT(channel.HasStoragePoolKind() || defaultDiskTypeLower, "Disk type is not specified for channel, id " << profile.GetProfileId());
                     if (defaultDiskTypeLower && !channel.HasStoragePoolKind()) {
                         channel.SetStoragePoolKind(defaultDiskTypeLower.GetRef());
                     }

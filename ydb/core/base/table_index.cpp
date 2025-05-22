@@ -197,9 +197,8 @@ void EnsureNoPostingParentFlag(TClusterId parent) {
 }
 
 TClusterId SetPostingParentFlag(TClusterId parent) {
-    ui64 result = (parent | PostingParentFlag);
-    Y_ENSURE(result != parent);
-    return result;
+    EnsureNoPostingParentFlag(parent);
+    return (parent | PostingParentFlag);
 }
 
 }

@@ -29,13 +29,11 @@ NTable::TLead CreateLeadFrom(const TTableRange& range) {
 }
 
 void AddRowToLevel(TBufferData& buffer, TClusterId parent, TClusterId child, const TString& embedding, bool isPostingLevel) {
-    Cerr << "AddRowToLevel " << child << " " << isPostingLevel << Endl;
     if (isPostingLevel) {
         child = SetPostingParentFlag(child);
     } else {
         EnsureNoPostingParentFlag(child);
     }
-    Cerr << "AddRowToLevel2 " << child << Endl;
 
     std::array<TCell, 2> pk;
     pk[0] = TCell::Make(parent);

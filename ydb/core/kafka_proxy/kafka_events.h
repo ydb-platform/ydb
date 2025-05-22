@@ -5,7 +5,6 @@
 #include <ydb/services/persqueue_v1/actors/events.h>
 
 #include "kafka_messages.h"
-#include "kafka_producer_instance_id.h"
 #include <ydb/library/aclib/aclib.h>
 #include "actors/actors.h"
 
@@ -226,12 +225,6 @@ struct TEvTopicOffsetsResponse : public NActors::TEventLocal<TEvTopicOffsetsResp
     TVector<TPartitionOffsetsInfo> Partitions;
 };
 
-struct PartitionConsumerOffset {
-    ui64 PartitionIndex;
-    ui64 Offset;
-    TString Metadata;
-};
-
 struct TEvCommitedOffsetsResponse : public NActors::TEventLocal<TEvCommitedOffsetsResponse, EvTopicOffsetsResponse>
                                   , public NKikimr::NGRpcProxy::V1::TLocalResponseBase
 {
@@ -240,8 +233,7 @@ struct TEvCommitedOffsetsResponse : public NActors::TEventLocal<TEvCommitedOffse
 
     TString TopicName;
     EKafkaErrors Status;
-
-    std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, PartitionConsumerOffset>>> PartitionIdToOffsets;
+    std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, ui32>>> PartitionIdToOffsets;
 };
 
 struct TEvTopicModificationResponse : public NActors::TEventLocal<TEvTopicModificationResponse, EvCreateTopicsResponse>
@@ -337,8 +329,14 @@ struct TEvEndTxnRequest : public TEventLocal<TEvEndTxnRequest, EvEndTxnRequest> 
     TActorId ConnectionId;
     TString DatabasePath;
 };
+struct TProducerInstanceId {
+    i64 Id;
+    i32 Epoch;
 
-/*
+    auto operator<=>(TProducerInstanceId const&) const = default;
+};
+
+/* 
 Event sent from TIintProducerActor to TKafkaTransactionRouter to notify that producer id will be obtained by client
  */
 struct TEvSaveTxnProducerRequest : public NActors::TEventLocal<TEvSaveTxnProducerRequest, EvSaveTxnProducerRequest> {
@@ -351,7 +349,7 @@ struct TEvSaveTxnProducerRequest : public NActors::TEventLocal<TEvSaveTxnProduce
     const TProducerInstanceId ProducerState;
 };
 
-/*
+/* 
 Event sent from TKafkaTransactionRouter to TIintProducerActor to notify that new transactional id was succesfully saved
 
 OK if this transactional producer was not found or older version was found

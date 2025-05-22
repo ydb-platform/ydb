@@ -38,17 +38,15 @@ public:
 
 class IChunkedArray {
 public:
-// PERSISTENT ENUM!!. DONT CHANGE ELEMENT'S IDS
     enum class EType : ui8 {
         Undefined = 0,
-        Array = 1,
-        ChunkedArray = 2,
-        SerializedChunkedArray = 3,
-        CompositeChunkedArray = 4,
-        SparsedArray = 5,
-        SubColumnsArray = 6,
-        SubColumnsPartialArray = 7,
-        Dictionary = 8
+        Array,
+        ChunkedArray,
+        SerializedChunkedArray,
+        CompositeChunkedArray,
+        SparsedArray,
+        SubColumnsArray,
+        SubColumnsPartialArray
     };
 
     using TValuesSimpleVisitor = std::function<void(std::shared_ptr<arrow::Array>)>;
@@ -96,13 +94,9 @@ public:
             return Addresses.size();
         }
 
-        ui32 GetLocalIndex(const ui32 global) const {
-            AFL_VERIFY(Contains(global))("pos", global)("start", GlobalStartPosition);
-            return global - GlobalStartPosition;
-        }
-
-        ui32 GetGlobalIndex(const ui32 local) const {
-            return local + GlobalStartPosition;
+        ui32 GetLocalIndex(const ui32 position) const {
+            AFL_VERIFY(Contains(position))("pos", position)("start", GlobalStartPosition);
+            return position - GlobalStartPosition;
         }
 
         bool Contains(const ui32 position) const {
@@ -367,7 +361,7 @@ public:
         for (ui32 currentIndex = 0; currentIndex < arr->GetRecordsCount();) {
             arrCurrent = arr->GetArray(arrCurrent, currentIndex, arr);
             auto result = actor(arrCurrent->GetArray());
-            if (result) {
+            if (!!result) {
                 return result;
             }
             currentIndex = currentIndex + arrCurrent->GetArray()->GetRecordsCount();
@@ -473,7 +467,6 @@ public:
             case EType::SubColumnsArray:
             case EType::SubColumnsPartialArray:
             case EType::Array:
-            case EType::Dictionary:
                 return true;
             case EType::Undefined:
                 AFL_VERIFY(false);

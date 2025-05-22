@@ -240,6 +240,9 @@ public:
         ShardedWriteController = CreateShardedWriteController(
             TShardedWriteControllerSettings {
                 .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
+                .MemoryLimitPerMessage = std::min(
+                    MessageSettings.InFlightMemoryLimitPerActorBytes,
+                    MessageSettings.MemoryLimitPerMessageBytes),
                 .Inconsistent = InconsistentTx,
             },
             Alloc);
@@ -775,8 +778,6 @@ public:
     void ProcessWritePreparedShard(NKikimr::NEvents::TDataEvents::TEvWriteResult::TPtr& ev) {
         YQL_ENSURE(Mode == EMode::PREPARE);
         const auto& record = ev->Get()->Record;
-        AFL_ENSURE(record.GetTxLocks().empty());
-
         IKqpTransactionManager::TPrepareResult preparedInfo;
         preparedInfo.ShardId = record.GetOrigin();
         preparedInfo.MinStep = record.GetMinStep();
@@ -819,7 +820,10 @@ public:
                     issues.AddIssue(*TxManager->GetLockIssue());
                     RuntimeError(
                         NYql::NDqProto::StatusIds::ABORTED,
-                        std::move(issues));
+                        NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
+                        TStringBuilder() << "Transaction locks invalidated. Table `"
+                            << TablePath << "`.",
+                        issues);
                     return;
                 }
             }
@@ -836,7 +840,6 @@ public:
         if (result && result->IsShardEmpty && Mode == EMode::IMMEDIATE_COMMIT) {
             Callbacks->OnCommitted(ev->Get()->Record.GetOrigin(), result->DataSize);
         } else if (result) {
-            AFL_ENSURE(Mode == EMode::WRITE);
             Callbacks->OnMessageAcknowledged(result->DataSize);
         }
     }
@@ -983,11 +986,7 @@ public:
             }()
             << ", Size=" << serializationResult.TotalDataSize << ", Cookie=" << metadata->Cookie
             << ", OperationsCount=" << evWrite->Record.OperationsSize() << ", IsFinal=" << metadata->IsFinal
-            << ", Attempts=" << metadata->SendAttempts << ", Mode=" << static_cast<int>(Mode)
-            << ", BufferMemory=" << GetMemory());
-
-        AFL_ENSURE(Mode == EMode::WRITE || metadata->IsFinal);
-
+            << ", Attempts=" << metadata->SendAttempts << ", Mode=" << static_cast<int>(Mode));
         Send(
             PipeCacheId,
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, /* subscribe */ true),
@@ -1504,8 +1503,7 @@ private:
                 RuntimeError(
                     NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                     NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-                    TStringBuilder() << "Out of buffer memory. Used " << GetMemory()
-                        << " bytes of " << MessageSettings.InFlightMemoryLimitPerActorBytes << " bytes.",
+                    TStringBuilder() << "Stream write can't be used for this query.",
                     {});
                 return;
             }
@@ -1805,7 +1803,6 @@ public:
             }
 
             EnableStreamWrite &= settings.EnableStreamWrite;
-
             auto cookie = writeInfo.WriteTableActor->Open(
                 settings.OperationType,
                 std::move(settings.KeyColumns),
@@ -1905,8 +1902,7 @@ public:
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                 NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-                TStringBuilder() << "Out of buffer memory. Used " << GetTotalMemory()
-                        << " bytes of " << MessageSettings.InFlightMemoryLimitPerActorBytes << " bytes.",
+                TStringBuilder() << "Stream write queries aren't allowed.",
                 {});
             return false;
         }
@@ -2390,13 +2386,6 @@ public:
 
         if (!TxManager->NeedCommit()) {
             RollbackAndDie(std::move(ev->TraceId));
-        } else if (TxManager->BrokenLocks()) {
-            NYql::TIssues issues;
-            issues.AddIssue(*TxManager->GetLockIssue());
-            ReplyErrorAndDie(
-                NYql::NDqProto::StatusIds::ABORTED,
-                std::move(issues));
-            return;
         } else if (TxManager->IsSingleShard() && !TxManager->HasOlapTable() && (!WriteInfos.empty() || TxManager->HasTopics())) {
             TxManager->StartExecute();
             ImmediateCommit(std::move(ev->TraceId));

@@ -1669,47 +1669,4 @@ TUnversionedValueRangeTruncationResult TruncateUnversionedValues(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool GetBit(TRef bitmap, i64 index)
-{
-    return (bitmap[index >> 3] & (1U << (index & 7))) != 0;
-}
-
-void SetBit(TMutableRef bitmap, i64 index, bool value)
-{
-    auto& byte = bitmap[index >> 3];
-    auto mask = (1U << (index & 7));
-    if (value) {
-        byte |= mask;
-    } else {
-        byte &= ~mask;
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TString EscapeCAndSingleQuotes(TStringBuf str)
-{
-    auto escaped = TString();
-    escaped.reserve(str.size() * 2);
-
-    EscapeC(str, escaped);
-
-    auto size = escaped.size();
-    auto newSize = size + std::count(escaped.cbegin(), escaped.cend(), '\'');
-
-    escaped.resize(newSize);
-
-    auto rit = escaped.rbegin();
-    std::for_each(rit + (newSize - size), escaped.rend(), [&] (char character) {
-        *rit++ = character;
-        if (character == '\'') {
-            *rit++ = '\\';
-        }
-    });
-
-    return escaped;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 } // namespace NYT::NTableClient

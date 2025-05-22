@@ -323,9 +323,6 @@ struct TPartitionTablesOptions
 
     //! COMPAT(apollo1321): remove in 25.2 release.
     bool UseNewSlicingImplementationInOrderedPool = true;
-
-    //! COMPAT(apollo1321): remove in 25.2 release.
-    bool UseNewSlicingImplementationInUnorderedPool = true;
 };
 
 struct TReadTablePartitionOptions
@@ -466,7 +463,7 @@ struct ITableClient
         const TGetTabletErrorsOptions& options = {}) = 0;
 
     virtual TFuture<std::vector<NTabletClient::TTabletActionId>> BalanceTabletCells(
-        const std::string& tabletCellBundle,
+        const TString& tabletCellBundle,
         const std::vector<NYPath::TYPath>& movableTables,
         const TBalanceTabletCellsOptions& options = {}) = 0;
 

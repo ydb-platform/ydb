@@ -202,10 +202,9 @@ public:
     }
 
     void release(std::uint32_t delta = 1) override {
-        auto parent = my_parent;
         std::uint64_t ref = m_ref_count.fetch_sub(static_cast<std::uint64_t>(delta)) - static_cast<std::uint64_t>(delta);
         if (ref == 0) {
-            parent->release();
+            my_parent->release();
         }
     }
 

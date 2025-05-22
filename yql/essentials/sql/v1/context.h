@@ -325,7 +325,6 @@ namespace NSQLTranslationV1 {
         const bool AnsiQuotedIdentifiers;
         bool AnsiOptionalAs = true;
         bool OrderedColumns = false;
-        bool DeriveColumnOrder = false;
         bool PositionalUnionAll = false;
         bool BogousStarInGroupByOverJoin = false;
         bool UnorderedSubqueries = true;

@@ -307,7 +307,8 @@
                                                                                                         ]
                                                                                                     }
                                                                                                 }
-                                                                                            ]
+                                                                                            ],
+                                                                                            "Version": 5
                                                                                         },
                                                                                         "Table": "clickbench/plans/column/hits"
                                                                                     }

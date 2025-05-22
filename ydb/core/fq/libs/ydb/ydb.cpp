@@ -25,29 +25,23 @@ TFuture<TDataQueryResult> SelectGeneration(const TGenerationContextPtr& context)
     auto query = Sprintf(R"(
         --!syntax_v1
         PRAGMA TablePathPrefix("%s");
-        DECLARE $pk AS String;
 
         SELECT %s, %s
         FROM %s
-        WHERE %s = $pk;
+        WHERE %s = "%s";
     )", context->TablePathPrefix.c_str(),
         context->PrimaryKeyColumn.c_str(),
         context->GenerationColumn.c_str(),
         context->Table.c_str(),
-        context->PrimaryKeyColumn.c_str());
-
-    NYdb::TParamsBuilder params;
-    params
-        .AddParam("$pk")
-        .String(context->PrimaryKey)
-        .Build();
+        context->PrimaryKeyColumn.c_str(),
+        context->PrimaryKey.c_str());
 
     auto ttxControl = TTxControl::BeginTx(TTxSettings::SerializableRW());
     if (context->OperationType == TGenerationContext::Check && context->CommitTx) {
         ttxControl.CommitTx();
     }
 
-    return context->Session.ExecuteDataQuery(query, ttxControl, params.Build(), context->ExecDataQuerySettings);
+    return context->Session.ExecuteDataQuery(query, ttxControl);
 }
 
 TFuture<TStatus> CheckGeneration(
@@ -133,24 +127,15 @@ TFuture<TStatus> UpsertGeneration(const TGenerationContextPtr& context) {
     auto query = Sprintf(R"(
         --!syntax_v1
         PRAGMA TablePathPrefix("%s");
-        DECLARE $pk AS String;
-        DECLARE $generation AS Uint64;
 
         UPSERT INTO %s (%s, %s) VALUES
-            ($pk, $generation);
+            ("%s", %lu);
     )", context->TablePathPrefix.c_str(),
         context->Table.c_str(),
         context->PrimaryKeyColumn.c_str(),
-        context->GenerationColumn.c_str());
-
-    NYdb::TParamsBuilder params;
-    params
-        .AddParam("$pk")
-        .String(context->PrimaryKey)
-        .Build()
-        .AddParam("$generation")
-        .Uint64(context->Generation)
-        .Build();
+        context->GenerationColumn.c_str(),
+        context->PrimaryKey.c_str(),
+        context->Generation);
 
     auto ttxControl = TTxControl::Tx(*context->Transaction);
     if (context->CommitTx) {
@@ -158,7 +143,7 @@ TFuture<TStatus> UpsertGeneration(const TGenerationContextPtr& context) {
         context->Transaction.reset();
     }
 
-    return context->Session.ExecuteDataQuery(query, ttxControl, params.Build(), context->ExecDataQuerySettings).Apply(
+    return context->Session.ExecuteDataQuery(query, ttxControl).Apply(
         [] (const TFuture<TDataQueryResult>& future) {
             TStatus status = future.GetValue();
             return status;

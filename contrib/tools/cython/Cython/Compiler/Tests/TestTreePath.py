@@ -1,4 +1,5 @@
 import unittest
+from Cython.Compiler.Visitor import PrintTree
 from Cython.TestUtils import TransformTest
 from Cython.Compiler.TreePath import find_first, find_all
 from Cython.Compiler import Nodes, ExprNodes

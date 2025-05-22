@@ -1,16 +1,14 @@
 #pragma once
 
 #include "flat_sausage_gut.h"
-#include "flat_part_iface.h"
 
-#include <util/generic/xrange.h>
 #include <ydb/library/actors/util/shared_data.h>
 
 namespace NKikimr {
 namespace NPageCollection {
 
     struct TFetch {
-        TFetch(ui64 cookie, TIntrusiveConstPtr<IPageCollection> pageCollection, TVector<TPageId> pages, NWilson::TTraceId traceId = {})
+        TFetch(ui64 cookie, TIntrusiveConstPtr<IPageCollection> pageCollection, TVector<ui32> pages, NWilson::TTraceId traceId = {})
             : Cookie(cookie)
             , PageCollection(std::move(pageCollection))
             , Pages(std::move(pages))
@@ -19,33 +17,24 @@ namespace NPageCollection {
 
         }
 
-        TString DebugString(bool detailed = false) const
+        void Describe(IOutputStream &out) const
         {
-            TStringBuilder str;
-            str << "PageCollection: " << PageCollection->Label();
-            if (detailed) {
-                str << " Pages: [";
-                for (const auto& pageId : Pages) {
-                    str << " " << pageId;
-                }
-                str << " ]";
-            } else {
-                str << " Pages: " << Pages.size();
-            }
-            if (Cookie != Max<ui64>()) str << " Cookie: " << Cookie;
-            return str;
+            out
+                << "Fetch{" << Pages.size() << " pages"
+                << " " << PageCollection->Label() << "}";
         }
 
-        ui64 Cookie = Max<ui64>();
+        const ui64 Cookie = Max<ui64>();
+
         TIntrusiveConstPtr<IPageCollection> PageCollection;
-        TVector<TPageId> Pages;
+        TVector<ui32> Pages;
         NWilson::TTraceId TraceId;
     };
 
     struct TLoadedPage {
         TLoadedPage() = default;
 
-        TLoadedPage(TPageId page, TSharedData data)
+        TLoadedPage(ui32 page, TSharedData data)
             : PageId(page)
             , Data(std::move(data))
         {
@@ -54,10 +43,10 @@ namespace NPageCollection {
 
         explicit operator bool() const noexcept
         {
-            return Data && PageId != Max<TPageId>();
+            return Data && PageId != Max<ui32>();
         }
 
-        TPageId PageId = Max<TPageId>();
+        ui32 PageId = Max<ui32>();
         TSharedData Data;
     };
 

@@ -1,4 +1,3 @@
-import json
 import logging
 from optparse import Values
 from typing import Any, Iterable, List, Optional
@@ -8,10 +7,7 @@ from pip._vendor.packaging.version import Version
 from pip._internal.cli import cmdoptions
 from pip._internal.cli.req_command import IndexGroupCommand
 from pip._internal.cli.status_codes import ERROR, SUCCESS
-from pip._internal.commands.search import (
-    get_installed_distribution,
-    print_dist_installation_info,
-)
+from pip._internal.commands.search import print_dist_installation_info
 from pip._internal.exceptions import CommandError, DistributionNotFound, PipError
 from pip._internal.index.collector import LinkCollector
 from pip._internal.index.package_finder import PackageFinder
@@ -38,7 +34,6 @@ class IndexCommand(IndexGroupCommand):
 
         self.cmd_opts.add_option(cmdoptions.ignore_requires_python())
         self.cmd_opts.add_option(cmdoptions.pre())
-        self.cmd_opts.add_option(cmdoptions.json())
         self.cmd_opts.add_option(cmdoptions.no_binary())
         self.cmd_opts.add_option(cmdoptions.only_binary())
 
@@ -54,6 +49,12 @@ class IndexCommand(IndexGroupCommand):
         handlers = {
             "versions": self.get_available_package_versions,
         }
+
+        logger.warning(
+            "pip index is currently an experimental command. "
+            "It may be removed/changed in a future release "
+            "without prior warning."
+        )
 
         # Determine action
         if not args or args[0] not in handlers:
@@ -133,21 +134,6 @@ class IndexCommand(IndexGroupCommand):
             formatted_versions = [str(ver) for ver in sorted(versions, reverse=True)]
             latest = formatted_versions[0]
 
-        dist = get_installed_distribution(query)
-
-        if options.json:
-            structured_output = {
-                "name": query,
-                "versions": formatted_versions,
-                "latest": latest,
-            }
-
-            if dist is not None:
-                structured_output["installed_version"] = str(dist.version)
-
-            write_output(json.dumps(structured_output))
-
-        else:
-            write_output(f"{query} ({latest})")
-            write_output("Available versions: {}".format(", ".join(formatted_versions)))
-            print_dist_installation_info(latest, dist)
+        write_output(f"{query} ({latest})")
+        write_output("Available versions: {}".format(", ".join(formatted_versions)))
+        print_dist_installation_info(query, latest)

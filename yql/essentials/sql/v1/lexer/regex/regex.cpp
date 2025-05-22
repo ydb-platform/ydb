@@ -45,7 +45,6 @@ namespace NSQLTranslationV1 {
 
         TString ToRegex(const TStringBuf name) {
             TString text = Grammar_->BlockByName.at(name);
-            Preprocess(text);
             Inline(text);
             Transform(text);
             Finalize(text);
@@ -53,10 +52,6 @@ namespace NSQLTranslationV1 {
         }
 
     private:
-        void Preprocess(TString& text) {
-            text = ChangedDigitsPrecendence(std::move(text));
-        }
-
         void Inline(TString& text) {
             ApplyEachWhileChanging(text, Inliners_);
         }
@@ -91,8 +86,6 @@ namespace NSQLTranslationV1 {
                     Grammar_->PunctuationNames.contains(name) ||
                     PunctuationFragments.contains(name)) {
                     def = "'" + def + "'";
-                } else if (name == "DIGITS") {
-                    def = ChangedDigitsPrecendence(std::move(def));
                 }
                 def = QuoteAntlrRewrite(std::move(def));
 
@@ -100,15 +93,6 @@ namespace NSQLTranslationV1 {
                     "(\\b" + name + "\\b)",
                     "(" + def + ")"));
             }
-        }
-
-        // Regex engine matches the first matched alternative,
-        // even if it is not the longest one, while ANTLR is more gready.
-        TString ChangedDigitsPrecendence(TString body) {
-            if (SubstGlobal(body, "DECDIGITS | ", "") != 0) {
-                SubstGlobal(body, "BINDIGITS", "BINDIGITS | DECDIGITS");
-            }
-            return body;
         }
 
         void Transform(TString& text) {

@@ -71,7 +71,7 @@ public:
 
     EProgramType ProgramType = EProgramType::SExpr;
     TLangVersion LangVer = UnknownLangVersion;
-    TLangVersion MaxLangVer = GetMaxLangVersion();
+    TLangVersion MaxLangVer = UnknownLangVersion;
     NYson::EYsonFormat ResultsFormat = NYson::EYsonFormat::Text;
     ERunMode Mode = ERunMode::Run;
     TString ProgramFile;

@@ -139,7 +139,7 @@ class YAML_CPP_API Node {
 
 YAML_CPP_API bool operator==(const Node& lhs, const Node& rhs);
 
-YAML_CPP_API Node Clone(const Node& node, bool preserveMarks = false);
+YAML_CPP_API Node Clone(const Node& node);
 
 template <typename T>
 struct convert;

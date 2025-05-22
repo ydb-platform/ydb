@@ -342,10 +342,6 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
 
     AddLocksToResult(op, ctx);
 
-    if (!guardLocks.LockTxId) {
-        writeVersion.ToProto(op->Result()->Record.MutableCommitVersion());
-    }
-
     Pipeline.AddCommittingOp(op);
 }
 

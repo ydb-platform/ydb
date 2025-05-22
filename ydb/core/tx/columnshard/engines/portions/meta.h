@@ -52,10 +52,6 @@ public:
     }
 
     ui64 GetMetadataMemorySize() const {
-        return GetBlobIds().capacity() * sizeof(TUnifiedBlobId);
-    }
-
-    ui64 GetMetadataDataSize() const {
         return GetBlobIds().size() * sizeof(TUnifiedBlobId);
     }
 
@@ -69,9 +65,7 @@ public:
 class TPortionMeta: public TPortionMetaBase {
 private:
     using TBase = TPortionMetaBase;
-    std::shared_ptr<arrow::Schema> PKSchema;
-    NArrow::TSimpleRowContent FirstPKRow;
-    NArrow::TSimpleRowContent LastPKRow;
+    NArrow::TFirstLastSpecialKeys ReplaceKeyEdges;
     YDB_READONLY_DEF(TString, TierName);
     YDB_READONLY(ui32, DeletionsCount, 0);
     YDB_READONLY(ui32, CompactionLevel, 0);
@@ -82,19 +76,17 @@ private:
     YDB_READONLY(ui32, IndexBlobBytes, 0);
 
     friend class TPortionMetaConstructor;
-    friend class TCompactedPortionInfo;
+    friend class TPortionInfo;
     TPortionMeta(NArrow::TFirstLastSpecialKeys& pk, const TSnapshot& min, const TSnapshot& max)
-        : PKSchema(pk.GetSchema())
-        , FirstPKRow(pk.GetFirst().GetContent())
-        , LastPKRow(pk.GetLast().GetContent())
+        : ReplaceKeyEdges(pk)
         , RecordSnapshotMin(min)
-        , RecordSnapshotMax(max) {
-        AFL_VERIFY(IndexKeyStart() <= IndexKeyEnd())("start", IndexKeyStart().DebugString())("end", IndexKeyEnd().DebugString());
+        , RecordSnapshotMax(max)
+        , IndexKeyStart(pk.GetFirst())
+        , IndexKeyEnd(pk.GetLast()) {
+        AFL_VERIFY(IndexKeyStart <= IndexKeyEnd)("start", IndexKeyStart.DebugString())("end", IndexKeyEnd.DebugString());
     }
     TSnapshot RecordSnapshotMin;
     TSnapshot RecordSnapshotMax;
-
-public:
 
     void FullValidation() const {
         TBase::FullValidation();
@@ -103,12 +95,9 @@ public:
         AFL_VERIFY(ColumnBlobBytes);
     }
 
-    NArrow::TSimpleRow IndexKeyStart() const {
-        return FirstPKRow.Build(PKSchema);
-    }
-
-    NArrow::TSimpleRow IndexKeyEnd() const {
-        return LastPKRow.Build(PKSchema);
+public:
+    const NArrow::TFirstLastSpecialKeys& GetFirstLastPK() const {
+        return ReplaceKeyEdges;
     }
 
     void ResetCompactionLevel(const ui32 level) {
@@ -117,20 +106,15 @@ public:
 
     using EProduced = NPortion::EProduced;
 
+    NArrow::TReplaceKey IndexKeyStart;
+    NArrow::TReplaceKey IndexKeyEnd;
+
     EProduced Produced = EProduced::UNSPECIFIED;
 
     std::optional<TString> GetTierNameOptional() const;
 
     ui64 GetMetadataMemorySize() const {
-        return GetMemorySize();
-    }
-
-    ui64 GetMemorySize() const {
-        return sizeof(TPortionMeta) + FirstPKRow.GetMemorySize() + LastPKRow.GetMemorySize() + TBase::GetMetadataMemorySize();
-    }
-
-    ui64 GetDataSize() const {
-        return sizeof(TPortionMeta) + FirstPKRow.GetDataSize() + LastPKRow.GetDataSize() + TBase::GetMetadataDataSize();
+        return sizeof(TPortionMeta) + ReplaceKeyEdges.GetMemorySize() + TBase::GetMetadataMemorySize();
     }
 
     NKikimrTxColumnShard::TIndexPortionMeta SerializeToProto() const;

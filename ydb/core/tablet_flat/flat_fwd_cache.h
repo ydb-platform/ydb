@@ -279,7 +279,6 @@ namespace NFwd {
             TDeque<TPageEx> Pages;
             ui32 PagesBeginOffset = 0, PagesPendingOffset = 0;
             TDeque<TNodeState> Queue;
-            TPageId BeginPageId = Max<TPageId>(), EndPageId = 0;
         };
 
     public:
@@ -301,8 +300,6 @@ namespace NFwd {
             auto& meta = Part->IndexPages.GetBTree(groupId);
             Levels.resize(meta.LevelCount + 1);
             Levels[0].Queue.push_back({meta.GetPageId(), meta.GetDataSize()});
-            Levels[0].BeginPageId = meta.GetPageId();
-            Levels[0].EndPageId = meta.GetPageId() + 1;
             if (meta.LevelCount) {
                 IndexPageLocator.Add(meta.GetPageId(), GroupId, 0);
             }
@@ -320,9 +317,6 @@ namespace NFwd {
             if (auto *page = level.Trace.Get(pageId)) {
                 return {page, false, true};
             }
-
-            Y_ENSURE(level.BeginPageId <= pageId && pageId < level.EndPageId, "Requested page " << pageId << " is out of loaded slice "
-                << BeginRowId << " " << EndRowId << " " << level.BeginPageId << " " << level.EndPageId << " with index " << Part->IndexPages.GetBTree(GroupId).ToString());
 
             DropPagesBefore(level, pageId);
             ShrinkPages(level);
@@ -435,13 +429,8 @@ namespace NFwd {
                         if (child.GetRowCount() <= BeginRowId) {
                             continue;
                         }
-                        auto& nextLevel = Levels[levelId + 1];
-                        Y_ENSURE(!nextLevel.Queue || nextLevel.Queue.back().PageId < child.GetPageId());
-                        nextLevel.Queue.push_back({child.GetPageId(), child.GetDataSize()});
-                        if (nextLevel.BeginPageId == Max<TPageId>()) {
-                            nextLevel.BeginPageId = child.GetPageId();
-                        }
-                        nextLevel.EndPageId = child.GetPageId() + 1;
+                        Y_ENSURE(!Levels[levelId + 1].Queue || Levels[levelId + 1].Queue.back().PageId < child.GetPageId());
+                        Levels[levelId + 1].Queue.push_back({child.GetPageId(), child.GetDataSize()});
                         if (child.GetRowCount() >= EndRowId) {
                             break;
                         }

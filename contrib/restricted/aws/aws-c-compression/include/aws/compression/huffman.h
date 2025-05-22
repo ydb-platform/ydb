@@ -10,8 +10,6 @@
 
 #include <aws/common/byte_buf.h>
 
-AWS_PUSH_SANE_WARNING_LEVEL
-
 /**
  * Represents an encoded code
  */
@@ -159,6 +157,5 @@ AWS_COMPRESSION_API
 void aws_huffman_decoder_allow_growth(struct aws_huffman_decoder *decoder, bool allow_growth);
 
 AWS_EXTERN_C_END
-AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMPRESSION_HUFFMAN_H */

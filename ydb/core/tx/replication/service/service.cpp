@@ -432,10 +432,9 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             transformLambda = writerSettings.GetTransformLambda(),
             compilationService = *CompilationService,
             batchingSettings = writerSettings.GetBatching(),
-            transferWriterFactory = transferWriterFactory,
-            runAsUser = writerSettings.GetRunAsUser()
+            transferWriterFactory = transferWriterFactory
         ]() {
-            return transferWriterFactory->Create({transformLambda, tablePathId, compilationService, batchingSettings, runAsUser});
+            return transferWriterFactory->Create({transformLambda, tablePathId, compilationService, batchingSettings});
         };
     }
 

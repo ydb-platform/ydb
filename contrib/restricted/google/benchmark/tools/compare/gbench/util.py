@@ -1,6 +1,4 @@
-"""util.py - General utilities for running, loading, and processing
-benchmarks
-"""
+"""util.py - General utilities for running, loading, and processing benchmarks"""
 
 import json
 import os
@@ -48,7 +46,7 @@ def is_json_file(filename):
     'False' otherwise.
     """
     try:
-        with open(filename) as f:
+        with open(filename, "r") as f:
             json.load(f)
         return True
     except BaseException:
@@ -99,8 +97,7 @@ def find_benchmark_flag(prefix, benchmark_flags):
     if it is found return the arg it specifies. If specified more than once the
     last value is returned. If the flag is not found None is returned.
     """
-    assert prefix.startswith("--")
-    assert prefix.endswith("=")
+    assert prefix.startswith("--") and prefix.endswith("=")
     result = None
     for f in benchmark_flags:
         if f.startswith(prefix):
@@ -113,8 +110,7 @@ def remove_benchmark_flags(prefix, benchmark_flags):
     Return a new list containing the specified benchmark_flags except those
     with the specified prefix.
     """
-    assert prefix.startswith("--")
-    assert prefix.endswith("=")
+    assert prefix.startswith("--") and prefix.endswith("=")
     return [f for f in benchmark_flags if not f.startswith(prefix)]
 
 
@@ -137,16 +133,17 @@ def load_benchmark_results(fname, benchmark_filter):
         name = benchmark.get("run_name", None) or benchmark["name"]
         return re.search(benchmark_filter, name) is not None
 
-    with open(fname) as f:
+    with open(fname, "r") as f:
         results = json.load(f)
-        if "json_schema_version" in results.get("context", {}):
-            json_schema_version = results["context"]["json_schema_version"]
-            if json_schema_version != 1:
-                print(
-                    f"In {fname}, got unnsupported JSON schema version:"
-                    f" {json_schema_version}, expected 1"
-                )
-                sys.exit(1)
+        if "context" in results:
+            if "json_schema_version" in results["context"]:
+                json_schema_version = results["context"]["json_schema_version"]
+                if json_schema_version != 1:
+                    print(
+                        "In %s, got unnsupported JSON schema version: %i, expected 1"
+                        % (fname, json_schema_version)
+                    )
+                    sys.exit(1)
         if "benchmarks" in results:
             results["benchmarks"] = list(
                 filter(benchmark_wanted, results["benchmarks"])
@@ -160,7 +157,9 @@ def sort_benchmark_results(result):
     # From inner key to the outer key!
     benchmarks = sorted(
         benchmarks,
-        key=lambda benchmark: benchmark.get("repetition_index", -1),
+        key=lambda benchmark: benchmark["repetition_index"]
+        if "repetition_index" in benchmark
+        else -1,
     )
     benchmarks = sorted(
         benchmarks,
@@ -170,11 +169,15 @@ def sort_benchmark_results(result):
     )
     benchmarks = sorted(
         benchmarks,
-        key=lambda benchmark: benchmark.get("per_family_instance_index", -1),
+        key=lambda benchmark: benchmark["per_family_instance_index"]
+        if "per_family_instance_index" in benchmark
+        else -1,
     )
     benchmarks = sorted(
         benchmarks,
-        key=lambda benchmark: benchmark.get("family_index", -1),
+        key=lambda benchmark: benchmark["family_index"]
+        if "family_index" in benchmark
+        else -1,
     )
 
     result["benchmarks"] = benchmarks
@@ -194,12 +197,11 @@ def run_benchmark(exe_name, benchmark_flags):
         is_temp_output = True
         thandle, output_name = tempfile.mkstemp()
         os.close(thandle)
-        benchmark_flags = [
-            *list(benchmark_flags),
-            "--benchmark_out=%s" % output_name,
+        benchmark_flags = list(benchmark_flags) + [
+            "--benchmark_out=%s" % output_name
         ]
 
-    cmd = [exe_name, *benchmark_flags]
+    cmd = [exe_name] + benchmark_flags
     print("RUNNING: %s" % " ".join(cmd))
     exitCode = subprocess.call(cmd)
     if exitCode != 0:

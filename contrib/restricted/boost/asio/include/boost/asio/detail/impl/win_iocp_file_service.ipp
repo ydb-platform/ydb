@@ -95,7 +95,6 @@ boost::system::error_code win_iocp_file_service::open(
   if ((open_flags & file_base::sync_all_on_write) != 0)
     flags |= FILE_FLAG_WRITE_THROUGH;
 
-  impl.offset_ = 0;
   HANDLE handle = ::CreateFileA(path, access, share, 0, disposition, flags, 0);
   if (handle != INVALID_HANDLE_VALUE)
   {
@@ -112,18 +111,10 @@ boost::system::error_code win_iocp_file_service::open(
           return ec;
         }
       }
-    }
-    if (disposition == OPEN_ALWAYS || disposition == OPEN_EXISTING)
-    {
-      if ((open_flags & file_base::append) != 0)
+      else if ((open_flags & file_base::append) != 0)
       {
-        LARGE_INTEGER distance, new_offset;
-        distance.QuadPart = 0;
-        if (::SetFilePointerEx(handle, distance, &new_offset, FILE_END))
-        {
-          impl.offset_ = static_cast<uint64_t>(new_offset.QuadPart);
-        }
-        else
+        if (::SetFilePointer(handle, 0, 0, FILE_END)
+            == INVALID_SET_FILE_POINTER)
         {
           DWORD last_error = ::GetLastError();
           ::CloseHandle(handle);
@@ -137,6 +128,7 @@ boost::system::error_code win_iocp_file_service::open(
     handle_service_.assign(impl, handle, ec);
     if (ec)
       ::CloseHandle(handle);
+    impl.offset_ = 0;
     BOOST_ASIO_ERROR_LOCATION(ec);
     return ec;
   }

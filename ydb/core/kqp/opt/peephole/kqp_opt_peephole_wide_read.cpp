@@ -35,30 +35,60 @@ TExprBase KqpBuildWideReadTable(const TExprBase& node, TExprContext& ctx, TTypeA
                 .Done());
     }
 
-    TExprNode::TPtr wideRead;
+    TMaybeNode<TExprBase> wideRead;
     if (auto maybeRead = node.Maybe<TKqpReadTable>()) {
-        wideRead = ctx.RenameNode(*node.Raw(), TKqpWideReadTable::CallableName());
+        auto read = maybeRead.Cast();
+
+        wideRead = Build<TKqpWideReadTable>(ctx, node.Pos())
+            .Table(read.Table())
+            .Range(read.Range())
+            .Columns(read.Columns())
+            .Settings(read.Settings())
+            .Done();
     } else if (auto maybeRead = node.Maybe<TKqpReadTableRanges>()) {
-        wideRead = ctx.RenameNode(*node.Raw(), TKqpWideReadTableRanges::CallableName());
+        auto read = maybeRead.Cast();
+
+        wideRead = Build<TKqpWideReadTableRanges>(ctx, node.Pos())
+            .Table(read.Table())
+            .Ranges(read.Ranges())
+            .Columns(read.Columns())
+            .Settings(read.Settings())
+            .ExplainPrompt(read.ExplainPrompt())
+            .Done();
     } else if (auto maybeRead = node.Maybe<TKqpReadOlapTableRanges>()) {
+        auto read = maybeRead.Cast();
+
         if (typesCtx.IsBlockEngineEnabled()) {
             wideRead = Build<TCoToFlow>(ctx, node.Pos())
                 .Input<TCoWideFromBlocks>()
                     .Input<TCoFromFlow>()
-                        .Input(ctx.RenameNode(*node.Raw(), TKqpBlockReadOlapTableRanges::CallableName()))
+                        .Input<TKqpBlockReadOlapTableRanges>()
+                            .Table(read.Table())
+                            .Ranges(read.Ranges())
+                            .Columns(read.Columns())
+                            .Settings(read.Settings())
+                            .ExplainPrompt(read.ExplainPrompt())
+                            .Process(read.Process())
+                            .Build()
                         .Build()
                     .Build()
-                .Done()
-                .Ptr();
+                .Done();
         } else {
-            wideRead = ctx.RenameNode(*node.Raw(), TKqpWideReadOlapTableRanges::CallableName());
+            wideRead = Build<TKqpWideReadOlapTableRanges>(ctx, node.Pos())
+                .Table(read.Table())
+                .Ranges(read.Ranges())
+                .Columns(read.Columns())
+                .Settings(read.Settings())
+                .ExplainPrompt(read.ExplainPrompt())
+                .Process(read.Process())
+                .Done();
         }
     } else {
         YQL_ENSURE(false, "Unknown read table operation: " << node.Ptr()->Content());
     }
 
     return Build<TCoNarrowMap>(ctx, node.Pos())
-        .Input(wideRead)
+        .Input(wideRead.Cast())
         .Lambda()
             .Args(args)
             .Body<TCoAsStruct>()

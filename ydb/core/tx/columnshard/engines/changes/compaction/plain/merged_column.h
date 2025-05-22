@@ -9,22 +9,23 @@ namespace NKikimr::NOlap::NCompaction {
 class TMergedColumn {
 private:
     TColumnMergeContext Context;
-    TColumnPortion Portion;
+    TChunkMergeContext ChunkContext;
+    YDB_READONLY_DEF(std::vector<TColumnPortion>, Portions);
     YDB_READONLY(ui32, RecordsCount, 0);
 
-public:
-    TMergedColumn(const TColumnMergeContext& context)
-        : Context(context)
-        , Portion(Context) {
-    }
+    void NewPortion();
 
-    const TColumnPortion& GetPortion() const {
-        return Portion;
+public:
+    TMergedColumn(const TColumnMergeContext& context, const TChunkMergeContext& chunkContext)
+        : Context(context)
+        , ChunkContext(chunkContext)
+    {
+        NewPortion();
     }
 
     void AppendSlice(const std::shared_ptr<arrow::Array>& data, const ui32 startIndex, const ui32 length);
 
-    TColumnPortionResult BuildResult();
+    std::vector<TColumnPortionResult> BuildResult();
 };
 
 }   // namespace NKikimr::NOlap::NCompaction

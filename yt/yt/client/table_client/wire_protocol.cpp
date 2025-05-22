@@ -35,7 +35,7 @@ using NCrypto::TMD5Hash;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constinit const auto Logger = TableClientLogger;
+static constexpr auto& Logger = TableClientLogger;
 
 struct TWireProtocolWriterTag
 { };

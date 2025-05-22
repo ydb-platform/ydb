@@ -162,7 +162,6 @@ SRCS(
     misc/utf8_decoder.cpp
     misc/zerocopy_output_writer.cpp
     misc/configurable_singleton_def.cpp
-    misc/memory_usage_tracker.cpp
 
     net/address.cpp
     net/connection.cpp

@@ -18,7 +18,6 @@ namespace {
 struct IStrategy {
     virtual TPathElement::EPathType GetPathType() const = 0;
     virtual bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc, const TOperationContext& context) const = 0;
-    virtual void Proccess(NKikimrReplication::TReplicationConfig& config, const TString& owner) const = 0;
 };
 
 struct TReplicationStrategy : public IStrategy {
@@ -37,9 +36,6 @@ struct TReplicationStrategy : public IStrategy {
         }
 
         return false;
-    }
-
-    void Proccess(NKikimrReplication::TReplicationConfig&, const TString&) const override {
     }
 };
 
@@ -93,10 +89,6 @@ struct TTransferStrategy : public IStrategy {
         }
 
         return false;
-    }
-
-    void Proccess(NKikimrReplication::TReplicationConfig& config, const TString& owner) const override {
-        config.MutableTransferSpecific()->SetRunAsUser(owner);
     }
 };
 
@@ -442,8 +434,6 @@ public:
         if (desc.GetConfig().GetConsistencySettings().GetLevelCase() == NKikimrReplication::TConsistencySettings::LEVEL_NOT_SET) {
             desc.MutableConfig()->MutableConsistencySettings()->MutableRow();
         }
-
-        Strategy->Proccess(*desc.MutableConfig(), owner);
 
         desc.MutableState()->MutableStandBy();
         auto replication = TReplicationInfo::Create(std::move(desc));

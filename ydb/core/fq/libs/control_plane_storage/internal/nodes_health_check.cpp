@@ -121,7 +121,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
         NActors::TActivationContext::ActorSystem(),
         status,
         SelfId(),
-        std::move(ev),
+        ev,
         startTime,
         requestCounters,
         prepare,

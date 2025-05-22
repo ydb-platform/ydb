@@ -22,9 +22,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
-def make_command_file(path_to_debug_info, prefix_code='',
-                      no_import=False, skip_interpreter=False):
+def make_command_file(path_to_debug_info, prefix_code='', no_import=False):
     if not no_import:
         pattern = os.path.join(path_to_debug_info,
                                'cython_debug',
@@ -47,23 +45,17 @@ def make_command_file(path_to_debug_info, prefix_code='',
             set print pretty on
 
             python
-            try:
-                # Activate virtualenv, if we were launched from one
-                import os
-                virtualenv = os.getenv('VIRTUAL_ENV')
-                if virtualenv:
-                    path_to_activate_this_py = os.path.join(virtualenv, 'bin', 'activate_this.py')
-                    print("gdb command file: Activating virtualenv: %s; path_to_activate_this_py: %s" % (
-                        virtualenv, path_to_activate_this_py))
-                    with open(path_to_activate_this_py) as f:
-                        exec(f.read(), dict(__file__=path_to_activate_this_py))
-                from Cython.Debugger import libcython, libpython
-            except Exception as ex:
-                from traceback import print_exc
-                print("There was an error in Python code originating from the file ''' + str(__file__) + '''")
-                print("It used the Python interpreter " + str(sys.executable))
-                print_exc()
-                exit(1)
+            # Activate virtualenv, if we were launched from one
+            import os
+            virtualenv = os.getenv('VIRTUAL_ENV')
+            if virtualenv:
+                path_to_activate_this_py = os.path.join(virtualenv, 'bin', 'activate_this.py')
+                print("gdb command file: Activating virtualenv: %s; path_to_activate_this_py: %s" % (
+                    virtualenv, path_to_activate_this_py))
+                with open(path_to_activate_this_py) as f:
+                    exec(f.read(), dict(__file__=path_to_activate_this_py))
+
+            from Cython.Debugger import libcython, libpython
             end
             '''))
 
@@ -72,33 +64,27 @@ def make_command_file(path_to_debug_info, prefix_code='',
             # f.write("file %s\n" % sys.executable)
             pass
         else:
-            if not skip_interpreter:
-                # Point Cygdb to the interpreter that was used to generate
-                # the debugging information.
-                path = os.path.join(path_to_debug_info, "cython_debug", "interpreter")
-                interpreter_file = open(path)
-                try:
-                    interpreter = interpreter_file.read()
-                finally:
-                    interpreter_file.close()
-                f.write("file %s\n" % interpreter)
-
+            path = os.path.join(path_to_debug_info, "cython_debug", "interpreter")
+            interpreter_file = open(path)
+            try:
+                interpreter = interpreter_file.read()
+            finally:
+                interpreter_file.close()
+            f.write("file %s\n" % interpreter)
             f.write('\n'.join('cy import %s\n' % fn for fn in debug_files))
+            f.write(textwrap.dedent('''\
+                python
+                import sys
+                try:
+                    gdb.lookup_type('PyModuleObject')
+                except RuntimeError:
+                    sys.stderr.write(
+                        'Python was not compiled with debug symbols (or it was '
+                        'stripped). Some functionality may not work (properly).\\n')
+                end
 
-            if not skip_interpreter:
-                f.write(textwrap.dedent('''\
-                    python
-                    import sys
-                    try:
-                        gdb.lookup_type('PyModuleObject')
-                    except RuntimeError:
-                        sys.stderr.write(
-                            "''' + interpreter + ''' was not compiled with debug symbols (or it was "
-                            "stripped). Some functionality may not work (properly).\\n")
-                    end
-                '''))
-
-            f.write("source .cygdbinit")
+                source .cygdbinit
+            '''))
     finally:
         f.close()
 
@@ -123,10 +109,6 @@ def main(path_to_debug_info=None, gdb_argv=None, no_import=False):
     parser.add_option("--verbose", "-v",
         dest="verbosity", action="count", default=0,
         help="Verbose mode. Multiple -v options increase the verbosity")
-    parser.add_option("--skip-interpreter",
-                      dest="skip_interpreter", default=False, action="store_true",
-                      help="Do not automatically point GDB to the same interpreter "
-                           "used to generate debugging information")
 
     (options, args) = parser.parse_args()
     if path_to_debug_info is None:
@@ -148,16 +130,12 @@ def main(path_to_debug_info=None, gdb_argv=None, no_import=False):
         logging_level = logging.DEBUG
     logging.basicConfig(level=logging_level)
 
-    skip_interpreter = options.skip_interpreter
-
     logger.info("verbosity = %r", options.verbosity)
     logger.debug("options = %r; args = %r", options, args)
     logger.debug("Done parsing command-line options. path_to_debug_info = %r, gdb_argv = %r",
         path_to_debug_info, gdb_argv)
 
-    tempfilename = make_command_file(path_to_debug_info,
-                                     no_import=no_import,
-                                     skip_interpreter=skip_interpreter)
+    tempfilename = make_command_file(path_to_debug_info, no_import=no_import)
     logger.info("Launching %s with command file: %s and gdb_argv: %s",
         options.gdb, tempfilename, gdb_argv)
     with open(tempfilename) as tempfile:

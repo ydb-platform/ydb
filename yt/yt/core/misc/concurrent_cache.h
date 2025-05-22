@@ -3,7 +3,8 @@
 #include "public.h"
 #include "atomic_ptr.h"
 #include "lock_free_hash_table.h"
-#include "memory_usage_tracker.h"
+
+#include <library/cpp/yt/memory/memory_usage_tracker.h>
 
 namespace NYT {
 
@@ -22,7 +23,7 @@ private:
 public:
     using TValuePtr = TIntrusivePtr<T>;
 
-    TConcurrentCache(size_t maxElementCount, IMemoryUsageTrackerPtr tracker);
+    explicit TConcurrentCache(size_t maxElementCount, IMemoryUsageTrackerPtr tracker = nullptr);
 
     ~TConcurrentCache();
 

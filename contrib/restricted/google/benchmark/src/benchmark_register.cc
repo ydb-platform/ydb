@@ -53,13 +53,13 @@ namespace benchmark {
 
 namespace {
 // For non-dense Range, intermediate values are powers of kRangeMultiplier.
-constexpr int kRangeMultiplier = 8;
+static constexpr int kRangeMultiplier = 8;
 
 // The size of a benchmark family determines is the number of inputs to repeat
 // the benchmark on. If this is "large" then warn the user during configuration.
-constexpr size_t kMaxFamilySize = 100;
+static constexpr size_t kMaxFamilySize = 100;
 
-constexpr char kDisabledPrefix[] = "DISABLED_";
+static constexpr char kDisabledPrefix[] = "DISABLED_";
 }  // end namespace
 
 namespace internal {
@@ -82,7 +82,7 @@ class BenchmarkFamilies {
 
   // Extract the list of benchmark instances that match the specified
   // regular expression.
-  bool FindBenchmarks(std::string spec,
+  bool FindBenchmarks(std::string re,
                       std::vector<BenchmarkInstance>* benchmarks,
                       std::ostream* Err);
 
@@ -125,7 +125,7 @@ bool BenchmarkFamilies::FindBenchmarks(
     is_negative_filter = true;
   }
   if (!re.Init(spec, &error_msg)) {
-    Err << "Could not compile benchmark re: " << error_msg << '\n';
+    Err << "Could not compile benchmark re: " << error_msg << std::endl;
     return false;
   }
 
@@ -140,9 +140,7 @@ bool BenchmarkFamilies::FindBenchmarks(
     int per_family_instance_index = 0;
 
     // Family was deleted or benchmark doesn't match
-    if (!family) {
-      continue;
-    }
+    if (!family) continue;
 
     if (family->ArgsCnt() == -1) {
       family->Args({});
@@ -161,9 +159,7 @@ bool BenchmarkFamilies::FindBenchmarks(
     // reserve in the special case the regex ".", since we know the final
     // family size.  this doesn't take into account any disabled benchmarks
     // so worst case we reserve more than we need.
-    if (spec == ".") {
-      benchmarks->reserve(benchmarks->size() + family_size);
-    }
+    if (spec == ".") benchmarks->reserve(benchmarks->size() + family_size);
 
     for (auto const& args : family->args_) {
       for (int num_threads : *thread_counts) {
@@ -181,9 +177,7 @@ bool BenchmarkFamilies::FindBenchmarks(
 
           // Only bump the next family index once we've estabilished that
           // at least one instance of this family will be run.
-          if (next_family_index == family_index) {
-            ++next_family_index;
-          }
+          if (next_family_index == family_index) ++next_family_index;
         }
       }
     }
@@ -191,11 +185,11 @@ bool BenchmarkFamilies::FindBenchmarks(
   return true;
 }
 
-Benchmark* RegisterBenchmarkInternal(std::unique_ptr<Benchmark> bench) {
-  Benchmark* bench_ptr = bench.get();
+Benchmark* RegisterBenchmarkInternal(Benchmark* bench) {
+  std::unique_ptr<Benchmark> bench_ptr(bench);
   BenchmarkFamilies* families = BenchmarkFamilies::GetInstance();
-  families->AddBenchmark(std::move(bench));
-  return bench_ptr;
+  families->AddBenchmark(std::move(bench_ptr));
+  return bench;
 }
 
 // FIXME: This function is a hack so that benchmark.cc can access
@@ -224,7 +218,9 @@ Benchmark::Benchmark(const std::string& name)
       use_real_time_(false),
       use_manual_time_(false),
       complexity_(oNone),
-      complexity_lambda_(nullptr) {
+      complexity_lambda_(nullptr),
+      setup_(nullptr),
+      teardown_(nullptr) {
   ComputeStatistics("mean", StatisticsMean);
   ComputeStatistics("median", StatisticsMedian);
   ComputeStatistics("stddev", StatisticsStdDev);
@@ -335,25 +331,13 @@ Benchmark* Benchmark::Apply(void (*custom_arguments)(Benchmark* benchmark)) {
   return this;
 }
 
-Benchmark* Benchmark::Setup(callback_function&& setup) {
-  BM_CHECK(setup != nullptr);
-  setup_ = std::forward<callback_function>(setup);
-  return this;
-}
-
-Benchmark* Benchmark::Setup(const callback_function& setup) {
+Benchmark* Benchmark::Setup(void (*setup)(const benchmark::State&)) {
   BM_CHECK(setup != nullptr);
   setup_ = setup;
   return this;
 }
 
-Benchmark* Benchmark::Teardown(callback_function&& teardown) {
-  BM_CHECK(teardown != nullptr);
-  teardown_ = std::forward<callback_function>(teardown);
-  return this;
-}
-
-Benchmark* Benchmark::Teardown(const callback_function& teardown) {
+Benchmark* Benchmark::Teardown(void (*teardown)(const benchmark::State&)) {
   BM_CHECK(teardown != nullptr);
   teardown_ = teardown;
   return this;
@@ -484,20 +468,13 @@ Benchmark* Benchmark::ThreadPerCpu() {
   return this;
 }
 
-Benchmark* Benchmark::ThreadRunner(threadrunner_factory&& factory) {
-  threadrunner_ = std::move(factory);
-  return this;
-}
-
 void Benchmark::SetName(const std::string& name) { name_ = name; }
 
 const char* Benchmark::GetName() const { return name_.c_str(); }
 
 int Benchmark::ArgsCnt() const {
   if (args_.empty()) {
-    if (arg_names_.empty()) {
-      return -1;
-    }
+    if (arg_names_.empty()) return -1;
     return static_cast<int>(arg_names_.size());
   }
   return static_cast<int>(args_.front().size());

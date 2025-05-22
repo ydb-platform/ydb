@@ -39,4 +39,10 @@ namespace NSQLComplete {
         return index;
     }
 
+    TString NormalizeName(const TString& name);
+
+    TString LowerizeName(const TString& name);
+
+    TString UnchangedName(const TString& name);
+
 } // namespace NSQLComplete

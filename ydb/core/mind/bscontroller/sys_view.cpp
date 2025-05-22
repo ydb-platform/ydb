@@ -310,9 +310,7 @@ void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageContro
     }
     info->SetAvailableSize(pDiskInfo->Metrics.GetAvailableSize());
     info->SetTotalSize(pDiskInfo->Metrics.GetTotalSize());
-    if (auto s = pDiskInfo->Metrics.GetState(); pDiskInfo->Operational || s != NKikimrBlobStorage::TPDiskState::Normal) {
-        info->SetState(NKikimrBlobStorage::TPDiskState::E_Name(s));
-    }
+    info->SetState(NKikimrBlobStorage::TPDiskState::E_Name(pDiskInfo->Metrics.GetState()));
     info->SetStatusV2(NKikimrBlobStorage::EDriveStatus_Name(pDiskInfo->Status));
     if (pDiskInfo->StatusTimestamp != TInstant::Zero()) {
         info->SetStatusChangeTimestamp(pDiskInfo->StatusTimestamp.GetValue());
@@ -400,8 +398,6 @@ void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageContro
     }
 
     info->SetLayoutCorrect(groupInfo->LayoutCorrect);
-    info->SetOperatingStatus(NKikimrBlobStorage::TGroupStatus::E_Name(groupInfo->Status.OperatingStatus));
-    info->SetExpectedStatus(NKikimrBlobStorage::TGroupStatus::E_Name(groupInfo->Status.ExpectedStatus));
 }
 
 void CopyInfo(NKikimrSysView::TStoragePoolInfo* info, const TBlobStorageController::TStoragePoolInfo& poolInfo) {

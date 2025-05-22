@@ -3,7 +3,7 @@ items:
   href: glossary.md
 - name: Connecting to a database
   href: connect.md
-- name: Cluster structure
+- name: Data model and schema
   href: datamodel/index.md
   include:
     path: datamodel/toc_p.yaml

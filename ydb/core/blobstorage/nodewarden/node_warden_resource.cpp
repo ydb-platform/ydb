@@ -42,7 +42,7 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
         bool comprehensive, bool updateCache, const char *origin) {
     if (Cfg->IsCacheEnabled() && updateCache) {
         Y_ABORT_UNLESS(!isStatic);
-        return EnqueueSyncOp(WrapCacheOp(UpdateServiceSet(serviceSet, comprehensive, [=, this] {
+        return EnqueueSyncOp(WrapCacheOp(UpdateServiceSet(serviceSet, comprehensive, [=] {
             ApplyServiceSet(serviceSet, false, comprehensive, false, origin);
         })));
     }
@@ -77,19 +77,15 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
 }
 
 void TNodeWarden::Handle(TEvNodeWardenQueryStorageConfig::TPtr ev) {
-    Send(ev->Sender, new TEvNodeWardenStorageConfig(StorageConfig, nullptr, SelfManagementEnabled, IsPrimary,
-        IsBeingPromoted));
+    Send(ev->Sender, new TEvNodeWardenStorageConfig(StorageConfig, nullptr, SelfManagementEnabled));
     if (ev->Get()->Subscribe) {
         StorageConfigSubscribers.insert(ev->Sender);
     }
 }
 
 void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
-    auto *msg = ev->Get();
-    msg->Config->Swap(&StorageConfig);
-    SelfManagementEnabled = msg->SelfManagementEnabled;
-    IsPrimary = msg->IsPrimary;
-    IsBeingPromoted = msg->IsBeingPromoted;
+    ev->Get()->Config->Swap(&StorageConfig);
+    SelfManagementEnabled = ev->Get()->SelfManagementEnabled;
 
     if (StorageConfig.HasBlobStorageConfig()) {
         if (const auto& bsConfig = StorageConfig.GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
@@ -115,8 +111,7 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     }
 
     for (const TActorId& subscriber : StorageConfigSubscribers) {
-        Send(subscriber, new TEvNodeWardenStorageConfig(StorageConfig, nullptr, SelfManagementEnabled,
-            IsPrimary, IsBeingPromoted));
+        Send(subscriber, new TEvNodeWardenStorageConfig(StorageConfig, nullptr, SelfManagementEnabled));
     }
 
     if (StorageConfig.HasConfigComposite()) {

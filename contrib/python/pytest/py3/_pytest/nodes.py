@@ -1,8 +1,6 @@
-import abc
-from functools import cached_property
-from inspect import signature
 import os
-import pathlib
+import warnings
+from inspect import signature
 from pathlib import Path
 from typing import Any
 from typing import Callable
@@ -19,19 +17,16 @@ from typing import Type
 from typing import TYPE_CHECKING
 from typing import TypeVar
 from typing import Union
-import warnings
-
-import pluggy
 
 import _pytest._code
 from _pytest._code import getfslineno
 from _pytest._code.code import ExceptionInfo
 from _pytest._code.code import TerminalRepr
 from _pytest._code.code import Traceback
+from _pytest.compat import cached_property
 from _pytest.compat import LEGACY_PATH
 from _pytest.config import Config
 from _pytest.config import ConftestImportFailure
-from _pytest.config.compat import _check_path
 from _pytest.deprecated import FSCOLLECTOR_GETHOOKPROXY_ISINITPATH
 from _pytest.deprecated import NODE_CTOR_FSPATH_ARG
 from _pytest.mark.structures import Mark
@@ -43,11 +38,10 @@ from _pytest.pathlib import commonpath
 from _pytest.stash import Stash
 from _pytest.warning_types import PytestWarning
 
-
 if TYPE_CHECKING:
     # Imported here due to circular import.
-    from _pytest._code.code import _TracebackStyle
     from _pytest.main import Session
+    from _pytest._code.code import _TracebackStyle
 
 
 SEP = "/"
@@ -100,6 +94,14 @@ def iterparentnodeids(nodeid: str) -> Iterator[str]:
         yield nodeid
 
 
+def _check_path(path: Path, fspath: LEGACY_PATH) -> None:
+    if Path(fspath) != path:
+        raise ValueError(
+            f"Path({fspath!r}) != {path!r}\n"
+            "if both path and fspath are given they need to be equal"
+        )
+
+
 def _imply_path(
     node_type: Type["Node"],
     path: Optional[Path],
@@ -124,21 +126,7 @@ def _imply_path(
 _NodeType = TypeVar("_NodeType", bound="Node")
 
 
-class NodeMeta(abc.ABCMeta):
-    """Metaclass used by :class:`Node` to enforce that direct construction raises
-    :class:`Failed`.
-
-    This behaviour supports the indirection introduced with :meth:`Node.from_parent`,
-    the named constructor to be used instead of direct construction. The design
-    decision to enforce indirection with :class:`NodeMeta` was made as a
-    temporary aid for refactoring the collection tree, which was diagnosed to
-    have :class:`Node` objects whose creational patterns were overly entangled.
-    Once the refactoring is complete, this metaclass can be removed.
-
-    See https://github.com/pytest-dev/pytest/projects/3 for an overview of the
-    progress on detangling the :class:`Node` classes.
-    """
-
+class NodeMeta(type):
     def __call__(self, *k, **kw):
         msg = (
             "Direct construction of {name} has been deprecated, please use {name}.from_parent.\n"
@@ -168,7 +156,7 @@ class NodeMeta(abc.ABCMeta):
             return super().__call__(*k, **known_kw)
 
 
-class Node(abc.ABC, metaclass=NodeMeta):
+class Node(metaclass=NodeMeta):
     r"""Base class of :class:`Collector` and :class:`Item`, the components of
     the test collection tree.
 
@@ -179,9 +167,9 @@ class Node(abc.ABC, metaclass=NodeMeta):
     # Implemented in the legacypath plugin.
     #: A ``LEGACY_PATH`` copy of the :attr:`path` attribute. Intended for usage
     #: for methods not migrated to ``pathlib.Path`` yet, such as
-    #: :meth:`Item.reportinfo <pytest.Item.reportinfo>`. Will be deprecated in
+    #: :meth:`Item.reportinfo`. Will be deprecated in a future release, prefer
+    #: using :attr:`path` instead.
     fspath: LEGACY_PATH
-    #: a future release, prefer using :attr:`path` instead.
 
     # Use __slots__ to make attribute access faster.
     # Note that __dict__ is still available.
@@ -231,7 +219,7 @@ class Node(abc.ABC, metaclass=NodeMeta):
         if path is None and fspath is None:
             path = getattr(parent, "path", None)
         #: Filesystem path where this node was collected from (can be None).
-        self.path: pathlib.Path = _imply_path(type(self), path, fspath=fspath)
+        self.path: Path = _imply_path(type(self), path, fspath=fspath)
 
         # The explicit annotation is to avoid publicly exposing NodeKeywords.
         #: Keywords/markers collected from all scopes.
@@ -276,7 +264,7 @@ class Node(abc.ABC, metaclass=NodeMeta):
         return cls._create(parent=parent, **kw)
 
     @property
-    def ihook(self) -> pluggy.HookRelay:
+    def ihook(self):
         """fspath-sensitive hook proxy used to call pytest hooks."""
         return self.session.gethookproxy(self.path)
 
@@ -307,7 +295,9 @@ class Node(abc.ABC, metaclass=NodeMeta):
         # enforce type checks here to avoid getting a generic type error later otherwise.
         if not isinstance(warning, Warning):
             raise ValueError(
-                f"warning must be an instance of Warning or subclass, got {warning!r}"
+                "warning must be an instance of Warning or subclass, got {!r}".format(
+                    warning
+                )
             )
         path, lineno = get_fslocation_from_item(self)
         assert lineno is not None
@@ -535,7 +525,7 @@ def get_fslocation_from_item(node: "Node") -> Tuple[Union[str, Path], Optional[i
     return getattr(node, "fspath", "unknown location"), -1
 
 
-class Collector(Node, abc.ABC):
+class Collector(Node):
     """Base class of all collectors.
 
     Collector create children through `collect()` and thus iteratively build
@@ -545,7 +535,6 @@ class Collector(Node, abc.ABC):
     class CollectError(Exception):
         """An error during collection, contains a custom message."""
 
-    @abc.abstractmethod
     def collect(self) -> Iterable[Union["Item", "Collector"]]:
         """Collect children (items and collectors) for this collector."""
         raise NotImplementedError("abstract")
@@ -590,7 +579,7 @@ def _check_initialpaths_for_relpath(session: "Session", path: Path) -> Optional[
     return None
 
 
-class FSCollector(Collector, abc.ABC):
+class FSCollector(Collector):
     """Base class for filesystem collectors."""
 
     def __init__(
@@ -668,32 +657,14 @@ class FSCollector(Collector, abc.ABC):
         return self.session.isinitpath(path)
 
 
-class File(FSCollector, abc.ABC):
+class File(FSCollector):
     """Base class for collecting tests from a file.
 
     :ref:`non-python tests`.
     """
 
 
-class Directory(FSCollector, abc.ABC):
-    """Base class for collecting files from a directory.
-
-    A basic directory collector does the following: goes over the files and
-    sub-directories in the directory and creates collectors for them by calling
-    the hooks :hook:`pytest_collect_directory` and :hook:`pytest_collect_file`,
-    after checking that they are not ignored using
-    :hook:`pytest_ignore_collect`.
-
-    The default directory collectors are :class:`~pytest.Dir` and
-    :class:`~pytest.Package`.
-
-    .. versionadded:: 8.0
-
-    :ref:`custom directory collectors`.
-    """
-
-
-class Item(Node, abc.ABC):
+class Item(Node):
     """Base class of all test invocation items.
 
     Note that for a single function there might be multiple test invocation items.
@@ -759,7 +730,6 @@ class Item(Node, abc.ABC):
                 PytestWarning,
             )
 
-    @abc.abstractmethod
     def runtest(self) -> None:
         """Run the test case for this item.
 

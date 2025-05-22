@@ -6,9 +6,11 @@
 
 using namespace NYdb::NConsoleClient;
 
-TTopicWorkloadWriterWorker::TTopicWorkloadWriterWorker(const TTopicWorkloadWriterParams& params)
-    : Params(params)
+TTopicWorkloadWriterWorker::TTopicWorkloadWriterWorker(
+    TTopicWorkloadWriterParams&& params)
+    : Params(std::move(params))
     , StatsCollector(Params.StatsCollector)
+
 {
     Producers = std::vector<std::shared_ptr<TTopicWorkloadWriterProducer>>();
     Producers.reserve(Params.PartitionCount);
@@ -17,7 +19,7 @@ TTopicWorkloadWriterWorker::TTopicWorkloadWriterWorker(const TTopicWorkloadWrite
         // write to random partition, cause workload CLI tool can be launched in several instances
         // and they need to load test different partitions of the topic
         ui32 partitionId = (Params.PartitionSeed + i) % Params.PartitionCount;
-
+        
         Producers.push_back(CreateProducer(partitionId));
     }
 
@@ -37,7 +39,7 @@ void TTopicWorkloadWriterWorker::Close()
     CloseProducers();
 }
 
-void TTopicWorkloadWriterWorker::CloseProducers()
+void TTopicWorkloadWriterWorker::CloseProducers() 
 {
     for (auto producer : Producers) {
         producer->Close();
@@ -116,7 +118,7 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
 
         if (writingAllowed && !WaitForCommitTx)
         {
-            TInstant createTimestamp = GetCreateTimestampForNextMessage();
+            TInstant createTimestamp = GetCreateTimestampForNextMessage(); 
             BytesWritten += Params.MessageSize;
 
             std::optional<NYdb::NTable::TTransaction> transaction;
@@ -157,7 +159,7 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
 std::shared_ptr<TTopicWorkloadWriterProducer> TTopicWorkloadWriterWorker::CreateProducer(ui64 partitionId) {
     auto clock = NUnifiedAgent::TClock();
     if (!clock.Configured()) {
-        clock.Configure();
+        clock.Configure(); 
     }
     auto producerId = TGUID::CreateTimebased().AsGuidString();
 
@@ -168,7 +170,7 @@ std::shared_ptr<TTopicWorkloadWriterProducer> TTopicWorkloadWriterWorker::Create
             partitionId,
             std::move(clock)
     );
-
+ 
     NYdb::NTopic::TWriteSessionSettings settings;
     settings.Codec((NYdb::NTopic::ECodec) Params.Codec);
     settings.Path(Params.TopicName);
@@ -204,7 +206,7 @@ size_t TTopicWorkloadWriterWorker::InflightMessagesSize() {
     return total;
 }
 
-void TTopicWorkloadWriterWorker::RetryableWriterLoop(const TTopicWorkloadWriterParams& params) {
+void TTopicWorkloadWriterWorker::RetryableWriterLoop(TTopicWorkloadWriterParams& params) {
     auto errorFlag = params.ErrorFlag;
 
     const TInstant endTime = Now() + TDuration::Seconds(params.TotalSec + 3);
@@ -218,8 +220,8 @@ void TTopicWorkloadWriterWorker::RetryableWriterLoop(const TTopicWorkloadWriterP
     }
 }
 
-void TTopicWorkloadWriterWorker::WriterLoop(const TTopicWorkloadWriterParams& params, TInstant endTime) {
-    TTopicWorkloadWriterWorker writer(params);
+void TTopicWorkloadWriterWorker::WriterLoop(TTopicWorkloadWriterParams& params, TInstant endTime) {
+    TTopicWorkloadWriterWorker writer(std::move(params));
 
     if (params.UseTransactions) {
         writer.TxSupport.emplace(params.Driver, "", "");
@@ -292,5 +294,5 @@ TInstant TTopicWorkloadWriterWorker::GetCreateTimestampForNextMessage() {
         return TInstant::Now();
     } else {
         return GetExpectedCurrMessageCreationTimestamp();
-    }
+    }    
 }

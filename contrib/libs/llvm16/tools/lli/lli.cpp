@@ -79,7 +79,7 @@
 #endif
 
 #ifdef __CYGWIN__
-#error #include <cygwin/version.h>
+#include <cygwin/version.h>
 #if defined(CYGWIN_VERSION_DLL_MAJOR) && CYGWIN_VERSION_DLL_MAJOR<1007
 #define DO_NOTHING_ATEXIT 1
 #endif

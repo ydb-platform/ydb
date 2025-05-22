@@ -15,19 +15,18 @@ TStringBuf ToHttpString(EMethod method)
 #define XX(num, name, string) case EMethod::name: return #string;
         YT_HTTP_METHOD_MAP(XX)
 #undef XX
-        default:
-            THROW_ERROR_EXCEPTION("Invalid method %v", method);
+        default: THROW_ERROR_EXCEPTION("Invalid method %v", method);
     }
 }
 
-TString ToHttpString(EStatusCode code)
+TStringBuf ToHttpString(EStatusCode code)
 {
     switch (code) {
 #define XX(num, name, string) case EStatusCode::name: return #string;
         YT_HTTP_STATUS_MAP(XX)
 #undef XX
         default:
-            return Format("Status code %v", code);
+            THROW_ERROR_EXCEPTION("Invalid status code %v", code);
     }
 }
 
@@ -68,12 +67,12 @@ TUrlRef ParseUrl(TStringBuf url)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void THeaders::Add(std::string header, std::string value)
+void THeaders::Add(const TString& header, TString value)
 {
     ValidateHeaderValue(header, value);
 
     auto& entry = NameToEntry_[header];
-    entry.OriginalHeaderName = std::move(header);
+    entry.OriginalHeaderName = header;
     entry.Values.push_back(std::move(value));
 }
 
@@ -82,15 +81,14 @@ void THeaders::Remove(TStringBuf header)
     NameToEntry_.erase(header);
 }
 
-void THeaders::Set(std::string header, std::string value)
+void THeaders::Set(const TString& header, TString value)
 {
     ValidateHeaderValue(header, value);
 
-    auto& entry = NameToEntry_[header];
-    entry = {std::move(header), {std::move(value)}};
+    NameToEntry_[header] = {header, {std::move(value)}};
 }
 
-const std::string* THeaders::Find(TStringBuf header) const
+const TString* THeaders::Find(TStringBuf header) const
 {
     auto it = NameToEntry_.find(header);
     if (it == NameToEntry_.end()) {
@@ -114,7 +112,7 @@ void THeaders::RemoveOrThrow(TStringBuf header)
     NameToEntry_.erase(it);
 }
 
-std::string THeaders::GetOrThrow(TStringBuf header) const
+TString THeaders::GetOrThrow(TStringBuf header) const
 {
     auto value = Find(header);
     if (!value) {
@@ -123,7 +121,7 @@ std::string THeaders::GetOrThrow(TStringBuf header) const
     return *value;
 }
 
-const TCompactVector<std::string, 1>& THeaders::GetAll(TStringBuf header) const
+const TCompactVector<TString, 1>& THeaders::GetAll(TStringBuf header) const
 {
     auto it = NameToEntry_.find(header);
     if (it == NameToEntry_.end()) {
@@ -166,9 +164,9 @@ void THeaders::MergeFrom(const THeadersPtr& headers)
     }
 }
 
-std::vector<std::pair<std::string, std::string>> THeaders::Dump(const THeaderNames* filtered) const
+std::vector<std::pair<TString, TString>> THeaders::Dump(const THeaderNames* filtered) const
 {
-    std::vector<std::pair<std::string, std::string>> result;
+    std::vector<std::pair<TString, TString>> result;
 
     for (const auto& [name, entry] : NameToEntry_) {
         if (filtered && filtered->contains(entry.OriginalHeaderName)) {
@@ -185,15 +183,15 @@ std::vector<std::pair<std::string, std::string>> THeaders::Dump(const THeaderNam
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::string EscapeHeaderValue(TStringBuf value)
+TString EscapeHeaderValue(TStringBuf value)
 {
-    std::string result;
+    TString result;
     result.reserve(value.length());
     for (auto ch : value) {
         if (ch == '\n') {
-            result += "\\n";
+            result.append("\\n");
         } else {
-            result += ch;
+            result.append(ch);
         }
     }
     return result;

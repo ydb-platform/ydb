@@ -972,7 +972,7 @@
 /* #undef USE_LIBSSH */
 
 /* if libSSH2 is in use */
-#define USE_LIBSSH2 1
+/* #undef USE_LIBSSH2 */
 
 /* If you want to build curl with the built-in manual */
 /* #undef USE_MANUAL */

@@ -2,6 +2,7 @@ import base64
 import itertools
 from hashlib import md5
 import os
+import six
 from _common import rootrel_arc_src, tobuilddir
 import ymake
 
@@ -210,7 +211,7 @@ def on_go_process_srcs(unit):
         for f in go_files:
             if f.endswith('_test.go'):
                 continue
-            cover_var = 'GoCover' + base64.b32encode(f.encode('utf-8')).decode('utf-8').rstrip('=')
+            cover_var = 'GoCover' + six.ensure_str(base64.b32encode(six.ensure_binary(f))).rstrip('=')
             cover_file = unit.resolve_arc_path(f)
             cover_file_output = '{}/{}'.format(unit_path, os.path.basename(f))
             unit.on_go_gen_cover_go([cover_file, cover_file_output, cover_var])
@@ -310,7 +311,7 @@ def on_go_resource(unit, *args):
     args = list(args)
     files = args[::2]
     keys = args[1::2]
-    suffix_md5 = md5('@'.join(args).encode()).hexdigest()
+    suffix_md5 = md5(six.ensure_binary('@'.join(args))).hexdigest()
     resource_go = os.path.join("resource.{}.res.go".format(suffix_md5))
 
     unit.onpeerdir(["library/go/core/resource"])

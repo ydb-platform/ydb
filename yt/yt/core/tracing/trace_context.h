@@ -290,7 +290,9 @@ TTraceContextPtr CreateTraceContextFromCurrent(const std::string& spanName);
 class TCurrentTraceContextGuard
 {
 public:
-    explicit TCurrentTraceContextGuard(TTraceContextPtr traceContext);
+    explicit TCurrentTraceContextGuard(
+        TTraceContextPtr traceContext,
+        TSourceLocation location = YT_CURRENT_SOURCE_LOCATION);
     TCurrentTraceContextGuard(TCurrentTraceContextGuard&& other);
     ~TCurrentTraceContextGuard();
 
@@ -310,7 +312,7 @@ private:
 class TNullTraceContextGuard
 {
 public:
-    TNullTraceContextGuard();
+    TNullTraceContextGuard(TSourceLocation location = YT_CURRENT_SOURCE_LOCATION);
     TNullTraceContextGuard(TNullTraceContextGuard&& other);
     ~TNullTraceContextGuard();
 

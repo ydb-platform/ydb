@@ -654,20 +654,18 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnableSpilling = serviceConfig.GetEnableQueryServiceSpilling();
     kqpConfig.EnableSnapshotIsolationRW = serviceConfig.GetEnableSnapshotIsolationRW();
     kqpConfig.AllowMultiBroadcasts = serviceConfig.GetAllowMultiBroadcasts();
-    kqpConfig.EnableNewRBO = serviceConfig.GetEnableNewRBO();
-    kqpConfig.EnableSpillingInHashJoinShuffleConnections = serviceConfig.GetEnableSpillingInHashJoinShuffleConnections();
-    kqpConfig.EnableOlapScalarApply = serviceConfig.GetEnableOlapScalarApply();
-    kqpConfig.EnableOlapSubstringPushdown = serviceConfig.GetEnableOlapSubstringPushdown();
 
     if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
         kqpConfig._KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));
     }
 
-    if (serviceConfig.GetFilterPushdownOverJoinOptionalSide()) {
-        kqpConfig.FilterPushdownOverJoinOptionalSide = true;
+    kqpConfig.FilterPushdownOverJoinOptionalSide = serviceConfig.GetFilterPushdownOverJoinOptionalSide();
+    if (serviceConfig.GetFuseEquiJoinsInputMultiLabels())
         kqpConfig.YqlCoreOptimizerFlags.insert("fuseequijoinsinputmultilabels");
+    if (serviceConfig.GetPullUpFlatMapOverJoinMultipleLabels())
         kqpConfig.YqlCoreOptimizerFlags.insert("pullupflatmapoverjoinmultiplelabels");
-    }
+    if (serviceConfig.GetEqualityFilterOverJoin())
+        kqpConfig.YqlCoreOptimizerFlags.insert("equalityfilteroverjoin");
 }
 
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,

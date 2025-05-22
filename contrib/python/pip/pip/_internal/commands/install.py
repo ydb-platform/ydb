@@ -8,7 +8,6 @@ from optparse import SUPPRESS_HELP, Values
 from typing import List, Optional
 
 from pip._vendor.packaging.utils import canonicalize_name
-from pip._vendor.requests.exceptions import InvalidProxyURL
 from pip._vendor.rich import print_json
 
 # Eagerly import self_outdated_check to avoid crashes. Otherwise,
@@ -420,7 +419,7 @@ class InstallCommand(RequirementCommand):
 
             reqs_to_build = [
                 r
-                for r in requirement_set.requirements_to_install
+                for r in requirement_set.requirements.values()
                 if should_build_for_install_command(r)
             ]
 
@@ -465,7 +464,6 @@ class InstallCommand(RequirementCommand):
                 warn_script_location=warn_script_location,
                 use_user_site=options.use_user_site,
                 pycompile=options.compile,
-                progress_bar=options.progress_bar,
             )
 
             lib_locations = get_lib_location_guesses(
@@ -765,13 +763,6 @@ def create_os_error_message(
             )
         else:
             parts.append(permissions_part)
-        parts.append(".\n")
-
-    # Suggest to check "pip config debug" in case of invalid proxy
-    if type(error) is InvalidProxyURL:
-        parts.append(
-            'Consider checking your local proxy configuration with "pip config debug"'
-        )
         parts.append(".\n")
 
     # Suggest the user to enable Long Paths if path length is

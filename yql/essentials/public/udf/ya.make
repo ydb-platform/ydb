@@ -59,6 +59,7 @@ RECURSE(
     arrow
     service
     support
+    tz
 )
 
 RECURSE_FOR_TESTS(

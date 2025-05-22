@@ -7,7 +7,6 @@
 
 #include <yql/essentials/minikql/aligned_page_pool.h>
 #include <yql/essentials/minikql/compact_hash.h>
-#include <yql/essentials/minikql/mkql_node_serialization.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 
@@ -614,10 +613,10 @@ template <class IFace>
 class TTypeOperationsRegistry {
     using TValuePtr = typename IFace::TPtr;
 public:
-    IFace* FindOrEmplace(TType& type) const {
-        const TString serializedType = SerializeNode(&type, NodeStack);
-        auto it = Registry.find(serializedType);
+    IFace* FindOrEmplace(const TType& type) {
+        auto it = Registry.find(type);
         if (it == Registry.end()) {
+            TTypeBase tb(type);
             TValuePtr ptr;
             if constexpr (std::is_same_v<IFace, NUdf::IHash>) {
                 ptr = MakeHashImpl(&type);
@@ -628,15 +627,14 @@ public:
             } else {
                 static_assert(TDependentFalse<IFace>, "unexpected type");
             }
-            auto p = std::make_pair(std::move(serializedType), std::move(ptr));
-            it = Registry.insert(std::move(p)).first;
+            auto p = std::make_pair((const TTypeBase)type, ptr);
+            it = Registry.insert(p).first;
         }
         return it->second.Get();
     }
 
 private:
-    mutable std::vector<TNode*> NodeStack;
-    mutable THashMap<TString, TValuePtr> Registry;
+    THashMap<TTypeBase, TValuePtr, THasherTType, TEqualTType> Registry;
 };
 
 class TDirectArrayHolderInplace : public TComputationValue<TDirectArrayHolderInplace> {
@@ -864,9 +862,9 @@ public:
     NUdf::TUnboxedValuePod NewVectorHolder() const;
     NUdf::TUnboxedValuePod NewTemporaryVectorHolder() const;
 
-    const NUdf::IHash* GetHash(TType& type, bool useIHash) const;
-    const NUdf::IEquate* GetEquate(TType& type, bool useIHash) const;
-    const NUdf::ICompare* GetCompare(TType& type, bool useIHash) const;
+    const NUdf::IHash* GetHash(const TType& type, bool useIHash) const;
+    const NUdf::IEquate* GetEquate(const TType& type, bool useIHash) const;
+    const NUdf::ICompare* GetCompare(const TType& type, bool useIHash) const;
 
     template <class TForwardIterator>
     NUdf::TUnboxedValuePod RangeAsArray(TForwardIterator first, TForwardIterator last) const {

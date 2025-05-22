@@ -655,15 +655,7 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
     }
 
     void Handle(TEvPrivate::TEvUpdateSystemUsage::TPtr&, const TActorContext&) {
-        static constexpr auto REQUIRED_FIELDS = std::to_array<i32>({
-            NKikimrWhiteboard::TSystemStateInfo::kNumberOfCpusFieldNumber,
-            NKikimrWhiteboard::TSystemStateInfo::kPoolStatsFieldNumber,
-            NKikimrWhiteboard::TSystemStateInfo::kMemoryUsedInAllocFieldNumber,
-            NKikimrWhiteboard::TSystemStateInfo::kMemoryLimitFieldNumber,
-        });
-        auto req = std::make_unique<NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest>();
-        req->Record.MutableFieldsRequired()->Assign(REQUIRED_FIELDS.begin(), REQUIRED_FIELDS.end());
-        Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), req.release());
+        Send(NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId()), new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateRequest());
         Schedule(UPDATE_SYSTEM_USAGE_INTERVAL, new TEvPrivate::TEvUpdateSystemUsage());
     }
 

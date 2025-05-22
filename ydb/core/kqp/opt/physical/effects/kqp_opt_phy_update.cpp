@@ -1,8 +1,6 @@
 #include "kqp_opt_phy_effects_rules.h"
 #include "kqp_opt_phy_effects_impl.h"
 
-#include <yql/essentials/providers/common/provider/yql_provider.h>
-
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
@@ -85,68 +83,6 @@ TDictAndKeysResult PrecomputeDictAndKeys(const TCondenseInputResult& condenseRes
     };
 }
 
-TKqpCnStreamLookup BuildStreamLookupOverPrecompute(const TKikimrTableDescription & table,  NYql::NNodes::TDqPhyPrecompute& keysPrecompute,
-    NYql::NNodes::TExprBase originalInput, const TKqpTable& kqpTableNode, const TPositionHandle& pos, TExprContext& ctx, const TVector<TString>& extraColumnsToRead)
-{
-    TKqpStreamLookupSettings streamLookupSettings;
-    streamLookupSettings.Strategy = EStreamLookupStrategyType::LookupRows;
-
-    TVector<const TItemExprType*> expectedRowTypeItems;
-    const TTypeAnnotationNode* originalAnnotation = originalInput.Ptr()->GetTypeAnn();
-    YQL_ENSURE(originalAnnotation, "stream lookup received input which isn't properly annontated");
-
-    TExprNode::TPtr input = originalInput.Ptr();
-    const TTypeAnnotationNode* itemType = nullptr;
-
-    if (input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream) {
-        itemType = input->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType();
-    } else {
-        YQL_ENSURE(EnsureListType(*input, ctx), "stream or list is allowed as input of the stream lookup");
-        itemType = input->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
-    }
-
-    YQL_ENSURE(itemType->GetKind() == ETypeAnnotationKind::Struct);
-    auto* columns = itemType->Cast<TStructExprType>();
-
-    for (auto& column : table.Metadata->KeyColumnNames) {
-        auto columnType = columns->FindItemType(column);
-        YQL_ENSURE(columnType, "stream lookup input doesn't contain required column " << column);
-        expectedRowTypeItems.push_back(ctx.MakeType<TItemExprType>(column, columnType));
-    }
-
-    const TTypeAnnotationNode* expectedRowType = ctx.MakeType<TStructExprType>(expectedRowTypeItems);
-    const TTypeAnnotationNode* streamLookupInputType = ctx.MakeType<TListExprType>(expectedRowType);
-
-    TSet<TString> columnsToReadSet(table.Metadata->KeyColumnNames.begin(), table.Metadata->KeyColumnNames.end());
-    for(const auto& col: extraColumnsToRead) {
-        columnsToReadSet.insert(col);
-    }
-
-    TVector<TString> columnsToRead(columnsToReadSet.begin(), columnsToReadSet.end());
-
-    return Build<TKqpCnStreamLookup>(ctx, pos)
-        .Output()
-            .Stage<TDqStage>()
-                .Inputs()
-                    .Add(keysPrecompute)
-                    .Build()
-                .Program()
-                    .Args({"stream_lookup_keys"})
-                    .Body<TCoToStream>()
-                        .Input("stream_lookup_keys")
-                        .Build()
-                    .Build()
-                .Settings().Build()
-                .Build()
-            .Index().Build(0)
-            .Build()
-        .Table(kqpTableNode)
-        .Columns(BuildColumnsList(columnsToRead, pos, ctx))
-        .InputType(ExpandType(pos, *streamLookupInputType, ctx))
-        .Settings(streamLookupSettings.BuildNode(ctx, pos))
-        .Done();
-}
-
 TExprBase KqpBuildUpdateStages(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!node.Maybe<TKqlUpdateRows>()) {
         return node;
@@ -157,7 +93,7 @@ TExprBase KqpBuildUpdateStages(TExprBase node, TExprContext& ctx, const TKqpOpti
 
     const bool isSink = NeedSinks(table, kqpCtx);
     const bool needPrecompute = !isSink;
-
+    
     if (needPrecompute) {
         auto payloadSelector = MakeRowsPayloadSelector(update.Columns(), table, update.Pos(), ctx);
         auto condenseResult = CondenseInputToDictByPk(update.Input(), table, payloadSelector, ctx);
@@ -169,13 +105,19 @@ TExprBase KqpBuildUpdateStages(TExprBase node, TExprContext& ctx, const TKqpOpti
 
         auto prepareUpdateStage = Build<TDqStage>(ctx, update.Pos())
             .Inputs()
-                .Add(BuildStreamLookupOverPrecompute(table, inputDictAndKeys.KeysPrecompute, update.Input(), update.Table(), update.Pos(), ctx))
+                .Add(inputDictAndKeys.KeysPrecompute)
                 .Add(inputDictAndKeys.DictPrecompute)
                 .Build()
             .Program()
                 .Args({"keys_list", "dict"})
                 .Body<TCoFlatMap>()
-                    .Input("keys_list")
+                    .Input<TKqpLookupTable>()
+                        .Table(update.Table())
+                        .LookupKeys<TCoIterator>()
+                            .List("keys_list")
+                            .Build()
+                        .Columns(BuildColumnsList(table.Metadata->KeyColumnNames, update.Pos(), ctx))
+                        .Build()
                     .Lambda()
                         .Args({"existingKey"})
                         .Body<TCoJust>()

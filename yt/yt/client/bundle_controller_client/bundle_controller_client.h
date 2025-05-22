@@ -22,7 +22,7 @@ struct TSetBundleConfigOptions
 struct TBundleConfigDescriptor
     : public NYTree::TYsonStruct
 {
-    std::string BundleName;
+    TString BundleName;
 
     TBundleTargetConfigPtr Config;
     TBundleConfigConstraintsPtr ConfigConstraints;
@@ -42,11 +42,11 @@ struct IBundleControllerClient
     virtual ~IBundleControllerClient() = default;
 
     virtual TFuture<TBundleConfigDescriptorPtr> GetBundleConfig(
-        const std::string& bundleName,
+        const TString& bundleName,
         const TGetBundleConfigOptions& options = {}) = 0;
 
     virtual TFuture<void> SetBundleConfig(
-        const std::string& bundleName,
+        const TString& bundleName,
         const NBundleControllerClient::TBundleTargetConfigPtr& bundleConfig,
         const TSetBundleConfigOptions& options = {}) = 0;
 };

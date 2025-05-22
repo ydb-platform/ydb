@@ -24,6 +24,9 @@ class TJsonVDiskEvict : public TViewerPipeClient {
 protected:
     using TThis = TJsonVDiskEvict;
     using TBase = TViewerPipeClient;
+    IViewer* Viewer;
+    NMon::TEvHttpInfo::TPtr Event;
+    ui32 Timeout = 0;
     ui32 ActualRetries = 0;
     ui32 Retries = 0;
     TDuration RetryPeriod = TDuration::MilliSeconds(500);
@@ -39,19 +42,23 @@ protected:
 
 public:
     TJsonVDiskEvict(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
-        : TViewerPipeClient(viewer, ev)
+        : Viewer(viewer)
+        , Event(ev)
     {}
 
     inline ui32 GetRequiredParam(const TCgiParameters& params, const std::string& name, ui32& obj) {
         if (!TryFromString<ui32>(params.Get(name), obj)) {
-            TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", TStringBuilder() << "field '" << name << "' is required"));
+            TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(
+                Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", TStringBuilder() << "field '" << name << "' or 'vdisk_id' are required"),
+                0, NMon::IEvHttpInfoRes::EContentType::Custom));
             return false;
         }
         return true;
     }
 
     void Bootstrap() override {
-        TString vdisk_id = Params.Get("vdisk_id");
+        const auto& params(Event->Get()->Request.GetParams());
+        TString vdisk_id = params.Get("vdisk_id");
         if (vdisk_id) {
             TVector<TString> parts = StringSplitter(vdisk_id).Split('-').SkipEmpty();
             if (parts.size() == 5) {
@@ -64,33 +71,40 @@ public:
             if (parts.size() != 5 || GroupId == Max<ui32>()
                     || GroupGeneration == Max<ui32>() || FailRealmIdx  == Max<ui32>()
                     || FailDomainIdx == Max<ui32>() || VdiskIdx == Max<ui32>()) {
-                return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Unable to parse the 'vdisk_id' parameter"), "BadRequest");
+                TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(
+                    Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", TStringBuilder() << "Unable to parse the 'vdisk_id' parameter"),
+                    0, NMon::IEvHttpInfoRes::EContentType::Custom));
+                return PassAway();
             }
-        } else if (!GetRequiredParam(Params, "group_id", GroupId)
-                || !GetRequiredParam(Params, "group_generation_id", GroupGeneration)
-                || !GetRequiredParam(Params, "fail_realm_idx", FailRealmIdx)
-                || !GetRequiredParam(Params, "fail_domain_idx", FailDomainIdx)
-                || !GetRequiredParam(Params, "vdisk_idx", VdiskIdx)) {
-            return;
-            //return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Parameter 'vdisk_id' is required"), "BadRequest");
+        } else if (!GetRequiredParam(params, "group_id", GroupId)
+                || !GetRequiredParam(params, "group_generation_id", GroupGeneration)
+                || !GetRequiredParam(params, "fail_realm_idx", FailRealmIdx)
+                || !GetRequiredParam(params, "fail_domain_idx", FailDomainIdx)
+                || !GetRequiredParam(params, "vdisk_idx", VdiskIdx)) {
+            return PassAway();
         }
 
         if (Event->Get()->Request.GetMethod() != HTTP_METHOD_POST) {
-            return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Only POST method is allowed"), "BadRequest");
+            TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(
+                Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Only POST method is allowed"),
+                0, NMon::IEvHttpInfoRes::EContentType::Custom));
+            return PassAway();
         }
+        TBase::InitConfig(params);
 
-        Force = FromStringWithDefault<bool>(Params.Get("force"), false);
-        Retries = FromStringWithDefault<ui32>(Params.Get("retries"), 0);
-        RetryPeriod = TDuration::MilliSeconds(FromStringWithDefault<ui32>(Params.Get("retry_period"), RetryPeriod.MilliSeconds()));
+        Force = FromStringWithDefault<bool>(params.Get("force"), false);
+        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
+        Retries = FromStringWithDefault<ui32>(params.Get("retries"), 0);
+        RetryPeriod = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("retry_period"), RetryPeriod.MilliSeconds()));
 
         if (Force && !Viewer->CheckAccessAdministration(Event->Get())) {
-            return TBase::ReplyAndPassAway(GetHTTPFORBIDDEN(), "BadRequest");
+            TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPFORBIDDEN(Event->Get()), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
             return PassAway();
         }
 
         SendRequest();
 
-        TBase::Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
+        TBase::Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
 
     STATEFN(StateWork) {
@@ -131,6 +145,12 @@ public:
         SendRequest();
     }
 
+    void HandleTimeout() {
+        Send(Event->Sender, new NMon::TEvHttpInfoRes(
+            Viewer->GetHTTPGATEWAYTIMEOUT(Event->Get(), "text/plain", "Timeout receiving response from BSC"),
+            0, NMon::IEvHttpInfoRes::EContentType::Custom));
+    }
+
     void PassAway() override {
         TBase::PassAway();
     }
@@ -155,7 +175,8 @@ public:
             json["result"] = false;
             json["error"] = "No response was received from BSC";
         }
-        TBase::ReplyAndPassAway(GetHTTPOKJSON(json));
+        TBase::Send(Event->Sender, new NMon::TEvHttpInfoRes(Viewer->GetHTTPOKJSON(Event->Get(), NJson::WriteJson(json)), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        PassAway();
     }
 
     static YAML::Node GetSwagger() {
@@ -169,18 +190,43 @@ public:
               - name: vdisk_id
                 in: query
                 description: vdisk identifier
-                required: true
-                type: string
-              - name: force
-                in: query
-                description: attempt forced operation, ignore warnings
                 required: false
-                type: boolean
+                type: string
+              - name: group_id
+                in: query
+                description: group identifier
+                required: false
+                type: integer
+              - name: group_generation_id
+                in: query
+                description: group generation identifier
+                required: false
+                type: integer
+              - name: fail_realm_idx
+                in: query
+                description: fail realm identifier
+                required: false
+                type: integer
+              - name: fail_domain_ids
+                in: query
+                description: fail domain identifier
+                required: false
+                type: integer
+              - name: vdisk_idx
+                in: query
+                description: vdisk idx identifier
+                required: false
+                type: integer
               - name: timeout
                 in: query
                 description: timeout in ms
                 required: false
                 type: integer
+              - name: force
+                in: query
+                description: attempt forced operation, ignore warnings
+                required: false
+                type: boolean
             responses:
                 200:
                     description: OK

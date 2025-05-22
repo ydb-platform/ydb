@@ -13,7 +13,6 @@ PEERDIR(
     ydb/core/tx/program
     ydb/core/protos
     ydb/core/tx/columnshard/data_sharing/protos
-    ydb/core/tx/conveyor/usage
 )
 
 GENERATE_ENUM_SERIALIZATION(read_metadata.h)

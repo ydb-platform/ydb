@@ -9,35 +9,14 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 namespace {
-
-    void CheckRegexMatch(
-        const TString& str,
-        const TVector<std::pair<TString, ui64>>& regexToMatchCount)
-    {
-        for (auto& [regexString, expectedMatchCount]: regexToMatchCount) {
-            std::regex expression(regexString.c_str());
-
-            auto matchCount = std::distance(
-                std::sregex_iterator(str.begin(), str.end(), expression),
-                std::sregex_iterator());
-
-            UNIT_ASSERT_VALUES_EQUAL(expectedMatchCount, matchCount);
+    ui64 CountSubstr(const TString& str, const TString& substr) {
+        ui64 count = 0;
+        for (auto pos = str.find(substr); pos != TString::npos; pos = str.find(substr, pos + substr.size())) {
+            ++count;
         }
+        return count;
     }
-
-    TString ConstructRegexToCheckLogs(
-        const TString& logLevel,
-        const TString& component)
-    {
-        TStringBuilder builder;
-
-        // [\\w]+\\.[A-Za-z]+:[0-9]+ match filename and line number
-        builder << "DATA_INTEGRITY " << logLevel
-                << ": [\\w]+\\.[A-Za-z]+:[0-9]+: Component: " << component;
-        return builder;
-    }
-
-} // namespace
+}
 
 Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
     Y_UNIT_TEST_QUAD(Upsert, LogEnabled, UseSink) {
@@ -53,7 +32,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             if (LogEnabled) {
                 kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::DATA_INTEGRITY, NLog::PRI_TRACE);
             }
-
+            
             auto db = kikimr.GetTableClient();
             auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -68,29 +47,19 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        TVector<std::pair<TString, ui64>> regexToMatchCount{
-            // check session actor logs
-            {ConstructRegexToCheckLogs("DEBUG", "SessionActor"),
-             LogEnabled ? 2 : 0},
-            // check grpc logs
-            {ConstructRegexToCheckLogs("TRACE", "Grpc"), LogEnabled ? 2 : 0},
-            // check datashard logs
-            {ConstructRegexToCheckLogs("INFO", "DataShard"), LogEnabled ? 2 : 0},
-        };
-
         if (UseSink) {
             // check write actor logs
-            regexToMatchCount.emplace_back(
-                ConstructRegexToCheckLogs("INFO", "WriteActor"),
-                LogEnabled ? 1 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: WriteActor"), LogEnabled ? 1 : 0);
         } else {
             // check executer logs
-            regexToMatchCount.emplace_back(
-                ConstructRegexToCheckLogs("INFO", "Executer"),
-                LogEnabled ? 2 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), LogEnabled ? 2 : 0);
         }
-
-        CheckRegexMatch(ss.Str(), regexToMatchCount);
+        // check session actor logs
+        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), LogEnabled ? 2 : 0);
+        // check grpc logs
+        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY TRACE: Component: Grpc"), LogEnabled ? 2 : 0);
+        // check datashard logs
+        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: DataShard"), LogEnabled ? 2 : 0);
     }
 
     Y_UNIT_TEST_QUAD(UpsertEvWriteQueryService, isOlap, useOltpSink) {
@@ -134,37 +103,38 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        TVector<std::pair<TString, ui64>> regexToMatchCount;
         if (!isOlap) {
-            regexToMatchCount = {
-                {ConstructRegexToCheckLogs("DEBUG", "SessionActor"), 2},
-                {ConstructRegexToCheckLogs("TRACE", "Grpc"), 2},
-                {ConstructRegexToCheckLogs("INFO", "DataShard"), 2},
-            };
-
             if (useOltpSink) {
                 // check write actor logs
-                regexToMatchCount.emplace_back(
-                    ConstructRegexToCheckLogs("INFO", "WriteActor"),
-                    1);
+                UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: WriteActor"), 1);
             } else {
                 // check executer logs
-                regexToMatchCount.emplace_back(
-                    ConstructRegexToCheckLogs("INFO", "Executer"),
-                    2);
+                UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 2);
             }
+            // check session actor logs
+            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), 2);
+            // check grpc logs
+            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY TRACE: Component: Grpc"), 2);
+            // check datashard logs
+            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: DataShard"), 2);
         } else {
-            regexToMatchCount = {
-                {ConstructRegexToCheckLogs("INFO", "WriteActor"), 3},
-                {ConstructRegexToCheckLogs("DEBUG", "SessionActor"), 2},
-                {ConstructRegexToCheckLogs("TRACE", "Grpc"), 2},
-                {ConstructRegexToCheckLogs("INFO", "Executer"),
-                 useOltpSink ? 1 : 11}};
-
+            // check write actor logs
+            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: WriteActor"), 3);
+            if (useOltpSink) {
+                // check executer logs
+                UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 1);
+            } else {
+                // check executer logs
+                UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 11);
+            }
+            // check session actor logs
+            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), 2);
+            // check grpc logs
+            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY TRACE: Component: Grpc"), 2);
+            // check columnshard logs
             // ColumnShard doesn't have integrity logs.
+            // UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: ColumnShard"), 6);
         }
-
-        CheckRegexMatch(ss.Str(), regexToMatchCount);
     }
 
     Y_UNIT_TEST(Ddl) {
@@ -179,7 +149,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
 
             auto result = session.ExecuteSchemeQuery(R"(
                 --!syntax_v1
-
+                
                 CREATE TABLE `/Root/Tmp` (
                     Key Uint64,
                     Value String,
@@ -189,14 +159,14 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        TVector<std::pair<TString, ui64>> regexToMatchCount{
-            {ConstructRegexToCheckLogs("INFO", "Executer"), 0},
-            {ConstructRegexToCheckLogs("DEBUG", "SessionActor"), 0},
-            {ConstructRegexToCheckLogs("TRACE", "Grpc"), 0},
-            {ConstructRegexToCheckLogs("INFO", "DataShard"), 0},
-        };
-
-        CheckRegexMatch(ss.Str(), regexToMatchCount);
+        // check executer logs
+        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 0);
+        // check session actor logs
+        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), 0);
+        // check grpc logs
+        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY TRACE: Component: Grpc"), 0);
+        // check datashard logs
+        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: DataShard"), 0);
     }
 
     Y_UNIT_TEST(Select) {
@@ -217,20 +187,14 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        TVector<std::pair<TString, ui64>> regexToMatchCount{
-            // check executer logs (should be 1, because executer only logs
-            // result for read actor)
-            {ConstructRegexToCheckLogs("INFO", "Executer"), 1},
-            // check session actor logs
-            {ConstructRegexToCheckLogs("DEBUG", "SessionActor"), 2},
-            // check grpc logs
-            {ConstructRegexToCheckLogs("TRACE", "Grpc"), 2},
-            // check datashard logs (should be empty, because DataShard only
-            // logs modification operations)
-            {ConstructRegexToCheckLogs("INFO", "DataShard"), 0},
-        };
-
-        CheckRegexMatch(ss.Str(), regexToMatchCount);
+        // check executer logs (should be 1, because executer only logs result for read actor)
+        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 1);
+        // check session actor logs
+        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), 2);
+        // check grpc logs
+        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY TRACE: Component: Grpc"), 2);
+        // check datashard logs (should be empty, because DataShard only logs modification operations)
+        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: DataShard"), 0);
     }
 
     Y_UNIT_TEST_TWIN(BrokenReadLock, UseSink) {
@@ -297,7 +261,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
                 std::smatch lockIdMatch;
                 UNIT_ASSERT_C(std::regex_search(row.data(), lockIdMatch, lockIdRegex) || lockIdMatch.size() != 2, "failed to extract broken lock id");
                 brokenLock = lockIdMatch[1].str();
-            }
+            } 
         }
 
         UNIT_ASSERT_C(!readLock.empty() && readLock == brokenLock, "read lock should be broken");
@@ -369,7 +333,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
                 std::smatch lockIdMatch;
                 UNIT_ASSERT_C(std::regex_search(row.data(), lockIdMatch, lockIdRegex) || lockIdMatch.size() != 2, "failed to extract broken lock id");
                 brokenLock = lockIdMatch[1].str();
-            }
+            } 
         }
 
         UNIT_ASSERT_C(!readLock.empty() && readLock == brokenLock, "read lock should be broken");

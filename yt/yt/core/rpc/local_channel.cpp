@@ -30,7 +30,7 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constinit const auto Logger = RpcClientLogger;
+static constexpr auto& Logger = RpcClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -182,7 +182,7 @@ private:
 
         const std::string& GetEndpointAddress() const override
         {
-            static const std::string EmptyAddress;
+            static const TString EmptyAddress;
             return EmptyAddress;
         }
 

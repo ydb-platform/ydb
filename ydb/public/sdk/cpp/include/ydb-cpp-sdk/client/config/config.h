@@ -21,12 +21,10 @@ enum class EFetchAllConfigsTransform {
     NONE,
     DETACH_STORAGE_CONFIG_SECTION,
     ATTACH_STORAGE_CONFIG_SECTION,
-    ADD_BLOB_STORAGE_AND_DOMAINS_CONFIG,
-    ADD_EXPLICIT_SECTIONS,
 };
 
 struct TFetchAllConfigsSettings : public NYdb::TOperationRequestSettings<TFetchAllConfigsSettings> {
-    FLUENT_SETTING_DEFAULT(EFetchAllConfigsTransform, Transform, EFetchAllConfigsTransform::NONE);
+    FLUENT_SETTING(EFetchAllConfigsTransform, Transform);
 };
 
 struct TBootstrapClusterSettings : public NYdb::TOperationRequestSettings<TBootstrapClusterSettings> {};

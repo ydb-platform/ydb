@@ -30,8 +30,7 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
         if (GetReadMetadata()->IsMyUncommitted(i.GetInsertWriteId())) {
             continue;
         }
-        if (GetReadMetadata()->GetPKRangesFilter().CheckPoint(i.GetFirst()) ||
-            GetReadMetadata()->GetPKRangesFilter().CheckPoint(i.GetLast())) {
+        if (GetReadMetadata()->GetPKRangesFilter().CheckPoint(i.GetFirst()) || GetReadMetadata()->GetPKRangesFilter().CheckPoint(i.GetLast())) {
             GetReadMetadata()->SetConflictedWriteId(i.GetInsertWriteId());
         }
     }

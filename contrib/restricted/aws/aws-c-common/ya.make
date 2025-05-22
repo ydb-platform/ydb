@@ -3,7 +3,6 @@
 LIBRARY()
 
 LICENSE(
-    "(GPL-2.0-only OR BSD-3-Clause)" AND
     Apache-2.0 AND
     BSD-3-Clause AND
     MIT AND
@@ -12,14 +11,13 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(0.12.3)
+VERSION(0.8.23)
 
-ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-common/archive/v0.12.3.tar.gz)
+ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-common/archive/v0.8.23.tar.gz)
 
 ADDINCL(
     GLOBAL contrib/restricted/aws/aws-c-common/generated/include
     GLOBAL contrib/restricted/aws/aws-c-common/include
-    contrib/restricted/aws/aws-c-common/source/external/libcbor
 )
 
 NO_COMPILER_WARNINGS()
@@ -32,7 +30,6 @@ CFLAGS(
     -DAWS_PTHREAD_SETNAME_TAKES_2ARGS
     -DCJSON_HIDE_SYMBOLS
     -DHAVE_SYSCONF
-    -DINTEL_NO_ITTNOTIFY_API
 )
 
 IF (MUSL)
@@ -59,6 +56,8 @@ ENDIF()
 
 IF (ARCH_X86_64)
     CFLAGS(
+        -DHAVE_MM256_EXTRACT_EPI64
+        -DHAVE_AVX2_INTRINSICS
         -DUSE_SIMD_ENCODING
     )
 ENDIF()
@@ -70,7 +69,6 @@ SRCS(
     source/assert.c
     source/byte_buf.c
     source/cache.c
-    source/cbor.c
     source/codegen.c
     source/command_line_parser.c
     source/common.c
@@ -80,34 +78,12 @@ SRCS(
     source/encoding.c
     source/error.c
     source/external/cJSON.c
-    source/external/libcbor/allocators.c
-    source/external/libcbor/cbor.c
-    source/external/libcbor/cbor/arrays.c
-    source/external/libcbor/cbor/bytestrings.c
-    source/external/libcbor/cbor/callbacks.c
-    source/external/libcbor/cbor/common.c
-    source/external/libcbor/cbor/encoding.c
-    source/external/libcbor/cbor/floats_ctrls.c
-    source/external/libcbor/cbor/internal/builder_callbacks.c
-    source/external/libcbor/cbor/internal/encoders.c
-    source/external/libcbor/cbor/internal/loaders.c
-    source/external/libcbor/cbor/internal/memory_utils.c
-    source/external/libcbor/cbor/internal/stack.c
-    source/external/libcbor/cbor/internal/unicode.c
-    source/external/libcbor/cbor/ints.c
-    source/external/libcbor/cbor/maps.c
-    source/external/libcbor/cbor/serialization.c
-    source/external/libcbor/cbor/streaming.c
-    source/external/libcbor/cbor/strings.c
-    source/external/libcbor/cbor/tags.c
     source/fifo_cache.c
     source/file.c
     source/hash_table.c
-    source/host_utils.c
     source/json.c
     source/lifo_cache.c
     source/linked_hash_table.c
-    source/linux/system_info.c
     source/log_channel.c
     source/log_formatter.c
     source/log_writer.c
@@ -117,11 +93,11 @@ SRCS(
     source/memtrace.c
     source/priority_queue.c
     source/process_common.c
+    source/promise.c
     source/ref_count.c
     source/ring_buffer.c
     source/statistics.c
     source/string.c
-    source/system_info.c
     source/task_scheduler.c
     source/thread_scheduler.c
     source/thread_shared.c
@@ -132,7 +108,7 @@ SRCS(
 
 IF (ARCH_ARM)
     SRCS(
-        source/arch/arm/auxv/cpuid.c
+        source/arch/arm/asm/cpuid.c
     )
 ELSEIF (ARCH_X86_64)
     SRCS(
@@ -146,7 +122,6 @@ IF (NOT OS_WINDOWS)
     SRCS(
         source/posix/clock.c
         source/posix/condition_variable.c
-        source/posix/cross_process_lock.c
         source/posix/device_random.c
         source/posix/environment.c
         source/posix/file.c
@@ -154,7 +129,6 @@ IF (NOT OS_WINDOWS)
         source/posix/process.c
         source/posix/rw_lock.c
         source/posix/system_info.c
-        source/posix/system_resource_utils.c
         source/posix/thread.c
         source/posix/time.c
     )

@@ -6,7 +6,6 @@
 #include <ydb/core/fq/libs/checkpoint_storage/ydb_checkpoint_storage.h>
 #include <ydb/core/fq/libs/checkpoint_storage/ydb_state_storage.h>
 #include <ydb/core/fq/libs/ydb/util.h>
-#include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -89,13 +88,12 @@ struct TTestRuntime {
         storageConfig.SetTablePrefix(TablePrefix);
 
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
-        NYdb::TDriver driver(NYdb::TDriverConfig{});
-        auto ydbConnectionPtr = NewYdbConnection(config.GetStorage(), credFactory, driver);
-        CheckpointStorage = NewYdbCheckpointStorage(storageConfig, CreateEntityIdGenerator("id"), ydbConnectionPtr);
+        auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
+        CheckpointStorage = NewYdbCheckpointStorage(storageConfig, credFactory, CreateEntityIdGenerator("id"), yqSharedResources);
         auto issues = CheckpointStorage->Init().GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
 
-        StateStorage = NewYdbStateStorage(config, ydbConnectionPtr);
+        StateStorage = NewYdbStateStorage(config, credFactory, yqSharedResources);
         issues = StateStorage->Init().GetValueSync();
         UNIT_ASSERT_C(issues.Empty(), issues.ToString());
 

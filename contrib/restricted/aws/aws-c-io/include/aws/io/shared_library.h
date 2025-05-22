@@ -8,8 +8,6 @@
 
 #include <aws/io/io.h>
 
-AWS_PUSH_SANE_WARNING_LEVEL
-
 struct aws_byte_cursor;
 
 /*
@@ -46,6 +44,5 @@ int aws_shared_library_find_function(
     aws_generic_function *function_address);
 
 AWS_EXTERN_C_END
-AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_COMMON_SHARED_LIBRARY_H */

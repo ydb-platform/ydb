@@ -15,7 +15,6 @@ struct TBuildInfo
 
     // ArcRevision this binary was built from.
     TString ArcRevision;
-    int ArcLastChangeNum;
     bool ArcDirty;
 
     // BuildType this binary was built with.

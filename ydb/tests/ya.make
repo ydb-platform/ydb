@@ -1,5 +1,4 @@
 RECURSE(
-    compatibility
     datashard
     example
     fq

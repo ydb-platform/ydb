@@ -33,7 +33,7 @@
 #endif
 
 #if __TBB_CPP17_MEMORY_RESOURCE_PRESENT
-#include <memory_resource>
+#error #include <memory_resource>
 #endif
 
 #ifdef __cplusplus

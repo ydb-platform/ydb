@@ -274,7 +274,9 @@ protected:
     void ResetCoWState();
 
 private:
-    void UpdateCategory() const;
+    //! This method checks level against category's min level.
+    //! Refer to comment in TLogger::IsLevelEnabled for more details.
+    bool IsLevelEnabledHeavy(ELogLevel level) const;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

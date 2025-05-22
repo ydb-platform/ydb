@@ -140,15 +140,15 @@ namespace NDetail {
 
 YT_DECLARE_THREAD_LOCAL(TTraceContext*, CurrentTraceContext);
 
-TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext);
+TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext, TSourceLocation loc);
 
 } // namespace NDetail
 
-Y_FORCE_INLINE TCurrentTraceContextGuard::TCurrentTraceContextGuard(TTraceContextPtr traceContext)
+Y_FORCE_INLINE TCurrentTraceContextGuard::TCurrentTraceContextGuard(TTraceContextPtr traceContext, TSourceLocation location)
     : Active_(static_cast<bool>(traceContext))
 {
     if (Active_) {
-        OldTraceContext_ = NDetail::SwapTraceContext(std::move(traceContext));
+        OldTraceContext_ = NDetail::SwapTraceContext(std::move(traceContext), location);
     }
 }
 
@@ -172,7 +172,7 @@ Y_FORCE_INLINE bool TCurrentTraceContextGuard::IsActive() const
 Y_FORCE_INLINE void TCurrentTraceContextGuard::Release()
 {
     if (Active_) {
-        NDetail::SwapTraceContext(std::move(OldTraceContext_));
+        NDetail::SwapTraceContext(std::move(OldTraceContext_), YT_CURRENT_SOURCE_LOCATION);
         Active_ = false;
     }
 }
@@ -184,9 +184,9 @@ Y_FORCE_INLINE const TTraceContextPtr& TCurrentTraceContextGuard::GetOldTraceCon
 
 ////////////////////////////////////////////////////////////////////////////////
 
-Y_FORCE_INLINE TNullTraceContextGuard::TNullTraceContextGuard()
+Y_FORCE_INLINE TNullTraceContextGuard::TNullTraceContextGuard(TSourceLocation location)
     : Active_(true)
-    , OldTraceContext_(NDetail::SwapTraceContext(nullptr))
+    , OldTraceContext_(NDetail::SwapTraceContext(nullptr, location))
 { }
 
 Y_FORCE_INLINE TNullTraceContextGuard::TNullTraceContextGuard(TNullTraceContextGuard&& other)
@@ -209,7 +209,7 @@ Y_FORCE_INLINE bool TNullTraceContextGuard::IsActive() const
 Y_FORCE_INLINE void TNullTraceContextGuard::Release()
 {
     if (Active_) {
-        NDetail::SwapTraceContext(std::move(OldTraceContext_));
+        NDetail::SwapTraceContext(std::move(OldTraceContext_), YT_CURRENT_SOURCE_LOCATION);
         Active_ = false;
     }
 }

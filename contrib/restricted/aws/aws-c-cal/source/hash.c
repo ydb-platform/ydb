@@ -87,7 +87,7 @@ static inline int compute_hash(
     struct aws_byte_buf *output,
     size_t truncate_to) {
     if (!hash) {
-        return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
+        return AWS_OP_ERR;
     }
 
     if (aws_hash_update(hash, input)) {

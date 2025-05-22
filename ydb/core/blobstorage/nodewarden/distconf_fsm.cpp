@@ -414,9 +414,7 @@ namespace NKikimr::NStorage {
                     return {TStringBuilder() << "failed to propose configuration, base config contains errors: " << *error};
                 }
                 if (auto error = ValidateConfigUpdate(*propositionBase, *configToPropose)) {
-                    Y_FAIL_S("incorrect config proposed: " << *error
-                        << " Base# " << SingleLineProto(*propositionBase)
-                        << " Proposed# " << SingleLineProto(*configToPropose));
+                    Y_FAIL_S("incorrect config proposed: " << *error);
                 }
             } else {
                 if (auto error = ValidateConfig(*configToPropose)) {

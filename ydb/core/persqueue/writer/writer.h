@@ -7,7 +7,6 @@
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/core/persqueue/pq_rl_helpers.h>
 #include <ydb/core/persqueue/write_id.h>
-#include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
 
 #include <variant>
 
@@ -188,10 +187,6 @@ struct TPartitionWriterOpts {
     TString Token;
     TString SessionId;
     TString TxId;
-    // Used for deduplication in kafka idempotent producer (both in the transaction and out of the transaction)
-    std::optional<NKafka::TProducerInstanceId> KafkaProducerInstanceId;
-    // Indicates that this writer will write records in transactions
-    std::optional<TString> KafkaTransactionalId;
     TString TraceId;
     TString RequestType;
 
@@ -215,8 +210,6 @@ struct TPartitionWriterOpts {
     TPartitionWriterOpts& WithTraceId(const TString& value) { TraceId = value; return *this; }
     TPartitionWriterOpts& WithRequestType(const TString& value) { RequestType = value; return *this; }
     TPartitionWriterOpts& WithInitialSeqNo(const std::optional<ui64> value) { InitialSeqNo = value; return *this; }
-    TPartitionWriterOpts& WithKafkaProducerInstanceId(const std::optional<NKafka::TProducerInstanceId>& value) { KafkaProducerInstanceId = value; return *this; }
-    TPartitionWriterOpts& WithKafkaTransactionalId(const std::optional<TString>& value) { KafkaTransactionalId = value; return *this; }
 };
 
 IActor* CreatePartitionWriter(const TActorId& client,

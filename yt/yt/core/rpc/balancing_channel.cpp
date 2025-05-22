@@ -28,7 +28,7 @@ using namespace NNet;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constinit const auto Logger = RpcClientLogger;
+static constexpr auto& Logger = RpcClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -98,7 +98,7 @@ private:
     const TBalancingChannelConfigPtr Config_;
     const std::string EndpointDescription_;
     const IAttributeDictionaryPtr EndpointAttributes_;
-    const std::string ServiceName_;
+    const TString ServiceName_;
 
     const TDynamicChannelPoolPtr Pool_;
 

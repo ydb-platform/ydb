@@ -20,7 +20,6 @@ public:
             std::optional<ui32> Year;
             std::optional<ui32> Major;
             std::optional<ui32> Minor;
-            std::optional<ui32> Patch;
             std::optional<ui32> Hotfix;
 
             NKikimrConfig::TYdbVersion ToPB() {
@@ -33,9 +32,6 @@ public:
                 }
                 if (Minor) {
                     res.SetMinor(*Minor);
-                }
-                if (Patch) {
-                    res.SetPatch(*Patch);
                 }
                 if (Hotfix) {
                     res.SetHotfix(*Hotfix);

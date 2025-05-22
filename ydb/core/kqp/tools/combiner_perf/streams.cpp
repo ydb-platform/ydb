@@ -61,116 +61,66 @@ TString64Samples MakeKeyedString64Samples(const ui64 seed, const size_t numSampl
     return samples;
 }
 
-template<typename K, typename V, typename R, typename Next>
-THolder<R> DispatchByMap(EHashMapImpl implType, Next&& next)
-{
-    if (implType == EHashMapImpl::Absl) {
-        return next(TAbslMapImpl<K, V>());
-    } else if (implType == EHashMapImpl::YqlRobinHood) {
-        return next(TRobinHoodMapImpl<K, V>());
-    } else {
-        return next(TUnorderedMapImpl<K, V>());
-    }
-}
-
 THolder<IDataSampler> CreateWideSamplerFromParams(const TRunParams& params)
 {
     Y_ENSURE(params.RandomSeed.has_value());
 
     switch (params.SamplerType) {
-    case ESamplerType::StringKeysUI64Values: {
-        auto next = [&](auto&& impl) {
-            using MapImpl = std::decay_t<decltype(impl)>;
-            using SamplerType = TString64DataSampler<MapImpl, MapImpl::TValueType::ArrayWidth>;
-            return MakeHolder<SamplerType>(*params.RandomSeed, params.RowsPerRun, params.NumKeys - 1, params.NumRuns, params.LongStringKeys);
-        };
-        if (params.NumAggregations == 1) {
-            return DispatchByMap<std::string, TValueWrapper<ui64, 1>, IDataSampler>(params.ReferenceHashType, next);
-        } else {
-            // TODO: support other NumAggregations values?
-            return DispatchByMap<std::string, TValueWrapper<ui64, 3>, IDataSampler>(params.ReferenceHashType, next);
-        }
-    }
-    case ESamplerType::UI64KeysUI64Values: {
-        auto next = [&](auto&& impl) {
-            using MapImpl = std::decay_t<decltype(impl)>;
-            using SamplerType = T6464DataSampler<MapImpl, MapImpl::TValueType::ArrayWidth>;
-            return MakeHolder<SamplerType>(*params.RandomSeed, params.RowsPerRun, params.NumKeys - 1, params.NumRuns);
-        };
-        if (params.NumAggregations == 1) {
-            return DispatchByMap<ui64, TValueWrapper<ui64, 1>, IDataSampler>(params.ReferenceHashType, next);
-        } else {
-            // TODO: support other NumAggregations values?
-            return DispatchByMap<ui64, TValueWrapper<ui64, 3>, IDataSampler>(params.ReferenceHashType, next);
-        }
-    }
+    case ESamplerType::StringKeysUI64Values:
+        return MakeHolder<TString64DataSampler>(*params.RandomSeed, params.RowsPerRun, params.NumKeys - 1, params.NumRuns, params.LongStringKeys);
+    case ESamplerType::UI64KeysUI64Values:
+        return MakeHolder<T6464DataSampler>(*params.RandomSeed, params.RowsPerRun, params.NumKeys - 1, params.NumRuns);
     }
 }
 
-template<typename TMapImpl, typename K>
-struct TUpdateMapFromBlocks
+template<typename K>
+void UpdateMapFromBlocks(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, std::unordered_map<K, ui64>& result);
+
+template<>
+void UpdateMapFromBlocks(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, std::unordered_map<ui64, ui64>& result)
 {
-    static void Update(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, typename TMapImpl::TMapType& result);
-};
+    auto datumKey = TArrowBlock::From(key).GetDatum();
+    auto datumValue = TArrowBlock::From(value).GetDatum();
+    UNIT_ASSERT(datumKey.is_array());
+    UNIT_ASSERT(datumValue.is_array());
 
-template<typename TMapImpl>
-struct TUpdateMapFromBlocks<TMapImpl, ui64>
+    const auto ui64keys = datumKey.template array_as<arrow::UInt64Array>();
+    const auto ui64values = datumValue.template array_as<arrow::UInt64Array>();
+    UNIT_ASSERT(!!ui64keys);
+    UNIT_ASSERT(!!ui64values);
+    UNIT_ASSERT_VALUES_EQUAL(ui64keys->length(), ui64values->length());
+
+    const size_t length = ui64keys->length();
+    for (size_t i = 0; i < length; ++i) {
+        result[ui64keys->Value(i)] += ui64values->Value(i);
+    }
+}
+
+template<>
+void UpdateMapFromBlocks(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, std::unordered_map<std::string, ui64>& result)
 {
-    static void Update(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, typename TMapImpl::TMapType& result)
-    {
-        auto datumKey = TArrowBlock::From(key).GetDatum();
-        auto datumValue = TArrowBlock::From(value).GetDatum();
-        UNIT_ASSERT(datumKey.is_array());
-        UNIT_ASSERT(datumValue.is_array());
+    auto datumKey = TArrowBlock::From(key).GetDatum();
+    auto datumValue = TArrowBlock::From(value).GetDatum();
+    UNIT_ASSERT(datumKey.is_arraylike());
+    UNIT_ASSERT(datumValue.is_array());
 
-        const auto ui64keys = datumKey.template array_as<arrow::UInt64Array>();
-        const auto ui64values = datumValue.template array_as<arrow::UInt64Array>();
-        UNIT_ASSERT(!!ui64keys);
-        UNIT_ASSERT(!!ui64values);
-        UNIT_ASSERT_VALUES_EQUAL(ui64keys->length(), ui64values->length());
+    const auto ui64values = datumValue.template array_as<arrow::UInt64Array>();
+    UNIT_ASSERT(!!ui64values);
 
-        const size_t length = ui64keys->length();
-        for (size_t i = 0; i < length; ++i) {
-            if constexpr (!TMapImpl::CustomOps) {
-                result[ui64keys->Value(i)] += ui64values->Value(i);
-            } else {
-                TMapImpl::AggregateByKey(result, ui64keys->Value(i), ui64values->Value(i));
-            }
+    int64_t valueOffset = 0;
+
+    for (const auto& chunk : datumKey.chunks()) {
+        auto* barray = dynamic_cast<arrow::BinaryArray*>(chunk.get());
+        UNIT_ASSERT(barray != nullptr);
+        for (int64_t i = 0; i < barray->length(); ++i) {
+            auto key = barray->GetString(i);
+            auto val = ui64values->Value(valueOffset);
+            result[key] += val;
+            ++valueOffset;
         }
     }
-};
+}
 
-template<typename TMapImpl>
-struct TUpdateMapFromBlocks<TMapImpl, std::string>
-{
-    static void Update(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, typename TMapImpl::TMapType& result)
-    {
-        auto datumKey = TArrowBlock::From(key).GetDatum();
-        auto datumValue = TArrowBlock::From(value).GetDatum();
-        UNIT_ASSERT(datumKey.is_arraylike());
-        UNIT_ASSERT(datumValue.is_array());
-
-        const auto ui64values = datumValue.template array_as<arrow::UInt64Array>();
-        UNIT_ASSERT(!!ui64values);
-
-        int64_t valueOffset = 0;
-
-        for (const auto& chunk : datumKey.chunks()) {
-            auto* barray = dynamic_cast<arrow::BinaryArray*>(chunk.get());
-            UNIT_ASSERT(barray != nullptr);
-            for (int64_t i = 0; i < barray->length(); ++i) {
-                auto key = barray->GetString(i);
-                auto val = ui64values->Value(valueOffset);
-                if constexpr (!TMapImpl::CustomOps) {
-                    result[key] += val;
-                } else {
-                    TMapImpl::AggregateByKey(result, key, val);
-                }
-                ++valueOffset;
-            }
-        }
-    }
-};
 
 template<typename T>
 TType* GetVerySimpleDataType(const TTypeEnvironment& env)
@@ -184,7 +134,7 @@ TType* GetVerySimpleDataType<std::string>(const TTypeEnvironment& env)
     return TDataType::Create(NUdf::TDataType<char*>::Id, env);
 }
 
-template<typename K, typename V, typename TMapImpl>
+template<typename K, typename V>
 class TBlockSampler : public IBlockSampler
 {
     using TSamples = TBlockKVStream<K, V>::TSamples;
@@ -232,7 +182,7 @@ public:
 
     void ComputeReferenceResult(TComputationContext& ctx) override
     {
-        Y_ENSURE(MapEmpty<TMapImpl>(RefResult));
+        Y_ENSURE(RefResult.empty());
 
         const THolder<IWideStream> refStreamPtr = MakeStream(ctx);
         IWideStream& refStream = *refStreamPtr;
@@ -240,35 +190,27 @@ public:
         NUdf::TUnboxedValue columns[3];
 
         while (refStream.WideFetch(columns, 3) == NUdf::EFetchStatus::Ok) {
-            TUpdateMapFromBlocks<TMapImpl, K>::Update(columns[0], columns[1], RefResult);
+            UpdateMapFromBlocks(columns[0], columns[1], RefResult);
         }
     }
 
     void VerifyReferenceResultAgainstRaw() override
     {
+        Y_ENSURE(!RefResult.empty());
         Y_ENSURE(!RawResult.empty());
 
         // TODO: Replace UNIT_ASSERTS with something else, or actually set up the unit test thread context
-        if constexpr (!TMapImpl::CustomOps) {
-            UNIT_ASSERT_VALUES_EQUAL(RefResult.size(), RawResult.size());
-            for (const auto& tuple : RawResult) {
-                auto otherIt = RefResult.find(tuple.first);
-                UNIT_ASSERT(otherIt != RefResult.end());
-                UNIT_ASSERT_VALUES_EQUAL(tuple.second, otherIt->second);
-            }
-        } else {
-            UNIT_ASSERT_VALUES_EQUAL(RawResult.size(), TMapImpl::Size(RefResult));
-            TMapImpl::IteratePairs(RefResult, [&](const K& k, const V& v) {
-                auto otherIt = RawResult.find(k);
-                UNIT_ASSERT(otherIt != RawResult.end());
-                UNIT_ASSERT_VALUES_EQUAL(v, otherIt->second);
-            });
+        UNIT_ASSERT_VALUES_EQUAL(RefResult.size(), RawResult.size());
+        for (const auto& tuple : RawResult) {
+            auto otherIt = RefResult.find(tuple.first);
+            UNIT_ASSERT(otherIt != RefResult.end());
+            UNIT_ASSERT_VALUES_EQUAL(tuple.second, otherIt->second);
         }
     }
 
     void VerifyGraphResultAgainstReference(const NUdf::TUnboxedValue& blockList) override
     {
-        Y_ENSURE(!MapEmpty<TMapImpl>(RefResult));
+        Y_ENSURE(!RefResult.empty());
 
         size_t numResultItems = blockList.GetListLength();
         Cerr << "Result block count: " << numResultItems << Endl;
@@ -282,10 +224,15 @@ public:
 
             const auto elements = ptr[i].GetElements();
 
-            TUpdateMapFromBlocks<TUnorderedMapImpl<K, V>, K>::Update(elements[0], elements[1], graphResult);
+            UpdateMapFromBlocks(elements[0], elements[1], graphResult);
         }
 
-        VerifyMapsAreEqual<K, V, TMapImpl>(graphResult, RefResult);
+        UNIT_ASSERT_VALUES_EQUAL(RefResult.size(), graphResult.size());
+        for (const auto& tuple : RefResult) {
+            auto graphIt = graphResult.find(tuple.first);
+            UNIT_ASSERT(graphIt != graphResult.end());
+            UNIT_ASSERT_VALUES_EQUAL(tuple.second, graphIt->second);
+        }
     }
 
 private:
@@ -294,7 +241,7 @@ private:
     size_t BlockSize;
 
     std::unordered_map<K, V> RawResult;
-    TMapImpl::TMapType RefResult;
+    std::unordered_map<K, V> RefResult;
 };
 
 THolder<IBlockSampler> CreateBlockSamplerFromParams(const TRunParams& params)
@@ -303,21 +250,13 @@ THolder<IBlockSampler> CreateBlockSamplerFromParams(const TRunParams& params)
 
     switch(params.SamplerType) {
     case ESamplerType::StringKeysUI64Values:
-        return DispatchByMap<std::string, ui64, IBlockSampler>(params.ReferenceHashType, [&](auto&& impl) {
-            using MapImpl = std::decay_t<decltype(impl)>;
-            using SamplerType = TBlockSampler<std::string, ui64, MapImpl>;
-            return MakeHolder<SamplerType>(
-                params,
-                MakeKeyedString64Samples(*params.RandomSeed, params.RowsPerRun, params.NumKeys - 1, params.LongStringKeys));
-        });
+        return MakeHolder<TBlockSampler<std::string, ui64>>(
+            params,
+            MakeKeyedString64Samples(*params.RandomSeed, params.RowsPerRun, params.NumKeys - 1, params.LongStringKeys));
     case ESamplerType::UI64KeysUI64Values:
-        return DispatchByMap<ui64, ui64, IBlockSampler>(params.ReferenceHashType, [&](auto&& impl) {
-            using MapImpl = std::decay_t<decltype(impl)>;
-            using SamplerType = TBlockSampler<ui64, ui64, MapImpl>;
-            return MakeHolder<SamplerType>(
-                params,
-                MakeKeyed6464Samples(*params.RandomSeed, params.RowsPerRun, params.NumKeys - 1));
-        });
+        return MakeHolder<TBlockSampler<ui64, ui64>>(
+            params,
+            MakeKeyed6464Samples(*params.RandomSeed, params.RowsPerRun, params.NumKeys - 1));
     }
 }
 

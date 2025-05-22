@@ -221,7 +221,7 @@ Y_UNIT_TEST_SUITE(Donor) {
                 
                 auto senderActor = env.Runtime->GetActor(ev->Sender);
 
-                auto senderType = senderActor->GetActivityType().GetName();
+                auto senderType = TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetNameByIndex(senderActor->GetActivityType());
 
                 if (vdid == vdiskId && senderType == "BS_VDISK_REPL_PROXY") {
                     if (respondError) {

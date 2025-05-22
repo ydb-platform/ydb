@@ -194,10 +194,6 @@ protected:
         const std::shared_ptr<arrow::Scalar>& defaultValue, const std::shared_ptr<arrow::DataType>& type, const ui32 recordsCount);
 
 public:
-    static EType GetTypeStatic() {
-        return EType::SparsedArray;
-    }
-
     virtual void Reallocate() override;
 
     static std::shared_ptr<TSparsedArray> BuildFalseArrayUI8(const ui32 recordsCount) {
@@ -224,10 +220,6 @@ public:
 
     const TSparsedArrayChunk& GetSparsedChunk(const ui64 position) const {
         AFL_VERIFY(position < Record.GetRecordsCount());
-        return Record;
-    }
-
-    const TSparsedArrayChunk& GetSparsedChunk() const {
         return Record;
     }
 

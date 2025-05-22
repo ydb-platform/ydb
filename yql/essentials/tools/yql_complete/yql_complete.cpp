@@ -1,6 +1,6 @@
 #include <yql/essentials/sql/v1/complete/sql_complete.h>
-#include <yql/essentials/sql/v1/complete/name/service/ranking/frequency.h>
-#include <yql/essentials/sql/v1/complete/name/service/ranking/ranking.h>
+#include <yql/essentials/sql/v1/complete/name/service/static/frequency.h>
+#include <yql/essentials/sql/v1/complete/name/service/static/ranking.h>
 #include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
 
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
@@ -15,7 +15,7 @@
 
 NSQLComplete::TFrequencyData LoadFrequencyDataFromFile(TString filepath) {
     TString text = TUnbufferedFileInput(filepath).ReadAll();
-    return NSQLComplete::Pruned(NSQLComplete::ParseJsonFrequencyData(text));
+    return NSQLComplete::ParseJsonFrequencyData(text);
 }
 
 NSQLComplete::TLexerSupplier MakePureLexerSupplier() {
@@ -66,18 +66,18 @@ int Run(int argc, char* argv[]) {
         queryString = in.ReadAll();
     }
 
-    NSQLComplete::TFrequencyData frequency;
+    NSQLComplete::IRanking::TPtr ranking;
     if (freqFileName.empty()) {
-        frequency = NSQLComplete::LoadFrequencyData();
+        ranking = NSQLComplete::MakeDefaultRanking();
     } else {
-        frequency = LoadFrequencyDataFromFile(freqFileName);
+        auto freq = LoadFrequencyDataFromFile(freqFileName);
+        ranking = NSQLComplete::MakeDefaultRanking(std::move(freq));
     }
-
     auto engine = NSQLComplete::MakeSqlCompletionEngine(
         MakePureLexerSupplier(),
         NSQLComplete::MakeStaticNameService(
-            NSQLComplete::LoadDefaultNameSet(), 
-            std::move(frequency)));
+            NSQLComplete::MakeDefaultNameSet(),
+            std::move(ranking)));
 
     NSQLComplete::TCompletionInput input;
 

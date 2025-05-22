@@ -4,7 +4,7 @@
 
     Lexers for Python and related languages.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2024 by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -33,7 +33,7 @@ class PythonLexer(RegexLexer):
 
     name = 'Python'
     url = 'https://www.python.org'
-    aliases = ['python', 'py', 'sage', 'python3', 'py3', 'bazel', 'starlark', 'pyi']
+    aliases = ['python', 'py', 'sage', 'python3', 'py3', 'bazel', 'starlark']
     filenames = [
         '*.py',
         '*.pyw',
@@ -109,11 +109,11 @@ class PythonLexer(RegexLexer):
             (r'\\', Text),
             include('keywords'),
             include('soft-keywords'),
-            (r'(def)((?:\s|\\\s)+)', bygroups(Keyword, Whitespace), 'funcname'),
-            (r'(class)((?:\s|\\\s)+)', bygroups(Keyword, Whitespace), 'classname'),
-            (r'(from)((?:\s|\\\s)+)', bygroups(Keyword.Namespace, Whitespace),
+            (r'(def)((?:\s|\\\s)+)', bygroups(Keyword, Text), 'funcname'),
+            (r'(class)((?:\s|\\\s)+)', bygroups(Keyword, Text), 'classname'),
+            (r'(from)((?:\s|\\\s)+)', bygroups(Keyword.Namespace, Text),
              'fromimport'),
-            (r'(import)((?:\s|\\\s)+)', bygroups(Keyword.Namespace, Whitespace),
+            (r'(import)((?:\s|\\\s)+)', bygroups(Keyword.Namespace, Text),
              'import'),
             include('expr'),
         ],
@@ -329,14 +329,14 @@ class PythonLexer(RegexLexer):
             (uni_name, Name.Class, '#pop'),
         ],
         'import': [
-            (r'(\s+)(as)(\s+)', bygroups(Whitespace, Keyword, Whitespace)),
+            (r'(\s+)(as)(\s+)', bygroups(Text, Keyword, Text)),
             (r'\.', Name.Namespace),
             (uni_name, Name.Namespace),
-            (r'(\s*)(,)(\s*)', bygroups(Whitespace, Operator, Whitespace)),
+            (r'(\s*)(,)(\s*)', bygroups(Text, Operator, Text)),
             default('#pop')  # all else: go back
         ],
         'fromimport': [
-            (r'(\s+)(import)\b', bygroups(Whitespace, Keyword.Namespace), '#pop'),
+            (r'(\s+)(import)\b', bygroups(Text, Keyword.Namespace), '#pop'),
             (r'\.', Name.Namespace),
             # if None occurs here, it's "raise x from None", since None can
             # never be a module name
@@ -459,11 +459,11 @@ class Python2Lexer(RegexLexer):
             (r'(in|is|and|or|not)\b', Operator.Word),
             (r'!=|==|<<|>>|[-~+/*%=<>&^|.]', Operator),
             include('keywords'),
-            (r'(def)((?:\s|\\\s)+)', bygroups(Keyword, Whitespace), 'funcname'),
-            (r'(class)((?:\s|\\\s)+)', bygroups(Keyword, Whitespace), 'classname'),
-            (r'(from)((?:\s|\\\s)+)', bygroups(Keyword.Namespace, Whitespace),
+            (r'(def)((?:\s|\\\s)+)', bygroups(Keyword, Text), 'funcname'),
+            (r'(class)((?:\s|\\\s)+)', bygroups(Keyword, Text), 'classname'),
+            (r'(from)((?:\s|\\\s)+)', bygroups(Keyword.Namespace, Text),
              'fromimport'),
-            (r'(import)((?:\s|\\\s)+)', bygroups(Keyword.Namespace, Whitespace),
+            (r'(import)((?:\s|\\\s)+)', bygroups(Keyword.Namespace, Text),
              'import'),
             include('builtins'),
             include('magicfuncs'),
@@ -635,7 +635,6 @@ class Python2Lexer(RegexLexer):
     def analyse_text(text):
         return shebang_matches(text, r'pythonw?2(\.\d)?')
 
-
 class _PythonConsoleLexerBase(RegexLexer):
     name = 'Python console session'
     aliases = ['pycon', 'python-console']
@@ -671,7 +670,6 @@ class _PythonConsoleLexerBase(RegexLexer):
             (r'.*\n', Other.Traceback),
         ],
     }
-
 
 class PythonConsoleLexer(DelegatingLexer):
     """
@@ -720,7 +718,6 @@ class PythonConsoleLexer(DelegatingLexer):
             def __init__(self, **options):
                 super().__init__(pylexer, _PythonConsoleLexerBase, Other.Code, **options)
         super().__init__(tblexer, _ReplaceInnerCode, Other.Traceback, **options)
-
 
 class PythonTracebackLexer(RegexLexer):
     """
@@ -854,16 +851,16 @@ class CythonLexer(RegexLexer):
              bygroups(Punctuation, Keyword.Type, Punctuation)),
             (r'!=|==|<<|>>|[-~+/*%=<>&^|.?]', Operator),
             (r'(from)(\d+)(<=)(\s+)(<)(\d+)(:)',
-             bygroups(Keyword, Number.Integer, Operator, Whitespace, Operator,
+             bygroups(Keyword, Number.Integer, Operator, Name, Operator,
                       Name, Punctuation)),
             include('keywords'),
-            (r'(def|property)(\s+)', bygroups(Keyword, Whitespace), 'funcname'),
-            (r'(cp?def)(\s+)', bygroups(Keyword, Whitespace), 'cdef'),
+            (r'(def|property)(\s+)', bygroups(Keyword, Text), 'funcname'),
+            (r'(cp?def)(\s+)', bygroups(Keyword, Text), 'cdef'),
             # (should actually start a block with only cdefs)
             (r'(cdef)(:)', bygroups(Keyword, Punctuation)),
-            (r'(class|struct)(\s+)', bygroups(Keyword, Whitespace), 'classname'),
-            (r'(from)(\s+)', bygroups(Keyword, Whitespace), 'fromimport'),
-            (r'(c?import)(\s+)', bygroups(Keyword, Whitespace), 'import'),
+            (r'(class|struct)(\s+)', bygroups(Keyword, Text), 'classname'),
+            (r'(from)(\s+)', bygroups(Keyword, Text), 'fromimport'),
+            (r'(c?import)(\s+)', bygroups(Keyword, Text), 'import'),
             include('builtins'),
             include('backtick'),
             ('(?:[rR]|[uU][rR]|[rR][uU])"""', String, 'tdqs'),
@@ -941,9 +938,9 @@ class CythonLexer(RegexLexer):
             (r'(public|readonly|extern|api|inline)\b', Keyword.Reserved),
             (r'(struct|enum|union|class)\b', Keyword),
             (r'([a-zA-Z_]\w*)(\s*)(?=[(:#=]|$)',
-             bygroups(Name.Function, Whitespace), '#pop'),
+             bygroups(Name.Function, Text), '#pop'),
             (r'([a-zA-Z_]\w*)(\s*)(,)',
-             bygroups(Name.Function, Whitespace, Punctuation)),
+             bygroups(Name.Function, Text, Punctuation)),
             (r'from\b', Keyword, '#pop'),
             (r'as\b', Keyword),
             (r':', Punctuation, '#pop'),
@@ -955,13 +952,13 @@ class CythonLexer(RegexLexer):
             (r'[a-zA-Z_]\w*', Name.Class, '#pop')
         ],
         'import': [
-            (r'(\s+)(as)(\s+)', bygroups(Whitespace, Keyword, Whitespace)),
+            (r'(\s+)(as)(\s+)', bygroups(Text, Keyword, Text)),
             (r'[a-zA-Z_][\w.]*', Name.Namespace),
-            (r'(\s*)(,)(\s*)', bygroups(Whitespace, Operator, Whitespace)),
+            (r'(\s*)(,)(\s*)', bygroups(Text, Operator, Text)),
             default('#pop')  # all else: go back
         ],
         'fromimport': [
-            (r'(\s+)(c?import)\b', bygroups(Whitespace, Keyword), '#pop'),
+            (r'(\s+)(c?import)\b', bygroups(Text, Keyword), '#pop'),
             (r'[a-zA-Z_.][\w.]*', Name.Namespace),
             # ``cdef foo from "header"``, or ``for foo from 0 < i < 10``
             default('#pop'),

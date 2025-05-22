@@ -27,9 +27,6 @@ protected:
     ui64 Generation = 0;
     bool Running = false;
 
-    ui64 CounterDataErasureOk = 0;
-    ui64 CounterDataErasureTimeout = 0;
-
 public:
     TDataErasureManager(TSchemeShard* const schemeShard);
 

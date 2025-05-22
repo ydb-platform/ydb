@@ -58,8 +58,7 @@ public:
             size += i.GetBlobId().BlobSize();
         }
 
-        return TStringBuilder() << "size=" << size << ";count=" << WriteTasks.size() << ";actions=" << sb << ";waiting=" << WaitingActions.size()
-                                << ";";
+        return TStringBuilder() << "size=" << size << ";count=" << WriteTasks.size() << ";actions=" << sb << ";";
     }
 
     void Abort(const TString& reason) {

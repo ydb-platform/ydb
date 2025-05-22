@@ -1791,7 +1791,7 @@ public:
     void operator=(const TTempBlockWriter&) = delete;
 
     std::pair<char*, char*> NextEmptyBlock() override {
-        auto newPage = SanitizerMarkValid(Pool_.GetPage(), TAlignedPagePool::POOL_PAGE_SIZE);
+        auto newPage = Pool_.GetPage();
         auto header = (TPageHeader*)newPage;
         header->Avail_ = 0;
         header->Next_ = &Dummy_;

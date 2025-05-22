@@ -16,7 +16,7 @@ using namespace NYson;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constinit const auto Logger = ApiLogger;
+static constexpr auto& Logger = ApiLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -51,7 +51,7 @@ TFuture<std::optional<std::string>> TClusterAwareClientBase::GetClusterName(bool
 TFuture<std::optional<std::string>> TClusterAwareClientBase::FetchClusterNameFromMasterCache()
 {
     TGetNodeOptions options;
-    options.ReadFrom = EMasterChannelKind::Cache;
+    options.ReadFrom = EMasterChannelKind::MasterCache;
 
     return GetNode(ClusterNamePath, options).Apply(
         BIND([] (const TErrorOr<TYsonString>& clusterNameYsonOrError) -> std::optional<std::string> {

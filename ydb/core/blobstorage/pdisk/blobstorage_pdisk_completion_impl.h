@@ -83,7 +83,8 @@ public:
 
     TCompletionChunkWrite(const TActorId &recipient, TEvChunkWriteResult *event,
             TPDiskMon *mon, ui32 pdiskId, NHPTimer::STime startTime, size_t sizeBytes,
-            ui8 priorityClass, std::function<void()> onDestroy, TReqId reqId, NWilson::TSpan&& span)
+            ui8 priorityClass, std::function<void()> onDestroy, TReqId reqId,
+            NWilson::TSpan&& span)
         : Recipient(recipient)
         , Event(event)
         , Mon(mon)
@@ -146,7 +147,7 @@ public:
     }
 
     void Exec(TActorSystem *actorSystem) override {
-        Span.Event("PDisk.CompletionChunkWrite.Exec");
+        auto execSpan = Span.CreateChild(TWilson::PDiskDetailed, "PDisk.CompletionChunkWrite.Exec");
         double responseTimeMs = HPMilliSecondsFloat(HPNow() - StartTime);
         STLOGX(*actorSystem, PRI_DEBUG, BS_PDISK, BPD01, "TCompletionChunkWrite::Exec",
                 (DiskId, PDiskId),
@@ -164,6 +165,8 @@ public:
         if (Mon) {
             Mon->GetWriteCounter(PriorityClass)->CountResponse();
         }
+        execSpan.EndOk();
+        Span.EndOk();
         delete this;
     }
 
@@ -222,7 +225,7 @@ class TCompletionChunkRead : public TCompletionAction {
     const ui64 DoubleFreeCanary;
 public:
     TCompletionChunkRead(TPDisk *pDisk, TIntrusivePtr<TChunkRead> &read, std::function<void()> onDestroy,
-            ui64 chunkNonce);
+            ui64 chunkNonce, NWilson::TSpan&& span);
     void Exec(TActorSystem *actorSystem) override;
     ~TCompletionChunkRead();
     void ReplyError(TActorSystem *actorSystem, TString reason);
@@ -253,7 +256,7 @@ public:
 
     void Release(TActorSystem *actorSystem) override {
         ReplyError(actorSystem, "TCompletionChunkRead is released");
-        Read->Span.EndError("TCompletionChunkRead is released");
+        Span.EndError("release");
     }
 };
 
@@ -271,7 +274,8 @@ class TCompletionChunkReadPart : public TCompletionAction {
     NWilson::TSpan Span;
 public:
     TCompletionChunkReadPart(TPDisk *pDisk, TIntrusivePtr<TChunkRead> &read, ui64 rawReadSize, ui64 payloadReadSize,
-            ui64 commonBufferOffset, TCompletionChunkRead *cumulativeCompletion, bool isTheLastPart);
+            ui64 commonBufferOffset, TCompletionChunkRead *cumulativeCompletion, bool isTheLastPart,
+            NWilson::TSpan&& span);
 
 
     bool CanHandleResult() const override {

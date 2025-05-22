@@ -63,7 +63,7 @@ void ConsoleReporter::PrintHeader(const Run& run) {
       FormatString("%-*s %13s %15s %12s", static_cast<int>(name_field_width_),
                    "Benchmark", "Time", "CPU", "Iterations");
   if (!run.counters.empty()) {
-    if ((output_options_ & OO_Tabular) != 0) {
+    if (output_options_ & OO_Tabular) {
       for (auto const& c : run.counters) {
         str += FormatString(" %10s", c.first.c_str());
       }
@@ -83,7 +83,7 @@ void ConsoleReporter::ReportRuns(const std::vector<Run>& reports) {
     bool print_header = !printed_header_;
     // --- or if the format is tabular and this run
     //     has different fields from the prev header
-    print_header |= ((output_options_ & OO_Tabular) != 0) &&
+    print_header |= (output_options_ & OO_Tabular) &&
                     (!internal::SameNames(run.counters, prev_counters_));
     if (print_header) {
       printed_header_ = true;
@@ -97,8 +97,8 @@ void ConsoleReporter::ReportRuns(const std::vector<Run>& reports) {
   }
 }
 
-static void IgnoreColorPrint(std::ostream& out, LogColor /*unused*/,
-                             const char* fmt, ...) {
+static void IgnoreColorPrint(std::ostream& out, LogColor, const char* fmt,
+                             ...) {
   va_list args;
   va_start(args, fmt);
   out << FormatString(fmt, args);
@@ -131,7 +131,7 @@ BENCHMARK_EXPORT
 void ConsoleReporter::PrintRunData(const Run& result) {
   typedef void(PrinterFn)(std::ostream&, LogColor, const char*, ...);
   auto& Out = GetOutputStream();
-  PrinterFn* printer = (output_options_ & OO_Color) != 0
+  PrinterFn* printer = (output_options_ & OO_Color)
                            ? static_cast<PrinterFn*>(ColorPrintf)
                            : IgnoreColorPrint;
   auto name_color =
@@ -144,8 +144,7 @@ void ConsoleReporter::PrintRunData(const Run& result) {
             result.skip_message.c_str());
     printer(Out, COLOR_DEFAULT, "\n");
     return;
-  }
-  if (internal::SkippedWithMessage == result.skipped) {
+  } else if (internal::SkippedWithMessage == result.skipped) {
     printer(Out, COLOR_WHITE, "SKIPPED: \'%s\'", result.skip_message.c_str());
     printer(Out, COLOR_DEFAULT, "\n");
     return;
@@ -179,9 +178,9 @@ void ConsoleReporter::PrintRunData(const Run& result) {
     printer(Out, COLOR_CYAN, "%10lld", result.iterations);
   }
 
-  for (const auto& c : result.counters) {
+  for (auto& c : result.counters) {
     const std::size_t cNameLen =
-        std::max(static_cast<std::size_t>(10), c.first.length());
+        std::max(std::string::size_type(10), c.first.length());
     std::string s;
     const char* unit = "";
     if (result.run_type == Run::RT_Aggregate &&
@@ -190,11 +189,10 @@ void ConsoleReporter::PrintRunData(const Run& result) {
       unit = "%";
     } else {
       s = HumanReadableNumber(c.second.value, c.second.oneK);
-      if ((c.second.flags & Counter::kIsRate) != 0) {
-        unit = (c.second.flags & Counter::kInvert) != 0 ? "s" : "/s";
-      }
+      if (c.second.flags & Counter::kIsRate)
+        unit = (c.second.flags & Counter::kInvert) ? "s" : "/s";
     }
-    if ((output_options_ & OO_Tabular) != 0) {
+    if (output_options_ & OO_Tabular) {
       printer(Out, COLOR_DEFAULT, " %*s%s", cNameLen - strlen(unit), s.c_str(),
               unit);
     } else {

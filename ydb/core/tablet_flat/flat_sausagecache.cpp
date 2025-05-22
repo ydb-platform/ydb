@@ -15,6 +15,7 @@ TPrivatePageCache::TPage::TPage(size_t size, TPageId pageId, TInfo* info)
 TPrivatePageCache::TInfo::TInfo(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection)
     : Id(pageCollection->Label())
     , PageCollection(std::move(pageCollection))
+    , Users(0)
 {
     PageMap.resize(PageCollection->Total());
 }
@@ -22,6 +23,7 @@ TPrivatePageCache::TInfo::TInfo(TIntrusiveConstPtr<NPageCollection::IPageCollect
 TPrivatePageCache::TInfo::TInfo(const TInfo &info)
     : Id(info.Id)
     , PageCollection(info.PageCollection)
+    , Users(info.Users)
 {
     PageMap.resize(info.PageMap.size());
     for (const auto& kv : info.PageMap) {
@@ -61,6 +63,8 @@ void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) {
         ToTouchShared[page->Info->Id].insert(page->Id);
         Y_DEBUG_ABORT_UNLESS(!page->IsUnnecessary());
     }
+
+    ++info->Users;
 }
 
 TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ForgetPageCollection(TIntrusivePtr<TInfo> info) {
@@ -91,28 +95,48 @@ TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ForgetPageCollection(
         }
     }
 
-    // Completely forget page collection
-    for (const auto& kv : info->PageMap) {
-        auto* page = kv.second.Get();
-        Y_DEBUG_ABORT_UNLESS(page);
+    UnlockPageCollection(info->Id);
+
+    return ret;
+}
+
+void TPrivatePageCache::LockPageCollection(TLogoBlobID id) {
+    auto it = PageCollections.find(id);
+    Y_ENSURE(it != PageCollections.end(), "trying to lock unknown page collection. logic flaw?");
+    ++it->second->Users;
+}
+
+bool TPrivatePageCache::UnlockPageCollection(TLogoBlobID id) {
+    auto it = PageCollections.find(id);
+    Y_ENSURE(it != PageCollections.end(), "trying to unlock unknown page collection. logic flaw?");
+    TIntrusivePtr<TInfo> info = it->second;
+
+    --info->Users;
+
+    // Completely forget page collection if no users remain.
+    if (!info->Users) {
+        for (const auto& kv : info->PageMap) {
+            auto* page = kv.second.Get();
+            Y_DEBUG_ABORT_UNLESS(page);
 
             Y_ENSURE(!page->WaitQueue, "non-empty wait queue in forgotten page.");
             Y_ENSURE(!page->PinPad, "non-empty pin pad in forgotten page.");
 
-        if (page->SharedBody)
-            Stats.TotalSharedBody -= page->Size;
-        if (page->PinnedBody)
-            Stats.TotalPinnedBody -= page->Size;
-        if (page->PinnedBody && !page->SharedBody)
-            Stats.TotalExclusive -= page->Size;
+            if (page->SharedBody)
+                Stats.TotalSharedBody -= page->Size;
+            if (page->PinnedBody)
+                Stats.TotalPinnedBody -= page->Size;
+            if (page->PinnedBody && !page->SharedBody)
+                Stats.TotalExclusive -= page->Size;
+        }
+
+        info->PageMap.clear();
+        PageCollections.erase(it);
+        ToTouchShared.erase(id);
+        --Stats.TotalCollections;
     }
 
-    info->PageMap.clear();
-    PageCollections.erase(info->Id);
-    ToTouchShared.erase(info->Id);
-    --Stats.TotalCollections;
-
-    return ret;
+    return !info->Users;
 }
 
 TPrivatePageCache::TInfo* TPrivatePageCache::Info(TLogoBlobID id) {

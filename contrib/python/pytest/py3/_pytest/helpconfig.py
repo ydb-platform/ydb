@@ -1,19 +1,17 @@
 """Version info, help messages, tracing configuration."""
-
-from argparse import Action
 import os
 import sys
-from typing import Generator
+from argparse import Action
 from typing import List
 from typing import Optional
 from typing import Union
 
+import pytest
 from _pytest.config import Config
 from _pytest.config import ExitCode
 from _pytest.config import PrintHelp
 from _pytest.config.argparsing import Parser
 from _pytest.terminal import TerminalReporter
-import pytest
 
 
 class HelpAction(Action):
@@ -100,9 +98,10 @@ def pytest_addoption(parser: Parser) -> None:
     )
 
 
-@pytest.hookimpl(wrapper=True)
-def pytest_cmdline_parse() -> Generator[None, Config, Config]:
-    config = yield
+@pytest.hookimpl(hookwrapper=True)
+def pytest_cmdline_parse():
+    outcome = yield
+    config: Config = outcome.get_result()
 
     if config.option.debug:
         # --debug | --debug <file.log> was provided.
@@ -130,13 +129,13 @@ def pytest_cmdline_parse() -> Generator[None, Config, Config]:
 
         config.add_cleanup(unset_tracing)
 
-    return config
-
 
 def showversion(config: Config) -> None:
     if config.option.version > 1:
         sys.stdout.write(
-            f"This is pytest version {pytest.__version__}, imported from {pytest.__file__}\n"
+            "This is pytest version {}, imported from {}\n".format(
+                pytest.__version__, pytest.__file__
+            )
         )
         plugininfo = getpluginversioninfo(config)
         if plugininfo:

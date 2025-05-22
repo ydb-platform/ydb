@@ -99,7 +99,6 @@ namespace NKikimr {
             }
             ctx.Send(*SkeletonFrontIDPtr, ev.release());
             // send VDisk's metric to NodeWarden
-            const bool enableThrottlingReport = AppData()->FeatureFlags.GetEnableThrottlingReport();
             ctx.Send(NodeWardenServiceId,
                      new TEvBlobStorage::TEvControllerUpdateDiskStatus(
                          SelfVDiskId,
@@ -110,8 +109,8 @@ namespace NKikimr {
                          state,
                          replicated,
                          outOfSpaceFlags,
-                         enableThrottlingReport ? std::make_optional(OverloadHandler ? OverloadHandler->IsThrottling() : false) : std::nullopt,
-                         enableThrottlingReport ? std::make_optional(OverloadHandler ? OverloadHandler->GetThrottlingRate() : 0) : std::nullopt));
+                         OverloadHandler ? OverloadHandler->IsThrottling() : false,
+                         OverloadHandler ? OverloadHandler->GetThrottlingRate() : 0));
             // repeat later
             ctx.Schedule(Config->WhiteboardUpdateInterval, new TEvTimeToUpdateWhiteboard());
         }

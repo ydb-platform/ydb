@@ -10,8 +10,6 @@
 #include <yql/essentials/minikql/mkql_utils.h>
 #include <yql/essentials/utils/yql_panic.h>
 
-#include <library/cpp/containers/stack_array/stack_array.h>
-
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -137,7 +135,6 @@ public:
             TString&& typeConfig,
             NUdf::TSourcePosition pos,
             IComputationNode* runConfigNode,
-            ui32 runConfigArgs,
             const TCallableType* callableType,
             TType* userType)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
@@ -145,7 +142,6 @@ public:
         , TypeConfig(std::move(typeConfig))
         , Pos(pos)
         , RunConfigNode(runConfigNode)
-        , RunConfigArgs(runConfigArgs)
         , CallableType(callableType)
         , UserType(userType)
         , UdfIndex(mutables.CurValueIndex++)
@@ -158,9 +154,8 @@ public:
         if (!udf.HasValue()) {
             MakeUdf(ctx, udf);
         }
-        NStackArray::TStackArray<NUdf::TUnboxedValue> args(ALLOC_ON_STACK(NUdf::TUnboxedValue, RunConfigArgs));
-        args[0] = RunConfigNode->GetValue(ctx);
-        auto callable = udf.Run(ctx.Builder, args.data());
+        const auto runConfig = RunConfigNode->GetValue(ctx);
+        auto callable = udf.Run(ctx.Builder, &runConfig);
         Wrap(callable);
         return callable;
     }
@@ -168,7 +163,6 @@ public:
     void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
 
-        const auto indexType = Type::getInt32Ty(context);
         const auto valueType = Type::getInt128Ty(context);
 
         const auto udfPtr = GetElementPtrInst::CreateInBounds(valueType, ctx.GetMutables(), {ConstantInt::get(Type::getInt32Ty(context), UdfIndex)}, "udf_ptr", block);
@@ -191,25 +185,13 @@ public:
 
         block = main;
 
-        const auto argsType = ArrayType::get(valueType, RunConfigArgs);
-        const auto args = new AllocaInst(argsType, 0U, "args", block);
-        const auto zero = ConstantInt::get(indexType, 0);
-        Value* runConfigValue;
-        for (ui32 i = 0; i < RunConfigArgs; i++) {
-            const auto argIndex = ConstantInt::get(indexType, i);
-            const auto argSlot = GetElementPtrInst::CreateInBounds(argsType, args, {zero, argIndex}, "arg", block);
-            if (i == 0) {
-                GetNodeValue(argSlot, RunConfigNode, ctx, block);
-                runConfigValue = new LoadInst(valueType, argSlot, "runconfig", block);
-            } else {
-                new StoreInst(ConstantInt::get(valueType, 0U), argSlot, block);
-            }
-        }
+        GetNodeValue(pointer, RunConfigNode, ctx, block);
+        const auto conf = new LoadInst(valueType, pointer, "conf", block);
         const auto udf = new LoadInst(valueType, udfPtr, "udf", block);
 
-        CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Run>(pointer, udf, ctx.Codegen, block, ctx.GetBuilder(), args);
+        CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Run>(pointer, udf, ctx.Codegen, block, ctx.GetBuilder(), pointer);
 
-        ValueUnRef(RunConfigNode->GetRepresentation(), runConfigValue, ctx, block);
+        ValueUnRef(RunConfigNode->GetRepresentation(), conf, ctx, block);
 
         const auto wrap = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TUdfWrapper::Wrap>());
         const auto funType = FunctionType::get(Type::getVoidTy(context), {self->getType(), pointer->getType()}, false);
@@ -249,7 +231,6 @@ private:
     const TString TypeConfig;
     const NUdf::TSourcePosition Pos;
     IComputationNode* const RunConfigNode;
-    const ui32 RunConfigArgs;
     const TCallableType* CallableType;
     TType* const UserType;
     const ui32 UdfIndex;
@@ -317,65 +298,6 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
             << status.GetError()).c_str());
     }
 
-    const auto runConfigFuncType = funcInfo.RunConfigType;
-    const auto runConfigNodeType = runCfgNode.GetStaticType();
-
-    if (!runConfigFuncType->IsSameType(*runConfigNodeType)) {
-        // It's only legal, when the compiled UDF declares its
-        // signature using run config at compilation phase, but then
-        // omits it in favor to function currying at execution phase.
-        if (!runConfigFuncType->IsVoid()) {
-            TString diff = TStringBuilder()
-                << "run config type mismatch, expected: "
-                << PrintNode((runConfigNodeType), true)
-                << ", actual: "
-                << PrintNode(runConfigFuncType, true);
-            UdfTerminate((TStringBuilder() << pos
-                                           << " UDF Function '"
-                                           << funcName
-                                           << "' "
-                                           << TruncateTypeDiff(diff)).c_str());
-        }
-
-        // If so, check the following invariants:
-        // * The first argument of the head function in the sequence
-        //   of the curried functions has to be the same as the
-        //   run config type.
-        // * The type of the resulting callable has to be the same
-        //   as the function type.
-        const auto firstArgType = funcInfo.FunctionType->GetArgumentType(0);
-        if (!runConfigNodeType->IsSameType(*firstArgType)) {
-            TString diff = TStringBuilder()
-                << "type mismatch, expected run config type: "
-                << PrintNode(runConfigNodeType, true)
-                << ", actual: "
-                << PrintNode(firstArgType, true);
-            UdfTerminate((TStringBuilder() << pos
-                                           << " Udf Function '"
-                                           << funcName
-                                           << "' "
-                                           << TruncateTypeDiff(diff)).c_str());
-        }
-        const auto callableFuncType = funcInfo.FunctionType->GetReturnType();
-        const auto callableNodeType = callable.GetType()->GetReturnType();
-        if (!callableNodeType->IsSameType(*callableFuncType)) {
-            TString diff = TStringBuilder()
-                << "type mismatch, expected return type: "
-                << PrintNode(callableNodeType, true)
-                << ", actual: "
-                << PrintNode(callableFuncType, true);
-            UdfTerminate((TStringBuilder() << pos
-                                           << " Udf Function '"
-                                           << funcName
-                                           << "' "
-                                           << TruncateTypeDiff(diff)).c_str());
-        }
-
-        const auto runConfigCompNode = LocateNode(ctx.NodeLocator, *runCfgNode.GetNode());
-        const auto runConfigArgs = funcInfo.FunctionType->GetArgumentsCount();
-        return CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, runConfigCompNode, runConfigArgs, funcInfo.FunctionType, userType);
-    }
-
     if (!funcInfo.FunctionType->IsConvertableTo(*callable.GetType()->GetReturnType(), true)) {
         TString diff = TStringBuilder() << "type mismatch, expected return type: " << PrintNode(callable.GetType()->GetReturnType(), true) <<
                 ", actual:" << PrintNode(funcInfo.FunctionType, true);
@@ -386,7 +308,14 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
         UdfTerminate((TStringBuilder() << pos << " UDF implementation is not set for function " << funcName).c_str());
     }
 
-    if (runConfigFuncType->IsVoid()) {
+    const auto runConfigType = funcInfo.RunConfigType;
+    if (!runConfigType->IsSameType(*runCfgNode.GetStaticType())) {
+        TString diff = TStringBuilder() << "run config type mismatch, expected: " << PrintNode(runCfgNode.GetStaticType(), true) <<
+                ", actual:" << PrintNode(runConfigType, true);
+        UdfTerminate((TStringBuilder() << pos << " UDF Function '" << funcName << "' " << TruncateTypeDiff(diff)).c_str());
+    }
+
+    if (runConfigType->IsVoid()) {
         if (ctx.ValidateMode == NUdf::EValidateMode::None && funcInfo.ModuleIR && funcInfo.IRFunctionName) {
             return new TUdfRunCodegeneratorNode(
                 ctx.Mutables, std::move(funcName), std::move(typeConfig), pos, funcInfo.FunctionType, userType,
@@ -397,7 +326,7 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
     }
 
     const auto runCfgCompNode = LocateNode(ctx.NodeLocator, *runCfgNode.GetNode());
-    return CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, runCfgCompNode, 1U, funcInfo.FunctionType, userType);
+    return CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, runCfgCompNode, funcInfo.FunctionType, userType);
 }
 
 IComputationNode* WrapScriptUdf(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
@@ -446,7 +375,7 @@ IComputationNode* WrapScriptUdf(TCallable& callable, const TComputationNodeFacto
     const auto funcTypeInfo = static_cast<TCallableType*>(callableResultType);
 
     const auto programCompNode = LocateNode(ctx.NodeLocator, *programNode.GetNode());
-    return CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, programCompNode, 1U, funcTypeInfo, userType);
+    return CreateUdfWrapper<false>(ctx, std::move(funcName), std::move(typeConfig), pos, programCompNode, funcTypeInfo, userType);
 }
 
 }

@@ -1,8 +1,4 @@
-PY2_PROGRAM(ipython)
-
-VERSION(Service-proxy-version)
-
-LICENSE(BSD-3-Clause)
+PROGRAM(ipython)
 
 PEERDIR(
     contrib/python/ipython

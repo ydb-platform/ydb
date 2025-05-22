@@ -8,6 +8,7 @@ import shlex
 import sys
 from functools import reduce
 
+import six
 import ymake
 
 import _common
@@ -100,7 +101,7 @@ def format_recipes(data: str | None) -> str:
 
 def prepare_recipes(data: str | None) -> bytes:
     formatted = format_recipes(data)
-    return base64.b64encode(formatted.encode('utf-8'))
+    return base64.b64encode(six.ensure_binary(formatted))
 
 
 def prepare_env(data):
@@ -158,7 +159,7 @@ def _get_external_resources_from_canon_data(data):
             if resource:
                 res.add(resource)
         else:
-            for k, v in data.items():
+            for k, v in six.iteritems(data):
                 res.update(_get_external_resources_from_canon_data(v))
     elif isinstance(data, list):
         for e in data:
@@ -992,27 +993,16 @@ class DockerImage:
                         link
                     )
             else:
-                msg = 'Invalid docker image: {}. Image should be provided in format <tag>=<link>'.format(img)
+                msg = 'Invalid docker image: {}. Image should be provided in format <link>=<tag>'.format(img)
             if msg:
                 ymake.report_configure_error(msg)
                 raise DartValueError(msg)
 
-    @staticmethod
-    def unify_images(images):
-        res = []
-        for image in images:
-            if not image.startswith('docker://'):
-                alias, url = image.split('=', 1)
-                image = url + "=" + alias
-            res.append(image)
-        return res
-
     @classmethod
     def value(cls, unit, flat_args, spec_args):
-        images = get_values_list(unit, 'DOCKER_IMAGES_VALUE')
+        raw_value = get_values_list(unit, 'DOCKER_IMAGES_VALUE')
+        images = sorted(raw_value)
         if images:
-            images = cls.unify_images(images)
-            images = sorted(images)
             cls._validate(images)
         return {cls.KEY: serialize_list(images)}
 
@@ -1132,16 +1122,13 @@ class TestFiles:
         'maps/renderer/libs/hd3d',
         'maps/renderer/libs/image',
         'maps/renderer/libs/kv_storage',
-        'maps/renderer/libs/mapreduce',
         'maps/renderer/libs/marking',
         'maps/renderer/libs/mesh',
         'maps/renderer/libs/serializers',
         'maps/renderer/libs/style2',
         'maps/renderer/libs/style2_layer_bundle',
         'maps/renderer/libs/terrain',
-        'maps/renderer/libs/threading',
         'maps/renderer/libs/vec',
-        'maps/renderer/libs/yt',
         'maps/renderer/tilemill',
         'maps/renderer/tools/fontograph',
         'maps/renderer/tools/terrain_cli',
@@ -1245,9 +1232,7 @@ class TestFiles:
             lint_name = LintName.value(unit, flat_args, spec_args)[LintName.KEY]
             message = 'No files to lint for {}'.format(lint_name)
             raise DartValueError(message)
-        # XXX: we may have duplicated files because of macroses used to gather extra files for linting
-        # including those that use globs
-        test_files = serialize_list(_common.sort_uniq(test_files))
+        test_files = serialize_list(test_files)
         return {cls.KEY: test_files, cls.KEY2: test_files}
 
     @classmethod
@@ -1444,7 +1429,7 @@ class SystemProperties:
             ymake.report_configure_error(error_mgs)
             raise DartValueError()
 
-        props = base64.b64encode(json.dumps(props).encode('utf-8'))
+        props = base64.b64encode(six.ensure_binary(json.dumps(props)))
         return {cls.KEY: props}
 
 

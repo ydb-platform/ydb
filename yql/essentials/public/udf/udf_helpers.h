@@ -426,7 +426,7 @@ public:
             bool found = BuildFunctionTypeInfoImpl<TUdfs...>(name, userType, typeConfig, flags, builder);
             if (!found) {
                 TStringBuilder sb;
-                sb << "Unknown function: " << TStringBuf(name);
+                sb << "Unknown function: " << name.Data();
                 builder.SetError(sb);
             }
         } catch (const std::exception&) {

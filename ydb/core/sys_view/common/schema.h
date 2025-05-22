@@ -2,7 +2,6 @@
 
 #include "path.h"
 
-#include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tx/locks/sys_tables.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
@@ -321,8 +320,6 @@ struct Schema : NIceDb::Schema {
         struct PutUserDataLatency : Column<14, NScheme::NTypeIds::Interval> {};
         struct GetFastLatency : Column<15, NScheme::NTypeIds::Interval> {};
         struct LayoutCorrect : Column<16, NScheme::NTypeIds::Bool> {};
-        struct OperatingStatus : Column<17, NScheme::NTypeIds::Utf8> {};
-        struct ExpectedStatus : Column<18, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<GroupId>;
         using TColumns = TableColumns<
@@ -339,9 +336,7 @@ struct Schema : NIceDb::Schema {
             PutTabletLogLatency,
             PutUserDataLatency,
             GetFastLatency,
-            LayoutCorrect,
-            OperatingStatus,
-            ExpectedStatus>;
+            LayoutCorrect>;
     };
 
     struct StoragePools : Table<7> {
@@ -831,8 +826,6 @@ public:
     virtual bool IsSystemViewPath(const TVector<TString>& path, TSystemViewPath& sysViewPath) const = 0;
 
     virtual TMaybe<TSchema> GetSystemViewSchema(const TStringBuf viewName, ETarget target) const = 0;
-
-    virtual TMaybe<TSchema> GetSystemViewSchema(NKikimrSysView::ESysViewType viewType) const = 0;
 
     virtual bool IsSystemView(const TStringBuf viewName) const = 0;
 

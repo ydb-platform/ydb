@@ -1,4 +1,5 @@
-"""HTTP cache implementation."""
+"""HTTP cache implementation.
+"""
 
 import os
 from contextlib import contextmanager

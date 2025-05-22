@@ -24,7 +24,6 @@ CFLAGS(
 SRCS(
     ut_arrow.cpp
     ut_size_calcer.cpp
-    ut_splitter.cpp
 )
 
 END()

@@ -2,6 +2,8 @@ import json
 import logging
 import os
 
+from six import iteritems
+
 from .utils import build_pj_path
 
 
@@ -100,7 +102,7 @@ class PackageJson(object):
             if not deps:
                 continue
 
-            for name, spec in deps.items():
+            for name, spec in iteritems(deps):
                 yield name, spec
 
     def has_dependencies(self):

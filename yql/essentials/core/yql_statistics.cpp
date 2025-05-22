@@ -45,24 +45,6 @@ TString TOptimizerStatistics::ToString() const {
 std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) {
     os << "Type: " << ConvertToStatisticsTypeString(s.Type) << ", Nrows: " << s.Nrows
         << ", Ncols: " << s.Ncols << ", ByteSize: " << s.ByteSize << ", Cost: " << s.Cost;
-
-        os << ", Upper aliases: " << "[";
-    if (s.Aliases) {
-
-        std::string tmp;
-        for (const auto& c: *s.Aliases) {
-            tmp.append(c).append(", ");
-        }
-
-        if (!tmp.empty()) {
-            tmp.pop_back();
-            tmp.pop_back();
-        }
-        os << tmp;
-    }
-    os << "]";
-
-
     if (s.KeyColumns) {
         os << ", keys: ";
 
@@ -92,8 +74,6 @@ std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) 
         }
         os << "[" << tmp << "]";
     }
-    os << ", LogicalOrderings state: " << s.LogicalOrderings.GetState();
-
     os << ", Sel: " << s.Selectivity;
     os << ", Storage: " << ConvertToStatisticsTypeString(s.StorageType);
     if (s.SortColumns) {
@@ -117,7 +97,6 @@ std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) 
 
         os << tmp;
     }
-
     return os;
 }
 
@@ -140,15 +119,10 @@ TOptimizerStatistics::TOptimizerStatistics(
     , Ncols(ncols)
     , ByteSize(byteSize)
     , Cost(cost)
-    , Selectivity(1.0)
     , KeyColumns(keyColumns)
     , ColumnStatistics(columnMap)
-    , ShuffledByColumns(nullptr)
-    , SortColumns(nullptr)
     , StorageType(storageType)
     , Specific(std::move(specific))
-    , Labels(nullptr)
-    , LogicalOrderings()
 {
 }
 

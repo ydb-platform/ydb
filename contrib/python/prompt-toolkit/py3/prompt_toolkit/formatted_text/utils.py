@@ -89,7 +89,8 @@ def split_lines(
         parts = string.split("\n")
 
         for part in parts[:-1]:
-            line.append(cast(OneStyleAndTextTuple, (style, part, *mouse_handler)))
+            if part:
+                line.append(cast(OneStyleAndTextTuple, (style, part, *mouse_handler)))
             yield line
             line = []
 

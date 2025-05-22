@@ -87,13 +87,6 @@ std::vector<typename T::key_type> GetKeys(const T& collection, size_t sizeLimit)
 }
 
 template <class T>
-THashSet<typename T::key_type> GetKeySet(const T& collection, size_t sizeLimit)
-{
-    auto vec = GetKeys(collection, sizeLimit);
-    return THashSet<typename T::key_type>(vec.begin(), vec.end());
-}
-
-template <class T>
 std::vector<typename T::mapped_type> GetValues(const T& collection, size_t sizeLimit)
 {
     return GetIthsImpl<typename T::mapped_type>(

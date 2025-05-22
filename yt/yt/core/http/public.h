@@ -32,7 +32,7 @@ DECLARE_REFCOUNTED_CLASS(TSharedRefOutputStream)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using TContentEncoding = std::string;
+using TContentEncoding = TString;
 using TConnectionId = TGuid;
 using TRequestId = TGuid;
 

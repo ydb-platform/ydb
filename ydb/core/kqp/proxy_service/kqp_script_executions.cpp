@@ -2311,7 +2311,7 @@ private:
         }
 
         NJsonWriter::TBuf serializedSinks;
-        serializedSinks.WriteJsonValue(&value, false, PREC_NDIGITS, 17);
+        serializedSinks.WriteJsonValue(&value);
 
         return serializedSinks.Str();
     }
@@ -2327,7 +2327,7 @@ private:
         }
 
         NJsonWriter::TBuf serializedSecretNames;
-        serializedSecretNames.WriteJsonValue(&value, false, PREC_NDIGITS, 17);
+        serializedSecretNames.WriteJsonValue(&value);
 
         return serializedSecretNames.Str();
     }
@@ -2546,14 +2546,7 @@ public:
             Ydb::TableStats::QueryStats queryStats;
             NGRpcService::FillQueryStats(queryStats, *Request.QueryStats);
             NProtobufJson::Proto2Json(queryStats, statsJson, NProtobufJson::TProto2JsonConfig());
-            TStringStream statsStream;
-            NJson::WriteJson(&statsStream, &statsJson, {
-                .DoubleNDigits = 17,
-                .FloatToStringMode = PREC_NDIGITS,
-                .ValidateUtf8 = false,
-                .WriteNanAsString = true,
-            });
-            serializedStats = statsStream.Str();
+            serializedStats = NJson::WriteJson(statsJson);
         }
 
         std::optional<TString> ast;

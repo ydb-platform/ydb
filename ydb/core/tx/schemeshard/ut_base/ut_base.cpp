@@ -6674,7 +6674,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/PQGroup5", true), {
             NLs::CheckPartCount("PQGroup5", 2, 1, 2, 2),
-        });
+        });        
     }
 
     Y_UNIT_TEST(AlterPersQueueGroupWithKeySchema) {
@@ -9533,7 +9533,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         // case 2: add partition
         TestAlterSolomon(runtime, ++txId, "/MyRoot", R"(
             Name: "Solomon"
-            PartitionCount: 2
+            PartitionCount: 2    
             StorageConfig {
                 Channel {
                     PreferredPoolKind: "pool-kind-1"
@@ -10079,7 +10079,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(RejectSystemViewPath) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableSystemViews(true));
+        TTestEnv env(runtime, 4, true, &CreateFlatTxSchemeShard, true);
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot",

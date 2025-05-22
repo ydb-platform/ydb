@@ -7,7 +7,6 @@ PY_SRCS(
     create_table.py
     types_of_variables.py
     multicluster_test_base.py
-    vector_base.py
 )
 
 PEERDIR(

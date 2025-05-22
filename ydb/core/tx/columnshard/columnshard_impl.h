@@ -133,6 +133,7 @@ struct TSettings {
 
     static constexpr ui32 MAX_INDEXATIONS_TO_SKIP = 16;
     static constexpr TDuration GuaranteeIndexationInterval = TDuration::Seconds(10);
+    static constexpr TDuration DefaultPeriodicWakeupActivationPeriod = TDuration::Seconds(60);
     static constexpr TDuration DefaultStatsReportInterval = TDuration::Seconds(10);
     static constexpr i64 GuaranteeIndexationStartBytesLimit = (i64)5 * 1024 * 1024 * 1024;
 
@@ -351,7 +352,16 @@ public:
         return shift | Counter.Inc();
     }
 
-    using EOverloadStatus = EOverloadStatus;
+    enum class EOverloadStatus {
+        ShardTxInFly /* "shard_tx" */,
+        ShardWritesInFly /* "shard_writes" */,
+        ShardWritesSizeInFly /* "shard_writes_size" */,
+        InsertTable /* "insert_table" */,
+        OverloadMetadata /* "overload_metadata" */,
+        Disk /* "disk" */,
+        None /* "none" */,
+        OverloadCompaction /* "overload_compaction" */
+    };
 
     // For syslocks
     void IncCounter(NDataShard::ECumulativeCounters counter, ui64 num = 1) const {

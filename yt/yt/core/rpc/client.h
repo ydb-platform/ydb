@@ -9,7 +9,6 @@
 
 #include <yt/yt/core/compression/codec.h>
 
-#include <yt/yt/core/misc/memory_usage_tracker.h>
 #include <yt/yt/core/misc/property.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
@@ -18,6 +17,8 @@
 #include <yt/yt_proto/yt/core/rpc/proto/rpc.pb.h>
 
 #include <yt/yt/core/tracing/trace_context.h>
+
+#include <library/cpp/yt/memory/memory_usage_tracker.h>
 
 #include <library/cpp/yt/threading/spin_lock.h>
 
@@ -72,7 +73,7 @@ struct IClientRequest
     virtual const std::string& GetUserTag() const = 0;
     virtual void SetUserTag(const std::string& tag) = 0;
 
-    virtual void SetUserAgent(const std::string& userAgent) = 0;
+    virtual void SetUserAgent(const TString& userAgent) = 0;
 
     virtual bool GetRetry() const = 0;
     virtual void SetRetry(bool value) = 0;
@@ -186,7 +187,7 @@ public:
     const std::string& GetUserTag() const override;
     void SetUserTag(const std::string& tag) override;
 
-    void SetUserAgent(const std::string& userAgent) override;
+    void SetUserAgent(const TString& userAgent) override;
 
     bool GetRetry() const override;
     void SetRetry(bool value) override;
@@ -246,8 +247,8 @@ private:
     TAttachmentsOutputStreamPtr RequestAttachmentsStream_;
     TAttachmentsInputStreamPtr ResponseAttachmentsStream_;
 
-    std::string User_;
-    std::string UserTag_;
+    TString User_;
+    TString UserTag_;
 
     TWeakPtr<IClientRequestControl> RequestControl_;
 
@@ -337,7 +338,7 @@ public:
     //! Returns address of the response sender, as it was provided by the channel configuration (FQDN, IP address, etc).
     //! Empty if it is not supported by the underlying RPC stack or the OK response has not been received yet.
     //! Note: complex channels choose destination dynamically (hedging, roaming), so the address is not known beforehand.
-    const std::string& GetAddress() const;
+    const TString& GetAddress() const;
 
     const NProto::TResponseHeader& Header() const;
 
@@ -371,7 +372,7 @@ protected:
     const IInvokerPtr& GetInvoker();
 
 private:
-    std::string Address_;
+    TString Address_;
     NProto::TResponseHeader Header_;
     TSharedRefArray ResponseMessage_;
 

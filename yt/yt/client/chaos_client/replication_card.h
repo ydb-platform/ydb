@@ -102,12 +102,6 @@ inline constexpr auto MinimalFetchOptions = TReplicationCardFetchOptions{
     .IncludeHistory = true,
 };
 
-inline constexpr auto FetchOptionsWithProgress = TReplicationCardFetchOptions{
-    .IncludeCoordinators = true,
-    .IncludeProgress = true,
-    .IncludeHistory = true,
-};
-
 ////////////////////////////////////////////////////////////////////////////////
 
 void FormatValue(

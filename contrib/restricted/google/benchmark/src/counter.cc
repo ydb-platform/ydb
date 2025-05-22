@@ -20,20 +20,20 @@ namespace internal {
 double Finish(Counter const& c, IterationCount iterations, double cpu_time,
               double num_threads) {
   double v = c.value;
-  if ((c.flags & Counter::kIsRate) != 0) {
+  if (c.flags & Counter::kIsRate) {
     v /= cpu_time;
   }
-  if ((c.flags & Counter::kAvgThreads) != 0) {
+  if (c.flags & Counter::kAvgThreads) {
     v /= num_threads;
   }
-  if ((c.flags & Counter::kIsIterationInvariant) != 0) {
+  if (c.flags & Counter::kIsIterationInvariant) {
     v *= static_cast<double>(iterations);
   }
-  if ((c.flags & Counter::kAvgIterations) != 0) {
+  if (c.flags & Counter::kAvgIterations) {
     v /= static_cast<double>(iterations);
   }
 
-  if ((c.flags & Counter::kInvert) != 0) {  // Invert is *always* last.
+  if (c.flags & Counter::kInvert) {  // Invert is *always* last.
     v = 1.0 / v;
   }
   return v;
@@ -64,9 +64,7 @@ void Increment(UserCounters* l, UserCounters const& r) {
 }
 
 bool SameNames(UserCounters const& l, UserCounters const& r) {
-  if (&l == &r) {
-    return true;
-  }
+  if (&l == &r) return true;
   if (l.size() != r.size()) {
     return false;
   }

@@ -16,7 +16,7 @@ using namespace NYson;
 using namespace NYTree;
 
 //! Used only for YT_LOG_FATAL below.
-constinit const auto Logger = TableClientLogger;
+static constexpr auto& Logger = TableClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 

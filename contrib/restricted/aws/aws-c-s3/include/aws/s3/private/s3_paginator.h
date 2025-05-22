@@ -31,7 +31,8 @@ typedef int(aws_s3_next_http_message_fn)(
     void *user_data,
     struct aws_http_message **out_message);
 
-typedef int(aws_s3_on_result_node_encountered_fn)(struct aws_xml_node *node, void *user_data);
+typedef bool(
+    aws_s3_on_result_node_encountered_fn)(struct aws_xml_parser *parser, struct aws_xml_node *node, void *user_data);
 
 typedef void(aws_s3_on_page_finished_fn)(struct aws_s3_paginator *paginator, int error_code, void *user_data);
 
@@ -83,14 +84,14 @@ struct aws_s3_paginator_params {
  */
 struct aws_s3_paginated_operation_params {
     /**
-     * Name of the top level result node. Must not be empty.
+     * Name of the top level result node. Must not be NULL.
      */
-    struct aws_byte_cursor result_xml_node_name;
+    const struct aws_byte_cursor *result_xml_node_name;
 
     /**
-     * Name of the continuation token node. Must not be empty.
+     * Name of the continuation token node. Must not be NULL.
      */
-    struct aws_byte_cursor continuation_token_node_name;
+    const struct aws_byte_cursor *continuation_token_node_name;
 
     /**
      * Function to generate next message.

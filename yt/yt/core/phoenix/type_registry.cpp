@@ -14,7 +14,7 @@ namespace NYT::NPhoenix {
 
 namespace NDetail {
 
-constinit const auto Logger = PhoenixLogger;
+static constexpr auto& Logger = PhoenixLogger;
 
 class TTypeRegistry
     : public ITypeRegistry

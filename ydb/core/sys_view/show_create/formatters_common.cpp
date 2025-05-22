@@ -16,12 +16,4 @@ void EscapeBinary(const TString& str, TStringStream& stream) {
     NYql::EscapeBinaryAtom(str, '\'', &stream);
 }
 
-void EscapeValue(bool value, TStringStream& stream) {
-    if (value) {
-        EscapeName("true", stream);
-    } else {
-        EscapeName("false", stream);
-    }
-}
-
 }

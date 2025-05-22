@@ -15,7 +15,6 @@ To use this integration, install the following software:
     ```shell
     pip install -qU langchain-ydb
     ```
-
 - embedding model
 
     This tutorial uses `HuggingFaceEmbeddings`. To install this package, run the following command:

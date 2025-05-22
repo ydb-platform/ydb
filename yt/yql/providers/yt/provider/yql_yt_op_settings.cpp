@@ -425,6 +425,7 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
         case EYtSettingType::IgnoreNonExisting:
         case EYtSettingType::WarnNonExisting:
         case EYtSettingType::ForceTransform:
+        case EYtSettingType::SoftTransform:
         case EYtSettingType::CombineChunks:
         case EYtSettingType::WithQB:
         case EYtSettingType::Inline:
@@ -900,23 +901,6 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
                 if (!child.IsString()) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
                         << "Expected YSON list of strings"));
-                    return false;
-                }
-            }
-            break;
-        }
-        case EYtSettingType::SoftTransform: {
-            if (!EnsureTupleSize(*setting, 2, ctx)) {
-                return false;
-            }
-            TVector<TString> values;
-            if (!ValidateColumnSettings(setting->Tail(), ctx, values, false)) {
-                return false;
-            }
-            for (const auto& value: values) {
-                if (value != "column_groups" && value != "storage") {
-                    ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
-                        << "Unsupported value " << value));
                     return false;
                 }
             }

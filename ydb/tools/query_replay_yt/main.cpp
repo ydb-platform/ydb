@@ -235,7 +235,6 @@ static NYT::TTableSchema OutputSchema() {
 REGISTER_NAMED_MAPPER("Query replay mapper", TQueryReplayMapper);
 
 int main(int argc, const char** argv) {
-    NYT::TConfig::Get()->LogLevel = NYT::NLogLevel::Info;
     NYT::Initialize(argc, argv);
 
     TQueryReplayConfig config;
@@ -280,6 +279,7 @@ int main(int argc, const char** argv) {
     }
 
     auto client = NYT::CreateClient(config.Cluster);
+    NYT::SetLogger(NYT::CreateStdErrLogger(NYT::ILogger::ELevel::INFO));
 
     NYT::TMapOperationSpec spec;
     spec.AddInput<NYT::TNode>(config.SrcPath);

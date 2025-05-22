@@ -8,8 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
-    from typing import Literal
+    from typing import Iterator, Literal
 
 
 class PlatformDirsABC(ABC):  # noqa: PLR0904
@@ -18,7 +17,7 @@ class PlatformDirsABC(ABC):  # noqa: PLR0904
     def __init__(  # noqa: PLR0913, PLR0917
         self,
         appname: str | None = None,
-        appauthor: str | Literal[False] | None = None,
+        appauthor: str | None | Literal[False] = None,
         version: str | None = None,
         roaming: bool = False,  # noqa: FBT001, FBT002
         multipath: bool = False,  # noqa: FBT001, FBT002

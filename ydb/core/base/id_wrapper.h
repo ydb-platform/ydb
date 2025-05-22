@@ -7,6 +7,10 @@
 
 #include <google/protobuf/message.h>
 
+using TString = TBasicString<char>;
+
+class TGroupIdTag;
+
 template <typename T, typename Tag> class TIdWrapper {
 private:
     T Raw = {};
@@ -27,10 +31,10 @@ public:
 
     TString ToString() const { return TStringBuilder() << Raw; }
 
-    template<typename TProto>
-    void CopyToProto(TProto *message, void (TProto::*pfn)(T value)) {
-        std::invoke(pfn, message, Raw);
-    }
+    void CopyToProto(NProtoBuf::Message *message,
+                     void (NProtoBuf::Message::*pfn)(T value)) {
+        (message->*pfn)(*this);
+      }
 
     static constexpr TIdWrapper FromValue(T value) noexcept {
         TIdWrapper id;
@@ -39,8 +43,9 @@ public:
     }
 
     template <typename TType, typename TProto>
-    static constexpr TIdWrapper FromProto(const TType *message, TProto (TType::*pfn)() const) {
-        return FromValue(std::invoke(pfn, message));
+    static constexpr TIdWrapper FromProto(const TType *message,
+                                          TProto (TType::*pfn)() const) {
+        return FromValue((message->*pfn)());
     }
 
     static constexpr TIdWrapper Zero() noexcept { return TIdWrapper(); }

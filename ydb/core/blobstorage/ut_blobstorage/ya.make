@@ -16,7 +16,6 @@ ENDIF()
 SRCS(
     acceleration.cpp
     assimilation.cpp
-    backpressure.cpp
     block_race.cpp
     counting_events.cpp
     deadlines.cpp
@@ -67,7 +66,6 @@ RECURSE_FOR_TESTS(
     ut_balancing
     ut_blob_depot
     ut_blob_depot_fat
-    ut_check_integrity
     ut_donor
     ut_group_reconfiguration
     ut_huge

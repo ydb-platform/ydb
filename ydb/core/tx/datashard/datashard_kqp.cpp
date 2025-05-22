@@ -310,6 +310,16 @@ NTable::TColumn GetColumn(const TColumnMeta& columnMeta) {
     return NTable::TColumn(columnMeta.GetName(), columnMeta.GetId(), typeInfoMod.TypeInfo, typeInfoMod.TypeMod);
 }
 
+TVector<NTable::TColumn> GetColumns(const TReadOpMeta& readMeta) {
+    TVector<NTable::TColumn> columns;
+    columns.reserve(readMeta.GetColumns().size());
+
+    for (auto& column : readMeta.GetColumns()) {
+        columns.push_back(GetColumn(column));
+    }
+
+    return columns;
+}
 
 TVector<TKeyValidator::TColumnWriteMeta> GetColumnWrites(const TWriteOpMeta& writeMeta) {
     TVector<TKeyValidator::TColumnWriteMeta> writeColumns;
@@ -325,9 +335,14 @@ TVector<TKeyValidator::TColumnWriteMeta> GetColumnWrites(const TWriteOpMeta& wri
     return writeColumns;
 }
 
-void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const TUserTable* tableInfo, const NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta_TKeyRange& rangeKind, const TWriteOpMeta* writeMeta, const NScheme::TTypeRegistry& typeRegistry, const TActorContext& ctx, TKeyValidator& keyValidator)
+template <bool Read>
+void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const TUserTable* tableInfo, const NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta_TKeyRange& rangeKind, const TReadOpMeta* readMeta, const TWriteOpMeta* writeMeta, const NScheme::TTypeRegistry& typeRegistry, const TActorContext& ctx, TKeyValidator& keyValidator)
 {
-    Y_ENSURE(writeMeta);
+    if (Read) {
+        Y_ENSURE(readMeta);
+    } else {
+        Y_ENSURE(writeMeta);
+    }
 
     switch (rangeKind.Kind_case()) {
         case NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta_TKeyRange::kRanges: {
@@ -338,20 +353,28 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
                 TSerializedTableRange tableRange;
                 tableRange.Load(range);
 
-                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Table " << tableInfo->Path << ", shard: " << tabletId << ", task: " << taskId << ", " << "write range " << DebugPrintRange(tableInfo->KeyColumnTypes, tableRange.ToTableRange(), typeRegistry));
+                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Table " << tableInfo->Path << ", shard: " << tabletId << ", task: " << taskId << ", " << (Read ? "read range " : "write range ") << DebugPrintRange(tableInfo->KeyColumnTypes, tableRange.ToTableRange(), typeRegistry));
 
                 Y_DEBUG_ABORT_UNLESS(!(tableRange.To.GetCells().empty() && tableRange.ToInclusive));
 
-                keyValidator.AddWriteRange(tableId, tableRange.ToTableRange(), tableInfo->KeyColumnTypes, GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
+                if constexpr (Read) {
+                    keyValidator.AddReadRange(tableId, GetColumns(*readMeta), tableRange.ToTableRange(), tableInfo->KeyColumnTypes, readMeta->GetItemsLimit(), readMeta->GetReverse());
+                } else {
+                    keyValidator.AddWriteRange(tableId, tableRange.ToTableRange(), tableInfo->KeyColumnTypes, GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
+                }
             }
 
             for (auto& point : ranges.GetKeyPoints()) {
                 TSerializedTableRange tablePoint(point, point, true, true);
                 tablePoint.Point = true;
 
-                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Table " << tableInfo->Path << ", shard: " << tabletId << ", task: " << taskId << ", " << "write point " << DebugPrintPoint(tableInfo->KeyColumnTypes, tablePoint.From.GetCells(), typeRegistry));
+                LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Table " << tableInfo->Path << ", shard: " << tabletId << ", task: " << taskId << ", " << (Read ? "read point " : "write point ") << DebugPrintPoint(tableInfo->KeyColumnTypes, tablePoint.From.GetCells(), typeRegistry));
 
-                keyValidator.AddWriteRange(tableId, tablePoint.ToTableRange(), tableInfo->KeyColumnTypes, GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
+                if constexpr (Read) {
+                    keyValidator.AddReadRange(tableId, GetColumns(*readMeta), tablePoint.ToTableRange(), tableInfo->KeyColumnTypes, readMeta->GetItemsLimit(), readMeta->GetReverse());
+                } else {
+                    keyValidator.AddWriteRange(tableId, tablePoint.ToTableRange(), tableInfo->KeyColumnTypes, GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
+                }
             }
 
             break;
@@ -361,16 +384,26 @@ void KqpSetTxKeysImpl(ui64 tabletId, ui64 taskId, const TTableId& tableId, const
             TSerializedTableRange tableRange;
             tableRange.Load(rangeKind.GetFullRange());
 
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Table " << tableInfo->Path << ", shard: " << tabletId << ", task: " << taskId << ", " <<  "write range: FULL " << DebugPrintRange(tableInfo->KeyColumnTypes, tableRange.ToTableRange(), typeRegistry));
+            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Table " << tableInfo->Path << ", shard: " << tabletId << ", task: " << taskId << ", " << (Read ? "read range: FULL " : "write range: FULL ") << DebugPrintRange(tableInfo->KeyColumnTypes, tableRange.ToTableRange(), typeRegistry));
 
-            keyValidator.AddWriteRange(tableId, tableRange.ToTableRange(), tableInfo->KeyColumnTypes, GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
+            if constexpr (Read) {
+                keyValidator.AddReadRange(tableId, GetColumns(*readMeta), tableRange.ToTableRange(), tableInfo->KeyColumnTypes, readMeta->GetItemsLimit(), readMeta->GetReverse());
+            } else {
+                keyValidator.AddWriteRange(tableId, tableRange.ToTableRange(), tableInfo->KeyColumnTypes, GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
+            }
+
             break;
         }
 
         case NKikimrTxDataShard::TKqpTransaction_TDataTaskMeta_TKeyRange::KIND_NOT_SET: {
-            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Table " << tableInfo->Path << ", shard: " << tabletId << ", task: " << taskId << ", " << "write range: UNSPECIFIED");
+            LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Table " << tableInfo->Path << ", shard: " << tabletId << ", task: " << taskId << ", " << (Read ? "read range: UNSPECIFIED" : "write range: UNSPECIFIED"));
 
-            keyValidator.AddWriteRange(tableId, tableInfo->Range.ToTableRange(), tableInfo->KeyColumnTypes, GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
+            if constexpr (Read) {
+                keyValidator.AddReadRange(tableId, GetColumns(*readMeta), tableInfo->Range.ToTableRange(), tableInfo->KeyColumnTypes, readMeta->GetItemsLimit(), readMeta->GetReverse());
+            } else {
+                keyValidator.AddWriteRange(tableId, tableInfo->Range.ToTableRange(), tableInfo->KeyColumnTypes, GetColumnWrites(*writeMeta), writeMeta->GetIsPureEraseOp());
+            }
+
             break;
         }
     }
@@ -383,8 +416,12 @@ void KqpSetTxKeys(ui64 tabletId, ui64 taskId, const TUserTable* tableInfo, const
     auto& tableMeta = meta.GetTable();
     auto tableId = TTableId(tableMeta.GetTableId().GetOwnerId(), tableMeta.GetTableId().GetTableId(), tableMeta.GetSchemaVersion());
 
+    for (auto& read : meta.GetReads()) {
+        KqpSetTxKeysImpl<true>(tabletId, taskId, tableId, tableInfo, read.GetRange(), &read, nullptr, typeRegistry, ctx, keyValidator);
+    }
+
     if (meta.HasWrites()) {
-        KqpSetTxKeysImpl(tabletId, taskId, tableId, tableInfo, meta.GetWrites().GetRange(), &meta.GetWrites(), typeRegistry, ctx, keyValidator);
+        KqpSetTxKeysImpl<false>(tabletId, taskId, tableId, tableInfo, meta.GetWrites().GetRange(), nullptr, &meta.GetWrites(), typeRegistry, ctx, keyValidator);
     }
 }
 

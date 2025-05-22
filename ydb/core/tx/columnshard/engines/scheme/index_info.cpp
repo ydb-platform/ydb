@@ -18,12 +18,11 @@
 
 namespace NKikimr::NOlap {
 
-TConclusionStatus TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
+bool TIndexInfo::CheckCompatible(const TIndexInfo& other) const {
     if (!other.GetPrimaryKey()->Equals(PrimaryKey)) {
-        return TConclusionStatus::Fail(
-            TStringBuilder() << "PK mismatch: this=" << PrimaryKey->ToString() << " other=" << other.GetPrimaryKey()->ToString());
+        return false;
     }
-    return TConclusionStatus::Success();
+    return true;
 }
 
 ui32 TIndexInfo::GetColumnIdVerified(const std::string& name) const {
@@ -440,23 +439,20 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
     if (indexChunkConclusion.IsFail()) {
         return indexChunkConclusion;
     }
-    if (indexChunkConclusion->empty()) {
+    if (!*indexChunkConclusion) {
         return TConclusionStatus::Success();
     }
-    auto chunks = indexChunkConclusion.DetachResult();
+    auto chunk = indexChunkConclusion.DetachResult();
     auto opStorage = operators->GetOperatorVerified(index->GetStorageId());
-    for (auto&& chunk : chunks) {
-        if ((i64)chunk->GetPackedSize() > opStorage->GetBlobSplitSettings().GetMaxBlobSize()) {
-            return TConclusionStatus::Fail("blob size for secondary data (" + ::ToString(indexId) + ":" + ::ToString(chunk->GetPackedSize()) +
-                                           ":" + ::ToString(recordsCount) + ") bigger than limit (" +
-                                           ::ToString(opStorage->GetBlobSplitSettings().GetMaxBlobSize()) + ")");
-        }
+    if ((i64)chunk->GetPackedSize() > opStorage->GetBlobSplitSettings().GetMaxBlobSize()) {
+        return TConclusionStatus::Fail("blob size for secondary data (" + ::ToString(indexId) + ":" + ::ToString(chunk->GetPackedSize()) + ":" +
+                                       ::ToString(recordsCount) + ") bigger than limit (" +
+                                       ::ToString(opStorage->GetBlobSplitSettings().GetMaxBlobSize()) + ")");
     }
     if (index->GetStorageId() == IStoragesManager::LocalMetadataStorageId) {
-        AFL_VERIFY(chunks.size() == 1);
-        AFL_VERIFY(result.MutableSecondaryInplaceData().emplace(indexId, chunks.front()).second);
+        AFL_VERIFY(result.MutableSecondaryInplaceData().emplace(indexId, chunk).second);
     } else {
-        AFL_VERIFY(result.MutableExternalData().emplace(indexId, std::move(chunks)).second);
+        AFL_VERIFY(result.MutableExternalData().emplace(indexId, std::vector<std::shared_ptr<IPortionDataChunk>>({chunk})).second);
     }
     return TConclusionStatus::Success();
 }

@@ -1,33 +1,32 @@
 #pragma once
 
 #include "kafka_events.h"
-#include "kafka_producer_instance_id.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 
 namespace NKafka {
     /* 
-    This class serves as a proxy between Kafka SDK and TTransactionActor
+    This class serves as a proxy between Kafka SDK and TKafkaTransactionActor
 
     It validates that requester is not a zombie (by checking request's tranasactional_id+producer_id+producer_epoch)
     It does so by maintaining a set of the most relevant for this node tranasactional_id+producer_id+producer_epoch. 
     Recieves updates from init_producer_id_actors. 
     */
-    class TTransactionsCoordinator : public NActors::TActorBootstrapped<TTransactionsCoordinator> {
+    class TKafkaTransactionsCoordinator : public NActors::TActorBootstrapped<TKafkaTransactionsCoordinator> {
 
-        using TBase = NActors::TActorBootstrapped<TTransactionsCoordinator>;
+        using TBase = NActors::TActorBootstrapped<TKafkaTransactionsCoordinator>;
 
         struct TTransactionalRequest {
             TString TransactionalId;
-            TProducerInstanceId ProducerState;
+            TEvKafka::TProducerInstanceId ProducerState;
             ui64 CorrelationId;
             TActorId ConnectionId;
         };
 
         public:
             void Bootstrap(const TActorContext&) {
-                TBase::Become(&TTransactionsCoordinator::StateWork);
+                TBase::Become(&TKafkaTransactionsCoordinator::StateWork);
             }
 
             TStringBuilder LogPrefix() const {
@@ -51,7 +50,7 @@ namespace NKafka {
             // Handles new transactional_id+producer_id+producer_epoch: saves for validation of future requests
             void Handle(TEvKafka::TEvSaveTxnProducerRequest::TPtr& ev, const TActorContext& ctx);
             
-            // Proxies requests to the relevant TTransactionActor
+            // Proxies requests to the relevant TKafkaTransactionActor
             void Handle(TEvKafka::TEvAddPartitionsToTxnRequest::TPtr& ev, const TActorContext& ctx);
             void Handle(TEvKafka::TEvAddOffsetsToTxnRequest::TPtr& ev, const TActorContext& ctx);
             void Handle(TEvKafka::TEvTxnOffsetCommitRequest::TPtr& ev, const TActorContext& ctx);
@@ -69,20 +68,19 @@ namespace NKafka {
             template<class EventType> 
             void ForwardToTransactionActor(TAutoPtr<TEventHandle<EventType>>& evHandle, const TActorContext& ctx);
 
-            void DeleteTransactionActor(const TString& transactionalId);
-            bool NewProducerStateIsOutdated(const TProducerInstanceId& currentProducerState, const TProducerInstanceId& newProducerState);
+            bool NewProducerStateIsOutdated(const TEvKafka::TProducerInstanceId& currentProducerState, const TEvKafka::TProducerInstanceId& newProducerState);
             TMaybe<TString> GetTxnRequestError(const TTransactionalRequest& request);
-            TString GetProducerIsOutdatedError(const TString& transactionalId, const TProducerInstanceId& currentProducerState, const TProducerInstanceId& newProducerState);
+            TString GetProducerIsOutdatedError(const TString& transactionalId, const TEvKafka::TProducerInstanceId& currentProducerState, const TEvKafka::TProducerInstanceId& newProducerState);
 
-            std::unordered_map<TString, TProducerInstanceId> ProducersByTransactionalId;
+            std::unordered_map<TString, TEvKafka::TProducerInstanceId> ProducersByTransactionalId;
             std::unordered_map<TString, TActorId> TxnActorByTransactionalId;
     };
 
-    inline NActors::IActor* CreateTransactionsCoordinator() {
-        return new TTransactionsCoordinator();
+    inline NActors::IActor* CreateKafkaTransactionsCoordinator() {
+        return new TKafkaTransactionsCoordinator();
     };
 
-    inline TActorId MakeTransactionsServiceID() {
+    inline TActorId MakeKafkaTransactionsServiceID() {
         static const char x[12] = "kafka_txns";
         return TActorId(0, TStringBuf(x, 12));
     };

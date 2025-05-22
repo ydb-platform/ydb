@@ -13,7 +13,6 @@
 #include <yt/yt/core/concurrency/async_stream.h>
 
 #include <yt/yt/core/misc/error.h>
-#include <yt/yt/core/misc/memory_usage_tracker.h>
 
 #include <yt/yt/core/net/address.h>
 
@@ -23,6 +22,8 @@
 #include <yt/yt/core/yson/writer.h>
 
 #include <yt/yt/core/ytree/public.h>
+
+#include <library/cpp/yt/memory/memory_usage_tracker.h>
 
 namespace NYT::NDriver {
 
@@ -156,6 +157,8 @@ struct IDriver
     //! Returns the underlying connection.
     virtual NApi::IConnectionPtr GetConnection() = 0;
 
+    virtual NSignature::ISignatureGeneratorPtr GetSignatureGenerator() = 0;
+
     virtual NSignature::ISignatureValidatorPtr GetSignatureValidator() = 0;
 
     //! Terminates the underlying connection.
@@ -169,6 +172,7 @@ DEFINE_REFCOUNTED_TYPE(IDriver)
 IDriverPtr CreateDriver(
     NApi::IConnectionPtr connection,
     TDriverConfigPtr config,
+    NSignature::ISignatureGeneratorPtr signatureGenerator,
     NSignature::ISignatureValidatorPtr signatureValidator);
 
 ////////////////////////////////////////////////////////////////////////////////

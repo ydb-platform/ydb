@@ -791,10 +791,6 @@ is_internal_filename(PyObject *filename)
         }
     }
 
-    if (_PyUnicode_EqualToASCIIString(filename, "library/python/runtime_py3/__res.py")) {
-        return true;
-    }
-
     return false;
 }
 

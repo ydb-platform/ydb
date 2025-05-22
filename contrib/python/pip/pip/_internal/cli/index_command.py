@@ -9,7 +9,6 @@ so commands which don't always hit the network (e.g. list w/o --outdated or
 import logging
 import os
 import sys
-from functools import lru_cache
 from optparse import Values
 from typing import TYPE_CHECKING, List, Optional
 
@@ -26,7 +25,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-@lru_cache
 def _create_truststore_ssl_context() -> Optional["SSLContext"]:
     if sys.version_info < (3, 10):
         logger.debug("Disabling truststore because Python version isn't 3.10+")

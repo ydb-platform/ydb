@@ -350,21 +350,8 @@ class ConnectionPool(IConnectionPool):
         self._store = ConnectionsCache(driver_config.use_all_nodes, driver_config.tracer)
         self.tracer = driver_config.tracer
         self._grpc_init = connection_impl.Connection(self._driver_config.endpoint, self._driver_config)
-
-        if driver_config.disable_discovery:
-            # If discovery is disabled, just add the initial endpoint to the store
-            ready_connection = connection_impl.Connection.ready_factory(
-                self._driver_config.endpoint,
-                self._driver_config,
-                ready_timeout=getattr(self._driver_config, "discovery_request_timeout", 10),
-            )
-            self._store.add(ready_connection)
-            self._discovery_thread = None
-        else:
-            # Start discovery thread as usual
-            self._discovery_thread = Discovery(self._store, self._driver_config)
-            self._discovery_thread.start()
-
+        self._discovery_thread = Discovery(self._store, self._driver_config)
+        self._discovery_thread.start()
         self._stopped = False
         self._stop_guard = threading.Lock()
 
@@ -380,11 +367,9 @@ class ConnectionPool(IConnectionPool):
                 return
 
             self._stopped = True
-            if self._discovery_thread:
-                self._discovery_thread.stop()
+            self._discovery_thread.stop()
         self._grpc_init.close()
-        if self._discovery_thread:
-            self._discovery_thread.join(timeout)
+        self._discovery_thread.join(timeout)
 
     def async_wait(self, fail_fast=False):
         """
@@ -419,13 +404,7 @@ class ConnectionPool(IConnectionPool):
         self._discovery_thread.notify_disconnected()
 
     def discovery_debug_details(self):
-        """
-        Returns debug string about last errors
-        :return: str
-        """
-        if self._discovery_thread:
-            return self._discovery_thread.discovery_debug_details()
-        return "Discovery is disabled, using only the initial endpoint"
+        return self._discovery_thread.discovery_debug_details()
 
     @tracing.with_trace()
     def __call__(

@@ -31,12 +31,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLAllocTest) {
 
     Y_UNIT_TEST(TestDeallocated) {
         TScopedAlloc alloc(__LOCATION__);
-#if defined(_asan_enabled_)
-        constexpr size_t EXTRA_ALLOCATION_SPACE = ASAN_EXTRA_ALLOCATION_SPACE;
-#else  // defined(_asan_enabled_)
-        constexpr size_t EXTRA_ALLOCATION_SPACE = 0;
-#endif // defined(_asan_enabled_)
-
         void* p1 = TWithDefaultMiniKQLAlloc::AllocWithSize(10);
         void* p2 = TWithDefaultMiniKQLAlloc::AllocWithSize(20);
         UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetUsed(), TAlignedPagePool::POOL_PAGE_SIZE);
@@ -44,7 +38,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLAllocTest) {
         UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetFreePageCount(), 0);
         TWithDefaultMiniKQLAlloc::FreeWithSize(p1, 10);
         UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetUsed(), TAlignedPagePool::POOL_PAGE_SIZE);
-        UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetDeallocatedInPages(), 10 + EXTRA_ALLOCATION_SPACE);
+        UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetDeallocatedInPages(), 10);
         UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetFreePageCount(), 0);
         TWithDefaultMiniKQLAlloc::FreeWithSize(p2, 20);
         UNIT_ASSERT_VALUES_EQUAL(alloc.Ref().GetUsed(), 0);

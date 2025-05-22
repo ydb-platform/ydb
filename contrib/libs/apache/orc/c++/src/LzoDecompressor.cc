@@ -342,7 +342,7 @@ namespace orc {
         char* literalOutputLimit = output + literalLength;
         if (literalOutputLimit > fastOutputLimit ||
             input + literalLength > inputLimit - SIZE_OF_LONG) {
-          if (literalOutputLimit > outputLimit || input + literalLength > inputLimit) {
+          if (literalOutputLimit > outputLimit) {
             throw MalformedInputException(input - inputAddress);
           }
 

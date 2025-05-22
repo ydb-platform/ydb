@@ -1,7 +1,0 @@
-LIBRARY()
-
-END()
-
-RECURSE(
-    global
-)

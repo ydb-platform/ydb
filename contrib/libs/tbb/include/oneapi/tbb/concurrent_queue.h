@@ -1,5 +1,5 @@
 /*
-    Copyright (c) 2005-2025 Intel Corporation
+    Copyright (c) 2005-2023 Intel Corporation
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -56,6 +56,7 @@ std::pair<bool, ticket_type> internal_try_pop_impl(void* dst, QueueRep& queue, A
 
 // A high-performance thread-safe non-blocking concurrent queue.
 // Multiple threads may each push and pop concurrently.
+// Assignment construction is not allowed.
 template <typename T, typename Allocator = tbb::cache_aligned_allocator<T>>
 class concurrent_queue {
     using allocator_traits_type = tbb::detail::allocator_traits<Allocator>;
@@ -324,6 +325,7 @@ namespace d2 {
 // A high-performance thread-safe blocking concurrent bounded queue.
 // Supports boundedness and blocking semantics.
 // Multiple threads may each push and pop concurrently.
+// Assignment construction is not allowed.
 template <typename T, typename Allocator = tbb::cache_aligned_allocator<T>>
 class concurrent_bounded_queue {
     using allocator_traits_type = tbb::detail::allocator_traits<Allocator>;
@@ -382,14 +384,12 @@ public:
     concurrent_bounded_queue( const concurrent_bounded_queue& src, const allocator_type& a ) :
         concurrent_bounded_queue(a)
     {
-        my_capacity = src.my_capacity;
         my_queue_representation->assign(*src.my_queue_representation, my_allocator, copy_construct_item);
     }
 
     concurrent_bounded_queue( const concurrent_bounded_queue& src ) :
         concurrent_bounded_queue(queue_allocator_traits::select_on_container_copy_construction(src.get_allocator()))
     {
-        my_capacity = src.my_capacity;
         my_queue_representation->assign(*src.my_queue_representation, my_allocator, copy_construct_item);
     }
 
@@ -428,7 +428,6 @@ public:
         if (my_queue_representation != other.my_queue_representation) {
             clear();
             my_allocator = other.my_allocator;
-            my_capacity = other.my_capacity;
             my_queue_representation->assign(*other.my_queue_representation, my_allocator, copy_construct_item);
         }
         return *this;
@@ -444,7 +443,6 @@ public:
                 my_queue_representation->assign(*other.my_queue_representation, other.my_allocator, move_construct_item);
                 other.clear();
                 my_allocator = std::move(other.my_allocator);
-                my_capacity = other.my_capacity;
             }
         }
         return *this;
@@ -557,10 +555,8 @@ public:
 
 private:
     void internal_swap( concurrent_bounded_queue& src ) {
-        using std::swap;
-        swap(my_queue_representation, src.my_queue_representation);
-        swap(my_capacity, src.my_capacity);
-        swap(my_monitors, src.my_monitors);
+        std::swap(my_queue_representation, src.my_queue_representation);
+        std::swap(my_monitors, src.my_monitors);
     }
 
     static constexpr std::ptrdiff_t infinite_capacity = std::ptrdiff_t(~size_type(0) / 2);

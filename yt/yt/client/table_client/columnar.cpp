@@ -1,5 +1,4 @@
 #include "columnar.h"
-#include "helpers.h"
 
 #include <yt/yt/library/numeric/algorithm_helpers.h>
 
@@ -126,6 +125,22 @@ void CopyBitmapRangeToBitmapImpl(
         SafeWriteQword(currentQwordOutput, dst.End(), buildOutputQWord(qword1, qword2));
         ++currentQwordInput;
         ++currentQwordOutput;
+    }
+}
+
+bool GetBit(TRef bitmap, i64 index)
+{
+    return (bitmap[index >> 3] & (1U << (index & 7))) != 0;
+}
+
+void SetBit(TMutableRef bitmap, i64 index, bool value)
+{
+    auto& byte = bitmap[index >> 3];
+    auto mask = (1U << (index & 7));
+    if (value) {
+        byte |= mask;
+    } else {
+        byte &= ~mask;
     }
 }
 

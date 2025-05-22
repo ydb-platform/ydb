@@ -72,11 +72,11 @@ class TJavascriptTypeChecker : public TExploringNodeVisitor {
 void EnsureScriptSpecificTypes(
         EScriptType scriptType,
         TCallableType* funcType,
-        std::vector<TNode*>& nodeStack)
+        const TTypeEnvironment& env)
 {
     switch (scriptType) {
         case EScriptType::Lua:
-            return TLuaTypeChecker().Walk(funcType, nodeStack);
+            return TLuaTypeChecker().Walk(funcType, env);
         case EScriptType::Python:
         case EScriptType::Python2:
         case EScriptType::Python3:
@@ -94,9 +94,9 @@ void EnsureScriptSpecificTypes(
         case EScriptType::SystemPython3_11:
         case EScriptType::SystemPython3_12:
         case EScriptType::SystemPython3_13:
-            return TPythonTypeChecker().Walk(funcType, nodeStack);
+            return TPythonTypeChecker().Walk(funcType, env);
         case EScriptType::Javascript:
-            return TJavascriptTypeChecker().Walk(funcType, nodeStack);
+            return TJavascriptTypeChecker().Walk(funcType, env);
     default:
         MKQL_ENSURE(false, "Unknown script type " << static_cast<ui32>(scriptType));
     }
@@ -1217,11 +1217,11 @@ TRuntimeNode TProgramBuilder::BuildFilterNulls(TRuntimeNode list) {
     std::vector<std::conditional_t<OnStruct, std::string_view, ui32>> members;
     const bool multiOptional = CollectOptionalElements<IsFilter>(itemType, members, filteredItems);
 
-    const auto predicate = [=, this](TRuntimeNode item) {
+    const auto predicate = [=](TRuntimeNode item) {
         std::vector<TRuntimeNode> checkMembers;
         checkMembers.reserve(members.size());
         std::transform(members.cbegin(), members.cend(), std::back_inserter(checkMembers),
-            [=, this](const auto& i){ return Exists(Element(item, i)); });
+            [=](const auto& i){ return Exists(Element(item, i)); });
         return And(checkMembers);
     };
 
@@ -1263,11 +1263,11 @@ TRuntimeNode TProgramBuilder::BuildFilterNulls(TRuntimeNode list, const TArrayRe
         THROW yexception() << "Expected flow or list or stream or optional of struct.";
     }
 
-    const auto predicate = [=, this](TRuntimeNode item) {
+    const auto predicate = [=](TRuntimeNode item) {
         TRuntimeNode::TList checkMembers;
         checkMembers.reserve(members.size());
         std::transform(members.cbegin(), members.cend(), std::back_inserter(checkMembers),
-            [=, this](const auto& i){ return Exists(Element(item, i)); });
+            [=](const auto& i){ return Exists(Element(item, i)); });
         return And(checkMembers);
     };
 
@@ -1297,7 +1297,7 @@ TRuntimeNode TProgramBuilder::BuildFilterNulls(TRuntimeNode list, const TArrayRe
         TRuntimeNode::TList checkMembers;
         checkMembers.reserve(members.size());
         std::transform(members.cbegin(), members.cend(), std::back_inserter(checkMembers),
-            [=, this](const auto& i){ return this->Element(item, i); });
+            [=](const auto& i){ return Element(item, i); });
 
         return IfPresent(checkMembers, [&](TRuntimeNode::TList items) {
             std::conditional_t<OnStruct, std::vector<std::pair<std::string_view, TRuntimeNode>>, TRuntimeNode::TList> row;
@@ -4166,7 +4166,7 @@ TRuntimeNode TProgramBuilder::ScriptUdf(
     MKQL_ENSURE(funcType->IsCallable(), "type must be callable");
     auto scriptType = NKikimr::NMiniKQL::ScriptTypeFromStr(moduleName);
     MKQL_ENSURE(scriptType != EScriptType::Unknown, "unknown script type '" << moduleName << "'");
-    EnsureScriptSpecificTypes(scriptType, static_cast<TCallableType*>(funcType), Env.GetNodeStack());
+    EnsureScriptSpecificTypes(scriptType, static_cast<TCallableType*>(funcType), Env);
 
     auto scriptTypeStr = IsCustomPython(scriptType) ? moduleName : ScriptTypeAsStr(CanonizeScriptType(scriptType));
 
@@ -6148,7 +6148,7 @@ bool CanExportType(TType* type, const TTypeEnvironment& env) {
     }
 
     TExploringNodeVisitor explorer;
-    explorer.Walk(type, env.GetNodeStack());
+    explorer.Walk(type, env);
     bool canExport = true;
     for (auto& node : explorer.GetNodes()) {
         switch (static_cast<TType*>(node)->GetKind()) {

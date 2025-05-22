@@ -10,7 +10,7 @@ from . import Nodes
 from . import ExprNodes
 from .Nodes import Node
 from .ExprNodes import AtomicExprNode
-from .PyrexTypes import c_ptr_type, c_bint_type
+from .PyrexTypes import c_ptr_type
 
 
 class TempHandle(object):
@@ -45,7 +45,7 @@ class TempRefNode(AtomicExprNode):
 
     def calculate_result_code(self):
         result = self.handle.temp
-        if result is None: result = "<error>"  # might be called and overwritten
+        if result is None: result = "<error>" # might be called and overwritten
         return result
 
     def generate_result_code(self, code):
@@ -122,7 +122,8 @@ class ResultRefNode(AtomicExprNode):
         self.may_hold_none = may_hold_none
         if expression is not None:
             self.pos = expression.pos
-            self.type = getattr(expression, "type", None)
+            if hasattr(expression, "type"):
+                self.type = expression.type
         if pos is not None:
             self.pos = pos
         if type is not None:
@@ -143,17 +144,13 @@ class ResultRefNode(AtomicExprNode):
 
     def update_expression(self, expression):
         self.expression = expression
-        type = getattr(expression, "type", None)
-        if type:
-            self.type = type
-
-    def analyse_target_declaration(self, env):
-        pass  # OK - we can assign to this
+        if hasattr(expression, "type"):
+            self.type = expression.type
 
     def analyse_types(self, env):
         if self.expression is not None:
             if not self.expression.type:
-                self.expression = self.expression.analyse_types(env)
+              self.expression = self.expression.analyse_types(env)
             self.type = self.expression.type
         return self
 
@@ -178,7 +175,7 @@ class ResultRefNode(AtomicExprNode):
             return self.expression.may_be_none()
         if self.type is not None:
             return self.type.is_pyobject
-        return True  # play it safe
+        return True # play safe
 
     def is_simple(self):
         return True
@@ -236,10 +233,7 @@ class LetNodeMixin:
         if self._result_in_temp:
             self.temp = self.temp_expression.result()
         else:
-            if self.temp_type.is_memoryviewslice:
-                self.temp_expression.make_owned_memoryviewslice(code)
-            else:
-                self.temp_expression.make_owned_reference(code)
+            self.temp_expression.make_owned_reference(code)
             self.temp = code.funcstate.allocate_temp(
                 self.temp_type, manage_ref=True)
             code.putln("%s = %s;" % (self.temp, self.temp_expression.result()))
@@ -252,7 +246,7 @@ class LetNodeMixin:
             self.temp_expression.generate_disposal_code(code)
             self.temp_expression.free_temps(code)
         else:
-            if self.temp_type.needs_refcounting:
+            if self.temp_type.is_pyobject:
                 code.put_decref_clear(self.temp, self.temp_type)
             code.funcstate.release_temp(self.temp)
 
@@ -360,29 +354,6 @@ class TempResultFromStatNode(ExprNodes.ExprNode):
         self.body = self.body.analyse_expressions(env)
         return self
 
-    def may_be_none(self):
-        return self.result_ref.may_be_none()
-
     def generate_result_code(self, code):
         self.result_ref.result_code = self.result()
         self.body.generate_execution_code(code)
-
-    def generate_function_definitions(self, env, code):
-        self.body.generate_function_definitions(env, code)
-
-
-class HasGilNode(AtomicExprNode):
-    """
-    Simple node that evaluates to 0 or 1 depending on whether we're
-    in a nogil context
-    """
-    type = c_bint_type
-
-    def analyse_types(self, env):
-        return self
-
-    def generate_result_code(self, code):
-        self.has_gil = code.funcstate.gil_owned
-
-    def calculate_result_code(self):
-        return "1" if self.has_gil else "0"

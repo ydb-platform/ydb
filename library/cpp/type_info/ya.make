@@ -23,6 +23,4 @@ PEERDIR(
 
 END()
 
-RECURSE(tz)
-
 RECURSE_FOR_TESTS(ut)

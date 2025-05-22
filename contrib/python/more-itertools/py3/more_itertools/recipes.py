@@ -8,14 +8,13 @@ Some backward-compatible usability improvements have been made.
 
 """
 
-import random
+import math
+import operator
 
 from collections import deque
-from contextlib import suppress
 from collections.abc import Sized
 from functools import lru_cache, partial
 from itertools import (
-    accumulate,
     chain,
     combinations,
     compress,
@@ -29,8 +28,6 @@ from itertools import (
     tee,
     zip_longest,
 )
-from math import prod, comb, isqrt, gcd
-from operator import mul, not_, itemgetter, getitem
 from random import randrange, sample, choice
 from sys import hexversion
 
@@ -50,7 +47,6 @@ __all__ = [
     'iter_index',
     'loops',
     'matmul',
-    'multinomial',
     'ncycles',
     'nth',
     'nth_combination',
@@ -97,16 +93,12 @@ except TypeError:
 else:
     _zip_strict = partial(zip, strict=True)
 
-
 # math.sumprod is available for Python 3.12+
-try:
-    from math import sumprod as _sumprod
-except ImportError:
-    _sumprod = lambda x, y: dotproduct(x, y)
+_sumprod = getattr(math, 'sumprod', lambda x, y: dotproduct(x, y))
 
 
 def take(n, iterable):
-    """Return first *n* items of the *iterable* as a list.
+    """Return first *n* items of the iterable as a list.
 
         >>> take(3, range(10))
         [0, 1, 2]
@@ -152,9 +144,9 @@ def tail(n, iterable):
     # either islice or deque will throw a TypeError. This is why we don't
     # check if it is Iterable.
     if isinstance(iterable, Sized):
-        return islice(iterable, max(0, len(iterable) - n), None)
+        yield from islice(iterable, max(0, len(iterable) - n), None)
     else:
-        return iter(deque(iterable, maxlen=n))
+        yield from iter(deque(iterable, maxlen=n))
 
 
 def consume(iterator, n=None):
@@ -276,14 +268,11 @@ def ncycles(iterable, n):
 def dotproduct(vec1, vec2):
     """Returns the dot product of the two iterables.
 
-    >>> dotproduct([10, 15, 12], [0.65, 0.80, 1.25])
-    33.5
-    >>> 10 * 0.65 + 15 * 0.80 + 12 * 1.25
-    33.5
+    >>> dotproduct([10, 10], [20, 20])
+    400
 
-    In Python 3.12 and later, use ``math.sumprod()`` instead.
     """
-    return sum(map(mul, vec1, vec2))
+    return sum(map(operator.mul, vec1, vec2))
 
 
 def flatten(listOfLists):
@@ -408,26 +397,26 @@ def grouper(iterable, n, incomplete='fill', fillvalue=None):
 
     When *incomplete* is `'strict'`, a subclass of `ValueError` will be raised.
 
-    >>> iterator = grouper('ABCDEFG', 3, incomplete='strict')
-    >>> list(iterator)  # doctest: +IGNORE_EXCEPTION_DETAIL
+    >>> it = grouper('ABCDEFG', 3, incomplete='strict')
+    >>> list(it)  # doctest: +IGNORE_EXCEPTION_DETAIL
     Traceback (most recent call last):
     ...
     UnequalIterablesError
 
     """
-    iterators = [iter(iterable)] * n
+    args = [iter(iterable)] * n
     if incomplete == 'fill':
-        return zip_longest(*iterators, fillvalue=fillvalue)
+        return zip_longest(*args, fillvalue=fillvalue)
     if incomplete == 'strict':
-        return _zip_equal(*iterators)
+        return _zip_equal(*args)
     if incomplete == 'ignore':
-        return zip(*iterators)
+        return zip(*args)
     else:
         raise ValueError('Expected fill, strict, or ignore')
 
 
 def roundrobin(*iterables):
-    """Visit input iterables in a cycle until each is exhausted.
+    """Yields an item from each iterable, alternating between them.
 
         >>> list(roundrobin('ABC', 'D', 'EF'))
         ['A', 'D', 'E', 'B', 'F', 'C']
@@ -469,7 +458,7 @@ def partition(pred, iterable):
 
     t1, t2, p = tee(iterable, 3)
     p1, p2 = tee(map(pred, p))
-    return (compress(t1, map(not_, p1)), compress(t2, p2))
+    return (compress(t1, map(operator.not_, p1)), compress(t2, p2))
 
 
 def powerset(iterable):
@@ -548,9 +537,9 @@ def unique_justseen(iterable, key=None):
 
     """
     if key is None:
-        return map(itemgetter(0), groupby(iterable))
+        return map(operator.itemgetter(0), groupby(iterable))
 
-    return map(next, map(itemgetter(1), groupby(iterable, key)))
+    return map(next, map(operator.itemgetter(1), groupby(iterable, key)))
 
 
 def unique(iterable, key=None, reverse=False):
@@ -569,8 +558,7 @@ def unique(iterable, key=None, reverse=False):
     The elements in *iterable* need not be hashable, but they must be
     comparable for sorting to work.
     """
-    sequenced = sorted(iterable, key=key, reverse=reverse)
-    return unique_justseen(sequenced, key=key)
+    return unique_justseen(sorted(iterable, key=key, reverse=reverse), key=key)
 
 
 def iter_except(func, exception, first=None):
@@ -595,11 +583,13 @@ def iter_except(func, exception, first=None):
         []
 
     """
-    with suppress(exception):
+    try:
         if first is not None:
             yield first()
-        while True:
+        while 1:
             yield func()
+    except exception:
+        pass
 
 
 def first_true(iterable, default=None, pred=None):
@@ -751,40 +741,19 @@ def prepend(value, iterator):
 
 
 def convolve(signal, kernel):
-    """Discrete linear convolution of two iterables.
-    Equivalent to polynomial multiplication.
+    """Convolve the iterable *signal* with the iterable *kernel*.
 
-    For example, multiplying ``(x² -x - 20)`` by ``(x - 3)``
-    gives ``(x³ -4x² -17x + 60)``.
+        >>> signal = (1, 2, 3, 4, 5)
+        >>> kernel = [3, 2, 1]
+        >>> list(convolve(signal, kernel))
+        [3, 8, 14, 20, 26, 14, 5]
 
-        >>> list(convolve([1, -1, -20], [1, -3]))
-        [1, -4, -17, 60]
-
-    Examples of popular kinds of kernels:
-
-    * The kernel ``[0.25, 0.25, 0.25, 0.25]`` computes a moving average.
-      For image data, this blurs the image and reduces noise.
-    * The kernel ``[1/2, 0, -1/2]`` estimates the first derivative of
-      a function evaluated at evenly spaced inputs.
-    * The kernel ``[1, -2, 1]`` estimates the second derivative of a
-      function evaluated at evenly spaced inputs.
-
-    Convolutions are mathematically commutative; however, the inputs are
-    evaluated differently.  The signal is consumed lazily and can be
-    infinite. The kernel is fully consumed before the calculations begin.
-
-    Supports all numeric types: int, float, complex, Decimal, Fraction.
-
-    References:
-
-    * Article:  https://betterexplained.com/articles/intuitive-convolution/
-    * Video by 3Blue1Brown:  https://www.youtube.com/watch?v=KuXjwB4LzSA
+    Note: the input arguments are not interchangeable, as the *kernel*
+    is immediately consumed and stored.
 
     """
-    # This implementation comes from an older version of the itertools
-    # documentation.  While the newer implementation is a bit clearer,
-    # this one was kept because the inlined window logic is faster
-    # and it avoids an unnecessary deque-to-tuple conversion.
+    # This implementation intentionally doesn't match the one in the itertools
+    # documentation.
     kernel = tuple(kernel)[::-1]
     n = len(kernel)
     window = deque([0], maxlen=n) * n
@@ -852,9 +821,9 @@ def _sliding_window_islice(iterable, n):
 
 def _sliding_window_deque(iterable, n):
     # Normal path for other values of n.
-    iterator = iter(iterable)
-    window = deque(islice(iterator, n - 1), maxlen=n)
-    for x in iterator:
+    it = iter(iterable)
+    window = deque(islice(it, n - 1), maxlen=n)
+    for x in it:
         window.append(x)
         yield tuple(window)
 
@@ -895,21 +864,16 @@ def subslices(iterable):
     """
     seq = list(iterable)
     slices = starmap(slice, combinations(range(len(seq) + 1), 2))
-    return map(getitem, repeat(seq), slices)
+    return map(operator.getitem, repeat(seq), slices)
 
 
 def polynomial_from_roots(roots):
     """Compute a polynomial's coefficients from its roots.
 
-    >>> roots = [5, -4, 3]            # (x - 5) * (x + 4) * (x - 3)
-    >>> polynomial_from_roots(roots)  # x³ - 4 x² - 17 x + 60
+    >>> roots = [5, -4, 3]  # (x - 5) * (x + 4) * (x - 3)
+    >>> polynomial_from_roots(roots)  # x^3 - 4 * x^2 - 17 * x + 60
     [1, -4, -17, 60]
-
-    Supports all numeric types: int, float, complex, Decimal, Fraction.
     """
-    # This recipe differs from the one in itertools docs in that it
-    # applies list() after each call to convolve().  This avoids
-    # hitting stack limits with nested generators.
     poly = [1]
     for root in roots:
         poly = list(convolve(poly, (1, -root)))
@@ -944,17 +908,19 @@ def iter_index(iterable, value, start=0, stop=None):
     seq_index = getattr(iterable, 'index', None)
     if seq_index is None:
         # Slow path for general iterables
-        iterator = islice(iterable, start, stop)
-        for i, element in enumerate(iterator, start):
+        it = islice(iterable, start, stop)
+        for i, element in enumerate(it, start):
             if element is value or element == value:
                 yield i
     else:
         # Fast path for sequences
         stop = len(iterable) if stop is None else stop
         i = start - 1
-        with suppress(ValueError):
+        try:
             while True:
                 yield (i := seq_index(value, i + 1, stop))
+        except ValueError:
+            pass
 
 
 def sieve(n):
@@ -962,16 +928,13 @@ def sieve(n):
 
     >>> list(sieve(30))
     [2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
-
     """
-    # This implementation comes from an older version of the itertools
-    # documentation.  The newer implementation is easier to read but is
-    # less lazy.
     if n > 2:
         yield 2
     start = 3
     data = bytearray((0, 1)) * (n // 2)
-    for p in iter_index(data, 1, start, stop=isqrt(n) + 1):
+    limit = math.isqrt(n) + 1
+    for p in iter_index(data, 1, start, limit):
         yield from iter_index(data, 1, start, p * p)
         data[p * p : n : p + p] = bytes(len(range(p * p, n, p + p)))
         start = p * p
@@ -991,14 +954,14 @@ def _batched(iterable, n, *, strict=False):
     """
     if n < 1:
         raise ValueError('n must be at least one')
-    iterator = iter(iterable)
-    while batch := tuple(islice(iterator, n)):
+    it = iter(iterable)
+    while batch := tuple(islice(it, n)):
         if strict and len(batch) != n:
             raise ValueError('batched(): incomplete batch')
         yield batch
 
 
-if hexversion >= 0x30D00A2:  # pragma: no cover
+if hexversion >= 0x30D00A2:
     from itertools import batched as itertools_batched
 
     def batched(iterable, n, *, strict=False):
@@ -1041,17 +1004,15 @@ def matmul(m1, m2):
 
     The caller should ensure that the dimensions of the input matrices are
     compatible with each other.
-
-    Supports all numeric types: int, float, complex, Decimal, Fraction.
     """
     n = len(m2[0])
     return batched(starmap(_sumprod, product(m1, transpose(m2))), n)
 
 
 def _factor_pollard(n):
-    # Return a factor of n using Pollard's rho algorithm.
-    # Efficient when n is odd and composite.
-    for b in range(1, n):
+    # Return a factor of n using Pollard's rho algorithm
+    gcd = math.gcd
+    for b in range(1, n - 2):
         x = y = 2
         d = 1
         while d == 1:
@@ -1103,20 +1064,16 @@ def factor(n):
 def polynomial_eval(coefficients, x):
     """Evaluate a polynomial at a specific value.
 
-    Computes with better numeric stability than Horner's method.
-
-    Evaluate ``x^3 - 4 * x^2 - 17 * x + 60`` at ``x = 2.5``:
+    Example: evaluating x^3 - 4 * x^2 - 17 * x + 60 at x = 2.5:
 
     >>> coefficients = [1, -4, -17, 60]
     >>> x = 2.5
     >>> polynomial_eval(coefficients, x)
     8.125
-
-    Supports all numeric types: int, float, complex, Decimal, Fraction.
     """
     n = len(coefficients)
     if n == 0:
-        return type(x)(0)
+        return x * 0  # coerce zero to the type of x
     powers = map(pow, repeat(x), reversed(range(n)))
     return _sumprod(coefficients, powers)
 
@@ -1126,8 +1083,6 @@ def sum_of_squares(it):
 
     >>> sum_of_squares([10, 20, 30])
     1400
-
-    Supports all numeric types: int, float, complex, Decimal, Fraction.
     """
     return _sumprod(*tee(it))
 
@@ -1135,38 +1090,25 @@ def sum_of_squares(it):
 def polynomial_derivative(coefficients):
     """Compute the first derivative of a polynomial.
 
-    Evaluate the derivative of ``x³ - 4 x² - 17 x + 60``:
+    Example: evaluating the derivative of x^3 - 4 * x^2 - 17 * x + 60
 
     >>> coefficients = [1, -4, -17, 60]
     >>> derivative_coefficients = polynomial_derivative(coefficients)
     >>> derivative_coefficients
     [3, -8, -17]
-
-    Supports all numeric types: int, float, complex, Decimal, Fraction.
     """
     n = len(coefficients)
     powers = reversed(range(1, n))
-    return list(map(mul, coefficients, powers))
+    return list(map(operator.mul, coefficients, powers))
 
 
 def totient(n):
     """Return the count of natural numbers up to *n* that are coprime with *n*.
 
-    Euler's totient function φ(n) gives the number of totatives.
-    Totative are integers k in the range 1 ≤ k ≤ n such that gcd(n, k) = 1.
-
-    >>> n = 9
-    >>> totient(n)
+    >>> totient(9)
     6
-
-    >>> totatives = [x for x in range(1, n) if gcd(n, x) == 1]
-    >>> totatives
-    [1, 2, 4, 5, 7, 8]
-    >>> len(totatives)
-    6
-
-    Reference:  https://en.wikipedia.org/wiki/Euler%27s_totient_function
-
+    >>> totient(12)
+    4
     """
     for prime in set(factor(n)):
         n -= n // prime
@@ -1215,56 +1157,31 @@ def _strong_probable_prime(n, base):
     return False
 
 
-# Separate instance of Random() that doesn't share state
-# with the default user instance of Random().
-_private_randrange = random.Random().randrange
-
-
 def is_prime(n):
     """Return ``True`` if *n* is prime and ``False`` otherwise.
 
-    Basic examples:
+    >>> is_prime(37)
+    True
+    >>> is_prime(3 * 13)
+    False
+    >>> is_prime(18_446_744_073_709_551_557)
+    True
 
-        >>> is_prime(37)
-        True
-        >>> is_prime(3 * 13)
-        False
-        >>> is_prime(18_446_744_073_709_551_557)
-        True
-
-    Find the next prime over one billion:
-
-        >>> next(filter(is_prime, count(10**9)))
-        1000000007
-
-    Generate random primes up to 200 bits and up to 60 decimal digits:
-
-        >>> from random import seed, randrange, getrandbits
-        >>> seed(18675309)
-
-        >>> next(filter(is_prime, map(getrandbits, repeat(200))))
-        893303929355758292373272075469392561129886005037663238028407
-
-        >>> next(filter(is_prime, map(randrange, repeat(10**60))))
-        269638077304026462407872868003560484232362454342414618963649
-
-    This function is exact for values of *n* below 10**24.  For larger inputs,
-    the probabilistic Miller-Rabin primality test has a less than 1 in 2**128
+    This function uses the Miller-Rabin primality test, which can return false
+    positives for very large inputs. For values of *n* below 10**24
+    there are no false positives. For larger values, there is less than
+    a 1 in 2**128 false positive rate. Multiple tests can further reduce the
     chance of a false positive.
     """
-
     if n < 17:
         return n in {2, 3, 5, 7, 11, 13}
-
     if not (n & 1 and n % 3 and n % 5 and n % 7 and n % 11 and n % 13):
         return False
-
     for limit, bases in _perfect_tests:
         if n < limit:
             break
     else:
-        bases = (_private_randrange(2, n - 1) for i in range(64))
-
+        bases = [randrange(2, n - 1) for i in range(64)]
     return all(_strong_probable_prime(n, base) for base in bases)
 
 
@@ -1280,48 +1197,3 @@ def loops(n):
 
     """
     return repeat(None, n)
-
-
-def multinomial(*counts):
-    """Number of distinct arrangements of a multiset.
-
-    The expression ``multinomial(3, 4, 2)`` has several equivalent
-    interpretations:
-
-    * In the expansion of ``(a + b + c)⁹``, the coefficient of the
-      ``a³b⁴c²`` term is 1260.
-
-    * There are 1260 distinct ways to arrange 9 balls consisting of 3 reds, 4
-      greens, and 2 blues.
-
-    * There are 1260 unique ways to place 9 distinct objects into three bins
-      with sizes 3, 4, and 2.
-
-    The :func:`multinomial` function computes the length of
-    :func:`distinct_permutations`.  For example, there are 83,160 distinct
-    anagrams of the word "abracadabra":
-
-        >>> from more_itertools import distinct_permutations, ilen
-        >>> ilen(distinct_permutations('abracadabra'))
-        83160
-
-    This can be computed directly from the letter counts, 5a 2b 2r 1c 1d:
-
-        >>> from collections import Counter
-        >>> list(Counter('abracadabra').values())
-        [5, 2, 2, 1, 1]
-        >>> multinomial(5, 2, 1, 1, 2)
-        83160
-
-    A binomial coefficient is a special case of multinomial where there are
-    only two categories.  For example, the number of ways to arrange 12 balls
-    with 5 reds and 7 blues is ``multinomial(5, 7)`` or ``math.comb(12, 5)``.
-
-    When the multiplicities are all just 1, :func:`multinomial`
-    is a special case of ``math.factorial`` so that
-    ``multinomial(1, 1, 1, 1, 1, 1, 1) == math.factorial(7)``.
-
-    Reference:  https://en.wikipedia.org/wiki/Multinomial_theorem
-
-    """
-    return prod(map(comb, accumulate(counts), counts))

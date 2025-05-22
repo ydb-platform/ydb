@@ -6,11 +6,6 @@ IF (PROFILE_MEMORY_ALLOCATIONS)
     CFLAGS(-DPROFILE_MEMORY_ALLOCATIONS)
 ENDIF()
 
-IF (MUSL)
-    # musl code for CMSG_NXTHDR is broken by this check
-    CFLAGS(-Wno-sign-compare)
-ENDIF()
-
 SRCS(
     channel_scheduler.h
     event_filter.h

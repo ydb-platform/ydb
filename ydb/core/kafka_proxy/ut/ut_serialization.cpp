@@ -648,8 +648,7 @@ Y_UNIT_TEST(RequestHeader_reference) {
                      0x65, 0x72, 0x2D, 0x31};
 
     TWritableBuf sb(nullptr, BUFFER_SIZE);
-    ssize_t res = sb.write((char*)reference, sizeof(reference));
-    UNIT_ASSERT_GE(res, 0);
+    sb.write((char*)reference, sizeof(reference));
 
     TKafkaReadable readable(sb.GetBuffer());
     TRequestHeaderData result;

@@ -155,10 +155,6 @@ private:
         if (PathType == "Table") {
             record->MutableOptions()->SetReturnBoundaries(true);
             record->MutableOptions()->SetShowPrivateTable(false);
-            record->MutableOptions()->SetReturnBoundaries(true);
-            record->MutableOptions()->SetShowPrivateTable(true);
-            record->MutableOptions()->SetReturnIndexTableBoundaries(true);
-            record->MutableOptions()->SetReturnPartitionConfig(true);
         }
 
         Send(MakeTxProxyID(), navigateRequest.release());
@@ -313,7 +309,7 @@ private:
                         }
 
                         TCreateTableFormatter formatter;
-                        auto formatterResult = formatter.Format(tablePath, Path, columnTableDesc, temporary);
+                        auto formatterResult = formatter.Format(tablePath, columnTableDesc, temporary);
                         if (formatterResult.IsSuccess()) {
                             path = tablePath;
                             statement = formatterResult.ExtractOut();

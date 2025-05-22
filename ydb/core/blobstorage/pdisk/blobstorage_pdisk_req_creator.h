@@ -218,9 +218,14 @@ public:
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // TODO: Make all functions in style
-    [[nodiscard]] TChunkTrim* CreateChunkTrim(ui32 chunkIdx, ui32 offset, ui64 size) {
+    [[nodiscard]] TChunkTrim* CreateChunkTrim(ui32 chunkIdx, ui32 offset, ui64 size, const NWilson::TSpan& parent) {
+        NWilson::TSpan span = parent.CreateChild(TWilson::PDiskTopLevel, "PDisk.ChunkTrim");
+        span.Attribute("chunk_idx", chunkIdx)
+            .Attribute("offset", offset)
+            .Attribute("size", static_cast<i64>(size))
+            .Attribute("pdisk_id", PCtx->PDiskId);
         Mon->Trim.CountRequest(size);
-        return CreateFromArgs<TChunkTrim>(chunkIdx, offset, size);
+        return CreateFromArgs<TChunkTrim>(chunkIdx, offset, size, std::move(span));
     }
 
     [[nodiscard]] TLogWrite* CreateLogWrite(NPDisk::TEvLog &ev, const TActorId &sender, double& burstMs, NWilson::TTraceId traceId) {

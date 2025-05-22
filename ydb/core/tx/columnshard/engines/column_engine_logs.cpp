@@ -38,7 +38,6 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::share
     , Counters(counters)
     , LastPortion(0)
     , LastGranule(0) {
-    AFL_VERIFY(SchemaObjectsCache);
     ActualizationController = std::make_shared<NActualizer::TController>();
     RegisterSchemaVersion(snapshot, presetId, schema);
 }
@@ -54,7 +53,6 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::share
     , Counters(counters)
     , LastPortion(0)
     , LastGranule(0) {
-    AFL_VERIFY(SchemaObjectsCache);
     ActualizationController = std::make_shared<NActualizer::TController>();
     RegisterSchemaVersion(snapshot, presetId, std::move(schema));
 }
@@ -65,7 +63,7 @@ void TColumnEngineForLogs::RegisterSchemaVersion(const TSnapshot& snapshot, cons
     bool switchAccessorsManager = false;
     if (!VersionedIndex.IsEmpty()) {
         const NOlap::TIndexInfo& lastIndexInfo = VersionedIndex.GetLastSchema()->GetIndexInfo();
-        lastIndexInfo.CheckCompatible(indexInfo).Validate();
+        Y_ABORT_UNLESS(lastIndexInfo.CheckCompatible(indexInfo));
         switchOptimizer = !indexInfo.GetCompactionPlannerConstructor()->IsEqualTo(lastIndexInfo.GetCompactionPlannerConstructor());
         switchAccessorsManager = !indexInfo.GetMetadataManagerConstructor()->IsEqualTo(*lastIndexInfo.GetMetadataManagerConstructor());
     }
@@ -438,7 +436,12 @@ std::shared_ptr<TSelectInfo> TColumnEngineForLogs::Select(
     }
 
     for (const auto& [_, portionInfo] : spg->GetInsertedPortions()) {
-        if (!portionInfo->IsVisible(snapshot, !withUncommitted)) {
+        AFL_VERIFY(portionInfo->HasInsertWriteId());
+        if (withUncommitted) {
+            if (!portionInfo->IsVisible(snapshot, !withUncommitted)) {
+                continue;
+            }
+        } else if (!portionInfo->HasCommitSnapshot()) {
             continue;
         }
         const bool skipPortion = !pkRangesFilter.IsUsed(*portionInfo);

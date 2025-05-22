@@ -16,14 +16,14 @@ public:
     const TFsPath URL;
     const TFsPath FilePath;
     const TFsPath ResourcePath;
-    TUrlAdapter UrlAdapter;
+    const TFsPath Index;
 
-    THttpStaticContentHandler(const TString& url, const TString& filePath, const TString& resourcePath, TUrlAdapter&& urlAdapter)
+    THttpStaticContentHandler(const TString& url, const TString& filePath, const TString& resourcePath, const TString& index)
         : TBase(&THttpStaticContentHandler::StateWork)
         , URL(url)
         , FilePath(filePath)
         , ResourcePath(resourcePath)
-        , UrlAdapter(std::move(urlAdapter))
+        , Index(index)
     {}
 
     static constexpr char ActorName[] = "HTTP_STATIC_ACTOR";
@@ -47,13 +47,13 @@ public:
             Send(event->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(response));
             return;
         }
-        if (UrlAdapter) {
-            UrlAdapter(url);
+        if (url.GetPath().EndsWith('/') && Index.IsDefined()) {
+            url /= Index;
         }
         url = url.RelativeTo(URL);
         try {
             // TODO: caching?
-            TString contentType = mimetypeByExt(url.GetName().c_str());
+            TString contentType = mimetypeByExt(url.GetExtension().c_str());
             TString data;
             TFileStat filestat;
             TFsPath resourcename(ResourcePath / url);
@@ -90,16 +90,8 @@ public:
     }
 };
 
-NActors::IActor* CreateHttpStaticContentHandler(const TString& url, const TString& filePath, const TString& resourcePath, TUrlAdapter&& urlAdapter) {
-    return new THttpStaticContentHandler(url, filePath, resourcePath, std::move(urlAdapter));
-}
-
 NActors::IActor* CreateHttpStaticContentHandler(const TString& url, const TString& filePath, const TString& resourcePath, const TString& index) {
-    return CreateHttpStaticContentHandler(url, filePath, resourcePath, [index](TFsPath& url) {
-        if (url.GetPath().EndsWith('/') && index) {
-            url /= index;
-        }
-    });
+    return new THttpStaticContentHandler(url, filePath, resourcePath, index);
 }
 
 }

@@ -178,7 +178,6 @@ private:
 
     NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort) {
         auto serverSettings = TBase::GetServerSettings(Settings_, grpcPort, Settings_.VerboseLevel >= EVerbose::InitLogs);
-        serverSettings.SetDataCenterCount(Settings_.DcCount);
 
         SetStorageSettings(serverSettings);
 
@@ -331,10 +330,10 @@ private:
     NThreading::TFuture<void> RunHealthCheck(const TString& database) const {
         EHealthCheck level = Settings_.HealthCheckLevel;
         i32 nodesCount = Settings_.NodeCount;
-        TVector<ui32> tenantNodesIdx;
         if (database != Settings_.DomainName) {
-            tenantNodesIdx = Tenants_->List(database);
-            nodesCount = tenantNodesIdx.size();
+            nodesCount = Tenants_->Size(database);
+        } else if (StorageMeta_.TenantsSize() > 0) {
+            level = std::min(level, EHealthCheck::NodesCount);
         }
 
         const TWaitResourcesSettings settings = {
@@ -344,21 +343,14 @@ private:
             .VerboseLevel = Settings_.VerboseLevel,
             .Database = NKikimr::CanonizePath(database)
         };
+        const auto promise = NThreading::NewPromise();
+        GetRuntime()->Register(CreateResourcesWaiterActor(promise, settings), GetNodeIndexForDatabase(database), GetRuntime()->GetAppData().SystemPoolId);
 
-        std::vector<NThreading::TFuture<void>> futures;
-        futures.reserve(nodesCount);
-        for (i32 nodeIdx = 0; nodeIdx < nodesCount; ++nodeIdx) {
-            const auto promise = NThreading::NewPromise();
-            GetRuntime()->Register(CreateResourcesWaiterActor(promise, settings), tenantNodesIdx ? tenantNodesIdx[nodeIdx] : nodeIdx, GetRuntime()->GetAppData().SystemPoolId);
-            futures.emplace_back(promise.GetFuture());
-        }
-
-        return NThreading::WaitAll(futures);
+        return promise.GetFuture();
     }
 
     void WaitResourcesPublishing() const {
         std::vector<NThreading::TFuture<void>> futures(1, RunHealthCheck(Settings_.DomainName));
-        futures.reserve(StorageMeta_.GetTenants().size() + 1);
         for (const auto& [tenantName, _] : StorageMeta_.GetTenants()) {
             futures.emplace_back(RunHealthCheck(GetTenantPath(tenantName)));
         }
@@ -548,7 +540,6 @@ private:
         request->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
         request->SetDatabase(database);
         request->SetPoolId(query.PoolId);
-        request->MutableYdbParameters()->insert(query.Params.begin(), query.Params.end());
 
         if (query.Timeout) {
             request->SetTimeoutMs(query.Timeout.MilliSeconds());

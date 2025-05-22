@@ -4,8 +4,6 @@
 #include "columnar.h"
 #endif
 
-#include "helpers.h"
-
 #include <library/cpp/yt/coding/zig_zag.h>
 
 namespace NYT::NTableClient {
@@ -69,7 +67,6 @@ void DecodeVectorRleImpl(
     ui64 baseValue,
     TRange<ui32> dictionaryIndexes,
     TRange<ui64> rleIndexes,
-    TRef bitmap,
     TGetter getter,
     TConsumer consumer)
 {
@@ -84,30 +81,17 @@ void DecodeVectorRleImpl(
                 break;
             }
             decltype(getter(0)) currentValue;
-            bool isNull = false;
             if constexpr(WithDictionary) {
                 auto dictionaryIndex = dictionaryIndexes[currentRleIndex];
                 if (dictionaryIndex == 0) {
                     currentValue = {};
                 } else {
-                    if (bitmap && GetBit(bitmap, dictionaryIndex - 1)) {
-                        isNull = true;
-                    } else {
-                        currentValue = getter(dictionaryIndex - 1);
-                    }
-
+                    currentValue = getter(dictionaryIndex - 1);
                 }
             } else {
-                if (bitmap && GetBit(bitmap, currentRleIndex)) {
-                    isNull = true;
-                } else {
-                    currentValue = getter(currentRleIndex);
-                }
+                currentValue = getter(currentRleIndex);
             }
-            currentDecodedValue = {};
-            if (!isNull) {
-                currentDecodedValue = TValueDecoder<WithBaseValue, WithZigZag, T>::Run(currentValue, baseValue);
-            }
+            currentDecodedValue = TValueDecoder<WithBaseValue, WithZigZag, T>::Run(currentValue, baseValue);
             ++currentRleIndex;
             thresholdIndex = currentRleIndex < std::ssize(rleIndexes)
                 ? std::min(static_cast<i64>(rleIndexes[currentRleIndex]), endIndex)
@@ -147,36 +131,22 @@ void DecodeVectorDirectImpl(
     i64 endIndex,
     ui64 baseValue,
     TRange<ui32> dictionaryIndexes,
-    TRef bitmap,
     TGetter getter,
     TConsumer consumer)
 {
     for (i64 index = startIndex; index < endIndex; ++index) {
-        bool isNull = false;
         decltype(getter(0)) value;
         if constexpr(WithDictionary) {
             auto dictionaryIndex = dictionaryIndexes[index];
             if (dictionaryIndex == 0) {
                 value = {};
             } else {
-                if (bitmap && GetBit(bitmap, dictionaryIndex - 1)) {
-                    isNull = true;
-                } else {
-                    value = getter(dictionaryIndex - 1);
-                }
+                value = getter(dictionaryIndex - 1);
             }
         } else {
-            if (bitmap && GetBit(bitmap, index)) {
-                isNull = true;
-            } else {
-                value = getter(index);
-            }
+            value = getter(index);
         }
-        decltype(getter(0)) decodedValue = {};
-        if (!isNull) {
-            decodedValue = TValueDecoder<WithBaseValue, WithZigZag, T>::Run(value, baseValue);
-        }
-
+        auto decodedValue = TValueDecoder<WithBaseValue, WithZigZag, T>::Run(value, baseValue);
         consumer(decodedValue);
     }
 }
@@ -202,7 +172,6 @@ void DecodeVectorImpl(
     ui64 baseValue,
     TRange<ui32> dictionaryIndexes,
     TRange<ui64> rleIndexes,
-    TRef bitmap,
     TGetter getter,
     TConsumer consumer)
 {
@@ -213,7 +182,6 @@ void DecodeVectorImpl(
             baseValue,
             dictionaryIndexes,
             rleIndexes,
-            bitmap,
             std::forward<TGetter>(getter),
             std::forward<TConsumer>(consumer));
     } else {
@@ -222,7 +190,6 @@ void DecodeVectorImpl(
             endIndex,
             baseValue,
             dictionaryIndexes,
-            bitmap,
             std::forward<TGetter>(getter),
             std::forward<TConsumer>(consumer));
     }
@@ -291,7 +258,6 @@ void DecodeVector(
     bool zigZagEncoded,
     TRange<ui32> dictionaryIndexes,
     TRange<ui64> rleIndexes,
-    TRef bitmap,
     TGetter getter,
     TConsumer consumer)
 {
@@ -305,7 +271,6 @@ void DecodeVector(
             baseValue, \
             dictionaryIndexes, \
             rleIndexes, \
-            bitmap, \
             std::forward<TGetter>(getter), \
             std::forward<TConsumer>(consumer));
 
@@ -359,7 +324,6 @@ void DecodeIntegerVector(
     bool zigZagEncoded,
     TRange<ui32> dictionaryIndexes,
     TRange<ui64> rleIndexes,
-    TRef bitmap,
     TFetcher fetcher,
     TConsumer consumer)
 {
@@ -370,7 +334,6 @@ void DecodeIntegerVector(
         zigZagEncoded,
         dictionaryIndexes,
         rleIndexes,
-        bitmap,
         std::forward<TFetcher>(fetcher),
         std::forward<TConsumer>(consumer));
 }
@@ -395,7 +358,6 @@ void DecodeRawVector(
         false,
         dictionaryIndexes,
         rleIndexes,
-        /*bitmap*/ {},
         std::forward<TFetcher>(fetcher),
         std::forward<TConsumer>(consumer));
 }

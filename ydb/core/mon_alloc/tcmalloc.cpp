@@ -586,7 +586,7 @@ class TTcMallocMonitor : public IAllocMonitor {
         TControlWrapper PageCacheReleaseRate;
 
         TControls()
-            : ProfileSamplingRate(tcmalloc::MallocExtension::GetProfileSamplingInterval(),
+            : ProfileSamplingRate(tcmalloc::MallocExtension::GetProfileSamplingRate(),
                 64 << 10, MaxSamplingRate)
             , GuardedSamplingRate(MaxSamplingRate,
                 64 << 10, MaxSamplingRate)
@@ -650,12 +650,12 @@ private:
     }
 
     void UpdateControls() {
-        tcmalloc::MallocExtension::SetProfileSamplingInterval(Controls.ProfileSamplingRate);
+        tcmalloc::MallocExtension::SetProfileSamplingRate(Controls.ProfileSamplingRate);
 
         if (Controls.GuardedSamplingRate != TControls::MaxSamplingRate) {
             tcmalloc::MallocExtension::ActivateGuardedSampling();
         }
-        tcmalloc::MallocExtension::SetGuardedSamplingInterval(Controls.GuardedSamplingRate);
+        tcmalloc::MallocExtension::SetGuardedSamplingRate(Controls.GuardedSamplingRate);
     }
 
     void ReleaseMemoryIfNecessary(TDuration interval) {

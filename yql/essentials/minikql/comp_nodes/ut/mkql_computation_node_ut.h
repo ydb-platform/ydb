@@ -116,7 +116,7 @@ struct TSetup {
 
     TAutoPtr<IComputationGraph> BuildGraph(TRuntimeNode pgm, EGraphPerProcess graphPerProcess, const std::vector<TNode*>& entryPoints) {
         Reset();
-        Explorer.Walk(pgm.GetNode(), Env->GetNodeStack());
+        Explorer.Walk(pgm.GetNode(), *Env);
         TComputationPatternOpts opts(Alloc.Ref(), *Env, NodeFactory,
             FunctionRegistry.Get(), NUdf::EValidateMode::None, NUdf::EValidatePolicy::Exception,
              UseLLVM ? "" : "OFF", graphPerProcess, StatsRegistry.Get(), nullptr, nullptr);

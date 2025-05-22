@@ -182,10 +182,6 @@ public:
 
         buildInfo->CreateSender = Request->Sender;
         buildInfo->SenderCookie = Request->Cookie;
-        buildInfo->StartTime = TAppData::TimeProvider->Now();
-        if (request.HasUserSID()) {
-            buildInfo->UserSID = request.GetUserSID();
-        }
 
         Self->PersistCreateBuildIndex(db, *buildInfo);
 

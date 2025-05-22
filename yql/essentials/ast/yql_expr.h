@@ -1665,7 +1665,7 @@ public:
 
     bool HasResult() const {
         ENSURE_NOT_DELETED
-        return bool(Result);
+        return Type() != Callable || bool(Result);
     }
 
     void SetResult(TPtr&& result) {
@@ -1801,8 +1801,7 @@ public:
         return State == EState::ExecutionComplete
             || State == EState::ExecutionInProgress
             || State == EState::ExecutionRequired
-            || State == EState::ExecutionPending
-            || HasResult();
+            || State == EState::ExecutionPending;
     }
 
     bool IsComplete() const {
@@ -2008,7 +2007,7 @@ public:
         ENSURE_NOT_DELETED
         ENSURE_NOT_FROZEN
         Y_ENSURE(static_cast<EState>(State) >= EState::TypeComplete);
-        Y_ENSURE(static_cast<EState>(State) < EState::ExecutionRequired);
+        Y_ENSURE(!StartsExecution());
         Constraints_.AddConstraint(node);
         State = EState::ConstrComplete;
     }

@@ -63,11 +63,11 @@ TRunResult RunTestOverGraph(const TRunParams& params, const bool needsVerificati
         // Compute node implementation
 
         Cerr << "Compute graph result" << Endl;
-        const auto graphTimeStart = GetThreadCPUTime();
+        const auto graphTimeStart = TInstant::Now();
         size_t lineCount = CountWideStreamOutputs<2>(computeGraphPtr->GetValue());
         Cerr << lineCount << Endl;
 
-        return GetThreadCPUTimeDelta(graphTimeStart);
+        return TInstant::Now() - graphTimeStart;
     };
 
     auto measureRefTime = [&](auto& computeGraphPtr, IDataSampler& sampler) {
@@ -75,10 +75,10 @@ TRunResult RunTestOverGraph(const TRunParams& params, const bool needsVerificati
 
         Cerr << "Compute reference result" << Endl;
         auto referenceStream = sampler.MakeStream(computeGraphPtr->GetHolderFactory());
-        const auto cppTimeStart = GetThreadCPUTime();
+        const auto cppTimeStart = TInstant::Now();
         sampler.ComputeReferenceResult(*referenceStream);
 
-        return GetThreadCPUTimeDelta(cppTimeStart);
+        return TInstant::Now() - cppTimeStart;
     };
 
     auto graphRun1 = BuildGraph(setup, *sampler, params.WideCombinerMemLimit);
@@ -106,13 +106,13 @@ TRunResult RunTestOverGraph(const TRunParams& params, const bool needsVerificati
         // Measure the input stream run time
         Cerr << "Generator run" << Endl;
         const auto devnullStream = sampler->MakeStream(graphRun1->GetHolderFactory());
-        const auto devnullStart = GetThreadCPUTime();
+        const auto devnullStart = TInstant::Now();
         {
             NUdf::TUnboxedValue columns[2];
             while (devnullStream->WideFetch(columns, 2) == NUdf::EFetchStatus::Ok) {
             }
         }
-        result.GeneratorTime = GetThreadCPUTimeDelta(devnullStart);
+        result.GeneratorTime = TInstant::Now() - devnullStart;
 
         if (params.TestMode == ETestMode::GeneratorOnly) {
             return result;
@@ -142,7 +142,7 @@ void RunTestSimple(const TRunParams& params, TTestResultCollector& printout)
 
     Cerr << "======== " << __func__ << ", keys: " << params.NumKeys << ", llvm: " << LLVM << ", mem limit: " << params.WideCombinerMemLimit << Endl;
 
-    if (params.NumAttempts <= 1 && !params.MeasureReferenceMemory && !params.AlwaysSubprocess) {
+    if (params.NumAttempts <= 1 && !params.MeasureReferenceMemory) {
         finalResult = RunTestOverGraph<LLVM>(params, true, false);
     }
     else {

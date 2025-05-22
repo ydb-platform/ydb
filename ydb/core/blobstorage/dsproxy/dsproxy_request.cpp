@@ -879,7 +879,6 @@ namespace NKikimr {
             XX(Status)
             XX(Patch)
             XX(Assimilate)
-            XX(CheckIntegrity)
             default:
                 Y_ABORT();
 #undef XX

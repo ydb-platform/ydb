@@ -380,7 +380,6 @@ struct TChunkReaderOptions
     bool DynamicTable;
     bool EnableTabletIndex;
     bool EnableKeyWidening;
-    bool EnableAnyUnpacking;
 
     static TChunkReaderOptionsPtr GetDefault();
 

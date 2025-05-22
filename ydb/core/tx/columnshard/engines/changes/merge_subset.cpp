@@ -16,7 +16,7 @@ std::shared_ptr<NArrow::TColumnFilter> TReadPortionToMerge::BuildPortionFilter(c
     }
     NArrow::TColumnFilter filterDeleted = NArrow::TColumnFilter::BuildAllowFilter();
     if (pInfo.GetMeta().GetDeletionsCount()) {
-        if (pInfo.GetPortionType() == EPortionType::Written) {
+        if (pInfo.HasInsertWriteId()) {
             AFL_VERIFY(pInfo.GetMeta().GetDeletionsCount() == pInfo.GetRecordsCount());
             filterDeleted = NArrow::TColumnFilter::BuildDenyFilter();
         } else {

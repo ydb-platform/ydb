@@ -759,9 +759,10 @@ private:
         }
 
         if (!delegatedNode) {
-            const auto clusterStr = op.DataSink().Cluster().StringValue();
+            const auto cluster = op.DataSink().Cluster();
             const auto config = State_->Configuration->GetSettingsForNode(*input);
-            const auto tmpFolder = GetTablesTmpFolder(*config, clusterStr);
+            const auto tmpFolder = GetTablesTmpFolder(*config);
+            auto clusterStr = TString{cluster.Value()};
 
             delegatedNode = input->ChildPtr(TYtDqProcessWrite::idx_Input);
 

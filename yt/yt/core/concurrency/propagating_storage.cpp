@@ -4,8 +4,6 @@
 
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 
-#include <library/cpp/yt/memory/leaky_singleton.h>
-
 #include <yt/yt/core/misc/static_ring_queue.h>
 
 namespace NYT::NConcurrency {
@@ -53,8 +51,26 @@ public:
     DEFINE_SIGNAL_SIMPLE(void(), OnBeforeUninstall);
     DEFINE_SIGNAL_SIMPLE(void(), OnAfterInstall);
 
+    void RecordLocation(TSourceLocation loc)
+    {
+        Locations_.Append(&loc, &loc + 1);
+    }
+
+    void PrintModificationLocationsToStderr()
+    {
+        size_t size = Locations_.Size();
+        TSourceLocation lastLocations[MaxSize];
+        Locations_.CopyTailTo(size, &lastLocations[0]);
+        for (size_t i = 0; i < size; ++i) {
+            Cerr << NYT::ToString(lastLocations[i]) << Endl;
+        }
+    }
+
 private:
     TStorage Data_;
+
+    static constexpr int MaxSize = 8;
+    TStaticRingQueue<TSourceLocation, MaxSize> Locations_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -180,7 +196,24 @@ void TPropagatingStorage::EnsureUnique()
     Impl_ = Impl_->Clone();
 }
 
-static YT_DEFINE_GLOBAL(TFlsSlot<TPropagatingStorage>, PropagatingStorageSlot);
+void TPropagatingStorage::RecordLocation(TSourceLocation loc)
+{
+    Impl_->RecordLocation(loc);
+}
+
+void TPropagatingStorage::PrintModificationLocationsToStderr()
+{
+    Impl_->PrintModificationLocationsToStderr();
+}
+
+struct TPropagatingStorageInfo
+{
+    TPropagatingStorage Storage;
+    TSourceLocation Location;
+    TSourceLocation PrevLocation;
+};
+
+static YT_DEFINE_GLOBAL(TFlsSlot<TPropagatingStorageInfo>, PropagatingStorageSlot);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -189,27 +222,18 @@ class TPropagatingStorageManager
 public:
     static TPropagatingStorageManager* Get()
     {
-        return LeakySingleton<TPropagatingStorageManager>();
+        return Singleton<TPropagatingStorageManager>();
     }
 
-    TPropagatingStorage& CurrentPropagatingStorage()
+    TPropagatingStorage& GetCurrentPropagatingStorage()
     {
-        return *PropagatingStorageSlot();
-    }
-
-    const TPropagatingStorage& GetCurrentPropagatingStorage()
-    {
-        if (const auto& slot = PropagatingStorageSlot(); slot.IsInitialized()) {
-            return *slot;
-        } else {
-            static const TPropagatingStorage empty;
-            return empty;
-        }
+        return PropagatingStorageSlot()->Storage;
     }
 
     const TPropagatingStorage* TryGetPropagatingStorage(const TFls& fls)
     {
-        return PropagatingStorageSlot().Get(fls);
+        auto* info = PropagatingStorageSlot().Get(fls);
+        return info != nullptr ? &info->Storage : nullptr;
     }
 
     void InstallGlobalSwitchHandler(TPropagatingStorageGlobalSwitchHandler handler)
@@ -223,20 +247,15 @@ public:
 
     TPropagatingStorage SwitchPropagatingStorage(TPropagatingStorage newStorage)
     {
-        const auto& oldStorage = GetCurrentPropagatingStorage();
-        if (oldStorage.IsNull() && newStorage.IsNull()) {
-            return TPropagatingStorage();
-        }
+        auto& storage = GetCurrentPropagatingStorage();
         int count = SwitchHandlerCount_.load(std::memory_order::acquire);
         for (int index = 0; index < count; ++index) {
-            SwitchHandlers_[index](oldStorage, newStorage);
+            SwitchHandlers_[index](storage, newStorage);
         }
-        return std::exchange(CurrentPropagatingStorage(), std::move(newStorage));
+        return std::exchange(storage, std::move(newStorage));
     }
 
 private:
-    DECLARE_LEAKY_SINGLETON_FRIEND()
-
     NThreading::TForkAwareSpinLock Lock_;
 
     static constexpr int MaxSwitchHandlerCount = 16;
@@ -247,12 +266,7 @@ private:
     Y_DECLARE_SINGLETON_FRIEND()
 };
 
-TPropagatingStorage& CurrentPropagatingStorage()
-{
-    return TPropagatingStorageManager::Get()->CurrentPropagatingStorage();
-}
-
-const TPropagatingStorage& GetCurrentPropagatingStorage()
+TPropagatingStorage& GetCurrentPropagatingStorage()
 {
     return TPropagatingStorageManager::Get()->GetCurrentPropagatingStorage();
 }
@@ -269,13 +283,34 @@ void InstallGlobalPropagatingStorageSwitchHandler(TPropagatingStorageGlobalSwitc
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TPropagatingStorageGuard::TPropagatingStorageGuard(TPropagatingStorage storage)
+TSourceLocation SwitchPropagatingStorageLocation(TSourceLocation loc)
+{
+    PropagatingStorageSlot()->PrevLocation = PropagatingStorageSlot()->Location;
+    return std::exchange(PropagatingStorageSlot()->Location, loc);
+}
+
+void PrintLocationToStderr()
+{
+    Cerr << Format(
+        "PropagatingStorageLocation: %v, PrevLocation: %v, ModificationLocations:",
+        PropagatingStorageSlot()->Location,
+        PropagatingStorageSlot()->PrevLocation) << Endl;
+
+    PropagatingStorageSlot()->Storage.PrintModificationLocationsToStderr();
+}
+
+TPropagatingStorageGuard::TPropagatingStorageGuard(TPropagatingStorage storage, TSourceLocation loc)
     : OldStorage_(TPropagatingStorageManager::Get()->SwitchPropagatingStorage(std::move(storage)))
-{ }
+    , OldLocation_(SwitchPropagatingStorageLocation(loc))
+{
+    YT_VERIFY((OldLocation_.GetFileName() == nullptr) == (OldLocation_.GetLine() == -1));
+    YT_VERIFY((loc.GetFileName() == nullptr) == (loc.GetLine() == -1));
+}
 
 TPropagatingStorageGuard::~TPropagatingStorageGuard()
 {
     TPropagatingStorageManager::Get()->SwitchPropagatingStorage(std::move(OldStorage_));
+    SwitchPropagatingStorageLocation(OldLocation_);
 }
 
 const TPropagatingStorage& TPropagatingStorageGuard::GetOldStorage() const
@@ -285,8 +320,8 @@ const TPropagatingStorage& TPropagatingStorageGuard::GetOldStorage() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TNullPropagatingStorageGuard::TNullPropagatingStorageGuard()
-    : TPropagatingStorageGuard(TPropagatingStorage())
+TNullPropagatingStorageGuard::TNullPropagatingStorageGuard(TSourceLocation loc)
+    : TPropagatingStorageGuard(TPropagatingStorage(), loc)
 { }
 
 ////////////////////////////////////////////////////////////////////////////////

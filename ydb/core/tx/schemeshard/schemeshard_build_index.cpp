@@ -67,14 +67,8 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
         NIceDb::TUpdate<Schema::IndexBuild::MaxBatchBytes>(info.ScanSettings.GetMaxBatchBytes()),
         NIceDb::TUpdate<Schema::IndexBuild::MaxShards>(info.MaxInProgressShards),
         NIceDb::TUpdate<Schema::IndexBuild::MaxRetries>(info.ScanSettings.GetMaxBatchRetries()),
-        NIceDb::TUpdate<Schema::IndexBuild::BuildKind>(ui32(info.BuildKind)),
-        NIceDb::TUpdate<Schema::IndexBuild::StartTime>(info.StartTime.Seconds())
+        NIceDb::TUpdate<Schema::IndexBuild::BuildKind>(ui32(info.BuildKind))
     );
-    if (info.UserSID) {
-        persistedBuildIndex.Update(
-            NIceDb::TUpdate<Schema::IndexBuild::UserSID>(*info.UserSID)
-        );
-    }
     // Persist details of the index build operation: ImplTableDescriptions and SpecializedIndexDescription.
     // We have chosen TIndexCreationConfig's string representation as the serialization format.
     if (bool hasSpecializedDescription = !std::holds_alternative<std::monostate>(info.SpecializedIndexDescription);
@@ -125,11 +119,7 @@ void TSchemeShard::PersistCreateBuildIndex(NIceDb::TNiceDb& db, const TIndexBuil
 
 void TSchemeShard::PersistBuildIndexState(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {
     db.Table<Schema::IndexBuild>().Key(indexInfo.Id).Update(
-        NIceDb::TUpdate<Schema::IndexBuild::State>(ui32(indexInfo.State)),
-        NIceDb::TUpdate<Schema::IndexBuild::Issue>(indexInfo.Issue),
-        NIceDb::TUpdate<Schema::IndexBuild::StartTime>(indexInfo.StartTime.Seconds()),
-        NIceDb::TUpdate<Schema::IndexBuild::EndTime>(indexInfo.EndTime.Seconds())
-    );
+        NIceDb::TUpdate<Schema::IndexBuild::State>(ui32(indexInfo.State)));
 }
 
 void TSchemeShard::PersistBuildIndexCancelRequest(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo) {

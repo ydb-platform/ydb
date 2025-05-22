@@ -523,7 +523,7 @@ static int s_s2n_handler_process_read_message(
     AWS_LOGF_TRACE(
         AWS_LS_IO_TLS, "id=%p: Downstream window %llu", (void *)handler, (unsigned long long)downstream_window);
 
-    while (processed < downstream_window) {
+    while (processed < downstream_window && blocked == S2N_NOT_BLOCKED) {
 
         struct aws_io_message *outgoing_read_message = aws_channel_acquire_message_from_pool(
             slot->channel, AWS_IO_MESSAGE_APPLICATION_DATA, downstream_window - processed);
@@ -558,24 +558,9 @@ static int s_s2n_handler_process_read_message(
 
         if (read < 0) {
             aws_mem_release(outgoing_read_message->allocator, outgoing_read_message);
-
-            /* the socket blocked so exit from the loop */
-            if (s2n_error_get_type(s2n_errno) == S2N_ERR_T_BLOCKED) {
-                break;
-            }
-
-            /* the socket returned a fatal error so shut down */
-            AWS_LOGF_ERROR(
-                AWS_LS_IO_TLS,
-                "id=%p: S2N failed to read with error: %s (%s)",
-                (void *)handler,
-                s2n_strerror(s2n_errno, "EN"),
-                s2n_strerror_debug(s2n_errno, "EN"));
-            aws_channel_shutdown(slot->channel, AWS_IO_TLS_ERROR_READ_FAILURE);
-            return AWS_OP_SUCCESS;
+            continue;
         };
 
-        /* if read > 0 */
         processed += read;
         outgoing_read_message->message_data.len = (size_t)read;
 
@@ -1312,9 +1297,8 @@ struct aws_channel_handler *aws_tls_server_handler_new(
 
 static void s_s2n_ctx_destroy(struct s2n_ctx *s2n_ctx) {
     if (s2n_ctx != NULL) {
-        if (s2n_ctx->s2n_config) {
-            s2n_config_free(s2n_ctx->s2n_config);
-        }
+        s2n_config_free(s2n_ctx->s2n_config);
+
         if (s2n_ctx->custom_cert_chain_and_key) {
             s2n_cert_chain_and_key_free(s2n_ctx->custom_cert_chain_and_key);
         }
@@ -1388,22 +1372,20 @@ static struct aws_tls_ctx *s_tls_ctx_new(
         goto cleanup_s2n_config;
     }
 
-    const char *security_policy = NULL;
     if (options->custom_key_op_handler != NULL) {
-        /* When custom_key_op_handler is set, don't use security policy that allow TLS 1.3.
-         * This hack is necessary until our PKCS#11 custom_key_op_handler supports RSA PSS */
+        /* PKCS#11 integration hasn't been tested with TLS 1.3, so don't use cipher preferences that allow 1.3 */
         switch (options->minimum_tls_version) {
             case AWS_IO_SSLv3:
-                security_policy = "CloudFront-SSL-v-3";
+                s2n_config_set_cipher_preferences(s2n_ctx->s2n_config, "CloudFront-SSL-v-3");
                 break;
             case AWS_IO_TLSv1:
-                security_policy = "CloudFront-TLS-1-0-2014";
+                s2n_config_set_cipher_preferences(s2n_ctx->s2n_config, "CloudFront-TLS-1-0-2014");
                 break;
             case AWS_IO_TLSv1_1:
-                security_policy = "ELBSecurityPolicy-TLS-1-1-2017-01";
+                s2n_config_set_cipher_preferences(s2n_ctx->s2n_config, "ELBSecurityPolicy-TLS-1-1-2017-01");
                 break;
             case AWS_IO_TLSv1_2:
-                security_policy = "ELBSecurityPolicy-TLS-1-2-Ext-2018-06";
+                s2n_config_set_cipher_preferences(s2n_ctx->s2n_config, "ELBSecurityPolicy-TLS-1-2-Ext-2018-06");
                 break;
             case AWS_IO_TLSv1_3:
                 AWS_LOGF_ERROR(AWS_LS_IO_TLS, "TLS 1.3 with PKCS#11 is not supported yet.");
@@ -1411,29 +1393,28 @@ static struct aws_tls_ctx *s_tls_ctx_new(
                 goto cleanup_s2n_config;
             case AWS_IO_TLS_VER_SYS_DEFAULTS:
             default:
-                security_policy = "ELBSecurityPolicy-TLS-1-1-2017-01";
+                s2n_config_set_cipher_preferences(s2n_ctx->s2n_config, "ELBSecurityPolicy-TLS-1-1-2017-01");
         }
     } else {
-        /* No custom_key_op_handler is set, use normal security policies */
         switch (options->minimum_tls_version) {
             case AWS_IO_SSLv3:
-                security_policy = "AWS-CRT-SDK-SSLv3.0-2023";
+                s2n_config_set_cipher_preferences(s2n_ctx->s2n_config, "AWS-CRT-SDK-SSLv3.0");
                 break;
             case AWS_IO_TLSv1:
-                security_policy = "AWS-CRT-SDK-TLSv1.0-2023";
+                s2n_config_set_cipher_preferences(s2n_ctx->s2n_config, "AWS-CRT-SDK-TLSv1.0");
                 break;
             case AWS_IO_TLSv1_1:
-                security_policy = "AWS-CRT-SDK-TLSv1.1-2023";
+                s2n_config_set_cipher_preferences(s2n_ctx->s2n_config, "AWS-CRT-SDK-TLSv1.1");
                 break;
             case AWS_IO_TLSv1_2:
-                security_policy = "AWS-CRT-SDK-TLSv1.2-2023";
+                s2n_config_set_cipher_preferences(s2n_ctx->s2n_config, "AWS-CRT-SDK-TLSv1.2");
                 break;
             case AWS_IO_TLSv1_3:
-                security_policy = "AWS-CRT-SDK-TLSv1.3-2023";
+                s2n_config_set_cipher_preferences(s2n_ctx->s2n_config, "AWS-CRT-SDK-TLSv1.3");
                 break;
             case AWS_IO_TLS_VER_SYS_DEFAULTS:
             default:
-                security_policy = "AWS-CRT-SDK-TLSv1.0-2023";
+                s2n_config_set_cipher_preferences(s2n_ctx->s2n_config, "AWS-CRT-SDK-TLSv1.0");
         }
     }
 
@@ -1442,24 +1423,12 @@ static struct aws_tls_ctx *s_tls_ctx_new(
             /* No-Op, if the user configured a minimum_tls_version then a version-specific Cipher Preference was set */
             break;
         case AWS_IO_TLS_CIPHER_PREF_PQ_TLSv1_0_2021_05:
-            security_policy = "PQ-TLS-1-0-2021-05-26";
+            s2n_config_set_cipher_preferences(s2n_ctx->s2n_config, "PQ-TLS-1-0-2021-05-26");
             break;
         default:
             AWS_LOGF_ERROR(AWS_LS_IO_TLS, "Unrecognized TLS Cipher Preference: %d", options->cipher_pref);
             aws_raise_error(AWS_IO_TLS_CIPHER_PREF_UNSUPPORTED);
             goto cleanup_s2n_config;
-    }
-
-    AWS_ASSERT(security_policy != NULL);
-    if (s2n_config_set_cipher_preferences(s2n_ctx->s2n_config, security_policy)) {
-        AWS_LOGF_ERROR(
-            AWS_LS_IO_TLS,
-            "ctx: Failed setting security policy '%s' (newer S2N required?): %s (%s)",
-            security_policy,
-            s2n_strerror(s2n_errno, "EN"),
-            s2n_strerror_debug(s2n_errno, "EN"));
-        aws_raise_error(AWS_IO_TLS_CTX_ERROR);
-        goto cleanup_s2n_config;
     }
 
     if (aws_tls_options_buf_is_set(&options->certificate) && aws_tls_options_buf_is_set(&options->private_key)) {

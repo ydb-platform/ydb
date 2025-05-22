@@ -59,15 +59,18 @@ struct TCheckpointContext : public TThrRefBase {
     TGenerationContextPtr GenerationContext;
     TCheckpointGraphDescriptionContextPtr CheckpointGraphDescriptionContext;
     IEntityIdGenerator::TPtr EntityIdGenerator;
+    TExecDataQuerySettings Settings;
 
     TCheckpointContext(const TCheckpointId& id,
                        ECheckpointStatus status,
                        ECheckpointStatus expected,
-                       ui64 stateSizeBytes)
+                       ui64 stateSizeBytes,
+                       TExecDataQuerySettings settings)
         : CheckpointId(id)
         , Status(status)
         , ExpectedStatus(expected)
         , StateSizeBytes(stateSizeBytes)
+        , Settings(settings)
     {
     }
 };
@@ -112,8 +115,7 @@ TFuture<TDataQueryResult> SelectGraphCoordinators(const TGenerationContextPtr& c
 
     return context->Session.ExecuteDataQuery(
         query,
-        TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
-        context->ExecDataQuerySettings);
+        TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx());
 }
 
 TFuture<TStatus> ProcessCoordinators(
@@ -221,7 +223,7 @@ TFuture<TStatus> CreateCheckpoint(const TCheckpointContextPtr& context) {
     }
 
     auto ttxControl = TTxControl::Tx(*generationContext->Transaction).CommitTx();
-    return generationContext->Session.ExecuteDataQuery(query, ttxControl, params.Build(), generationContext->ExecDataQuerySettings).Apply(
+    return generationContext->Session.ExecuteDataQuery(query, ttxControl, params.Build(), context->Settings).Apply(
         [] (const TFuture<TDataQueryResult>& future) {
             TStatus status = future.GetValue();
             return status;
@@ -271,7 +273,7 @@ TFuture<TStatus> UpdateCheckpoint(const TCheckpointContextPtr& context) {
             .Build();
 
     auto ttxControl = TTxControl::Tx(*generationContext->Transaction).CommitTx();
-    return generationContext->Session.ExecuteDataQuery(query, ttxControl, params.Build(), generationContext->ExecDataQuerySettings).Apply(
+    return generationContext->Session.ExecuteDataQuery(query, ttxControl, params.Build(), context->Settings).Apply(
         [] (const TFuture<TDataQueryResult>& future) {
             TStatus status = future.GetValue();
             return status;
@@ -298,7 +300,7 @@ TFuture<TDataQueryResult> SelectGraphDescId(const TCheckpointContextPtr& context
             .String(graphDescContext->GraphDescId)
             .Build();
 
-    return generationContext->Session.ExecuteDataQuery(query, TTxControl::Tx(*generationContext->Transaction), params.Build(), generationContext->ExecDataQuerySettings);
+    return generationContext->Session.ExecuteDataQuery(query, TTxControl::Tx(*generationContext->Transaction), params.Build(), context->Settings);
 }
 
 bool GraphDescIdExists(const TFuture<TDataQueryResult>& result) {
@@ -350,7 +352,7 @@ TFuture<TStatus> CreateCheckpointWrapper(
         });
 }
 
-TFuture<TDataQueryResult> SelectGraphCheckpoints(const TGenerationContextPtr& context, const TVector<ECheckpointStatus>& statuses, ui64 limit, bool loadGraphDescription)
+TFuture<TDataQueryResult> SelectGraphCheckpoints(const TGenerationContextPtr& context, const TVector<ECheckpointStatus>& statuses, ui64 limit, TExecDataQuerySettings settings, bool loadGraphDescription)
 {
     NYdb::TParamsBuilder paramsBuilder;
     if (statuses) {
@@ -416,7 +418,7 @@ TFuture<TDataQueryResult> SelectGraphCheckpoints(const TGenerationContextPtr& co
         query,
         TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
         params,
-        context->ExecDataQuerySettings);
+        settings);
 }
 
 TFuture<TStatus> ProcessCheckpoints(
@@ -496,7 +498,7 @@ TFuture<TDataQueryResult> SelectCheckpoint(const TCheckpointContextPtr& context)
         query,
         TTxControl::Tx(*generationContext->Transaction),
         params.Build(),
-        generationContext->ExecDataQuerySettings);
+        context->Settings);
 }
 
 TFuture<TStatus> CheckCheckpoint(
@@ -589,14 +591,16 @@ TFuture<TStatus> UpdateCheckpointWithCheckWrapper(
 ////////////////////////////////////////////////////////////////////////////////
 
 class TCheckpointStorage : public ICheckpointStorage {
+    TYqSharedResources::TPtr YqSharedResources;
     TYdbConnectionPtr YdbConnection;
     const NConfig::TYdbStorageConfig Config;
 
 public:
     explicit TCheckpointStorage(
         const NConfig::TYdbStorageConfig& config,
+        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
         const IEntityIdGenerator::TPtr& entityIdGenerator,
-        const TYdbConnectionPtr& ydbConnection);
+        const TYqSharedResources::TPtr& yqSharedResources);
 
     ~TCheckpointStorage() = default;
 
@@ -660,9 +664,11 @@ private:
 
 TCheckpointStorage::TCheckpointStorage(
     const NConfig::TYdbStorageConfig& config,
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const IEntityIdGenerator::TPtr& entityIdGenerator,
-    const TYdbConnectionPtr& ydbConnection)
-    : YdbConnection(ydbConnection)
+    const TYqSharedResources::TPtr& yqSharedResources)
+    : YqSharedResources(yqSharedResources)
+    , YdbConnection(NewYdbConnection(config, credentialsProviderFactory, YqSharedResources->CoreYdbDriver))
     , Config(config)
     , EntityIdGenerator(entityIdGenerator)
 {
@@ -750,8 +756,7 @@ TFuture<TIssues> TCheckpointStorage::Init()
 TFuture<TIssues> TCheckpointStorage::RegisterGraphCoordinator(const TCoordinatorId& coordinator)
 {
     auto future = YdbConnection->TableClient.RetryOperation(
-        [prefix = YdbConnection->TablePathPrefix, coordinator,
-         execDataQuerySettings = DefaultExecDataQuerySettings()] (TSession session) {
+        [prefix = YdbConnection->TablePathPrefix, coordinator] (TSession session) {
             auto context = MakeIntrusive<TGenerationContext>(
                 session,
                 true,
@@ -760,8 +765,7 @@ TFuture<TIssues> TCheckpointStorage::RegisterGraphCoordinator(const TCoordinator
                 "graph_id",
                 "generation",
                 coordinator.GraphId,
-                coordinator.Generation,
-                execDataQuerySettings);
+                coordinator.Generation);
 
             return RegisterCheckGeneration(context);
         });
@@ -773,7 +777,7 @@ TFuture<ICheckpointStorage::TGetCoordinatorsResult> TCheckpointStorage::GetCoord
     auto getContext = MakeIntrusive<TGetCoordinatorsContext>();
 
     auto future = YdbConnection->TableClient.RetryOperation(
-        [prefix = YdbConnection->TablePathPrefix, getContext, execDataQuerySettings = DefaultExecDataQuerySettings()] (TSession session) {
+        [prefix = YdbConnection->TablePathPrefix, getContext] (TSession session) {
             auto generationContext = MakeIntrusive<TGenerationContext>(
                 session,
                 false,
@@ -782,8 +786,7 @@ TFuture<ICheckpointStorage::TGetCoordinatorsResult> TCheckpointStorage::GetCoord
                 "graph_id",
                 "generation",
                 "",
-                0UL,
-                execDataQuerySettings);
+                0UL);
 
             auto future = SelectGraphCoordinators(generationContext);
             return future.Apply(
@@ -808,7 +811,7 @@ TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateC
     ECheckpointStatus status)
 {
     Y_ABORT_UNLESS(graphDescId);
-    auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, status, ECheckpointStatus::Pending, 0ul);
+    auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, status, ECheckpointStatus::Pending, 0ul, DefaultExecDataQuerySettings());
     checkpointContext->CheckpointGraphDescriptionContext = MakeIntrusive<TCheckpointGraphDescriptionContext>(graphDescId);
     return CreateCheckpointImpl(coordinator, checkpointContext);
 }
@@ -819,7 +822,7 @@ TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateC
     const NProto::TCheckpointGraphDescription& graphDesc,
     ECheckpointStatus status)
 {
-    auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, status, ECheckpointStatus::Pending, 0ul);
+    auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, status, ECheckpointStatus::Pending, 0ul, DefaultExecDataQuerySettings());
     checkpointContext->CheckpointGraphDescriptionContext = MakeIntrusive<TCheckpointGraphDescriptionContext>(graphDesc);
     checkpointContext->EntityIdGenerator = EntityIdGenerator;
     return CreateCheckpointImpl(coordinator, checkpointContext);
@@ -828,7 +831,7 @@ TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateC
 TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateCheckpointImpl(const TCoordinatorId& coordinator, const TCheckpointContextPtr& checkpointContext) {
     Y_ABORT_UNLESS(checkpointContext->CheckpointGraphDescriptionContext->GraphDescId || checkpointContext->EntityIdGenerator);
     auto future = YdbConnection->TableClient.RetryOperation(
-        [prefix = YdbConnection->TablePathPrefix, coordinator, checkpointContext, execDataQuerySettings = DefaultExecDataQuerySettings()] (TSession session) {
+        [prefix = YdbConnection->TablePathPrefix, coordinator, checkpointContext] (TSession session) {
             auto generationContext = MakeIntrusive<TGenerationContext>(
                 session,
                 false,
@@ -837,8 +840,7 @@ TFuture<ICheckpointStorage::TCreateCheckpointResult> TCheckpointStorage::CreateC
                 "graph_id",
                 "generation",
                 coordinator.GraphId,
-                coordinator.Generation,
-                execDataQuerySettings);
+                coordinator.Generation);
 
             checkpointContext->GenerationContext = generationContext;
 
@@ -861,9 +863,9 @@ TFuture<TIssues> TCheckpointStorage::UpdateCheckpointStatus(
     ECheckpointStatus prevStatus,
     ui64 stateSizeBytes)
 {
-    auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, newStatus, prevStatus, stateSizeBytes);
+    auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, newStatus, prevStatus, stateSizeBytes, DefaultExecDataQuerySettings());
     auto future = YdbConnection->TableClient.RetryOperation(
-        [prefix = YdbConnection->TablePathPrefix, coordinator, checkpointContext, execDataQuerySettings = DefaultExecDataQuerySettings()] (TSession session) {
+        [prefix = YdbConnection->TablePathPrefix, coordinator, checkpointContext] (TSession session) {
             auto generationContext = MakeIntrusive<TGenerationContext>(
                 session,
                 false,
@@ -872,8 +874,7 @@ TFuture<TIssues> TCheckpointStorage::UpdateCheckpointStatus(
                 "graph_id",
                 "generation",
                 coordinator.GraphId,
-                coordinator.Generation,
-                execDataQuerySettings);
+                coordinator.Generation);
 
             checkpointContext->GenerationContext = generationContext;
 
@@ -888,9 +889,9 @@ TFuture<TIssues> TCheckpointStorage::AbortCheckpoint(
     const TCoordinatorId& coordinator,
     const TCheckpointId& checkpointId)
 {
-    auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, ECheckpointStatus::Aborted, ECheckpointStatus::Pending, 0ul);
+    auto checkpointContext = MakeIntrusive<TCheckpointContext>(checkpointId, ECheckpointStatus::Aborted, ECheckpointStatus::Pending, 0ul, DefaultExecDataQuerySettings());
     auto future = YdbConnection->TableClient.RetryOperation(
-        [prefix = YdbConnection->TablePathPrefix, coordinator, checkpointContext, execDataQuerySettings = DefaultExecDataQuerySettings()] (TSession session) {
+        [prefix = YdbConnection->TablePathPrefix, coordinator, checkpointContext] (TSession session) {
             auto generationContext = MakeIntrusive<TGenerationContext>(
                 session,
                 false,
@@ -899,8 +900,7 @@ TFuture<TIssues> TCheckpointStorage::AbortCheckpoint(
                 "graph_id",
                 "generation",
                 coordinator.GraphId,
-                coordinator.Generation,
-                execDataQuerySettings);
+                coordinator.Generation);
 
             checkpointContext->GenerationContext = generationContext;
 
@@ -921,7 +921,7 @@ TFuture<ICheckpointStorage::TGetCheckpointsResult> TCheckpointStorage::GetCheckp
     auto getContext = MakeIntrusive<TGetCheckpointsContext>();
 
     auto future = YdbConnection->TableClient.RetryOperation(
-        [prefix = YdbConnection->TablePathPrefix, graph, getContext, statuses, limit, loadGraphDescription, execDataQuerySettings = DefaultExecDataQuerySettings()] (TSession session) {
+        [prefix = YdbConnection->TablePathPrefix, graph, getContext, statuses, limit, loadGraphDescription, settings = DefaultExecDataQuerySettings()] (TSession session) {
             auto generationContext = MakeIntrusive<TGenerationContext>(
                 session,
                 false,
@@ -930,10 +930,9 @@ TFuture<ICheckpointStorage::TGetCheckpointsResult> TCheckpointStorage::GetCheckp
                 "graph_id",
                 "generation",
                 graph,
-                0UL,
-                execDataQuerySettings);
+                0UL);
 
-            auto future = SelectGraphCheckpoints(generationContext, statuses, limit, loadGraphDescription);
+            auto future = SelectGraphCheckpoints(generationContext, statuses, limit, settings, loadGraphDescription);
             return future.Apply(
                 [generationContext, getContext, loadGraphDescription] (const TFuture<TDataQueryResult>& future) {
                     return ProcessCheckpoints(future.GetValue(), generationContext, getContext, loadGraphDescription);
@@ -1187,11 +1186,12 @@ TExecDataQuerySettings TCheckpointStorage::DefaultExecDataQuerySettings() {
 
 TCheckpointStoragePtr NewYdbCheckpointStorage(
     const NConfig::TYdbStorageConfig& config,
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const IEntityIdGenerator::TPtr& entityIdGenerator,
-    const TYdbConnectionPtr& ydbConnection)
+    const TYqSharedResources::TPtr& yqSharedResources)
 {
     Y_ABORT_UNLESS(entityIdGenerator);
-    return new TCheckpointStorage(config, entityIdGenerator, ydbConnection);
+    return new TCheckpointStorage(config, credentialsProviderFactory, entityIdGenerator, yqSharedResources);
 }
 
 } // namespace NFq

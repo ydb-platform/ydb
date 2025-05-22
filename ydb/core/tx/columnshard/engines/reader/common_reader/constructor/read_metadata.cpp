@@ -21,13 +21,11 @@ TConclusionStatus TReadMetadata::Init(
     SelectInfo = dataAccessor.Select(readDescription, !!LockId);
     if (LockId) {
         for (auto&& i : SelectInfo->Portions) {
-            if (!i->IsCommitted()) {
-                AFL_VERIFY(i->GetPortionType() == EPortionType::Written);
-                auto* written = static_cast<const TWrittenPortionInfo*>(i.get());
-                if (owner->HasLongTxWrites(written->GetInsertWriteId())) {
+            if (i->HasInsertWriteId() && !i->HasCommitSnapshot()) {
+                if (owner->HasLongTxWrites(i->GetInsertWriteIdVerified())) {
                 } else {
-                    auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(written->GetInsertWriteId());
-                    AddWriteIdToCheck(written->GetInsertWriteId(), op->GetLockId());
+                    auto op = owner->GetOperationsManager().GetOperationByInsertWriteIdVerified(i->GetInsertWriteIdVerified());
+                    AddWriteIdToCheck(i->GetInsertWriteIdVerified(), op->GetLockId());
                 }
             }
         }
@@ -71,8 +69,8 @@ std::set<ui32> TReadMetadata::GetPKColumnIds() const {
     return result;
 }
 
-NArrow::NMerger::TSortableBatchPosition TReadMetadata::BuildSortedPosition(const NArrow::TSimpleRow& key) const {
-    return NArrow::NMerger::TSortableBatchPosition(key.ToBatch(), 0, GetReplaceKey()->field_names(), {}, IsDescSorted());
+NArrow::NMerger::TSortableBatchPosition TReadMetadata::BuildSortedPosition(const NArrow::TReplaceKey& key) const {
+    return NArrow::NMerger::TSortableBatchPosition(key.ToBatch(GetReplaceKey()), 0, GetReplaceKey()->field_names(), {}, IsDescSorted());
 }
 
 void TReadMetadata::DoOnReadFinished(NColumnShard::TColumnShard& owner) const {

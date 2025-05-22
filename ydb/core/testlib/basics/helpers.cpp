@@ -46,13 +46,16 @@ namespace NKikimr {
     }
 
     struct TPDiskReplyChecker : IReplyChecker {
-        bool OnRequest(IEventHandle *request) override {
-            if (const ui32 type = request->GetTypeRewrite(); type == TEvBlobStorage::EvMultiLog) {
-                LastLsn = request->Get<NPDisk::TEvMultiLog>()->LsnSeg.Last;
-                return true;
+        ~TPDiskReplyChecker()
+        {
+        }
+
+        void OnRequest(IEventHandle *request) override {
+            if (request->Type == TEvBlobStorage::EvMultiLog) {
+                NPDisk::TEvMultiLog *evLogs = request->Get<NPDisk::TEvMultiLog>();
+                LastLsn = evLogs->LsnSeg.Last;
             } else {
                 LastLsn = {};
-                return type != TEvBlobStorage::EvConfigureScheduler;
             }
         }
 

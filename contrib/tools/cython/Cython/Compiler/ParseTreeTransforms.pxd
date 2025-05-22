@@ -1,4 +1,5 @@
-# cython: language_level=3str
+
+from __future__ import absolute_import
 
 cimport cython
 
@@ -6,8 +7,8 @@ from .Visitor cimport (
     CythonTransform, VisitorTransform, TreeVisitor,
     ScopeTrackingTransform, EnvTransform)
 
-# Don't include mixins, only the main classes.
-#cdef class SkipDeclarations:
+cdef class SkipDeclarations: # (object):
+    pass
 
 cdef class NormalizeTree(CythonTransform):
     cdef bint is_in_statlist
@@ -29,7 +30,7 @@ cdef map_starred_assignment(list lhs_targets, list starred_assignments, list lhs
 
 #class PxdPostParse(CythonTransform, SkipDeclarations):
 #class InterpretCompilerDirectives(CythonTransform, SkipDeclarations):
-#class WithTransform(VisitorTransform, SkipDeclarations):
+#class WithTransform(CythonTransform, SkipDeclarations):
 #class DecoratorTransform(CythonTransform, SkipDeclarations):
 
 #class AnalyseDeclarationsTransform(EnvTransform):
@@ -54,12 +55,10 @@ cdef class YieldNodeCollector(TreeVisitor):
     cdef public bint has_return_value
     cdef public bint has_yield
     cdef public bint has_await
-    cdef list excludes
 
 @cython.final
 cdef class MarkClosureVisitor(CythonTransform):
     cdef bint needs_closure
-    cdef list excludes
 
 @cython.final
 cdef class CreateClosureClasses(CythonTransform):
@@ -78,7 +77,6 @@ cdef class GilCheck(VisitorTransform):
     cdef list env_stack
     cdef bint nogil
     cdef bint nogil_declarator_only
-    cdef bint current_gilstat_node_knows_gil_state
 
 cdef class TransformBuiltinMethods(EnvTransform):
     cdef visit_cython_attribute(self, node)

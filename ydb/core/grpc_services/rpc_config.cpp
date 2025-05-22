@@ -381,23 +381,7 @@ public:
             issues.AddIssue("Only fetch mode \"all\" is supported now.");
             return false;
         }
-        switch (const auto& all = request.all(); all.config_transform_case()) {
-            case Ydb::Config::FetchConfigRequest::FetchModeAll::ConfigTransformCase::CONFIG_TRANSFORM_NOT_SET:
-            case Ydb::Config::FetchConfigRequest::FetchModeAll::ConfigTransformCase::kNone:
-                return true;
-
-            case Ydb::Config::FetchConfigRequest::FetchModeAll::ConfigTransformCase::kAddBlobStorageAndDomainsConfig:
-            case Ydb::Config::FetchConfigRequest::FetchModeAll::ConfigTransformCase::kAddExplicitSections:
-                RequireSelfManagement = true;
-                return true;
-
-            case Ydb::Config::FetchConfigRequest::FetchModeAll::ConfigTransformCase::kDetachStorageConfigSection:
-            case Ydb::Config::FetchConfigRequest::FetchModeAll::ConfigTransformCase::kAttachStorageConfigSection:
-                break; // we don't support them
-        }
-        status = Ydb::StatusIds::BAD_REQUEST;
-        issues.AddIssue("Unsupported config_transform specified.");
-        return false;
+        return true;
     }
 
     NACLib::EAccessRights GetRequiredAccessRights() const {
@@ -425,18 +409,6 @@ public:
             case Ydb::Config::FetchConfigRequest::ModeCase::kAll:
                 record->SetMainConfig(true);
                 record->SetStorageConfig(true);
-                switch (const auto& all = request.all(); all.config_transform_case()) {
-                    case Ydb::Config::FetchConfigRequest::FetchModeAll::ConfigTransformCase::kAddBlobStorageAndDomainsConfig:
-                        record->SetAddSectionsForMigrationToV1(true);
-                        break;
-
-                    case Ydb::Config::FetchConfigRequest::FetchModeAll::ConfigTransformCase::kAddExplicitSections:
-                        record->SetAddExplicitConfigs(true);
-                        break;
-
-                    default:
-                        break;
-                }
                 break;
 
             case Ydb::Config::FetchConfigRequest::ModeCase::kTarget:

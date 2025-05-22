@@ -786,34 +786,27 @@ public:
         }
 
         if (Y_LIKELY(CollectBasic())) {
-            auto now = TInstant::Now();
             switch (runStatus) {
                 case ERunStatus::Finished:
                     // finished => waiting for nothing
-                    Stats->CurrentWaitInputStartTime = TInstant::Zero();
-                    Stats->CurrentWaitOutputStartTime = TInstant::Zero();
-                    Stats->FinishTs = now;
+                    Stats->CurrentWaitInputTime = TDuration::Zero();
+                    Stats->CurrentWaitOutputTime = TDuration::Zero();
+                    Stats->FinishTs = TInstant::Now();
                     break;
                 case ERunStatus::PendingInput:
                     // output is checked first => not waiting for output
-                    Stats->CurrentWaitOutputStartTime = TInstant::Zero();
+                    Stats->CurrentWaitOutputTime = TDuration::Zero();
                     if (Y_LIKELY(InputConsumed)) {
                         // did smth => waiting for nothing
-                        Stats->CurrentWaitInputStartTime = TInstant::Zero();
+                        Stats->CurrentWaitInputTime = TDuration::Zero();
                     } else {
                         StartWaitingInput();
-                        if (Y_LIKELY(!Stats->CurrentWaitInputStartTime)) {
-                            Stats->CurrentWaitInputStartTime = now;
-                        }
                     }
                     break;
                 case ERunStatus::PendingOutput:
                     // waiting for output => not waiting for input
-                    Stats->CurrentWaitInputStartTime = TInstant::Zero();
+                    Stats->CurrentWaitInputTime = TDuration::Zero();
                     StartWaitingOutput();
-                    if (Y_LIKELY(!Stats->CurrentWaitOutputStartTime)) {
-                        Stats->CurrentWaitOutputStartTime = now;
-                    }
                     break;
             }
         }
@@ -1084,6 +1077,7 @@ private:
             } else {
                 Stats->WaitStartTime += delta;
             }
+            Stats->CurrentWaitInputTime += delta;
         }
         StartWaitInputTime = now;
     }
@@ -1093,6 +1087,7 @@ private:
         if (Y_LIKELY(StartWaitOutputTime)) {
             auto delta = now - *StartWaitOutputTime;
             Stats->WaitOutputTime += delta;
+            Stats->CurrentWaitOutputTime += delta;
         }
         StartWaitOutputTime = now;
     }
@@ -1106,12 +1101,14 @@ private:
             } else {
                 Stats->WaitStartTime += delta;
             }
+            Stats->CurrentWaitInputTime += delta;
             StartWaitInputTime.reset();
             TDuration::Zero();
         }
         if (StartWaitOutputTime) {
             auto delta = now - *StartWaitOutputTime;
             Stats->WaitOutputTime += delta;
+            Stats->CurrentWaitOutputTime += delta;
             StartWaitOutputTime.reset();
         }
     }

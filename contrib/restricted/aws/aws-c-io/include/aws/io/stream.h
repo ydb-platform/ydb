@@ -9,8 +9,6 @@
 #include <aws/common/ref_count.h>
 #include <aws/io/io.h>
 
-AWS_PUSH_SANE_WARNING_LEVEL
-
 struct aws_input_stream;
 struct aws_byte_buf;
 
@@ -131,6 +129,5 @@ AWS_IO_API struct aws_input_stream *aws_input_stream_new_from_file(
 AWS_IO_API struct aws_input_stream *aws_input_stream_new_from_open_file(struct aws_allocator *allocator, FILE *file);
 
 AWS_EXTERN_C_END
-AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_IO_STREAM_H */

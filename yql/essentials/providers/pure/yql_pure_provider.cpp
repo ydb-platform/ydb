@@ -125,7 +125,7 @@ public:
         root = TransformProgram(root, files, env);
 
         TExploringNodeVisitor explorer;
-        explorer.Walk(root.GetNode(), env.GetNodeStack());
+        explorer.Walk(root.GetNode(), env);
         auto compFactory = GetCompositeWithBuiltinFactory({
             GetYqlFactory(),
             GetPgFactory()
@@ -206,7 +206,7 @@ public:
 private:
     TRuntimeNode TransformProgram(TRuntimeNode root, const TUserDataTable& files, TTypeEnvironment& env) {
         TExploringNodeVisitor explorer;
-        explorer.Walk(root.GetNode(), env.GetNodeStack());
+        explorer.Walk(root.GetNode(), env);
         bool wereChanges = false;
         TRuntimeNode program = SinglePassVisitCallables(root, explorer,
             TSimpleFileTransformProvider(State_->FunctionRegistry, files), env, true, wereChanges);

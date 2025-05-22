@@ -7,9 +7,9 @@
 
 #include <yt/yt/core/logging/log.h>
 
-#include <yt/yt/core/misc/memory_usage_tracker.h>
-
 #include <yt/yt_proto/yt/core/rpc/proto/rpc.pb.h>
+
+#include <library/cpp/yt/memory/memory_usage_tracker.h>
 
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 #include <library/cpp/yt/threading/spin_lock.h>
@@ -99,9 +99,9 @@ public:
     NProto::TRequestHeader& RequestHeader() override;
 
     bool IsLoggingEnabled() const override;
-    void SetRawRequestInfo(std::string info, bool incremental) override;
+    void SetRawRequestInfo(TString info, bool incremental) override;
     void SuppressMissingRequestInfoCheck() override;
-    void SetRawResponseInfo(std::string info, bool incremental) override;
+    void SetRawResponseInfo(TString info, bool incremental) override;
 
     const IMemoryUsageTrackerPtr& GetMemoryUsageTracker() const override;
 
@@ -125,7 +125,6 @@ protected:
 
     const NLogging::TLogger Logger;
     const NLogging::ELogLevel LogLevel_;
-    const NLogging::ELogLevel ErrorLogLevel_;
 
     // Set in #Initialize.
     bool LoggingEnabled_;
@@ -149,8 +148,8 @@ protected:
     std::vector<TSharedRef> ResponseAttachments_;
 
     bool RequestInfoSet_ = false;
-    TCompactVector<std::string, 4> RequestInfos_;
-    TCompactVector<std::string, 4> ResponseInfos_;
+    TCompactVector<TString, 4> RequestInfos_;
+    TCompactVector<TString, 4> ResponseInfos_;
 
     NCompression::ECodec ResponseCodec_ = NCompression::ECodec::None;
     // COMPAT(danilalexeev)
@@ -164,15 +163,13 @@ protected:
         TMemoryUsageTrackerGuard memoryGuard,
         IMemoryUsageTrackerPtr memoryUsageTracker,
         NLogging::TLogger logger,
-        NLogging::ELogLevel logLevel,
-        std::optional<NLogging::ELogLevel> errorLogLevel = {});
+        NLogging::ELogLevel logLevel);
     TServiceContextBase(
         TSharedRefArray requestMessage,
         TMemoryUsageTrackerGuard memoryGuard,
         IMemoryUsageTrackerPtr memoryUsageTracker,
         NLogging::TLogger logger,
-        NLogging::ELogLevel logLevel,
-        std::optional<NLogging::ELogLevel> errorLogLevel = {});
+        NLogging::ELogLevel logLevel);
 
     virtual void DoReply() = 0;
     virtual void DoFlush();
@@ -267,9 +264,9 @@ public:
     NProto::TRequestHeader& RequestHeader() override;
 
     bool IsLoggingEnabled() const override;
-    void SetRawRequestInfo(std::string info, bool incremental) override;
+    void SetRawRequestInfo(TString info, bool incremental) override;
     void SuppressMissingRequestInfoCheck() override;
-    void SetRawResponseInfo(std::string info, bool incremental) override;
+    void SetRawResponseInfo(TString info, bool incremental) override;
 
     const IMemoryUsageTrackerPtr& GetMemoryUsageTracker() const override;
 

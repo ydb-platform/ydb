@@ -154,7 +154,7 @@ int aws_apply_signing_result_to_http_request(
         }
 
         if (source_header.name == NULL || source_header.value == NULL) {
-            return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
+            return AWS_OP_ERR;
         }
 
         struct aws_http_header dest_header = {

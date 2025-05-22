@@ -12,8 +12,8 @@ docs-viewer:
     title: YQL core
     description: Язык запросов YQL
   auto-release-to:
-    testing: true
-    prod: true
+    testing: false
+    prod: false
   single-page:
     supported: true
   startrek:

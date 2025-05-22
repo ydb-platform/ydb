@@ -15,7 +15,7 @@ using namespace NNet;
 using namespace NYTree;
 using namespace NConcurrency;
 
-constinit const auto Logger = HttpLogger;
+static constexpr auto& Logger = HttpLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 

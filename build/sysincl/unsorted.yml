@@ -146,6 +146,7 @@
   - cpuid.h
   - nan.h
   - omp.h
+  - cygwin/version.h
   - zircon/syscalls.h
   - zircon/types.h
   - zircon/process.h
@@ -218,6 +219,7 @@
   - sys/bsdskt.h
   - sys/bsdtty.h
   - sys/builtin.h
+  - sys/cygwin.h
   - sys/dcmd_blk.h
   - sys/devpoll.h
   - sys/fmutex.h

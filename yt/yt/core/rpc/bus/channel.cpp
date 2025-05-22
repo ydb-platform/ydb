@@ -46,7 +46,7 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constinit const auto Logger = RpcClientLogger;
+static constexpr auto& Logger = RpcClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -229,7 +229,7 @@ private:
                 YT_LOG_DEBUG("Created bus (ConnectionType: Client, VerificationMode: %v, EncryptionMode: %v, Endpoint: %v)",
                     attrs.Get<EVerificationMode>("verification_mode"),
                     attrs.Get<EEncryptionMode>("encryption_mode"),
-                    attrs.Get<std::string>("address"));
+                    attrs.Get<TString>("address"));
 
                 session->Initialize(bus);
                 bucket.Sessions.push_back(session);
@@ -372,14 +372,7 @@ private:
                 // NB: Requests without timeout are rare but may occur.
                 // For these requests we still need to register a timeout cookie with TDelayedExecutor
                 // since this also provides proper cleanup and cancelation when global shutdown happens.
-                if (TDispatcher::Get()->ShouldAlertOnUnsetRequestTimeout() && !options.Timeout.has_value()) {
-                    YT_LOG_ALERT("Request without timeout (RequestId: %v, Method: %v.%v, Endpoint: %v)",
-                        requestControl->GetRequestId(),
-                        requestControl->GetService(),
-                        requestControl->GetMethod(),
-                        Bus_->GetEndpointDescription());
-                }
-                auto effectiveTimeout = options.Timeout.value_or(TDispatcher::Get()->GetDefaultRequestTimeout());
+                auto effectiveTimeout = options.Timeout.value_or(TDuration::Hours(24));
                 auto timeoutCookie = TDelayedExecutor::Submit(
                     BIND(&TSession::HandleTimeout, MakeWeak(this), requestControl),
                     effectiveTimeout,

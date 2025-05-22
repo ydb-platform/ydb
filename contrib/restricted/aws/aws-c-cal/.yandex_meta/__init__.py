@@ -1,5 +1,4 @@
 from devtools.yamaker.fileutil import files
-from devtools.yamaker import pathutil
 from devtools.yamaker.modules import Linkable, Switch, Words
 from devtools.yamaker.project import CMakeNinjaNixProject
 
@@ -8,7 +7,7 @@ def post_install(self):
     m = self.yamakes["."]
 
     # Support Darwin.
-    linux_srcs = files(self.srcdir + "/source/unix/", rel=self.srcdir, test=pathutil.is_source)
+    linux_srcs = files(self.srcdir + "/source/unix/", rel=self.srcdir)
     darwin_srcs = files(self.srcdir + "/source/darwin/", rel=self.srcdir)
     windows_srcs = files(self.srcdir + "/source/windows/", rel=self.srcdir)
     m.SRCS -= set(linux_srcs)
@@ -39,9 +38,6 @@ aws_c_cal = CMakeNinjaNixProject(
     copy_sources=[
         "source/darwin/",
         "source/windows/",
-    ],
-    disable_includes=[
-        "openssl/evp_errors.h",
     ],
     ignore_targets=["sha256_profile"],
     post_install=post_install,

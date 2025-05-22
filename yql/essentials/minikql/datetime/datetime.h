@@ -1,9 +1,8 @@
 #pragma once
 
 #include <yql/essentials/public/udf/udf_value_builder.h>
+#include <yql/essentials/public/udf/tz/udf_tz.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
-
-#include <library/cpp/type_info/tz/tz.h>
 
 #include <util/datetime/base.h>
 #include <util/string/printf.h>
@@ -152,7 +151,7 @@ struct TTMStorage {
     }
 
     const TString ToString() const {
-        const auto& tzName = NTi::GetTimezones()[TimezoneId];
+        const auto& tzName = NUdf::GetTimezones()[TimezoneId];
         return Sprintf("%4d-%02d-%02dT%02d:%02d:%02d.%06d,%.*s",
                        Year, Month, Day, Hour, Minute, Second, Microsecond,
                        static_cast<int>(tzName.size()), tzName.data());

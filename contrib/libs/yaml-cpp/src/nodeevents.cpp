@@ -42,17 +42,17 @@ void NodeEvents::Setup(const detail::node& node) {
   }
 }
 
-void NodeEvents::Emit(EventHandler& handler, bool preserveMarks) {
+void NodeEvents::Emit(EventHandler& handler) {
   AliasManager am;
 
   handler.OnDocumentStart(Mark());
   if (m_root)
-    Emit(*m_root, handler, am, preserveMarks);
+    Emit(*m_root, handler, am);
   handler.OnDocumentEnd();
 }
 
 void NodeEvents::Emit(const detail::node& node, EventHandler& handler,
-                      AliasManager& am, bool preserveMarks) const {
+                      AliasManager& am) const {
   anchor_t anchor = NullAnchor;
   if (IsAliased(node)) {
     anchor = am.LookupAnchor(node);
@@ -65,30 +65,26 @@ void NodeEvents::Emit(const detail::node& node, EventHandler& handler,
     anchor = am.LookupAnchor(node);
   }
 
-  auto getMark = [preserveMarks, &node]() {
-    return preserveMarks ? node.mark() : Mark();
-  };
-
   switch (node.type()) {
     case NodeType::Undefined:
       break;
     case NodeType::Null:
-      handler.OnNull(getMark(), anchor);
+      handler.OnNull(Mark(), anchor);
       break;
     case NodeType::Scalar:
-      handler.OnScalar(getMark(), node.tag(), anchor, node.scalar());
+      handler.OnScalar(Mark(), node.tag(), anchor, node.scalar());
       break;
     case NodeType::Sequence:
-      handler.OnSequenceStart(getMark(), node.tag(), anchor, node.style());
+      handler.OnSequenceStart(Mark(), node.tag(), anchor, node.style());
       for (auto element : node)
-        Emit(*element, handler, am, preserveMarks);
+        Emit(*element, handler, am);
       handler.OnSequenceEnd();
       break;
     case NodeType::Map:
-      handler.OnMapStart(getMark(), node.tag(), anchor, node.style());
+      handler.OnMapStart(Mark(), node.tag(), anchor, node.style());
       for (auto element : node) {
-        Emit(*element.first, handler, am, preserveMarks);
-        Emit(*element.second, handler, am, preserveMarks);
+        Emit(*element.first, handler, am);
+        Emit(*element.second, handler, am);
       }
       handler.OnMapEnd();
       break;

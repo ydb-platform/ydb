@@ -314,25 +314,22 @@ public:
         , AccumulatorCount()
     {}
 
-    bool Push(ValueType value) {
+    void Push(ValueType value) {
         if (IsValueReady()) {
             ValueType currentValue = GetValue();
             if (value > currentValue) {
                 ValueType newValue = (currentValue + value) / 2;
                 AccumulatorCount++;
                 AccumulatorValue = newValue * AccumulatorCount;
-                return false;
+                return;
             }
         }
-        bool shrink = false;
         if (AccumulatorCount >= MaxCount) {
             AccumulatorValue = AccumulatorValue / 2;
             AccumulatorCount /= 2;
-            shrink = true;
         }
         AccumulatorValue += value;
         AccumulatorCount++;
-        return shrink;
     }
 
     ValueType GetValue() const {

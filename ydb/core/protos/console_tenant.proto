@@ -10,7 +10,6 @@ option java_package = "ru.yandex.kikimr.proto";
 message TCreateTenantRequest {
     optional Ydb.Cms.CreateDatabaseRequest Request = 1;
     optional bytes UserToken = 2;
-    optional string PeerName = 3;
 }
 
 message TCreateTenantResponse {
@@ -20,7 +19,6 @@ message TCreateTenantResponse {
 message TGetTenantStatusRequest {
     optional Ydb.Cms.GetDatabaseStatusRequest Request = 1;
     optional bytes UserToken = 2;
-    optional string PeerName = 3;
 }
 
 message TGetTenantStatusResponse {
@@ -30,7 +28,6 @@ message TGetTenantStatusResponse {
 message TAlterTenantRequest {
     optional Ydb.Cms.AlterDatabaseRequest Request = 1;
     optional bytes UserToken = 2;
-    optional string PeerName = 3;
 }
 
 message TAlterTenantResponse {
@@ -40,7 +37,6 @@ message TAlterTenantResponse {
 message TListTenantsRequest {
     optional Ydb.Cms.ListDatabasesRequest Request = 1;
     optional bytes UserToken = 2;
-    optional string PeerName = 3;
 }
 
 message TListTenantsResponse {
@@ -50,7 +46,6 @@ message TListTenantsResponse {
 message TRemoveTenantRequest {
     optional Ydb.Cms.RemoveDatabaseRequest Request = 1;
     optional bytes UserToken = 2;
-    optional string PeerName = 3;
 }
 
 message TRemoveTenantResponse {
@@ -60,7 +55,6 @@ message TRemoveTenantResponse {
 message TGetOperationRequest {
     optional Ydb.Operations.GetOperationRequest Request = 1;
     optional bytes UserToken = 2;
-    optional string PeerName = 3;
 }
 
 message TGetOperationResponse {
@@ -70,7 +64,6 @@ message TGetOperationResponse {
 message TDescribeTenantOptionsRequest {
     optional Ydb.Cms.DescribeDatabaseOptionsRequest Request = 1;
     optional bytes UserToken = 2;
-    optional string PeerName = 3;
 }
 
 message TDescribeTenantOptionsResponse {

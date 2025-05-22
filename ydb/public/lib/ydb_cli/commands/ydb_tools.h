@@ -61,8 +61,6 @@ private:
     bool RestoreACL = true;
     bool SkipDocumentTables = false;
     bool SavePartialResult = false;
-    bool Replace = false;
-    bool VerifyExistence = false;
     TString UploadBandwidth;
     TString UploadRps;
     TString RowsPerRequest;

@@ -584,8 +584,6 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
 
         auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildId);
         UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
-        UNIT_ASSERT(descr.GetIndexBuild().HasStartTime());
-        UNIT_ASSERT(descr.GetIndexBuild().HasEndTime());
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/WithFollowers"),
                            {NLs::PathExist,
@@ -1208,8 +1206,6 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
 
         auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
         UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_CANCELLED);
-        UNIT_ASSERT(descr.GetIndexBuild().HasStartTime());
-        UNIT_ASSERT(descr.GetIndexBuild().HasEndTime());
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
                            {NLs::PathExist,
@@ -1267,11 +1263,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         {
             auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
             UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_PREPARING);
-            UNIT_ASSERT(descr.GetIndexBuild().HasStartTime());
-            UNIT_ASSERT(!descr.GetIndexBuild().HasEndTime());
         }
-
-        runtime.AdvanceCurrentTime(TDuration::Seconds(30)); // building index
 
         //
         TestCancelBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId + 1, TVector<Ydb::StatusIds::StatusCode>{Ydb::StatusIds::NOT_FOUND});
@@ -1284,9 +1276,6 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
         {
             auto descr = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexId);
             UNIT_ASSERT_VALUES_EQUAL(descr.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
-            UNIT_ASSERT(descr.GetIndexBuild().HasStartTime());
-            UNIT_ASSERT(descr.GetIndexBuild().HasEndTime());
-            UNIT_ASSERT_LT(descr.GetIndexBuild().GetStartTime().seconds(), descr.GetIndexBuild().GetEndTime().seconds());
         }
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),

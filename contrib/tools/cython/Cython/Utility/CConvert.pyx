@@ -6,20 +6,19 @@ cdef extern from *:
     PyTypeObject *Py_TYPE(obj)
     bint PyMapping_Check(obj)
     object PyErr_Format(exc, const char *format, ...)
-    int __Pyx_RaiseUnexpectedTypeError(const char *expected, object obj) except 0
 
 @cname("{{funcname}}")
 cdef {{struct_type}} {{funcname}}(obj) except *:
     cdef {{struct_type}} result
     if not PyMapping_Check(obj):
-        __Pyx_RaiseUnexpectedTypeError(b"a mapping", obj)
+        PyErr_Format(TypeError, b"Expected %.16s, got %.200s", b"a mapping", Py_TYPE(obj).tp_name)
 
     {{for member in var_entries:}}
     try:
         value = obj['{{member.name}}']
     except KeyError:
         raise ValueError("No value specified for struct attribute '{{member.name}}'")
-    result.{{member.name}} = value
+    result.{{member.cname}} = value
     {{endfor}}
     return result
 
@@ -32,14 +31,13 @@ cdef extern from *:
     PyTypeObject *Py_TYPE(obj)
     bint PyMapping_Check(obj)
     object PyErr_Format(exc, const char *format, ...)
-    int __Pyx_RaiseUnexpectedTypeError(const char *expected, object obj) except 0
 
 @cname("{{funcname}}")
 cdef {{struct_type}} {{funcname}}(obj) except *:
     cdef {{struct_type}} result
     cdef Py_ssize_t length
     if not PyMapping_Check(obj):
-        __Pyx_RaiseUnexpectedTypeError(b"a mapping", obj)
+        PyErr_Format(TypeError, b"Expected %.16s, got %.200s", b"a mapping", Py_TYPE(obj).tp_name)
 
     last_found = None
     length = len(obj)

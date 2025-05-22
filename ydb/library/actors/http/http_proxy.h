@@ -45,7 +45,6 @@ struct TEvHttpProxy {
         EvHttpIncomingRequest,
         EvHttpOutgoingRequest,
         EvHttpIncomingResponse,
-        EvHttpIncompleteIncomingResponse,
         EvHttpOutgoingResponse,
         EvHttpIncomingConnectionClosed,
         EvHttpOutgoingConnectionClosed,
@@ -54,7 +53,6 @@ struct TEvHttpProxy {
         EvResolveHostRequest,
         EvResolveHostResponse,
         EvReportSensors,
-        EvHttpIncomingDataChunk,
         EvHttpOutgoingDataChunk,
         EvSubscribeForCancel,
         EvRequestCancelled,
@@ -121,7 +119,6 @@ struct TEvHttpProxy {
         THttpOutgoingRequestPtr Request;
         TDuration Timeout;
         bool AllowConnectionReuse = false;
-        std::vector<TString> StreamContentTypes;
 
         TEvHttpOutgoingRequest(THttpOutgoingRequestPtr request)
             : Request(std::move(request))
@@ -169,16 +166,6 @@ struct TEvHttpProxy {
         }
     };
 
-    struct TEvHttpIncompleteIncomingResponse : NActors::TEventLocal<TEvHttpIncompleteIncomingResponse, EvHttpIncompleteIncomingResponse> {
-        THttpOutgoingRequestPtr Request;
-        THttpIncomingResponsePtr Response;
-
-        TEvHttpIncompleteIncomingResponse(THttpOutgoingRequestPtr request, THttpIncomingResponsePtr response)
-            : Request(std::move(request))
-            , Response(std::move(response))
-        {}
-    };
-
     struct TEvHttpOutgoingResponse : NActors::TEventLocal<TEvHttpOutgoingResponse, EvHttpOutgoingResponse> {
         THttpOutgoingResponsePtr Response;
 
@@ -198,29 +185,6 @@ struct TEvHttpProxy {
         TEvHttpOutgoingDataChunk(const TString& error)
             : Error(error)
         {}
-    };
-
-    struct TEvHttpIncomingDataChunk : NActors::TEventLocal<TEvHttpIncomingDataChunk, EvHttpIncomingDataChunk> {
-        THttpIncomingResponsePtr Response;
-        TString Data;
-        TString Error;
-        bool EndOfData = false;
-
-        TEvHttpIncomingDataChunk(THttpIncomingResponsePtr response)
-            : Response(std::move(response))
-        {}
-
-        void SetData(TString&& data) {
-            Data = data;
-        }
-
-        void SetEndOfData() {
-            EndOfData = true;
-        }
-
-        bool IsEndOfData() const {
-            return EndOfData;
-        }
     };
 
     struct TEvHttpIncomingConnectionClosed : NActors::TEventLocal<TEvHttpIncomingConnectionClosed, EvHttpIncomingConnectionClosed> {
@@ -330,7 +294,7 @@ struct TPrivateEndpointInfo : THttpEndpointInfo {
 
 NActors::IActor* CreateHttpProxy(std::weak_ptr<NMonitoring::IMetricFactory> registry = NMonitoring::TMetricRegistry::SharedInstance());
 NActors::IActor* CreateHttpAcceptorActor(const TActorId& owner);
-NActors::IActor* CreateOutgoingConnectionActor(const TActorId& owner, TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event);
+NActors::IActor* CreateOutgoingConnectionActor(const TActorId& owner, bool secure);
 NActors::IActor* CreateIncomingConnectionActor(
         std::shared_ptr<TPrivateEndpointInfo> endpoint,
         TIntrusivePtr<TSocketDescriptor> socket,

@@ -55,7 +55,7 @@ using namespace NTracing;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constinit const auto Logger = DriverLogger;
+static constexpr auto& Logger = DriverLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -115,6 +115,7 @@ public:
     TDriver(
         TDriverConfigPtr config,
         IConnectionPtr connection,
+        ISignatureGeneratorPtr signatureGenerator,
         ISignatureValidatorPtr signatureValidator)
         : Config_(std::move(config))
         , Connection_(std::move(connection))
@@ -125,6 +126,7 @@ public:
         , ProxyDiscoveryCache_(CreateProxyDiscoveryCache(
             Config_->ProxyDiscoveryCache,
             RootClient_))
+        , SignatureGenerator_(std::move(signatureGenerator))
         , SignatureValidator_(std::move(signatureValidator))
         , StickyTransactionPool_(CreateStickyTransactionPool(Logger()))
     {
@@ -349,8 +351,6 @@ public:
         REGISTER_ALL(TResurrectChunkLocationsCommand,      "resurrect_chunk_locations",       Null,       Structured, true,  false);
         REGISTER_ALL(TRequestRestartCommand,               "request_restart",                 Null,       Structured, true,  false);
 
-        REGISTER    (TGetCurrentUserCommand,               "get_current_user",                Null,       Structured, false, false, ApiVersion4);
-
         REGISTER_ALL(TSetUserPasswordCommand,              "set_user_password",               Null,       Structured, true,  false);
         REGISTER_ALL(TIssueTokenCommand,                   "issue_token",                     Null,       Structured, true,  false);
         REGISTER_ALL(TRevokeTokenCommand,                  "revoke_token",                    Null,       Structured, true,  false);
@@ -502,6 +502,11 @@ public:
     IConnectionPtr GetConnection() override
     {
         return Connection_;
+    }
+
+    ISignatureGeneratorPtr GetSignatureGenerator() override
+    {
+        return SignatureGenerator_;
     }
 
     ISignatureValidatorPtr GetSignatureValidator() override
@@ -727,15 +732,18 @@ private:
 IDriverPtr CreateDriver(
     IConnectionPtr connection,
     TDriverConfigPtr config,
+    ISignatureGeneratorPtr signatureGenerator,
     ISignatureValidatorPtr signatureValidator)
 {
     YT_VERIFY(connection);
     YT_VERIFY(config);
+    YT_VERIFY(signatureGenerator);
     YT_VERIFY(signatureValidator);
 
     return New<TDriver>(
         std::move(config),
         std::move(connection),
+        std::move(signatureGenerator),
         std::move(signatureValidator));
 }
 

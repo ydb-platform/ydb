@@ -216,7 +216,7 @@ namespace NOps {
                 --ReadsLeft;
 
                 Y_ENSURE(Loader);
-                Loader->Save(msg->Cookie, msg->Pages);
+                Loader->Save(msg->Cookie, msg->Loaded);
 
                 if (ReadsLeft == 0) {
                     RunLoader();
@@ -486,7 +486,7 @@ namespace NOps {
 
                 while (auto req = Cache->GrabFetches()) {
                     if (auto logl = Logger->Log(ELnLev::Debug))
-                        logl << NFmt::Do(*this) << " Fetches " << req->DebugString();
+                        logl << NFmt::Do(*this) << " " << NFmt::Do(*req);
 
                     Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(Args.ReadPrio, req));
                 }
@@ -618,7 +618,7 @@ namespace NOps {
                 return Terminate(EAbort::Host);
             }
 
-            Cache->DoSave(std::move(msg.PageCollection), msg.Cookie, std::move(msg.Pages));
+            Cache->DoSave(std::move(msg.Origin), msg.Cookie, std::move(msg.Loaded));
 
             if (MayProgress()) {
                 Spent->Alter(true /* resource available again */);

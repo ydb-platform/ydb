@@ -7,7 +7,6 @@
 #include <aws/common/hash_table.h>
 #include <aws/common/json.h>
 #include <aws/common/string.h>
-#include <aws/sdkutils/private/endpoints_regex.h>
 #include <aws/sdkutils/private/endpoints_types_impl.h>
 #include <aws/sdkutils/private/endpoints_util.h>
 
@@ -62,8 +61,6 @@ void aws_partition_info_destroy(struct aws_partition_info *partition_info) {
     if (!partition_info->is_copy) {
         aws_string_destroy(partition_info->info);
     }
-
-    aws_endpoints_regex_destroy(partition_info->region_regex);
 
     aws_mem_release(partition_info->allocator, partition_info);
 }

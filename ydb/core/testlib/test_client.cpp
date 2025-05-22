@@ -440,8 +440,7 @@ namespace Tests {
             return;
         }
 
-        const auto nodeCount = StaticNodes() + DynamicNodes();
-        Runtime = MakeHolder<TTestBasicRuntime>(nodeCount, Settings->DataCenterCount ? *Settings->DataCenterCount : nodeCount, Settings->UseRealThreads);
+        Runtime = MakeHolder<TTestBasicRuntime>(StaticNodes() + DynamicNodes(), Settings->UseRealThreads);
 
         if (init) {
             Initialize();
@@ -1452,8 +1451,8 @@ namespace Tests {
             TActorId discoveryCacheId = Runtime->Register(discoveryCache, nodeIdx, userPoolId);
             Runtime->RegisterService(NKafka::MakeKafkaDiscoveryCacheID(), discoveryCacheId, nodeIdx);
             
-            TActorId kafkaTxnCoordinatorActorId = Runtime->Register(NKafka::CreateTransactionsCoordinator(), nodeIdx, userPoolId);
-            Runtime->RegisterService(NKafka::MakeTransactionsServiceID(), kafkaTxnCoordinatorActorId, nodeIdx);
+            TActorId kafkaTxnCoordinatorActorId = Runtime->Register(NKafka::CreateKafkaTransactionsCoordinator(), nodeIdx, userPoolId);
+            Runtime->RegisterService(NKafka::MakeKafkaTransactionsServiceID(), kafkaTxnCoordinatorActorId, nodeIdx);
 
             NKafka::TListenerSettings settings;
             settings.Port = Settings->AppConfig->GetKafkaProxyConfig().GetListeningPort();

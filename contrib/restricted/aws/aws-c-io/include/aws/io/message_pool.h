@@ -7,8 +7,6 @@
 #include <aws/common/array_list.h>
 #include <aws/io/io.h>
 
-AWS_PUSH_SANE_WARNING_LEVEL
-
 struct aws_memory_pool {
     struct aws_allocator *alloc;
     struct aws_array_list stack;
@@ -84,6 +82,5 @@ AWS_IO_API
 void aws_message_pool_release(struct aws_message_pool *msg_pool, struct aws_io_message *message);
 
 AWS_EXTERN_C_END
-AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_IO_MESSAGE_POOL_H */

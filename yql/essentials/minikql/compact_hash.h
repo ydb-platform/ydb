@@ -3,7 +3,6 @@
 #include <yql/essentials/utils/hash.h>
 
 #include "aligned_page_pool.h"
-#include "asan_utils.h"
 #include "primes.h"
 
 #include <util/generic/vector.h>
@@ -564,7 +563,7 @@ private:
         }
         ui16 listCount = GetSmallPageCapacity<T>(size);
         Y_ASSERT(listCount >= 2);
-        TListHeader* header = new (SanitizerMarkValid(GetPagePool().GetPage(), TAlignedPagePool::POOL_PAGE_SIZE)) TListHeader(SMALL_MARK, size, listCount);
+        TListHeader* header = new (GetPagePool().GetPage()) TListHeader(SMALL_MARK, size, listCount);
         pages.PushFront(&header->ListItem);
         return header;
     }
@@ -581,14 +580,14 @@ private:
         ui16 listCapacity = FastClp2(size);
         ui16 listCount = GetMediumPageCapacity<T>(listCapacity);
         Y_ASSERT(listCount >= 2);
-        TListHeader* header = new (SanitizerMarkValid(GetPagePool().GetPage(), TAlignedPagePool::POOL_PAGE_SIZE)) TListHeader(MEDIUM_MARK, listCapacity, listCount);
+        TListHeader* header = new (GetPagePool().GetPage()) TListHeader(MEDIUM_MARK, listCapacity, listCount);
         pages.PushFront(&header->ListItem);
         return header;
     }
 
     template <typename T>
     TLargeListHeader* GetLargeListPage() {
-        TLargeListHeader* const header = new (SanitizerMarkValid(GetPagePool().GetPage(), TAlignedPagePool::POOL_PAGE_SIZE)) TLargeListHeader(GetLargePageCapacity<T>());
+        TLargeListHeader* const header = new (GetPagePool().GetPage()) TLargeListHeader(GetLargePageCapacity<T>());
         return header;
     }
 
@@ -1316,7 +1315,7 @@ protected:
 
     void AllocateBuckets(size_t count) {
         auto bucketsMemory = Max(sizeof(TItemNode) * count, (size_t)TAlignedPagePool::POOL_PAGE_SIZE);
-        Buckets_ = (TItemNode*)SanitizerMarkValid(GetPagePool().GetBlock(bucketsMemory), bucketsMemory);
+        Buckets_ = (TItemNode*)GetPagePool().GetBlock(bucketsMemory);
         BucketsCount_ = count;
         BucketsMemory_ = bucketsMemory;
         for (size_t i = 0; i < count; ++i) {

@@ -100,9 +100,7 @@ void TNormalizationController::InitNormalizers(const TInitContext& ctx) {
         if (::ToString(nType).StartsWith("Deprecated")) {
             continue;
         }
-        auto component = INormalizerComponent::TFactory::MakeHolder(::ToString(nType), ctx);
-        AFL_VERIFY(component)("class_name", ::ToString(nType));
-        auto normalizer = RegisterNormalizer(std::shared_ptr<INormalizerComponent>(component.Release()));
+        auto normalizer = RegisterNormalizer(std::shared_ptr<INormalizerComponent>(INormalizerComponent::TFactory::Construct(::ToString(nType), ctx)));
         AFL_VERIFY(normalizer->GetEnumSequentialIdVerified() == nType);
         AFL_VERIFY(lastRegisteredNormalizer <= nType)("current", ToString(nType))("last", ToString(lastRegisteredNormalizer));
         lastRegisteredNormalizer = nType;

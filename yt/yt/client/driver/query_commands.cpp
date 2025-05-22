@@ -270,7 +270,7 @@ void TListQueriesCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
         "user",
         [] (TThis* command) -> auto& {
             return command->Options.UserFilter;

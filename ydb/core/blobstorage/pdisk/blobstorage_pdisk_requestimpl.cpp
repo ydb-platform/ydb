@@ -9,8 +9,9 @@ namespace NPDisk {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void TRequestBase::AbortDelete(TRequestBase* request, TActorSystem* actorSystem) {
-    request->Span.EndError("Abort");
-
+    while (auto span = request->SpanStack.Pop()) {
+        span.EndError("Abort");
+    }
     switch(request->GetType()) {
     case ERequestType::RequestChunkRead:
     {
@@ -92,8 +93,8 @@ void TChunkRead::Abort(TActorSystem* actorSystem) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 TChunkReadPiece::TChunkReadPiece(TIntrusivePtr<TChunkRead> &read, ui64 pieceCurrentSector, ui64 pieceSizeLimit,
-        bool isTheLastPiece)
-        : TRequestBase(read->Sender, read->ReqId, read->Owner, read->OwnerRound, read->PriorityClass)
+        bool isTheLastPiece, NWilson::TSpan span)
+        : TRequestBase(read->Sender, read->ReqId, read->Owner, read->OwnerRound, read->PriorityClass, std::move(span))
         , ChunkRead(read)
         , PieceCurrentSector(pieceCurrentSector)
         , PieceSizeLimit(pieceSizeLimit)

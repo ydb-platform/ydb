@@ -558,8 +558,6 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, UseColumnGroupsFromInputTables);
     REGISTER_SETTING(*this, UseNativeDynamicTableRead);
     REGISTER_SETTING(*this, _ForbidSensitiveDataInOperationSpec);
-    REGISTER_SETTING(*this, DontForceTransformForInputTables);
-    REGISTER_SETTING(*this, _LocalTableContentLimit);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

@@ -855,13 +855,12 @@ private:
     }
 
     void StreamJsonResponse(const NJson::TJsonValue& json) {
+        constexpr EFloatToStringMode floatMode = EFloatToStringMode::PREC_NDIGITS;
         TStringStream content;
         NJson::WriteJson(&content, &json, {
-            .DoubleNDigits = Proto2JsonConfig.DoubleNDigits,
-            .FloatNDigits = Proto2JsonConfig.FloatNDigits,
-            .FloatToStringMode = Proto2JsonConfig.FloatToStringMode,
+            .FloatToStringMode = floatMode,
             .ValidateUtf8 = false,
-            .WriteNanAsString = Proto2JsonConfig.WriteNanAsString,
+            .WriteNanAsString = true,
         });
         TStringBuilder data;
         data << "--boundary\r\nContent-Type: application/json\r\nContent-Length: " << content.Size() << "\r\n\r\n" << content.Str() << "\r\n";

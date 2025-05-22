@@ -19,20 +19,6 @@
 
 using NKikimr::NMiniKQL::TRunParams;
 
-TStringBuf HashMapTypeName(NKikimr::NMiniKQL::EHashMapImpl implType)
-{
-    switch (implType) {
-    case NKikimr::NMiniKQL::EHashMapImpl::UnorderedMap:
-        return "std";
-    case NKikimr::NMiniKQL::EHashMapImpl::Absl:
-        return "absl";
-    case NKikimr::NMiniKQL::EHashMapImpl::YqlRobinHood:
-        return "robinhood";
-    default:
-        ythrow yexception() << "Unknown hashmap impl type";
-    }
-}
-
 class TPrintingResultCollector : public TTestResultCollector
 {
 public:
@@ -52,7 +38,6 @@ public:
         Cout << "Block size: " << runParams.BlockSize << Endl;
         Cout << "Long strings: " << (runParams.LongStringKeys ? "yes" : "no") << Endl;
         Cout << "Combiner mem limit: " << runParams.WideCombinerMemLimit << Endl;
-        Cout << "Hash map type: " << HashMapTypeName(runParams.ReferenceHashType) << Endl;
         Cout << Endl;
 
         Cout << "Graph runtime is: " << result.ResultTime << " vs. reference C++ implementation: " << result.ReferenceTime << Endl;
@@ -96,7 +81,6 @@ public:
         out["longStringKeys"] = runParams.LongStringKeys;
         out["numKeys"] = runParams.NumKeys;
         out["combinerMemLimit"] = runParams.WideCombinerMemLimit;
-        out["hashType"] = HashMapTypeName(runParams.ReferenceHashType);
 
         out["generatorTime"] = result.GeneratorTime.MilliSeconds();
         out["resultTime"] = result.ResultTime.MilliSeconds();
@@ -115,9 +99,9 @@ void DoFullPass(TRunParams runParams, bool withSpilling)
 
     TJsonResultCollector printout;
 
-    const std::vector<size_t> numKeys = {4u, 1000u, 100'000u, 1'000'000u, 10'000'000};
-    //const std::vector<size_t> numKeys = {60'000'000, 120'000'000};
-    //const std::vector<size_t> numKeys = {30'000'000u};
+    // const std::vector<size_t> numKeys = {4u, 1000u, 100'000u, 1'000'000u, 10'000'000, 30'000'000};
+    // const std::vector<size_t> numKeys = {60'000'000, 120'000'000};
+    const std::vector<size_t> numKeys = {1'000'000u};
     const std::vector<size_t> blockSizes = {128u, 8192u};
 
     auto doSimple = [&printout, numKeys](const TRunParams& params) {
@@ -260,23 +244,6 @@ int main(int argc, const char* argv[])
         })
         .Help("Input data type: string key -> ui64 numeric value or ui64 numeric key -> ui64 numeric value");
 
-    options.AddLongOption("hashmap")
-        .Choices({"std", "absl", "robinhood"})
-        .RequiredArgument()
-        .Handler1([&](const NLastGetopt::TOptsParser* option) {
-            auto val = TStringBuf(option->CurVal());
-            if (val == "std") {
-                runParams.ReferenceHashType = NKikimr::NMiniKQL::EHashMapImpl::UnorderedMap;
-            } else if (val == "absl") {
-                runParams.ReferenceHashType = NKikimr::NMiniKQL::EHashMapImpl::Absl;
-            } else if (val == "robinhood") {
-                runParams.ReferenceHashType = NKikimr::NMiniKQL::EHashMapImpl::YqlRobinHood;
-            } else {
-                ythrow yexception() << "Unimplemented hash map type: " << val;
-            }
-        })
-        .Help("Hash map type (std::unordered_map or absl::dense_hash_map)");
-
     options
         .AddLongOption('t', "test")
         .Choices({"combiner", "last-combiner", "block-combiner"})
@@ -294,10 +261,6 @@ int main(int argc, const char* argv[])
             }
         })
         .Help("Enable single test run mode");
-
-    options.AddLongOption("no-verify").NoArgument().Handler0([&](){
-        runParams.EnableVerification = false;
-    });
 
     options
         .AddLongOption('m', "mode")
@@ -342,7 +305,6 @@ int main(int argc, const char* argv[])
     if (testType != ETestType::All) {
         DoSelectedTest(runParams, testType, llvm, spilling);
     } else {
-        runParams.AlwaysSubprocess = true;
         DoFullPass(runParams, spilling);
     }
 

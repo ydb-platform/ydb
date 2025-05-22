@@ -6,7 +6,6 @@
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/blobs_reader/events.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
-#include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
@@ -37,9 +36,8 @@ void IDataSource::RegisterInterval(TFetchingInterval& interval, const std::share
             return;
         }
         TFetchingScriptCursor cursor(FetchingPlan, 0);
-        const auto& commonContext = *GetContext()->GetCommonContext();
-        auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), commonContext.GetScanActorId(), true);
-        NConveyor::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
+        auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), GetContext()->GetCommonContext()->GetScanActorId(), true);
+        NConveyor::TScanServiceOperator::SendTaskToExecute(task);
     }
 }
 
@@ -142,11 +140,10 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
     auto blobSchema = GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*Portion);
 
     std::optional<TSnapshot> ss;
-    if (Portion->GetPortionType() == EPortionType::Written) {
-        const auto* portion = static_cast<const TWrittenPortionInfo*>(Portion.get());
-        if (portion->HasCommitSnapshot()) {
-            ss = portion->GetCommitSnapshotVerified();
-        } else if (GetContext()->GetReadMetadata()->IsMyUncommitted(portion->GetInsertWriteId())) {
+    if (Portion->HasInsertWriteId()) {
+        if (Portion->HasCommitSnapshot()) {
+            ss = Portion->GetCommitSnapshotVerified();
+        } else if (GetContext()->GetReadMetadata()->IsMyUncommitted(Portion->GetInsertWriteIdVerified())) {
             ss = GetContext()->GetReadMetadata()->GetRequestSnapshot();
         }
     }
@@ -173,9 +170,8 @@ private:
         AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
         Source->MutableStageData().SetPortionAccessor(std::move(result.ExtractPortionsVector().front()));
         AFL_VERIFY(Step.Next());
-        const auto& commonContext = *Source->GetContext()->GetCommonContext();
-        auto task = std::make_shared<TStepAction>(Source, std::move(Step), commonContext.GetScanActorId(), false);
-        NConveyor::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
+        auto task = std::make_shared<TStepAction>(Source, std::move(Step), Source->GetContext()->GetCommonContext()->GetScanActorId(), false);
+        NConveyor::TScanServiceOperator::SendTaskToExecute(task);
     }
 
 public:
@@ -196,20 +192,6 @@ bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<IDataSour
     request->RegisterSubscriber(std::make_shared<TPortionAccessorFetchingSubscriber>(step, sourcePtr));
     GetContext()->GetCommonContext()->GetDataAccessorsManager()->AskData(request);
     return true;
-}
-
-bool TPortionDataSource::DoAddTxConflict() {
-    if (Portion->IsCommitted()) {
-        GetContext()->GetReadMetadata()->SetBrokenWithCommitted();
-        return true;
-    } else {
-        const auto* wPortion = static_cast<const TWrittenPortionInfo*>(Portion.get());
-        if (!GetContext()->GetReadMetadata()->IsMyUncommitted(wPortion->GetInsertWriteId())) {
-            GetContext()->GetReadMetadata()->SetConflictedWriteId(wPortion->GetInsertWriteId());
-            return true;
-        }
-    }
-    return false;
 }
 
 bool TCommittedDataSource::DoStartFetchingColumns(

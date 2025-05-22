@@ -2,7 +2,6 @@
 #include "schemeshard_export_uploaders.h"
 
 #include <ydb/core/backup/common/encryption.h>
-#include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/datashard/export_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export_helpers.h>
@@ -10,13 +9,10 @@
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
-#include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
-#include <ydb/public/lib/ydb_cli/dump/files/files.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 
 #include <library/cpp/json/json_writer.h>
 
@@ -53,44 +49,15 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         return scheme;
     }
 
-    bool BuildTopicScheme(const NKikimrScheme::TEvDescribeSchemeResult& describeResult, TString& error) {
-        const auto& pathDesc = describeResult.GetPathDescription();
-        if (!pathDesc.HasPersQueueGroup()) {
-            error = "Path description does not contain a description of PersQueueGroup";
-            return false;
-        }
-        Ydb::Topic::DescribeTopicResult descTopicResult;
-        Ydb::StatusIds::StatusCode status;
-        if (!FillTopicDescription(descTopicResult, pathDesc.GetPersQueueGroup(), pathDesc.GetSelf(), Nothing(), status, error)) {
-            return false;
-        }
-
-        Ydb::Topic::CreateTopicRequest request;
-        NYdb::NTopic::TTopicDescription(std::move(descTopicResult)).SerializeTo(request);
-
-        request.clear_attributes();
-
-        return google::protobuf::TextFormat::PrintToString(request, &Scheme);
-    }
-
     bool BuildSchemeToUpload(const NKikimrScheme::TEvDescribeSchemeResult& describeResult, TString& error) {
-        static THashMap<NKikimrSchemeOp::EPathType, TString> TypeToFileName = {
-            {NKikimrSchemeOp::EPathType::EPathTypeView, NYdb::NDump::NFiles::CreateView().FileName},
-            {NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup, NYdb::NDump::NFiles::CreateTopic().FileName},
-        };
-
-        PathType = describeResult.GetPathDescription().GetSelf().GetPathType();
-        FileName = TypeToFileName[PathType];
-        switch (PathType) {
+        const auto pathType = describeResult.GetPathDescription().GetSelf().GetPathType();
+        switch (pathType) {
             case NKikimrSchemeOp::EPathTypeView: {
                 Scheme = BuildViewScheme(describeResult.GetPath(), describeResult.GetPathDescription().GetViewDescription(), DatabaseRoot, error);
                 return !Scheme.empty();
             }
-            case NKikimrSchemeOp::EPathTypePersQueueGroup: {
-                return BuildTopicScheme(describeResult, error);
-            }
             default:
-                error = TStringBuilder() << "unsupported path type: " << PathType;
+                error = TStringBuilder() << "unsupported path type: " << pathType;
                 return false;
         }
     }
@@ -134,7 +101,7 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         }
 
         auto request = Aws::S3::Model::PutObjectRequest()
-            .WithKey(Sprintf("%s/%s", DestinationPrefix->c_str(), FileName.c_str()));
+            .WithKey(Sprintf("%s/create_view.sql", DestinationPrefix->c_str()));
 
         Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(Scheme)));
         Become(&TThis::StateUploadScheme);
@@ -355,8 +322,6 @@ private:
     ui64 ExportId;
     ui32 ItemIdx;
     TPathId SourcePathId;
-    NKikimrSchemeOp::EPathType PathType;
-    TString FileName;
 
     NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
     TMaybe<TString> DestinationPrefix;
@@ -496,21 +461,34 @@ private:
     }
 
     bool AddSchemaMappingJson() {
-        NBackup::TSchemaMapping schemaMapping;
+        TString content;
+        TStringOutput ss(content);
+        NJson::TJsonWriter writer(&ss, false);
+
+        writer.OpenMap();
+        writer.WriteKey("exportedObjects");
+        writer.OpenMap();
         for (const auto& item : ExportMetadata.GetSchemaMapping()) {
-            schemaMapping.Items.emplace_back(NBackup::TSchemaMapping::TItem{
-                .ExportPrefix = item.GetDestinationPrefix(),
-                .ObjectPath = item.GetSourcePath(),
-                .IV = item.HasIV() ? TMaybe<NBackup::TEncryptionIV>(NBackup::TEncryptionIV::FromBinaryString(item.GetIV())) : Nothing()
-            });
+            writer.WriteKey(item.GetSourcePath());
+            writer.OpenMap();
+            writer.Write("exportPrefix", item.GetDestinationPrefix());
+            if (item.HasIV()) {
+                writer.Write("iv", NBackup::TEncryptionIV::FromBinaryString(item.GetIV()).GetHexString());
+            }
+            writer.CloseMap();
         }
+        writer.CloseMap();
+        writer.CloseMap();
+
+        writer.Flush();
+        ss.Flush();
 
         TMaybe<NBackup::TEncryptionIV> iv;
         if (IV) {
             iv = NBackup::TEncryptionIV::Combine(*IV, NBackup::EBackupFileType::SchemaMapping, 0, 0);
         }
 
-        return AddFile("SchemaMapping/mapping.json", schemaMapping.Serialize(), iv, Key);
+        return AddFile("SchemaMapping/mapping.json", content, iv, Key);
     }
 
     void ProcessQueue() {

@@ -159,7 +159,6 @@ def get(
     retry_count=5,
     headers=None,
     return_none_for_not_found_error=False,
-    timeout=_METADATA_DEFAULT_TIMEOUT,
 ):
     """Fetch a resource from the metadata server.
 
@@ -179,7 +178,6 @@ def get(
         headers (Optional[Mapping[str, str]]): Headers for the request.
         return_none_for_not_found_error (Optional[bool]): If True, returns None
             for 404 error instead of throwing an exception.
-        timeout (int): How long to wait, in seconds for the metadata server to respond.
 
     Returns:
         Union[Mapping, str]: If the metadata server returns JSON, a mapping of
@@ -206,9 +204,7 @@ def get(
     failure_reason = None
     for attempt in backoff:
         try:
-            response = request(
-                url=url, method="GET", headers=headers_to_use, timeout=timeout
-            )
+            response = request(url=url, method="GET", headers=headers_to_use)
             if response.status in transport.DEFAULT_RETRYABLE_STATUS_CODES:
                 _LOGGER.warning(
                     "Compute Engine Metadata server unavailable on "

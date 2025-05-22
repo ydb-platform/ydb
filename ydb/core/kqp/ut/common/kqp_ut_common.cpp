@@ -72,8 +72,6 @@ NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateJson2Module();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateRe2Module();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateStringModule();
 NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateDateTime2Module();
-NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateMathModule();
-NYql::NUdf::TUniquePtr<NYql::NUdf::IUdfModule> CreateUnicodeModule();
 
 NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegistry) {
     Y_UNUSED(typeRegistry);
@@ -83,9 +81,6 @@ NMiniKQL::IFunctionRegistry* UdfFrFactory(const NScheme::TTypeRegistry& typeRegi
     funcRegistry->AddModule("", "Re2", CreateRe2Module());
     funcRegistry->AddModule("", "String", CreateStringModule());
     funcRegistry->AddModule("", "DateTime", CreateDateTime2Module());
-    funcRegistry->AddModule("", "Math", CreateMathModule());
-    funcRegistry->AddModule("", "Unicode", CreateUnicodeModule());
-    
     NKikimr::NMiniKQL::FillStaticModules(*funcRegistry);
     return funcRegistry.Release();
 }
@@ -1399,16 +1394,6 @@ void InitRoot(Tests::TServer::TPtr server, TActorId sender) {
     server->SetupRootStoragePools(sender);
 }
 
-void Grant(NYdb::NTable::TSession& adminSession, const char* permissions, const char* path, const char* user) {
-    auto grantQuery = Sprintf(R"(
-            GRANT %s ON `%s` TO `%s`;
-        )",
-        permissions, path, user
-    );
-    auto result = adminSession.ExecuteSchemeQuery(grantQuery).ExtractValueSync();
-    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-};  
-
 THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender,
                                                      const TString& path, NSchemeCache::TSchemeCacheNavigate::EOp op)
 {
@@ -1527,36 +1512,6 @@ void WaitForZeroReadIterators(Tests::TServer& server, const TString& path) {
     }
 
     UNIT_ASSERT_C(iterators == 0, "Unable to wait for proper read iterator count, it looks like cancelation doesn`t work (" << iterators << ")");
-}
-
-int GetCumulativeCounterValue(Tests::TServer& server, const TString& path, const TString& counterName) {
-    int result = 0;
-
-    TTestActorRuntime* runtime = server.GetRuntime();
-    auto sender = runtime->AllocateEdgeActor();
-    auto shards = GetTableShards(&server, sender, path);
-    UNIT_ASSERT_C(shards.size() > 0, "Table: " << path << " has no shards");
-
-    for (auto x : shards) {
-        runtime->SendToPipe(
-            x,
-            sender,
-            new TEvTablet::TEvGetCounters,
-            0,
-            GetPipeConfigWithRetries());
-
-        auto ev = runtime->GrabEdgeEvent<TEvTablet::TEvGetCountersResponse>(sender);
-        UNIT_ASSERT(ev);
-
-        const NKikimrTabletBase::TEvGetCountersResponse& resp = ev->Get()->Record;
-        for (const auto& counter : resp.GetTabletCounters().GetAppCounters().GetCumulativeCounters()) {
-            if (counter.GetName() == counterName) {
-                result += counter.GetValue();
-            }
-        }
-    }
-
-    return result;
 }
 
 TTableId ResolveTableId(Tests::TServer* server, TActorId sender, const TString& path) {
@@ -1736,7 +1691,7 @@ NJson::TJsonValue GetJoinOrderFromDetailedJoinOrderImpl(const NJson::TJsonValue&
     if (!opt.IsMap()) {
         return {};
     }
-
+    
     if (!opt.GetMapSafe().contains("table")) {
         NJson::TJsonValue res;
         auto args = opt.GetMapSafe().at("args").GetArraySafe();

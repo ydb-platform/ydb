@@ -1,5 +1,5 @@
 # POSIX additions to <stdio.h>.
-# https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/stdio.h.html
+# http://pubs.opengroup.org/onlinepubs/9699919799/basedefs/stdio.h.html
 
 from libc.stdio cimport FILE
 from libc.stddef cimport wchar_t

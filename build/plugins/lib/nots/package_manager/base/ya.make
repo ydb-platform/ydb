@@ -16,6 +16,7 @@ PY_SRCS(
 )
 
 PEERDIR(
+    contrib/python/six
     library/python/archive
     devtools/frontend_build_platform/libraries/logging
 )

@@ -21,8 +21,7 @@ namespace NYql {
 class TTransformationPipeline
 {
 public:
-    TTransformationPipeline(TIntrusivePtr<TTypeAnnotationContext> ctx,
-        TTypeAnnCallableFactory typeAnnCallableFactory = {});
+    TTransformationPipeline(TIntrusivePtr<TTypeAnnotationContext> ctx);
 
     TTransformationPipeline& AddServiceTransformers(EYqlIssueCode issueCode = TIssuesIds::CORE_GC);
     TTransformationPipeline& AddParametersEvaluation(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry, EYqlIssueCode issueCode = TIssuesIds::CORE_PARAM_EVALUATION);
@@ -60,7 +59,6 @@ public:
 
 private:
     TIntrusivePtr<TTypeAnnotationContext> TypeAnnotationContext_;
-    TTypeAnnCallableFactory TypeAnnCallableFactory_;
     TVector<TTransformStage> Transformers_;
 };
 

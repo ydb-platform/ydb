@@ -181,7 +181,6 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RequestRestart);
 
     // Security
-    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetCurrentUser);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AddMember);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, RemoveMember);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, CheckPermission);

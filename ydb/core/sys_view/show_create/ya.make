@@ -9,7 +9,6 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
-    ydb/core/formats/arrow/serializer
     ydb/core/kqp/runtime
     ydb/core/protos
     ydb/core/sys_view/common

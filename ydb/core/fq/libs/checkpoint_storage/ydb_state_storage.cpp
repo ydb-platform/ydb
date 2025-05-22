@@ -283,6 +283,7 @@ TStatus ProcessRowState(
 ////////////////////////////////////////////////////////////////////////////////
 
 class TStateStorage : public IStateStorage {
+    TYqSharedResources::TPtr YqSharedResources;
     TYdbConnectionPtr YdbConnection;
     const NConfig::TYdbStorageConfig StorageConfig;
     const NConfig::TCheckpointCoordinatorConfig Config;
@@ -290,7 +291,8 @@ class TStateStorage : public IStateStorage {
 public:
     explicit TStateStorage(
         const NConfig::TCheckpointCoordinatorConfig& config,
-        const TYdbConnectionPtr& ydbConnection);
+        const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+        const TYqSharedResources::TPtr& yqSharedResources);
     ~TStateStorage() = default;
 
     TFuture<TIssues> Init() override;
@@ -356,8 +358,10 @@ private:
 
 TStateStorage::TStateStorage(
     const NConfig::TCheckpointCoordinatorConfig& config,
-    const TYdbConnectionPtr& ydbConnection)
-    : YdbConnection(ydbConnection)
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+    const TYqSharedResources::TPtr& yqSharedResources)
+    : YqSharedResources(yqSharedResources)
+    , YdbConnection(NewYdbConnection(config.GetStorage(), credentialsProviderFactory, YqSharedResources->UserSpaceYdbDriver))
     , StorageConfig(config.GetStorage())
     , Config(config)
 {
@@ -1001,8 +1005,9 @@ std::vector<NYql::NDq::TComputeActorState> TStateStorage::ApplyIncrements(
 
 TStateStoragePtr NewYdbStateStorage(
     const NConfig::TCheckpointCoordinatorConfig& config,
-    const TYdbConnectionPtr& ydbConnection) {
-    return new TStateStorage(config, ydbConnection);
+    const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
+    const TYqSharedResources::TPtr& yqSharedResources) {
+    return new TStateStorage(config, credentialsProviderFactory, yqSharedResources);
 }
 
 } // namespace NFq

@@ -26,7 +26,7 @@
 
 namespace NYT::NConcurrency {
 
-constinit const auto Logger = ConcurrencyLogger;
+static constexpr auto& Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -45,12 +45,6 @@ namespace NKikimr::NBsController {
             }
         }
 
-        if (const auto mr = cmd.GetMaintenanceStatus();
-            mr != NKikimrBlobStorage::TMaintenanceStatus::NOT_SET &&
-            mr != pdisk->MaintenanceStatus) {
-            pdisk->MaintenanceStatus = mr;
-        }
-
         if (fitGroups) {
             for (const auto& [id, slot] : pdisk->VSlotsOnPDisk) {
                 if (slot->Group) {

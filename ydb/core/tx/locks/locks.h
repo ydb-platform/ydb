@@ -75,9 +75,6 @@ public:
     // Persist volatile dependencies, i.e. which undecided transactions must be waited for on commit
     virtual void PersistAddVolatileDependency(ui64 lockId, ui64 txId) = 0;
     virtual void PersistRemoveVolatileDependency(ui64 lockId, ui64 txId) = 0;
-
-    // Schedules callback when changes are confirmed to be persistent
-    virtual void OnPersistent(std::function<void()> callback) = 0;
 };
 
 class TLocksDataShard {
@@ -352,11 +349,11 @@ public:
     void PersistBrokenLock(ILocksDb* db);
     void PersistRemoveLock(ILocksDb* db);
 
-    bool PersistRanges(ILocksDb* db);
+    void PersistRanges(ILocksDb* db);
 
-    bool AddConflict(TLockInfo* otherLock, ILocksDb* db);
-    bool AddVolatileDependency(ui64 txId, ILocksDb* db);
-    bool PersistConflicts(ILocksDb* db);
+    void AddConflict(TLockInfo* otherLock, ILocksDb* db);
+    void AddVolatileDependency(ui64 txId, ILocksDb* db);
+    void PersistConflicts(ILocksDb* db);
     void CleanupConflicts();
 
     void RestoreInMemoryState(const ILocksDb::TLockRow& lockRow);
@@ -396,11 +393,6 @@ public:
     bool IsFrozen() const { return !!(Flags & ELockFlags::Frozen); }
     void SetFrozen(ILocksDb* db = nullptr);
 
-    bool IsPersisting() const { return WaitPersistentCounter > 0; }
-    void AddWaitPersistentCallback(ILocksDb* db);
-
-    static void AddWaitPersistentCallback(ILocksDb* db, TVector<TLockInfo::TPtr>&& locks);
-
 private:
     void MakeShardLock();
     bool AddShardLock(const TPathId& pathId);
@@ -410,7 +402,7 @@ private:
     void SetBroken(TRowVersion at);
     void OnRemoved();
 
-    bool PersistAddRange(const TPathId& tableId, ELockRangeFlags flags, ILocksDb* db);
+    void PersistAddRange(const TPathId& tableId, ELockRangeFlags flags, ILocksDb* db);
 
 private:
     struct TPersistentRange {
@@ -442,7 +434,6 @@ private:
     TVector<TPersistentRange> PersistentRanges;
 
     ui64 LastOpId = 0;
-    ui64 WaitPersistentCounter = 0;
 };
 
 struct TTableLocksReadListTag {};
@@ -586,7 +577,6 @@ public:
     void AddShardLock(const TLockInfo::TPtr& lock, TIntrusiveList<TTableLocks, TTableLocksReadListTag>& readTables);
     void AddWriteLock(const TLockInfo::TPtr& lock, TIntrusiveList<TTableLocks, TTableLocksWriteListTag>& writeTables);
 
-    TLockInfo::TPtr GetLock(ui64 lockTxId) const;
     TLockInfo::TPtr GetLock(ui64 lockTxId, const TRowVersion& at) const;
 
     ui64 LocksCount() const { return Locks.size(); }
@@ -926,19 +916,14 @@ public:
     ui64 LocksCount() const { return Locker.LocksCount(); }
     ui64 BrokenLocksCount() const { return Locker.BrokenLocksCount(); }
 
-    TLockInfo::TPtr GetRawLock(ui64 lockTxId) const {
-        return Locker.GetLock(lockTxId);
-    }
-
-    TLockInfo::TPtr GetRawLock(ui64 lockTxId, const TRowVersion& at) const {
+    TLockInfo::TPtr GetRawLock(ui64 lockTxId, const TRowVersion& at = TRowVersion::Max()) const {
         return Locker.GetLock(lockTxId, at);
     }
 
     bool IsBroken(ui64 lockTxId, const TRowVersion& at = TRowVersion::Max()) const {
-        TLockInfo::TPtr txLock = Locker.GetLock(lockTxId);
-        if (txLock) {
+        TLockInfo::TPtr txLock = Locker.GetLock(lockTxId, at);
+        if (txLock)
             return txLock->IsBroken(at);
-        }
         return true;
     }
 

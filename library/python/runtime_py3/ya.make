@@ -8,18 +8,21 @@ PEERDIR(
     library/cpp/resource
 )
 
+CFLAGS(-DCYTHON_REGISTER_ABCS=0)
+
 NO_PYTHON_INCLUDES()
 
 ENABLE(PYBUILD_NO_PYC)
 
-SRCS(
-    __res.cpp
-    sitecustomize.cpp
-    GLOBAL runtime_reg_py3.cpp
-)
-
 PY_SRCS(
     entry_points.py
+    TOP_LEVEL
+
+    CYTHON_DIRECTIVE
+    language_level=3
+
+    __res.pyx
+    sitecustomize.pyx
 )
 
 IF (EXTERNAL_PY_FILES)
@@ -28,16 +31,17 @@ IF (EXTERNAL_PY_FILES)
     )
 ENDIF()
 
-RUN_PROGRAM(
-    library/python/runtime_py3/stage0pycc
-        mod=${MODDIR}/__res.py __res.py __res.pyc
-        mod=${MODDIR}/sitecustomize.py sitecustomize.py sitecustomize.pyc
-    IN __res.py sitecustomize.py
-    OUT_NOAUTO __res.pyc sitecustomize.pyc
-    ENV PYTHONHASHSEED=0
-)
-ARCHIVE(NAME __res.pyc.inc DONTCOMPRESS __res.pyc)
-ARCHIVE(NAME sitecustomize.pyc.inc DONTCOMPRESS sitecustomize.pyc)
+IF (CYTHON_COVERAGE)
+    # Let covarage support add all needed files to resources
+ELSE()
+    RESOURCE_FILES(
+        DONT_COMPRESS
+        PREFIX ${MODDIR}/
+        __res.pyx
+        importer.pxi
+        sitecustomize.pyx
+    )
+ENDIF()
 
 END()
 

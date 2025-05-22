@@ -32,21 +32,6 @@
 #include <util/string/subst.h>
 #include <util/system/hostname.h>
 
-// ad-hoc test parametrization support: only for single boolean flag
-// taken from ydb/core/ut/common/kqp_ut_common.h:Y_UNIT_TEST_TWIN
-//TODO: introduce general support for test parametrization?
-#define Y_UNIT_TEST_FLAG(N, OPT)                                                                                   \
-    template<bool OPT> void Test##N(NUnitTest::TTestContext&);                                                           \
-    struct TTestRegistration##N {                                                                                  \
-        TTestRegistration##N() {                                                                                   \
-            TCurrentTest::AddTest(#N "-" #OPT "-false", static_cast<void (*)(NUnitTest::TTestContext&)>(&Test##N<false>), false); \
-            TCurrentTest::AddTest(#N "-" #OPT "-true", static_cast<void (*)(NUnitTest::TTestContext&)>(&Test##N<true>), false);   \
-        }                                                                                                          \
-    };                                                                                                             \
-    static TTestRegistration##N testRegistration##N;                                                               \
-    template<bool OPT>                                                                                             \
-    void Test##N(NUnitTest::TTestContext&)
-
 const bool STRAND_PDISK = true;
 #ifndef NDEBUG
 const bool ENABLE_DETAILED_NODE_BROKER_LOG = true;
@@ -75,8 +60,7 @@ void SetupLogging(TTestActorRuntime& runtime)
 THashMap<ui32, TIntrusivePtr<TNodeWardenConfig>> NodeWardenConfigs;
 
 void SetupServices(TTestActorRuntime &runtime,
-                   ui32 maxDynNodes,
-                   bool enableNodeBrokerDeltaProtocol)
+                   ui32 maxDynNodes)
 {
     const ui32 domainsNum = 1;
     const ui32 disksInDomain = 1;
@@ -197,8 +181,7 @@ void SetupServices(TTestActorRuntime &runtime,
     dnConfig->MaxDynamicNodeId = 1024 + (maxDynNodes - 1);
     runtime.GetAppData().FeatureFlags.SetEnableNodeBrokerSingleDomainMode(true);
     runtime.GetAppData().FeatureFlags.SetEnableStableNodeNames(true);
-    runtime.GetAppData().FeatureFlags.SetEnableNodeBrokerDeltaProtocol(enableNodeBrokerDeltaProtocol);
-
+     
     if (!runtime.IsRealThreads()) {
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvLocalRecoveryDone,
@@ -208,23 +191,8 @@ void SetupServices(TTestActorRuntime &runtime,
 
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::SchemeShard, TTabletTypes::SchemeShard), &CreateFlatTxSchemeShard);
     BootFakeCoordinator(runtime, TTestTxConfig::Coordinator, MakeIntrusive<TFakeCoordinator::TState>());
-
-    ui32 connectedNameservers = 0;
-    auto prevObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-        if (ev->GetTypeRewrite() == TEvTabletPipe::EvClientConnected) {
-            auto* connectedEv = ev->Get<TEvTabletPipe::TEvClientConnected>();
-            if (connectedEv->TabletId == MakeNodeBrokerID() && connectedEv->Status == NKikimrProto::OK) {
-                ++connectedNameservers;
-            }
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    });
-
     auto aid = CreateTestBootstrapper(runtime, CreateTestTabletInfo(MakeNodeBrokerID(), TTabletTypes::NodeBroker), &CreateNodeBroker);
     runtime.EnableScheduleForActor(aid, true);
-
-    runtime.WaitFor("nameservers are connected", [&]{ return connectedNameservers >= runtime.GetNodeCount(); });
-    runtime.SetObserverFunc(prevObserver);
 }
 
 void AsyncSetConfig(TTestActorRuntime& runtime,
@@ -283,8 +251,7 @@ void SetBannedIds(TTestActorRuntime& runtime,
 
 void Setup(TTestActorRuntime& runtime,
            ui32 maxDynNodes = 3,
-           const TVector<TString>& databases = {},
-           bool enableNodeBrokerDeltaProtocol = false)
+           const TVector<TString>& databases = {})
 {
     using namespace NMalloc;
     TMallocInfo mallocInfo = MallocInfo();
@@ -300,7 +267,7 @@ void Setup(TTestActorRuntime& runtime,
     runtime.SetScheduledEventFilter(scheduledFilter);
 
     SetupLogging(runtime);
-    SetupServices(runtime, maxDynNodes, enableNodeBrokerDeltaProtocol);
+    SetupServices(runtime, maxDynNodes);
 
     TActorId sender = runtime.AllocateEdgeActor();
     ui32 txId = 100;
@@ -325,11 +292,6 @@ void Setup(TTestActorRuntime& runtime,
             }
         } while (true);
     }
-}
-
-void SetupWithDeltaProtocol(TTestActorRuntime& runtime, bool enableNodeBrokerDeltaProtocol)
-{
-    Setup(runtime, 3, {}, enableNodeBrokerDeltaProtocol);
 }
 
 bool IsTabletActiveEvent(IEventHandle& ev)
@@ -4498,65 +4460,13 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         SubscribeToNodesUpdates(runtime, sender, pipe, cachedVersion, seqNo);
         CheckNodesUpdate(runtime, { NODE3 }, seqNo, GetEpoch(runtime, sender));
     }
-
-    void TestNNodesSubscribers(size_t n)
-    {
-        TTestBasicRuntime runtime(8, false);
-        Setup(runtime, 3);
-        TActorId sender = runtime.AllocateEdgeActor();
-
-        ui64 cachedVersion = 0;
-        ui64 seqNo = 0;
-
-        // Subscribe to nodes update and check initial update
-        for (size_t i = 0; i < n; ++i) {
-            TActorId sender = runtime.AllocateEdgeActor();
-            TActorId pipe = runtime.ConnectToPipe(MakeNodeBrokerID(), sender, 0, GetPipeConfigWithRetries());
-
-            SubscribeToNodesUpdates(runtime, sender, pipe, cachedVersion, seqNo);
-            CheckNodesUpdate(runtime, {}, seqNo, GetEpoch(runtime, sender));
-        }
-
-        // Register node
-        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
-                          1, 2, 3, 4, TStatus::OK, NODE1);
-
-        // Check updates after registration
-        for (size_t i = 0; i < n; ++i) {
-            CheckNodesUpdate(runtime, { NODE1 }, seqNo, GetEpoch(runtime, sender));
-        }
-
-        // Register node
-        CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.4",
-                          1, 2, 3, 4, TStatus::OK, NODE2);
-
-        // Check updates after registration
-        for (size_t i = 0; i < n; ++i) {
-            CheckNodesUpdate(runtime, { NODE2 }, seqNo, GetEpoch(runtime, sender));
-        }
-    }
-
-    Y_UNIT_TEST(Test999NodesSubscribers)
-    {
-        TestNNodesSubscribers(999);
-    }
-
-    Y_UNIT_TEST(Test1000NodesSubscribers)
-    {
-        TestNNodesSubscribers(1000);
-    }
-
-    Y_UNIT_TEST(Test1001NodesSubscribers)
-    {
-        TestNNodesSubscribers(1001);
-    }
 }
 
 Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
-    Y_UNIT_TEST_FLAG(BasicFunctionality, EnableNodeBrokerDeltaProtocol)
+    Y_UNIT_TEST(BasicFunctionality)
     {
         TTestBasicRuntime runtime(8, false);
-        SetupWithDeltaProtocol(runtime, EnableNodeBrokerDeltaProtocol);
+        Setup(runtime);
         TActorId sender = runtime.AllocateEdgeActor();
 
         // Register node NODE1.
@@ -4710,9 +4620,9 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         CheckNoPendingCacheMissesLeft(runtime, 0);
     }
 
-    Y_UNIT_TEST_FLAG(ListNodesCacheWhenNoChanges, EnableNodeBrokerDeltaProtocol) {
+    Y_UNIT_TEST(ListNodesCacheWhenNoChanges) {
         TTestBasicRuntime runtime(1, false);
-        SetupWithDeltaProtocol(runtime, EnableNodeBrokerDeltaProtocol);
+        Setup(runtime);
         TActorId sender = runtime.AllocateEdgeActor();
         
         // Add one dynamic node in addition to one static node
@@ -4741,38 +4651,33 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         UNIT_ASSERT_VALUES_UNEQUAL(ev2->NodesPtr.Get(), ev3->NodesPtr.Get());
     }
 
-    Y_UNIT_TEST_FLAG(CacheMissPipeDisconnect, EnableNodeBrokerDeltaProtocol) {
+    Y_UNIT_TEST(CacheMissPipeDisconnect) {
         TTestBasicRuntime runtime(1, false);
-        SetupWithDeltaProtocol(runtime, EnableNodeBrokerDeltaProtocol);
+        Setup(runtime);
         TActorId sender = runtime.AllocateEdgeActor();
-
-        // Block cache miss requests in old protocol
-        TBlockEvents<TEvNodeBroker::TEvResolveNode> resolveBlock(runtime);
-        // Block cache miss requests in new detlta protocol
-        TBlockEvents<TEvNodeBroker::TEvUpdateNodes> deltaBlock(runtime);
-        TBlockEvents<TEvNodeBroker::TEvSyncNodesRequest> syncBlock(runtime);
 
         // Register a dynamic node in NodeBroker
         CheckRegistration(runtime, sender, "host1", 1001, "host1.host1.host1", "1.2.3.4",
                           1, 2, 3, 4, TStatus::OK, NODE1);
 
+        // Block cache miss requests
+        TBlockEvents<TEvNodeBroker::TEvResolveNode> block(runtime);
+        
         // Send an asynchronous node resolve request to DynamicNameserver
         AsyncResolveNode(runtime, sender, NODE1);
 
         // Wait until cache miss is blocked
-        runtime.WaitFor("cache miss", [&]{return resolveBlock.size() >= 1 || syncBlock.size() >= 1; });
-
+        runtime.WaitFor("cache miss", [&]{ return block.size() >= 1; });
+        
         // Reboot NodeBroker to break pipe
         RebootTablet(runtime, MakeNodeBrokerID(), sender);
 
+        // Stop blocking new cache miss requests
+        block.Stop();
+
         // Resolve request is failed, because pipe was broken
         CheckAsyncResolveUnknownNode(runtime, NODE1);
-
-        // Stop blocking new cache miss requests
-        resolveBlock.Stop();
-        syncBlock.Stop();
-        deltaBlock.Stop();
-
+        
         // The following requests should be OK
         CheckResolveNode(runtime, sender, NODE1, "1.2.3.4");
 
@@ -4780,31 +4685,27 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         CheckNoPendingCacheMissesLeft(runtime, 0);
     }
 
-    Y_UNIT_TEST_FLAG(CacheMissSimpleDeadline, EnableNodeBrokerDeltaProtocol) {
+    Y_UNIT_TEST(CacheMissSimpleDeadline) {
         TTestBasicRuntime runtime(1, false);
-        SetupWithDeltaProtocol(runtime, EnableNodeBrokerDeltaProtocol);
+        Setup(runtime);
         TActorId sender = runtime.AllocateEdgeActor();
-
-        // Block cache miss requests in old protocol
-        TBlockEvents<TEvNodeBroker::TEvResolveNode> resolveBlock(runtime);
-        // Block cache miss requests in new detlta protocol
-        TBlockEvents<TEvNodeBroker::TEvUpdateNodes> deltaBlock(runtime);
-        TBlockEvents<TEvNodeBroker::TEvSyncNodesRequest> syncBlock(runtime);
 
         // Register dynamic node in NodeBroker
         CheckRegistration(runtime, sender, "host1", 1001, "host1.host1.host1", "1.2.3.4",
             1, 2, 3, 4, TStatus::OK, NODE1);
 
-
+        // Block cache miss requests
+        TBlockEvents<TEvNodeBroker::TEvResolveNode> block(runtime);
+        
         // Send an asynchronous node resolve request to DynamicNameserver with deadline
         AsyncResolveNode(runtime, sender, NODE1, TDuration::Seconds(1));
-
+        
         // Wait until cache miss is blocked
-        runtime.WaitFor("cache miss", [&]{ return resolveBlock.size() >= 1 || syncBlock.size() >= 1; });
-
+        runtime.WaitFor("cache miss", [&]{ return block.size() >= 1; });
+        
         // Move time to the deadline
         runtime.AdvanceCurrentTime(TDuration::Seconds(1));
-
+        
         // Resolve request is failed, because of deadline
         CheckAsyncResolveUnknownNode(runtime, NODE1);
 
@@ -4812,16 +4713,10 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         CheckNoPendingCacheMissesLeft(runtime, 0);
     }
 
-    Y_UNIT_TEST_FLAG(CacheMissSameDeadline, EnableNodeBrokerDeltaProtocol) {
+    Y_UNIT_TEST(CacheMissSameDeadline) {
         TTestBasicRuntime runtime(1, false);
-        SetupWithDeltaProtocol(runtime, EnableNodeBrokerDeltaProtocol);
+        Setup(runtime);
         TActorId sender = runtime.AllocateEdgeActor();
-
-        // Block cache miss requests in old protocol
-        TBlockEvents<TEvNodeBroker::TEvResolveNode> resolveBlock(runtime);
-        // Block cache miss requests in new detlta protocol
-        TBlockEvents<TEvNodeBroker::TEvUpdateNodes> deltaBlock(runtime);
-        TBlockEvents<TEvNodeBroker::TEvSyncNodesRequest> syncBlock(runtime);
 
         // Register dynamic nodes in NodeBroker
         CheckRegistration(runtime, sender, "host1", 1001, "host1.host1.host1", "1.2.3.4",
@@ -4829,16 +4724,19 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         CheckRegistration(runtime, sender, "host2", 1001, "host2.host2.host2", "1.2.3.5",
             1, 2, 3, 5, TStatus::OK, NODE2);
 
+        // Block cache miss requests
+        TBlockEvents<TEvNodeBroker::TEvResolveNode> block(runtime);
+
         // Send two asynchronous node resolve requests to DynamicNameserver with same deadline
         AsyncResolveNode(runtime, sender, NODE1, TDuration::Seconds(1));
         AsyncResolveNode(runtime, sender, NODE2, TDuration::Seconds(1));
 
         // Wait until cache misses are blocked
-        runtime.WaitFor("cache miss", [&]{ return resolveBlock.size() >= 2 || syncBlock.size() >= 1; });
+        runtime.WaitFor("cache miss", [&]{ return block.size() >= 2; });
 
         // Move time to the deadline
         runtime.AdvanceCurrentTime(TDuration::Seconds(1));
-
+            
         // Resolve requests are failed, because of deadline
         CheckAsyncResolveUnknownNode(runtime, NODE1);
         CheckAsyncResolveUnknownNode(runtime, NODE2);
@@ -4847,16 +4745,10 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         CheckNoPendingCacheMissesLeft(runtime, 0);
     }
 
-    Y_UNIT_TEST_FLAG(CacheMissNoDeadline, EnableNodeBrokerDeltaProtocol) {
+    Y_UNIT_TEST(CacheMissNoDeadline) {
         TTestBasicRuntime runtime(1, false);
-        SetupWithDeltaProtocol(runtime, EnableNodeBrokerDeltaProtocol);
+        Setup(runtime);
         TActorId sender = runtime.AllocateEdgeActor();
-
-        // Block cache miss requests in old protocol
-        TBlockEvents<TEvNodeBroker::TEvResolveNode> resolveBlock(runtime);
-        // Block cache miss requests in new detlta protocol
-        TBlockEvents<TEvNodeBroker::TEvUpdateNodes> deltaBlock(runtime);
-        TBlockEvents<TEvNodeBroker::TEvSyncNodesRequest> syncBlock(runtime);
 
         // Register dynamic nodes in NodeBroker
         CheckRegistration(runtime, sender, "host1", 1001, "host1.host1.host1", "1.2.3.4",
@@ -4864,26 +4756,27 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         CheckRegistration(runtime, sender, "host2", 1001, "host2.host2.host2", "1.2.3.5",
             1, 2, 3, 5, TStatus::OK, NODE2);
 
+        // Block cache miss requests
+        TBlockEvents<TEvNodeBroker::TEvResolveNode> block(runtime);
+
         // Send asynchronous node resolve request to DynamicNameserver with no deadline
         AsyncResolveNode(runtime, sender, NODE1);
-
+        
         // Send asynchronous node resolve request to DynamicNameserver with deadline
         AsyncResolveNode(runtime, sender, NODE2, TDuration::Seconds(1));
 
         // Wait until cache misses are blocked
-        runtime.WaitFor("cache miss", [&]{ return resolveBlock.size() >= 2 || syncBlock.size() >= 1; });
+        runtime.WaitFor("cache miss", [&]{ return block.size() >= 2; });
 
         // Move time to the deadline
         runtime.AdvanceCurrentTime(TDuration::Seconds(1));
-
+            
         // Resolve request is failed, because of deadline
         CheckAsyncResolveUnknownNode(runtime, NODE2);
-
+        
         // Unblock blocked cache misses
-        resolveBlock.Unblock();
-        deltaBlock.Unblock();
-        syncBlock.Unblock();
-
+        block.Unblock();
+        
         // Resolve request with no deadline is OK
         CheckAsyncResolveNode(runtime, NODE1, "1.2.3.4");
 
@@ -4891,16 +4784,10 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         CheckNoPendingCacheMissesLeft(runtime, 0);
     }
 
-    Y_UNIT_TEST_FLAG(CacheMissDifferentDeadline, EnableNodeBrokerDeltaProtocol) {
+    Y_UNIT_TEST(CacheMissDifferentDeadline) {
         TTestBasicRuntime runtime(1, false);
-        SetupWithDeltaProtocol(runtime, EnableNodeBrokerDeltaProtocol);
+        Setup(runtime);
         TActorId sender = runtime.AllocateEdgeActor();
-
-        // Block cache miss requests in old protocol
-        TBlockEvents<TEvNodeBroker::TEvResolveNode> resolveBlock(runtime);
-        // Block cache miss requests in new detlta protocol
-        TBlockEvents<TEvNodeBroker::TEvUpdateNodes> deltaBlock(runtime);
-        TBlockEvents<TEvNodeBroker::TEvSyncNodesRequest> syncBlock(runtime);
 
         // Register dynamic nodes in NodeBroker
         CheckRegistration(runtime, sender, "host1", 1001, "host1.host1.host1", "1.2.3.4",
@@ -4908,22 +4795,25 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         CheckRegistration(runtime, sender, "host2", 1001, "host2.host2.host2", "1.2.3.5",
             1, 2, 3, 5, TStatus::OK, NODE2);
 
+        // Block cache miss requests
+        TBlockEvents<TEvNodeBroker::TEvResolveNode> block(runtime);
+
         // Send asynchronous node resolve requests to DynamicNameserver with different deadline
         AsyncResolveNode(runtime, sender, NODE1, TDuration::Seconds(1));
         AsyncResolveNode(runtime, sender, NODE2, TDuration::Seconds(2));
 
         // Wait until cache misses are blocked
-        runtime.WaitFor("cache miss", [&]{ return resolveBlock.size() >= 2 || syncBlock.size() >= 1; });
+        runtime.WaitFor("cache miss", [&]{ return block.size() >= 2; });
 
         // Move time to the first deadline
         runtime.AdvanceCurrentTime(TDuration::Seconds(1));
-
+            
         // Resolve request is failed, because of deadline
         CheckAsyncResolveUnknownNode(runtime, NODE1);
-
+        
         // Move time to the second deadline
         runtime.AdvanceCurrentTime(TDuration::Seconds(1));
-
+        
         // Resolve request is failed, because of deadline
         CheckAsyncResolveUnknownNode(runtime, NODE2);
 
@@ -4931,16 +4821,10 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         CheckNoPendingCacheMissesLeft(runtime, 0);
     }
 
-    Y_UNIT_TEST_FLAG(CacheMissDifferentDeadlineInverseOrder, EnableNodeBrokerDeltaProtocol) {
+    Y_UNIT_TEST(CacheMissDifferentDeadlineInverseOrder) {
         TTestBasicRuntime runtime(1, false);
-        SetupWithDeltaProtocol(runtime, EnableNodeBrokerDeltaProtocol);
+        Setup(runtime);
         TActorId sender = runtime.AllocateEdgeActor();
-
-        // Block cache miss requests in old protocol
-        TBlockEvents<TEvNodeBroker::TEvResolveNode> resolveBlock(runtime);
-        // Block cache miss requests in new detlta protocol
-        TBlockEvents<TEvNodeBroker::TEvUpdateNodes> deltaBlock(runtime);
-        TBlockEvents<TEvNodeBroker::TEvSyncNodesRequest> syncBlock(runtime);
 
         // Register dynamic nodes in NodeBroker
         CheckRegistration(runtime, sender, "host1", 1001, "host1.host1.host1", "1.2.3.4",
@@ -4948,22 +4832,25 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         CheckRegistration(runtime, sender, "host2", 1001, "host2.host2.host2", "1.2.3.5",
             1, 2, 3, 5, TStatus::OK, NODE2);
 
+        // Block cache miss requests
+        TBlockEvents<TEvNodeBroker::TEvResolveNode> block(runtime);
+
         // Send asynchronous node resolve requests to DynamicNameserver with different deadline
         AsyncResolveNode(runtime, sender, NODE1, TDuration::Seconds(2));
         AsyncResolveNode(runtime, sender, NODE2, TDuration::Seconds(1));
 
         // Wait until cache misses are blocked
-        runtime.WaitFor("cache miss", [&]{ return resolveBlock.size() >= 2 || syncBlock.size() >= 1; });
+        runtime.WaitFor("cache miss", [&]{ return block.size() >= 2; });
 
         // Move time to the first deadline
         runtime.AdvanceCurrentTime(TDuration::Seconds(1));
-
+            
         // Resolve request is failed, because of deadline
         CheckAsyncResolveUnknownNode(runtime, NODE2);
-
+        
         // Move time to the second deadline
         runtime.AdvanceCurrentTime(TDuration::Seconds(1));
-
+        
         // Resolve request is failed, because of deadline
         CheckAsyncResolveUnknownNode(runtime, NODE1);
 

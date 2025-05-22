@@ -55,7 +55,6 @@
   - tbmintrin.h
   - tmmintrin.h
   - varargs.h
-  - wasm_simd128.h
   - wmmintrin.h
   - x86intrin.h
   - xmmintrin.h

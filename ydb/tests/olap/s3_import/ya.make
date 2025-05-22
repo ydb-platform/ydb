@@ -31,7 +31,3 @@ DEPENDS(
 )
 
 END()
-
-RECURSE(
-    large
-)

@@ -1,22 +1,21 @@
-# cython: language_level=3str
-# cython: auto_pickle=True
-
 from __future__ import absolute_import
 
 import cython
-cython.declare(PyrexTypes=object, ExprNodes=object, Nodes=object, Builtin=object,
-               Options=object, TreeVisitor=object, CythonTransform=object,
-               InternalError=object, error=object, warning=object,
-               fake_rhs_expr=object, TypedExprNode=object)
+cython.declare(PyrexTypes=object, ExprNodes=object, Nodes=object,
+               Builtin=object, InternalError=object, error=object, warning=object,
+               py_object_type=object, unspecified_type=object,
+               object_expr=object, fake_rhs_expr=object, TypedExprNode=object)
 
 from . import Builtin
 from . import ExprNodes
 from . import Nodes
 from . import Options
+from .PyrexTypes import py_object_type, unspecified_type
 from . import PyrexTypes
 
 from .Visitor import TreeVisitor, CythonTransform
 from .Errors import error, warning, InternalError
+from .Optimize import ConstantFolding
 
 
 class TypedExprNode(ExprNodes.ExprNode):
@@ -29,8 +28,9 @@ class TypedExprNode(ExprNodes.ExprNode):
     def may_be_none(self):
         return self._may_be_none != False
 
+object_expr = TypedExprNode(py_object_type, may_be_none=True)
 # Fake rhs to silence "unused variable" warning
-fake_rhs_expr = TypedExprNode(PyrexTypes.unspecified_type)
+fake_rhs_expr = TypedExprNode(unspecified_type)
 
 
 class ControlBlock(object):
@@ -52,7 +52,7 @@ class ControlBlock(object):
         stats = [Assignment(a), NameReference(a), NameReference(c),
                      Assignment(b)]
         gen = {Entry(a): Assignment(a), Entry(b): Assignment(b)}
-        bounded = {Entry(a), Entry(c)}
+        bounded = set([Entry(a), Entry(c)])
 
     """
 
@@ -110,7 +110,6 @@ class ControlFlow(object):
        entries     set    tracked entries
        loops       list   stack for loop descriptors
        exceptions  list   stack for exception descriptors
-       in_try_block  int  track if we're in a try...except or try...finally block
     """
 
     def __init__(self):
@@ -123,7 +122,6 @@ class ControlFlow(object):
         self.exit_point = ExitBlock()
         self.blocks.add(self.exit_point)
         self.block = self.entry_point
-        self.in_try_block = 0
 
     def newblock(self, parent=None):
         """Create floating block linked to `parent` if given.
@@ -162,7 +160,7 @@ class ControlFlow(object):
                 (entry.type.is_struct_or_union or
                  entry.type.is_complex or
                  entry.type.is_array or
-                 (entry.type.is_cpp_class and not entry.is_cpp_optional))):
+                 entry.type.is_cpp_class)):
             # stack allocated structured variable => never uninitialised
             return True
         return False
@@ -172,9 +170,9 @@ class ControlFlow(object):
         if self.block:
             self.block.positions.add(node.pos[:2])
 
-    def mark_assignment(self, lhs, rhs, entry, rhs_scope=None):
+    def mark_assignment(self, lhs, rhs, entry):
         if self.block and self.is_tracked(entry):
-            assignment = NameAssignment(lhs, rhs, entry, rhs_scope=rhs_scope)
+            assignment = NameAssignment(lhs, rhs, entry)
             self.block.stats.append(assignment)
             self.block.gen[entry] = assignment
             self.entries.add(entry)
@@ -205,7 +203,7 @@ class ControlFlow(object):
 
     def normalize(self):
         """Delete unreachable and orphan blocks."""
-        queue = {self.entry_point}
+        queue = set([self.entry_point])
         visited = set()
         while queue:
             root = queue.pop()
@@ -219,7 +217,7 @@ class ControlFlow(object):
         visited.remove(self.entry_point)
         for block in visited:
             if block.empty():
-                for parent in block.parents:  # Re-parent
+                for parent in block.parents: # Re-parent
                     for child in block.children:
                         parent.add_child(child)
                 block.detach()
@@ -315,7 +313,7 @@ class ExceptionDescr(object):
 
 
 class NameAssignment(object):
-    def __init__(self, lhs, rhs, entry, rhs_scope=None):
+    def __init__(self, lhs, rhs, entry):
         if lhs.cf_state is None:
             lhs.cf_state = set()
         self.lhs = lhs
@@ -326,18 +324,16 @@ class NameAssignment(object):
         self.is_arg = False
         self.is_deletion = False
         self.inferred_type = None
-        # For generator expression targets, the rhs can have a different scope than the lhs.
-        self.rhs_scope = rhs_scope
 
     def __repr__(self):
         return '%s(entry=%r)' % (self.__class__.__name__, self.entry)
 
     def infer_type(self):
-        self.inferred_type = self.rhs.infer_type(self.rhs_scope or self.entry.scope)
+        self.inferred_type = self.rhs.infer_type(self.entry.scope)
         return self.inferred_type
 
     def type_dependencies(self):
-        return self.rhs.type_dependencies(self.rhs_scope or self.entry.scope)
+        return self.rhs.type_dependencies(self.entry.scope)
 
     @property
     def type(self):
@@ -377,9 +373,9 @@ class NameDeletion(NameAssignment):
 
     def infer_type(self):
         inferred_type = self.rhs.infer_type(self.entry.scope)
-        if (not inferred_type.is_pyobject
-                and inferred_type.can_coerce_to_pyobject(self.entry.scope)):
-            return PyrexTypes.py_object_type
+        if (not inferred_type.is_pyobject and
+            inferred_type.can_coerce_to_pyobject(self.entry.scope)):
+            return py_object_type
         self.inferred_type = inferred_type
         return inferred_type
 
@@ -459,7 +455,7 @@ class GVContext(object):
         start = min(block.positions)
         stop = max(block.positions)
         srcdescr = start[0]
-        if srcdescr not in self.sources:
+        if not srcdescr in self.sources:
             self.sources[srcdescr] = list(srcdescr.get_lines())
         lines = self.sources[srcdescr]
         return '\\n'.join([l.strip() for l in lines[start[1] - 1:stop[1]]])
@@ -589,13 +585,12 @@ def check_definitions(flow, compiler_directives):
     for node, entry in references.items():
         if Uninitialized in node.cf_state:
             node.cf_maybe_null = True
-            if (not entry.from_closure and len(node.cf_state) == 1
-                    and entry.name not in entry.scope.scope_predefined_names):
+            if not entry.from_closure and len(node.cf_state) == 1:
                 node.cf_is_null = True
             if (node.allow_null or entry.from_closure
                     or entry.is_pyclass_attr or entry.type.is_error):
                 pass  # Can be uninitialized here
-            elif node.cf_is_null and not entry.in_closure:
+            elif node.cf_is_null:
                 if entry.error_on_uninitialized or (
                         Options.error_on_uninitialized and (
                         entry.type.is_pyobject or entry.type.is_unspecified)):
@@ -609,12 +604,10 @@ def check_definitions(flow, compiler_directives):
                         "local variable '%s' referenced before assignment"
                         % entry.name)
             elif warn_maybe_uninitialized:
-                msg = "local variable '%s' might be referenced before assignment" % entry.name
-                if entry.in_closure:
-                    msg += " (maybe initialized inside a closure)"
                 messages.warning(
                     node.pos,
-                    msg)
+                    "local variable '%s' might be referenced before assignment"
+                    % entry.name)
         elif Unknown in node.cf_state:
             # TODO: better cross-closure analysis to know when inner functions
             #       are being called before a variable is being set, and when
@@ -628,7 +621,7 @@ def check_definitions(flow, compiler_directives):
     # Unused result
     for assmt in assignments:
         if (not assmt.refs and not assmt.entry.is_pyclass_attr
-                and not assmt.entry.in_closure):
+            and not assmt.entry.in_closure):
             if assmt.entry.cf_references and warn_unused_result:
                 if assmt.is_arg:
                     messages.warning(assmt.pos, "Unused argument value '%s'" %
@@ -668,7 +661,7 @@ class AssignmentCollector(TreeVisitor):
         self.assignments = []
 
     def visit_Node(self):
-        self._visitchildren(self, None, None)
+        self._visitchildren(self, None)
 
     def visit_SingleAssignmentNode(self, node):
         self.assignments.append((node.lhs, node.rhs))
@@ -680,37 +673,30 @@ class AssignmentCollector(TreeVisitor):
 
 class ControlFlowAnalysis(CythonTransform):
 
-    def find_in_stack(self, env):
-        if env == self.env:
-            return self.flow
-        for e, flow in reversed(self.stack):
-            if e is env:
-                return flow
-        assert False
-
     def visit_ModuleNode(self, node):
-        dot_output = self.current_directives['control_flow.dot_output']
-        self.gv_ctx = GVContext() if dot_output else None
-
-        from .Optimize import ConstantFolding
+        self.gv_ctx = GVContext()
         self.constant_folder = ConstantFolding()
 
         # Set of NameNode reductions
         self.reductions = set()
 
         self.in_inplace_assignment = False
+        self.env_stack = []
         self.env = node.scope
+        self.stack = []
         self.flow = ControlFlow()
-        self.stack = []  # a stack of (env, flow) tuples
-        self.object_expr = TypedExprNode(PyrexTypes.py_object_type, may_be_none=True)
         self.visitchildren(node)
 
         check_definitions(self.flow, self.current_directives)
 
+        dot_output = self.current_directives['control_flow.dot_output']
         if dot_output:
             annotate_defs = self.current_directives['control_flow.dot_annotate_defs']
-            with open(dot_output, 'wt') as fp:
+            fp = open(dot_output, 'wt')
+            try:
                 self.gv_ctx.render(fp, 'module', annotate_defs=annotate_defs)
+            finally:
+                fp.close()
         return node
 
     def visit_FuncDefNode(self, node):
@@ -718,8 +704,9 @@ class ControlFlowAnalysis(CythonTransform):
             if arg.default:
                 self.visitchildren(arg)
         self.visitchildren(node, ('decorators',))
-        self.stack.append((self.env, self.flow))
+        self.env_stack.append(self.env)
         self.env = node.local_scope
+        self.stack.append(self.flow)
         self.flow = ControlFlow()
 
         # Collect all entries
@@ -757,10 +744,10 @@ class ControlFlowAnalysis(CythonTransform):
         check_definitions(self.flow, self.current_directives)
         self.flow.blocks.add(self.flow.entry_point)
 
-        if self.gv_ctx is not None:
-            self.gv_ctx.add(GV(node.local_scope.name, self.flow))
+        self.gv_ctx.add(GV(node.local_scope.name, self.flow))
 
-        self.env, self.flow = self.stack.pop()
+        self.flow = self.stack.pop()
+        self.env = self.env_stack.pop()
         return node
 
     def visit_DefNode(self, node):
@@ -773,7 +760,7 @@ class ControlFlowAnalysis(CythonTransform):
     def visit_CTypeDefNode(self, node):
         return node
 
-    def mark_assignment(self, lhs, rhs=None, rhs_scope=None):
+    def mark_assignment(self, lhs, rhs=None):
         if not self.flow.block:
             return
         if self.flow.exceptions:
@@ -782,22 +769,19 @@ class ControlFlowAnalysis(CythonTransform):
             self.flow.nextblock()
 
         if not rhs:
-            rhs = self.object_expr
+            rhs = object_expr
         if lhs.is_name:
             if lhs.entry is not None:
                 entry = lhs.entry
             else:
                 entry = self.env.lookup(lhs.name)
-            if entry is None:  # TODO: This shouldn't happen...
+            if entry is None: # TODO: This shouldn't happen...
                 return
-            self.flow.mark_assignment(lhs, rhs, entry, rhs_scope=rhs_scope)
+            self.flow.mark_assignment(lhs, rhs, entry)
         elif lhs.is_sequence_constructor:
             for i, arg in enumerate(lhs.args):
-                if arg.is_starred:
-                    # "a, *b = x" assigns a list to "b"
-                    item_node = TypedExprNode(Builtin.list_type, may_be_none=False, pos=arg.pos)
-                elif rhs is self.object_expr:
-                    item_node = rhs
+                if not rhs or arg.is_starred:
+                    item_node = None
                 else:
                     item_node = rhs.inferable_item_node(i)
                 self.mark_assignment(arg, item_node)
@@ -822,7 +806,7 @@ class ControlFlowAnalysis(CythonTransform):
         return node
 
     def visit_AssignmentNode(self, node):
-        raise InternalError("Unhandled assignment node %s" % type(node))
+        raise InternalError("Unhandled assignment node")
 
     def visit_SingleAssignmentNode(self, node):
         self._visit(node.rhs)
@@ -932,26 +916,6 @@ class ControlFlowAnalysis(CythonTransform):
             self.flow.block = None
         return node
 
-    def visit_AssertStatNode(self, node):
-        """Essentially an if-condition that wraps a RaiseStatNode.
-        """
-        self.mark_position(node)
-        next_block = self.flow.newblock()
-        parent = self.flow.block
-        # failure case
-        parent = self.flow.nextblock(parent)
-        self._visit(node.condition)
-        self.flow.nextblock()
-        self._visit(node.exception)
-        if self.flow.block:
-            self.flow.block.add_child(next_block)
-        parent.add_child(next_block)
-        if next_block.parents:
-            self.flow.block = next_block
-        else:
-            self.flow.block = None
-        return node
-
     def visit_WhileStatNode(self, node):
         condition_block = self.flow.nextblock()
         next_block = self.flow.newblock()
@@ -987,11 +951,10 @@ class ControlFlowAnalysis(CythonTransform):
         is_special = False
         sequence = node.iterator.sequence
         target = node.target
-        env = node.iterator.expr_scope or self.env
         if isinstance(sequence, ExprNodes.SimpleCallNode):
             function = sequence.function
             if sequence.self is None and function.is_name:
-                entry = env.lookup(function.name)
+                entry = self.env.lookup(function.name)
                 if not entry or entry.is_builtin:
                     if function.name == 'reversed' and len(sequence.args) == 1:
                         sequence = sequence.args[0]
@@ -999,32 +962,30 @@ class ControlFlowAnalysis(CythonTransform):
                         if target.is_sequence_constructor and len(target.args) == 2:
                             iterator = sequence.args[0]
                             if iterator.is_name:
-                                iterator_type = iterator.infer_type(env)
+                                iterator_type = iterator.infer_type(self.env)
                                 if iterator_type.is_builtin_type:
                                     # assume that builtin types have a length within Py_ssize_t
                                     self.mark_assignment(
                                         target.args[0],
                                         ExprNodes.IntNode(target.pos, value='PY_SSIZE_T_MAX',
-                                                          type=PyrexTypes.c_py_ssize_t_type),
-                                        rhs_scope=node.iterator.expr_scope)
+                                                          type=PyrexTypes.c_py_ssize_t_type))
                                     target = target.args[1]
                                     sequence = sequence.args[0]
         if isinstance(sequence, ExprNodes.SimpleCallNode):
             function = sequence.function
             if sequence.self is None and function.is_name:
-                entry = env.lookup(function.name)
+                entry = self.env.lookup(function.name)
                 if not entry or entry.is_builtin:
                     if function.name in ('range', 'xrange'):
                         is_special = True
                         for arg in sequence.args[:2]:
-                            self.mark_assignment(target, arg, rhs_scope=node.iterator.expr_scope)
+                            self.mark_assignment(target, arg)
                         if len(sequence.args) > 2:
                             self.mark_assignment(target, self.constant_folder(
                                 ExprNodes.binop_node(node.pos,
                                                      '+',
                                                      sequence.args[0],
-                                                     sequence.args[2])),
-                                                rhs_scope=node.iterator.expr_scope)
+                                                     sequence.args[2])))
 
         if not is_special:
             # A for-loop basically translates to subsequent calls to
@@ -1033,7 +994,7 @@ class ControlFlowAnalysis(CythonTransform):
             # Python strings, etc., while correctly falling back to an
             # object type when the base type cannot be handled.
 
-            self.mark_assignment(target, node.item, rhs_scope=node.iterator.expr_scope)
+            self.mark_assignment(target, node.item)
 
     def visit_AsyncForStatNode(self, node):
         return self.visit_ForInStatNode(node)
@@ -1052,7 +1013,7 @@ class ControlFlowAnalysis(CythonTransform):
         elif isinstance(node, Nodes.AsyncForStatNode):
             # not entirely correct, but good enough for now
             self.mark_assignment(node.target, node.item)
-        else:  # Parallel
+        else: # Parallel
             self.mark_assignment(node.target)
 
         # Body block
@@ -1179,9 +1140,7 @@ class ControlFlowAnalysis(CythonTransform):
         ## XXX: children nodes
         self.flow.block.add_child(entry_point)
         self.flow.nextblock()
-        self.flow.in_try_block += 1
         self._visit(node.body)
-        self.flow.in_try_block -= 1
         self.flow.exceptions.pop()
 
         # After exception
@@ -1241,9 +1200,7 @@ class ControlFlowAnalysis(CythonTransform):
         self.flow.block = body_block
         body_block.add_child(entry_point)
         self.flow.nextblock()
-        self.flow.in_try_block += 1
         self._visit(node.body)
-        self.flow.in_try_block -= 1
         self.flow.exceptions.pop()
         if self.flow.loops:
             self.flow.loops[-1].exceptions.pop()
@@ -1262,8 +1219,6 @@ class ControlFlowAnalysis(CythonTransform):
         if self.flow.exceptions:
             self.flow.block.add_child(self.flow.exceptions[-1].entry_point)
         self.flow.block = None
-        if self.flow.in_try_block:
-            node.in_try_block = True
         return node
 
     def visit_ReraiseStatNode(self, node):
@@ -1332,47 +1287,34 @@ class ControlFlowAnalysis(CythonTransform):
 
     def visit_ComprehensionNode(self, node):
         if node.expr_scope:
-            self.stack.append((self.env, self.flow))
+            self.env_stack.append(self.env)
             self.env = node.expr_scope
         # Skip append node here
         self._visit(node.loop)
         if node.expr_scope:
-            self.env, _ = self.stack.pop()
+            self.env = self.env_stack.pop()
         return node
 
     def visit_ScopedExprNode(self, node):
-        # currently this is written to deal with these two types
-        # (with comprehensions covered in their own function)
-        assert isinstance(node, (ExprNodes.IteratorNode, ExprNodes.AsyncIteratorNode)), node
         if node.expr_scope:
-            self.stack.append((self.env, self.flow))
-            self.flow = self.find_in_stack(node.expr_scope)
+            self.env_stack.append(self.env)
             self.env = node.expr_scope
         self.visitchildren(node)
         if node.expr_scope:
-            self.env, self.flow = self.stack.pop()
+            self.env = self.env_stack.pop()
         return node
 
     def visit_PyClassDefNode(self, node):
         self.visitchildren(node, ('dict', 'metaclass',
                                   'mkw', 'bases', 'class_result'))
         self.flow.mark_assignment(node.target, node.classobj,
-                                  self.env.lookup(node.target.name))
-        self.stack.append((self.env, self.flow))
+                                  self.env.lookup(node.name))
+        self.env_stack.append(self.env)
         self.env = node.scope
         self.flow.nextblock()
-        if node.doc_node:
-            self.flow.mark_assignment(node.doc_node, fake_rhs_expr, node.doc_node.entry)
         self.visitchildren(node, ('body',))
         self.flow.nextblock()
-        self.env, _ = self.stack.pop()
-        return node
-
-    def visit_CClassDefNode(self, node):
-        # just make sure the nodes scope is findable in-case there is a list comprehension in it
-        self.stack.append((node.scope, self.flow))
-        self.visitchildren(node)
-        self.stack.pop()
+        self.env = self.env_stack.pop()
         return node
 
     def visit_AmpersandNode(self, node):

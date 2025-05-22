@@ -3,13 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0.
  */
 
-#include "aws/common/byte_buf.h"
 #include <aws/auth/credentials.h>
 
 #include <aws/auth/private/credentials_utils.h>
 #include <aws/common/clock.h>
 #include <aws/common/date_time.h>
-#include <aws/common/environment.h>
 #include <aws/common/string.h>
 #include <aws/http/connection.h>
 #include <aws/http/connection_manager.h>
@@ -30,9 +28,6 @@
 #define ECS_RESPONSE_SIZE_LIMIT 10000
 #define ECS_CONNECT_TIMEOUT_DEFAULT_IN_SECONDS 2
 
-AWS_STATIC_STRING_FROM_LITERAL(s_ecs_creds_env_token_file, "AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE");
-AWS_STATIC_STRING_FROM_LITERAL(s_ecs_creds_env_token, "AWS_CONTAINER_AUTHORIZATION_TOKEN");
-
 static void s_on_connection_manager_shutdown(void *user_data);
 
 struct aws_credentials_provider_ecs_impl {
@@ -40,7 +35,6 @@ struct aws_credentials_provider_ecs_impl {
     const struct aws_auth_http_system_vtable *function_table;
     struct aws_string *host;
     struct aws_string *path_and_query;
-    struct aws_string *auth_token_file_path;
     struct aws_string *auth_token;
 };
 
@@ -53,7 +47,6 @@ struct aws_credentials_provider_ecs_user_data {
     struct aws_credentials_provider *ecs_provider;
     aws_on_get_credentials_callback_fn *original_callback;
     void *original_user_data;
-    struct aws_byte_buf auth_token;
 
     /* mutable */
     struct aws_http_connection *connection;
@@ -75,7 +68,6 @@ static void s_aws_credentials_provider_ecs_user_data_destroy(struct aws_credenti
             impl->connection_manager, user_data->connection);
     }
 
-    aws_byte_buf_clean_up(&user_data->auth_token);
     aws_byte_buf_clean_up(&user_data->current_result);
 
     if (user_data->request) {
@@ -92,6 +84,9 @@ static struct aws_credentials_provider_ecs_user_data *s_aws_credentials_provider
 
     struct aws_credentials_provider_ecs_user_data *wrapped_user_data =
         aws_mem_calloc(ecs_provider->allocator, 1, sizeof(struct aws_credentials_provider_ecs_user_data));
+    if (wrapped_user_data == NULL) {
+        goto on_error;
+    }
 
     wrapped_user_data->allocator = ecs_provider->allocator;
     wrapped_user_data->ecs_provider = ecs_provider;
@@ -103,33 +98,12 @@ static struct aws_credentials_provider_ecs_user_data *s_aws_credentials_provider
         goto on_error;
     }
 
-    struct aws_credentials_provider_ecs_impl *impl = ecs_provider->impl;
-    if (impl->auth_token_file_path != NULL && impl->auth_token_file_path->len > 0) {
-        if (aws_byte_buf_init_from_file(
-                &wrapped_user_data->auth_token,
-                ecs_provider->allocator,
-                aws_string_c_str(impl->auth_token_file_path))) {
-            AWS_LOGF_ERROR(
-                AWS_LS_AUTH_CREDENTIALS_PROVIDER,
-                "(id=%p) ECS credentials provider failed to read token from the path: %s with error: %d",
-                (void *)ecs_provider,
-                aws_string_c_str(impl->auth_token_file_path),
-                aws_last_error());
-            aws_raise_error(AWS_AUTH_CREDENTIALS_PROVIDER_ECS_INVALID_TOKEN_FILE_PATH);
-            goto on_error;
-        }
-    } else if (impl->auth_token != NULL && impl->auth_token->len > 0) {
-        if (aws_byte_buf_init_copy_from_cursor(
-                &wrapped_user_data->auth_token,
-                ecs_provider->allocator,
-                aws_byte_cursor_from_string(impl->auth_token))) {
-            goto on_error;
-        }
-    }
-
     return wrapped_user_data;
+
 on_error:
+
     s_aws_credentials_provider_ecs_user_data_destroy(wrapped_user_data);
+
     return NULL;
 }
 
@@ -344,10 +318,10 @@ static int s_make_ecs_http_query(
         goto on_error;
     }
 
-    if (ecs_user_data->auth_token.len) {
+    if (impl->auth_token != NULL) {
         struct aws_http_header auth_header = {
             .name = aws_byte_cursor_from_string(s_ecs_authorization_header),
-            .value = aws_byte_cursor_from_buf(&ecs_user_data->auth_token),
+            .value = aws_byte_cursor_from_string(impl->auth_token),
         };
         if (aws_http_message_add_header(request, auth_header)) {
             goto on_error;
@@ -457,9 +431,6 @@ static int s_credentials_provider_ecs_get_credentials_async(
     aws_on_get_credentials_callback_fn callback,
     void *user_data) {
 
-    AWS_LOGF_DEBUG(
-        AWS_LS_AUTH_CREDENTIALS_PROVIDER, "id=%p: ECS provider trying to load credentials", (void *)provider);
-
     struct aws_credentials_provider_ecs_impl *impl = provider->impl;
 
     struct aws_credentials_provider_ecs_user_data *wrapped_user_data =
@@ -488,7 +459,6 @@ static void s_credentials_provider_ecs_destroy(struct aws_credentials_provider *
 
     aws_string_destroy(impl->path_and_query);
     aws_string_destroy(impl->auth_token);
-    aws_string_destroy(impl->auth_token_file_path);
     aws_string_destroy(impl->host);
 
     /* aws_http_connection_manager_release will eventually leads to call of s_on_connection_manager_shutdown,
@@ -594,18 +564,7 @@ struct aws_credentials_provider *aws_credentials_provider_new_ecs(
         if (impl->auth_token == NULL) {
             goto on_error;
         }
-    } else {
-        /* read the environment variables */
-        struct aws_string *ecs_env_token_file_path = NULL;
-        struct aws_string *ecs_env_token = NULL;
-        if (aws_get_environment_value(allocator, s_ecs_creds_env_token_file, &ecs_env_token_file_path) ||
-            aws_get_environment_value(allocator, s_ecs_creds_env_token, &ecs_env_token)) {
-            goto on_error;
-        }
-        impl->auth_token_file_path = ecs_env_token_file_path;
-        impl->auth_token = ecs_env_token;
     }
-
     impl->path_and_query = aws_string_new_from_cursor(allocator, &options->path_and_query);
     if (impl->path_and_query == NULL) {
         goto on_error;

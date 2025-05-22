@@ -221,5 +221,7 @@ message LogRecord {
   // as an event.
   //
   // [Optional].
+  //
+  // Status: [Development]
   string event_name = 12;
 }

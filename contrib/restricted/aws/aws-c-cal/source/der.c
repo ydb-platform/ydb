@@ -36,23 +36,11 @@ struct der_tlv {
     uint8_t *value;
 };
 
-static int s_decode_tlv(struct der_tlv *tlv) {
+static void s_decode_tlv(struct der_tlv *tlv) {
     if (tlv->tag == AWS_DER_INTEGER) {
-        if (tlv->length == 0) {
-            return aws_raise_error(AWS_ERROR_CAL_MALFORMED_ASN1_ENCOUNTERED);
-        }
-
         uint8_t first_byte = tlv->value[0];
-        if (first_byte & 0x80) {
-            return aws_raise_error(AWS_ERROR_CAL_DER_UNSUPPORTED_NEGATIVE_INT);
-        }
-
-        /* if its multibyte int and first byte is 0, strip it since it was added
-         * to indicate to der that it is positive number.
-         * if len is 1 and first byte is 0, then the number is just zero, so
-         * leave it as is.
-         */
-        if (tlv->length > 1 && first_byte == 0x00) {
+        /* if the first byte is 0, it just denotes unsigned and should be removed */
+        if (first_byte == 0x00) {
             tlv->length -= 1;
             tlv->value += 1;
         }
@@ -61,8 +49,6 @@ static int s_decode_tlv(struct der_tlv *tlv) {
         tlv->length -= 1;
         tlv->value += 1;
     }
-
-    return AWS_OP_SUCCESS;
 }
 
 static int s_der_read_tlv(struct aws_byte_cursor *cur, struct der_tlv *tlv) {
@@ -70,10 +56,10 @@ static int s_der_read_tlv(struct aws_byte_cursor *cur, struct der_tlv *tlv) {
     uint8_t len_bytes = 0;
     uint32_t len = 0;
     if (!aws_byte_cursor_read_u8(cur, &tag)) {
-        return aws_raise_error(AWS_ERROR_CAL_MALFORMED_ASN1_ENCOUNTERED);
+        return AWS_OP_ERR;
     }
     if (!aws_byte_cursor_read_u8(cur, &len_bytes)) {
-        return aws_raise_error(AWS_ERROR_CAL_MALFORMED_ASN1_ENCOUNTERED);
+        return AWS_OP_ERR;
     }
     /* if the sign bit is set, then the first byte is the number of bytes required to store
      * the length */
@@ -102,16 +88,10 @@ static int s_der_read_tlv(struct aws_byte_cursor *cur, struct der_tlv *tlv) {
         len = len_bytes;
     }
 
-    if (len > cur->len) {
-        return aws_raise_error(AWS_ERROR_CAL_MALFORMED_ASN1_ENCOUNTERED);
-    }
-
     tlv->tag = tag;
     tlv->length = len;
     tlv->value = (tag == AWS_DER_NULL) ? NULL : cur->ptr;
-    if (s_decode_tlv(tlv)) {
-        return AWS_OP_ERR;
-    }
+    s_decode_tlv(tlv);
     aws_byte_cursor_advance(cur, len);
 
     return AWS_OP_SUCCESS;
@@ -242,7 +222,7 @@ void aws_der_encoder_destroy(struct aws_der_encoder *encoder) {
     aws_mem_release(encoder->allocator, encoder);
 }
 
-int aws_der_encoder_write_unsigned_integer(struct aws_der_encoder *encoder, struct aws_byte_cursor integer) {
+int aws_der_encoder_write_integer(struct aws_der_encoder *encoder, struct aws_byte_cursor integer) {
     AWS_FATAL_ASSERT(integer.len <= UINT32_MAX);
     struct der_tlv tlv = {
         .tag = AWS_DER_INTEGER,
@@ -411,13 +391,12 @@ int s_parse_cursor(struct aws_der_decoder *decoder, struct aws_byte_cursor cur) 
     while (cur.len) {
         struct der_tlv tlv = {0};
         if (s_der_read_tlv(&cur, &tlv)) {
-            return AWS_OP_ERR;
+            return aws_raise_error(AWS_ERROR_CAL_MALFORMED_ASN1_ENCOUNTERED);
         }
         /* skip trailing newlines in the stream after any TLV */
         while (cur.len && *cur.ptr == '\n') {
             aws_byte_cursor_advance(&cur, 1);
         }
-
         if (aws_array_list_push_back(&decoder->tlvs, &tlv)) {
             return aws_raise_error(AWS_ERROR_INVALID_STATE);
         }
@@ -493,7 +472,7 @@ int aws_der_decoder_tlv_string(struct aws_der_decoder *decoder, struct aws_byte_
     return AWS_OP_SUCCESS;
 }
 
-int aws_der_decoder_tlv_unsigned_integer(struct aws_der_decoder *decoder, struct aws_byte_cursor *integer) {
+int aws_der_decoder_tlv_integer(struct aws_der_decoder *decoder, struct aws_byte_cursor *integer) {
     struct der_tlv tlv = s_decoder_tlv(decoder);
     if (tlv.tag != AWS_DER_INTEGER) {
         return aws_raise_error(AWS_ERROR_CAL_MISMATCHED_DER_TYPE);

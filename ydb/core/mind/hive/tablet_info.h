@@ -165,7 +165,6 @@ public:
     TInstant BootTime;
     TNodeFilter NodeFilter;
     bool InWaitQueue = false;
-    double UsageImpact = 0;
 
     TTabletInfo(ETabletRole role, THive& hive);
     TTabletInfo(const TTabletInfo&) = delete;

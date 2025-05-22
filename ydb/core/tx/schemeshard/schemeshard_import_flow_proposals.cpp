@@ -4,9 +4,7 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/protos/s3_settings.pb.h>
-#include <ydb/services/lib/actors/pq_schema_actor.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -14,12 +12,12 @@ namespace NSchemeShard {
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     TSchemeShard* ss,
     TTxId txId,
-    const TImportInfo& importInfo,
+    TImportInfo::TPtr importInfo,
     ui32 itemIdx,
     TString& error
 ) {
-    Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
-    const auto& item = importInfo.Items.at(itemIdx);
+    Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+    const auto& item = importInfo->Items.at(itemIdx);
 
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
     auto& record = propose->Record;
@@ -28,7 +26,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
     modifyScheme.SetInternal(true);
 
-    const TPath domainPath = TPath::Init(importInfo.DomainPathId, ss);
+    const TPath domainPath = TPath::Init(importInfo->DomainPathId, ss);
 
     std::pair<TString, TString> wdAndPath;
     if (!TrySplitPathByDb(item.DstPathName, domainPath.PathString(), wdAndPath, error)) {
@@ -67,8 +65,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
         }
     }
 
-    if (importInfo.UserSID) {
-        record.SetOwner(*importInfo.UserSID);
+    if (importInfo->UserSID) {
+        record.SetOwner(*importInfo->UserSID);
     }
     FillOwner(record, item.Permissions);
 
@@ -82,7 +80,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     TSchemeShard* ss,
     TTxId txId,
-    const TImportInfo& importInfo,
+    TImportInfo::TPtr importInfo,
     ui32 itemIdx
 ) {
     TString unused;
@@ -125,11 +123,11 @@ static NKikimrSchemeOp::TTableDescription RebuildTableDescription(
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
     TSchemeShard* ss,
     TTxId txId,
-    const TImportInfo& importInfo,
+    TImportInfo::TPtr importInfo,
     ui32 itemIdx
 ) {
-    Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
-    const auto& item = importInfo.Items.at(itemIdx);
+    Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+    const auto& item = importInfo->Items.at(itemIdx);
 
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
 
@@ -146,27 +144,27 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
     task.SetTableName(dstPath.LeafName());
     *task.MutableTableDescription() = RebuildTableDescription(GetTableDescription(ss, item.DstPathId), item.Scheme);
 
-    if (importInfo.Settings.has_encryption_settings()) {
+    if (importInfo->Settings.has_encryption_settings()) {
         auto& taskEncryptionSettings = *task.MutableEncryptionSettings();
-        *taskEncryptionSettings.MutableSymmetricKey() = importInfo.Settings.encryption_settings().symmetric_key();
+        *taskEncryptionSettings.MutableSymmetricKey() = importInfo->Settings.encryption_settings().symmetric_key();
         if (item.ExportItemIV) {
             taskEncryptionSettings.SetIV(item.ExportItemIV->GetBinaryString());
         }
     }
 
-    switch (importInfo.Kind) {
+    switch (importInfo->Kind) {
     case TImportInfo::EKind::S3:
         {
-            task.SetNumberOfRetries(importInfo.Settings.number_of_retries());
+            task.SetNumberOfRetries(importInfo->Settings.number_of_retries());
             auto& restoreSettings = *task.MutableS3Settings();
-            restoreSettings.SetEndpoint(importInfo.Settings.endpoint());
-            restoreSettings.SetBucket(importInfo.Settings.bucket());
-            restoreSettings.SetAccessKey(importInfo.Settings.access_key());
-            restoreSettings.SetSecretKey(importInfo.Settings.secret_key());
-            restoreSettings.SetObjectKeyPattern(importInfo.GetItemSrcPrefix(itemIdx));
-            restoreSettings.SetUseVirtualAddressing(!importInfo.Settings.disable_virtual_addressing());
+            restoreSettings.SetEndpoint(importInfo->Settings.endpoint());
+            restoreSettings.SetBucket(importInfo->Settings.bucket());
+            restoreSettings.SetAccessKey(importInfo->Settings.access_key());
+            restoreSettings.SetSecretKey(importInfo->Settings.secret_key());
+            restoreSettings.SetObjectKeyPattern(importInfo->GetItemSrcPrefix(itemIdx));
+            restoreSettings.SetUseVirtualAddressing(!importInfo->Settings.disable_virtual_addressing());
 
-            switch (importInfo.Settings.scheme()) {
+            switch (importInfo->Settings.scheme()) {
             case Ydb::Import::ImportFromS3Settings::HTTP:
                 restoreSettings.SetScheme(NKikimrSchemeOp::TS3Settings::HTTP);
                 break;
@@ -177,12 +175,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
                 Y_ABORT("Unknown scheme");
             }
 
-            if (const auto region = importInfo.Settings.region()) {
+            if (const auto region = importInfo->Settings.region()) {
                 restoreSettings.SetRegion(region);
             }
 
             if (!item.Metadata.HasVersion() || item.Metadata.GetVersion() > 0) {
-                task.SetValidateChecksums(!importInfo.Settings.skip_checksum_validation());
+                task.SetValidateChecksums(!importInfo->Settings.skip_checksum_validation());
             }
         }
         break;
@@ -192,13 +190,13 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
 }
 
 THolder<TEvSchemeShard::TEvCancelTx> CancelRestorePropose(
-    const TImportInfo& importInfo,
+    TImportInfo::TPtr importInfo,
     TTxId restoreTxId
 ) {
     auto propose = MakeHolder<TEvSchemeShard::TEvCancelTx>();
 
     auto& record = propose->Record;
-    record.SetTxId(importInfo.Id);
+    record.SetTxId(importInfo->Id);
     record.SetTargetTxId(ui64(restoreTxId));
 
     return propose;
@@ -207,12 +205,12 @@ THolder<TEvSchemeShard::TEvCancelTx> CancelRestorePropose(
 THolder<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
     TSchemeShard* ss,
     TTxId txId,
-    const TImportInfo& importInfo,
+    TImportInfo::TPtr importInfo,
     ui32 itemIdx,
     const TString& uid
 ) {
-    Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
-    const auto& item = importInfo.Items.at(itemIdx);
+    Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+    const auto& item = importInfo->Items.at(itemIdx);
 
     NKikimrIndexBuilder::TIndexBuildSettings settings;
 
@@ -229,7 +227,7 @@ THolder<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
         settings.mutable_index()->mutable_global_index();
     }
 
-    const TPath domainPath = TPath::Init(importInfo.DomainPathId, ss);
+    const TPath domainPath = TPath::Init(importInfo->DomainPathId, ss);
     auto propose = MakeHolder<TEvIndexBuilder::TEvCreateRequest>(ui64(txId), domainPath.PathString(), std::move(settings));
     auto& request = propose->Record;
     (*request.MutableOperationParams()->mutable_labels())["uid"] = uid;
@@ -240,10 +238,10 @@ THolder<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
 
 THolder<TEvIndexBuilder::TEvCancelRequest> CancelIndexBuildPropose(
     TSchemeShard* ss,
-    const TImportInfo& importInfo,
+    TImportInfo::TPtr importInfo,
     TTxId indexBuildId
 ) {
-    const TPath domainPath = TPath::Init(importInfo.DomainPathId, ss);
+    const TPath domainPath = TPath::Init(importInfo->DomainPathId, ss);
     return MakeHolder<TEvIndexBuilder::TEvCancelRequest>(ui64(indexBuildId), domainPath.PathString(), ui64(indexBuildId));
 }
 
@@ -356,34 +354,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
         if (consumer.important()) {
             addedConsumer.SetImportant(true);
         }
-    }
-
-    return propose;
-}
-
-THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTopicPropose(
-    TSchemeShard* ss,
-    TTxId txId,
-    const TImportInfo& importInfo,
-    ui32 itemIdx,
-    TString& error
-) {
-    Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
-    const auto& item = importInfo.Items.at(itemIdx);
-    Y_ABORT_UNLESS(item.Topic);
-
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
-    auto& record = propose->Record;
-    auto& modifyScheme = *record.AddTransaction();
-
-    const TFsPath dstPath = item.DstPathName;
-    modifyScheme.SetWorkingDir(dstPath.Dirname());
-
-    auto codes =
-        NGRpcProxy::V1::FillProposeRequestImpl(dstPath.GetName(), item.Topic.GetRef(), modifyScheme, AppData(), error, dstPath.Dirname());
-
-    if (codes.YdbCode != Ydb::StatusIds::SUCCESS) {
-        return nullptr;
     }
 
     return propose;

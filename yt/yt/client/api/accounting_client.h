@@ -23,8 +23,8 @@ struct IAccountingClient
     virtual ~IAccountingClient() = default;
 
     virtual TFuture<void> TransferAccountResources(
-        const std::string& srcAccount,
-        const std::string& dstAccount,
+        const TString& srcAccount,
+        const TString& dstAccount,
         NYTree::INodePtr resourceDelta,
         const TTransferAccountResourcesOptions& options = {}) = 0;
 

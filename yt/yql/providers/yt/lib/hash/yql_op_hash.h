@@ -20,8 +20,17 @@ public:
     using THasher = std::function<TString(const TExprNode& node, TArgIndex& argIndex, ui32 frameLevel)>;
     using THasherMap = THashMap<TStringBuf, THasher>;
 
-    TNodeHashCalculator(const TTypeAnnotationContext& types, std::unordered_map<ui64, TString>& nodeHash, const TString& salt);
-    TString GetHash(const TExprNode& node) const;
+    TNodeHashCalculator(const TTypeAnnotationContext& types, std::unordered_map<ui64, TString>& nodeHash, const TString& salt)
+        : Types(types)
+        , NodeHash(nodeHash)
+        , Salt(salt)
+    {
+    }
+
+    TString GetHash(const TExprNode& node) const {
+        TArgIndex argIndex;
+        return GetHashImpl(node, argIndex, 0);
+    }
 
 protected:
     void UpdateFileHash(THashBuilder& builder, TStringBuf alias) const;
@@ -32,7 +41,7 @@ protected:
     const TTypeAnnotationContext& Types;
     std::unordered_map<ui64, TString>& NodeHash;
     THasherMap Hashers;
-    TString FullSalt;
+    TString Salt;
 };
 
 }

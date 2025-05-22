@@ -2,7 +2,7 @@
 
 PY2_LIBRARY()
 
-VERSION(1.26.20)
+VERSION(1.26.15)
 
 LICENSE(MIT)
 
@@ -28,9 +28,6 @@ PY_SRCS(
     urllib3/fields.py
     urllib3/filepost.py
     urllib3/packages/__init__.py
-    urllib3/packages/backports/__init__.py
-    urllib3/packages/backports/makefile.py
-    urllib3/packages/backports/weakref_finalize.py
     urllib3/packages/six.py
     urllib3/poolmanager.py
     urllib3/request.py

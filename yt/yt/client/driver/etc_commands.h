@@ -33,21 +33,6 @@ protected:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TGetCurrentUserCommand
-    : public TCommandBase
-{
-public:
-    REGISTER_YSON_STRUCT_LITE(TGetCurrentUserCommand);
-
-    static void Register(TRegistrar)
-    { }
-
-private:
-    void DoExecute(ICommandContextPtr context) override;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TAddMemberCommand
     : public TUpdateMembershipCommand<NApi::TAddMemberOptions>
 {
@@ -147,7 +132,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    std::optional<std::string> User;
+    std::optional<TString> User;
     NYTree::EPermission Permission;
     NYTree::INodePtr Acl;
 
@@ -165,8 +150,8 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-std::string SourceAccount;
-    std::string DestinationAccount;
+    TString SourceAccount;
+    TString DestinationAccount;
     NYTree::INodePtr ResourceDelta;
 
     void DoExecute(ICommandContextPtr context) override;
@@ -264,7 +249,7 @@ public:
     static void Register(TRegistrar registrar);
 
 private:
-    std::string TabletCellBundle;
+    TString TabletCellBundle;
     std::vector<NYPath::TYPath> MovableTables;
 
     void DoExecute(ICommandContextPtr context) override;

@@ -3,28 +3,39 @@
  * SPDX-License-Identifier: Apache-2.0.
  */
 
+#include "aws/s3/private/s3_auto_ranged_get.h"
+#include "aws/s3/private/s3_auto_ranged_put.h"
 #include "aws/s3/private/s3_client_impl.h"
+#include "aws/s3/private/s3_default_meta_request.h"
 #include "aws/s3/private/s3_meta_request_impl.h"
 #include "aws/s3/private/s3_util.h"
 
 #include <aws/auth/credentials.h>
 #include <aws/common/assert.h>
+#include <aws/common/atomics.h>
+#include <aws/common/clock.h>
 #include <aws/common/device_random.h>
+#include <aws/common/environment.h>
 #include <aws/common/string.h>
+#include <aws/common/system_info.h>
 #include <aws/http/connection.h>
 #include <aws/http/connection_manager.h>
+#include <aws/http/request_response.h>
 #include <aws/io/channel_bootstrap.h>
 #include <aws/io/event_loop.h>
 #include <aws/io/host_resolver.h>
+#include <aws/io/retry_strategy.h>
 #include <aws/io/socket.h>
+#include <aws/io/stream.h>
 #include <aws/io/tls_channel_handler.h>
 #include <aws/io/uri.h>
 
 #include <inttypes.h>
+#include <math.h>
 
 static const uint32_t s_connection_timeout_ms = 3000;
-static const uint32_t s_http_port = 80;
-static const uint32_t s_https_port = 443;
+static const uint16_t s_http_port = 80;
+static const uint16_t s_https_port = 443;
 
 static void s_s3_endpoint_on_host_resolver_address_resolved(
     struct aws_host_resolver *resolver,
@@ -39,7 +50,7 @@ static struct aws_http_connection_manager *s_s3_endpoint_create_http_connection_
     struct aws_client_bootstrap *client_bootstrap,
     const struct aws_tls_connection_options *tls_connection_options,
     uint32_t max_connections,
-    uint32_t port,
+    uint16_t port,
     const struct aws_http_proxy_config *proxy_config,
     const struct proxy_env_var_settings *proxy_ev_settings,
     uint32_t connect_timeout_ms,
@@ -47,6 +58,8 @@ static struct aws_http_connection_manager *s_s3_endpoint_create_http_connection_
     const struct aws_http_connection_monitoring_options *monitoring_options);
 
 static void s_s3_endpoint_http_connection_manager_shutdown_callback(void *user_data);
+
+static void s_s3_endpoint_ref_count_zero(struct aws_s3_endpoint *endpoint);
 
 static void s_s3_endpoint_acquire(struct aws_s3_endpoint *endpoint, bool already_holding_lock);
 
@@ -121,6 +134,8 @@ struct aws_s3_endpoint *aws_s3_endpoint_new(
 
 error_cleanup:
 
+    aws_string_destroy(options->host_name);
+
     aws_mem_release(allocator, endpoint);
 
     return NULL;
@@ -132,7 +147,7 @@ static struct aws_http_connection_manager *s_s3_endpoint_create_http_connection_
     struct aws_client_bootstrap *client_bootstrap,
     const struct aws_tls_connection_options *tls_connection_options,
     uint32_t max_connections,
-    uint32_t port,
+    uint16_t port,
     const struct aws_http_proxy_config *proxy_config,
     const struct proxy_env_var_settings *proxy_ev_settings,
     uint32_t connect_timeout_ms,
@@ -242,6 +257,7 @@ static void s_s3_endpoint_acquire(struct aws_s3_endpoint *endpoint, bool already
         aws_s3_client_lock_synced_data(endpoint->client);
     }
 
+    AWS_ASSERT(endpoint->client_synced_data.ref_count > 0);
     ++endpoint->client_synced_data.ref_count;
 
     if (!already_holding_lock) {
@@ -262,31 +278,28 @@ static void s_s3_endpoint_release(struct aws_s3_endpoint *endpoint) {
     /* BEGIN CRITICAL SECTION */
     aws_s3_client_lock_synced_data(endpoint->client);
 
-    bool should_destroy = endpoint->client_synced_data.ref_count == 1 && !endpoint->client->synced_data.active;
+    bool should_destroy = (endpoint->client_synced_data.ref_count == 1);
     if (should_destroy) {
         aws_hash_table_remove(&endpoint->client->synced_data.endpoints, endpoint->host_name, NULL, NULL);
+    } else {
+        --endpoint->client_synced_data.ref_count;
     }
-    --endpoint->client_synced_data.ref_count;
 
     aws_s3_client_unlock_synced_data(endpoint->client);
     /* END CRITICAL SECTION */
 
     if (should_destroy) {
-        /* Do a sync cleanup since client is getting destroyed to avoid any cleanup delay.
-         * The endpoint may have async cleanup to do (connection manager).
+        /* The endpoint may have async cleanup to do (connection manager).
          * When that's all done we'll invoke a completion callback.
          * Since it's a crime to hold a lock while invoking a callback,
-         * we make sure that we've released the client's lock before proceeding...
-         */
-        aws_s3_endpoint_destroy(endpoint);
+         * we make sure that we've released the client's lock before proceeding... */
+        s_s3_endpoint_ref_count_zero(endpoint);
     }
 }
 
-void aws_s3_endpoint_destroy(struct aws_s3_endpoint *endpoint) {
+static void s_s3_endpoint_ref_count_zero(struct aws_s3_endpoint *endpoint) {
     AWS_PRECONDITION(endpoint);
     AWS_PRECONDITION(endpoint->http_connection_manager);
-
-    AWS_FATAL_ASSERT(endpoint->client_synced_data.ref_count == 0);
 
     struct aws_http_connection_manager *http_connection_manager = endpoint->http_connection_manager;
     endpoint->http_connection_manager = NULL;

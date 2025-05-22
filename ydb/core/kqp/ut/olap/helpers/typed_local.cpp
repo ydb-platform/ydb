@@ -112,7 +112,7 @@ NKikimr::NKqp::TTypedLocalHelper::TDistribution TTypedLocalHelper::GetDistributi
 }
 
 void TTypedLocalHelper::GetVolumes(
-    ui64& rawBytes, ui64& bytes, ui64& portionsCount, const bool verbose /*= false*/, const std::vector<TString> columnNames /*= {}*/) {
+    ui64& rawBytes, ui64& bytes, const bool verbose /*= false*/, const std::vector<TString> columnNames /*= {}*/) {
     TString selectQuery = "SELECT * FROM `" + TablePath + "/.sys/primary_index_stats` WHERE Activity == 1";
     if (columnNames.size()) {
         selectQuery += " AND EntityName IN ('" + JoinSeq("','", columnNames) + "')";
@@ -122,7 +122,6 @@ void TTypedLocalHelper::GetVolumes(
 
     std::optional<ui64> rawBytesPred;
     std::optional<ui64> bytesPred;
-    std::set<ui32> portionIds;
     while (true) {
         auto rows = ExecuteScanQuery(tableClient, selectQuery);
         rawBytes = 0;
@@ -141,9 +140,6 @@ void TTypedLocalHelper::GetVolumes(
                 if (verbose) {
                     Cerr << c.first << ":" << Endl << c.second.GetProto().DebugString() << Endl;
                 }
-                if (c.first == "PortionId") {
-                    portionIds.emplace(GetUint64(c.second));
-                }
             }
         }
         if (rawBytesPred && *rawBytesPred == rawBytes && bytesPred && *bytesPred == bytes) {
@@ -155,8 +151,7 @@ void TTypedLocalHelper::GetVolumes(
             Sleep(TDuration::Seconds(5));
         }
     }
-    portionsCount = portionIds.size();
-    Cerr << bytes << "/" << rawBytes << "/" << portionIds.size() << Endl;
+    Cerr << bytes << "/" << rawBytes << Endl;
 }
 
 void TTypedLocalHelper::GetCount(ui64& count) {

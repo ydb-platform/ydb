@@ -85,14 +85,7 @@ namespace NActors {
             TString formatted;
             vsprintf(formatted, c, params);
 
-            auto ok = OutputRecord(
-                time,
-                NLog::EPrio(priority),
-                component,
-                __FILE_NAME__,
-                __LINE__,
-                formatted,
-                false);
+            auto ok = OutputRecord(time, NLog::EPrio(priority), component, formatted, false);
             Y_UNUSED(ok);
             va_end(params);
         }
@@ -122,15 +115,7 @@ namespace NActors {
         if (ignoredCount > 0) {
             NLog::EPrio prio = LogBuffer.GetIgnoredHighestPrio();
             TString message = Sprintf("Logger overflow! Ignored %" PRIu64 "  log records with priority [%s] or lower!", ignoredCount, PriorityToString(prio));
-            if (!OutputRecord(
-                    ctx.Now(),
-                    NActors::NLog::EPrio::Error,
-                    Settings->LoggerComponent,
-                    __FILE_NAME__,
-                    __LINE__,
-                    message,
-                    false))
-            {
+            if (!OutputRecord(ctx.Now(), NActors::NLog::EPrio::Error, Settings->LoggerComponent, message, false)) {
                 BecomeDefunct();
             }
             LogBuffer.ClearIgnoredCount();
@@ -462,25 +447,11 @@ namespace NActors {
     constexpr size_t TimeBufSize = 512;
 
     bool TLoggerActor::OutputRecord(NLog::TEvLog *evLog) noexcept {
-        return OutputRecord(
-            evLog->Stamp,
-            evLog->Level.ToPrio(),
-            evLog->Component,
-            evLog->FileName,
-            evLog->LineNumber,
-            evLog->Line,
-            evLog->Json);
+        return OutputRecord(evLog->Stamp, evLog->Level.ToPrio(), evLog->Component, evLog->Line, evLog->Json);
     }
 
-    bool TLoggerActor::OutputRecord(
-        TInstant time,
-        NLog::EPrio priority,
-        NLog::EComponent component,
-        const char* fileName,
-        ui64 lineNumber,
-        const TString& formatted,
-        bool json) noexcept
-    try {
+    bool TLoggerActor::OutputRecord(TInstant time, NLog::EPrio priority, NLog::EComponent component,
+                                    const TString& formatted, bool json) noexcept try {
         const auto logPrio = ::ELogPriority(ui16(priority));
 
         char buf[TimeBufSize];
@@ -492,15 +463,11 @@ namespace NActors {
                 } else {
                     logRecord << time;
                 }
-
-                logRecord << Settings->MessagePrefix << " :"
-                          << Settings->ComponentName(component) << " "
-                          << PriorityToString(priority);
-
-                if (fileName && Settings->LogSourceLocation) {
-                    logRecord << ": " << fileName << ":" << lineNumber;
-                }
-                logRecord << ": " << formatted;
+                logRecord
+                    << Settings->MessagePrefix
+                    << " :" << Settings->ComponentName(component)
+                    << " "  << PriorityToString(priority)
+                    << ": " << formatted;
                 LogBackend->WriteData(
                     TLogRecord(logPrio, logRecord.data(), logRecord.size()));
             } break;
@@ -541,13 +508,6 @@ namespace NActors {
                     .WriteString("KIKIMR")
                     .WriteKey("revision")
                     .WriteInt(GetProgramSvnRevision());
-
-                if (fileName) {
-                    TStringBuilder location;
-                    location << fileName << ":" << lineNumber;
-                    j.WriteKey("location").WriteString(location);
-                }
-
                 if (json) {
                     if (formatted && formatted.front() == '{' && formatted.back() == '}') {
                         j.UnsafeWritePair(TStringBuf(formatted.data() + 1, formatted.size() - 2));
@@ -776,13 +736,7 @@ namespace NActors {
 
     TFormattedRecordWriter::~TFormattedRecordWriter() {
         if (ActorContext) {
-            ::NActors::MemLogAdapter(
-                *ActorContext,
-                Priority,
-                Component,
-                __FILE_NAME__,
-                __LINE__,
-                TBase::GetResult());
+            ::NActors::MemLogAdapter(*ActorContext, Priority, Component, TBase::GetResult());
         } else {
             Cerr << "FALLBACK_ACTOR_LOGGING;priority=" << Priority << ";component=" << Component << ";" << TBase::GetResult() << Endl;
         }
@@ -810,13 +764,7 @@ namespace NActors {
     TEnsureFormattedRecordWriter::~TEnsureFormattedRecordWriter() noexcept(false) {
         const TString data = TBase::GetResult();
         if (NActors::TlsActivationContext) {
-            ::NActors::MemLogAdapter(
-                NActors::TlsActivationContext->AsActorContext(),
-                NLog::EPriority::PRI_ERROR,
-                0,
-                __FILE_NAME__,
-                __LINE__,
-                data);
+            ::NActors::MemLogAdapter(NActors::TlsActivationContext->AsActorContext(), NLog::EPriority::PRI_ERROR, 0, data);
         } else {
             Cerr << "FALLBACK_EXCEPTION_LOGGING;component=EXCEPTION;" << data << Endl;
         }

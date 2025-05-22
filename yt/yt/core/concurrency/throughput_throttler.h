@@ -106,8 +106,6 @@ struct IReconfigurableThroughputThrottler
 
     virtual std::optional<double> GetLimit() const = 0;
 
-    virtual TDuration GetPeriod() const = 0;
-
     //! Returns a future that is set when throttler has become available.
     virtual TFuture<void> GetAvailableFuture() = 0;
 

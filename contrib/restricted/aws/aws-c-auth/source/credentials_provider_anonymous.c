@@ -48,9 +48,7 @@ struct aws_credentials_provider *aws_credentials_provider_new_anonymous(
 
     aws_credentials_provider_init_base(provider, allocator, &s_aws_credentials_provider_anonymous_vtable, credentials);
 
-    if (shutdown_options) {
-        provider->shutdown_options = *shutdown_options;
-    }
+    provider->shutdown_options = *shutdown_options;
 
     return provider;
 

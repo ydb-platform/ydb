@@ -23,7 +23,7 @@ static inline size_t aws_common_private_base64_decode_sse41(const unsigned char 
     (void)out;
     (void)len;
     AWS_ASSERT(false);
-    return SIZE_MAX; /* unreachable */
+    return (size_t)-1; /* unreachable */
 }
 static inline void aws_common_private_base64_encode_sse41(const unsigned char *in, unsigned char *out, size_t len) {
     (void)in;
@@ -66,9 +66,7 @@ static const uint8_t BASE64_DECODING_TABLE[256] = {
 int aws_hex_compute_encoded_len(size_t to_encode_len, size_t *encoded_length) {
     AWS_ASSERT(encoded_length);
 
-    /* For every byte of input, there will be 2 hex chars of encoded output */
-
-    size_t temp = to_encode_len << 1;
+    size_t temp = (to_encode_len << 1) + 1;
 
     if (AWS_UNLIKELY(temp < to_encode_len)) {
         return aws_raise_error(AWS_ERROR_OVERFLOW_DETECTED);
@@ -100,7 +98,7 @@ int aws_hex_encode(const struct aws_byte_cursor *AWS_RESTRICT to_encode, struct 
         output->buffer[written++] = HEX_CHARS[to_encode->ptr[i] & 0x0f];
     }
 
-    AWS_ASSERT(written == encoded_len);
+    output->buffer[written] = '\0';
     output->len = encoded_len;
 
     return AWS_OP_SUCCESS;
@@ -155,10 +153,6 @@ static int s_hex_decode_char_to_int(char character, uint8_t *int_val) {
 int aws_hex_compute_decoded_len(size_t to_decode_len, size_t *decoded_len) {
     AWS_ASSERT(decoded_len);
 
-    /* For every 2 hex chars (rounded up) of encoded input, there will be 1 byte of decoded output.
-     * Rounding is because if buffer isn't even, we'll pretend there's an extra '0' at start of buffer */
-
-    /* adding 1 before dividing by 2 is a trick to round up during division */
     size_t temp = (to_decode_len + 1);
 
     if (AWS_UNLIKELY(temp < to_decode_len)) {
@@ -191,7 +185,7 @@ int aws_hex_decode(const struct aws_byte_cursor *AWS_RESTRICT to_decode, struct 
     /* if the buffer isn't even, prepend a 0 to the buffer. */
     if (AWS_UNLIKELY(to_decode->len & 0x01)) {
         i = 1;
-        if (s_hex_decode_char_to_int((char)to_decode->ptr[0], &low_value)) {
+        if (s_hex_decode_char_to_int(to_decode->ptr[0], &low_value)) {
             return aws_raise_error(AWS_ERROR_INVALID_HEX_STR);
         }
 
@@ -218,10 +212,6 @@ int aws_hex_decode(const struct aws_byte_cursor *AWS_RESTRICT to_decode, struct 
 int aws_base64_compute_encoded_len(size_t to_encode_len, size_t *encoded_len) {
     AWS_ASSERT(encoded_len);
 
-    /* For every 3 bytes (rounded up) of unencoded input, there will be 4 ascii characters of encoded output.
-     * Rounding is because the output will be padded with '=' chars if necessary to make it divisible by 4. */
-
-    /* adding 2 before dividing by 3 is a trick to round up during division */
     size_t tmp = to_encode_len + 2;
 
     if (AWS_UNLIKELY(tmp < to_encode_len)) {
@@ -230,7 +220,7 @@ int aws_base64_compute_encoded_len(size_t to_encode_len, size_t *encoded_len) {
 
     tmp /= 3;
     size_t overflow_check = tmp;
-    tmp = 4 * tmp;
+    tmp = 4 * tmp + 1; /* plus one for the NULL terminator */
 
     if (AWS_UNLIKELY(tmp < overflow_check)) {
         return aws_raise_error(AWS_ERROR_OVERFLOW_DETECTED);
@@ -253,40 +243,40 @@ int aws_base64_compute_decoded_len(const struct aws_byte_cursor *AWS_RESTRICT to
         return AWS_OP_SUCCESS;
     }
 
-    /* ensure it's divisible by 4 */
     if (AWS_UNLIKELY(len & 0x03)) {
         return aws_raise_error(AWS_ERROR_INVALID_BASE64_STR);
     }
 
-    /* For every 4 ascii characters of encoded input, there will be 3 bytes of decoded output (deal with padding later)
-     * decoded_len = 3/4 * len       <-- note that result will be smaller then len, so overflow can be avoided
-     *             = (len / 4) * 3   <-- divide before multiply to avoid overflow
-     */
-    size_t decoded_len_tmp = (len / 4) * 3;
+    size_t tmp = len * 3;
 
-    /* But last two ascii chars might be padding. */
-    AWS_ASSERT(len >= 4); /* we checked earlier len != 0, and was divisible by 4 */
+    if (AWS_UNLIKELY(tmp < len)) {
+        return aws_raise_error(AWS_ERROR_OVERFLOW_DETECTED);
+    }
+
     size_t padding = 0;
-    if (input[len - 1] == '=' && input[len - 2] == '=') { /*last two chars are = */
+
+    if (len >= 2 && input[len - 1] == '=' && input[len - 2] == '=') { /*last two chars are = */
         padding = 2;
     } else if (input[len - 1] == '=') { /*last char is = */
         padding = 1;
     }
 
-    *decoded_len = decoded_len_tmp - padding;
+    *decoded_len = (tmp / 4 - padding);
     return AWS_OP_SUCCESS;
 }
 
 int aws_base64_encode(const struct aws_byte_cursor *AWS_RESTRICT to_encode, struct aws_byte_buf *AWS_RESTRICT output) {
-    AWS_ASSERT(to_encode->len == 0 || to_encode->ptr != NULL);
+    AWS_ASSERT(to_encode->ptr);
+    AWS_ASSERT(output->buffer);
 
+    size_t terminated_length = 0;
     size_t encoded_length = 0;
-    if (AWS_UNLIKELY(aws_base64_compute_encoded_len(to_encode->len, &encoded_length))) {
+    if (AWS_UNLIKELY(aws_base64_compute_encoded_len(to_encode->len, &terminated_length))) {
         return AWS_OP_ERR;
     }
 
     size_t needed_capacity = 0;
-    if (AWS_UNLIKELY(aws_add_size_checked(output->len, encoded_length, &needed_capacity))) {
+    if (AWS_UNLIKELY(aws_add_size_checked(output->len, terminated_length, &needed_capacity))) {
         return AWS_OP_ERR;
     }
 
@@ -294,10 +284,16 @@ int aws_base64_encode(const struct aws_byte_cursor *AWS_RESTRICT to_encode, stru
         return aws_raise_error(AWS_ERROR_SHORT_BUFFER);
     }
 
-    AWS_ASSERT(needed_capacity == 0 || output->buffer != NULL);
+    /*
+     * For convenience to standard C functions expecting a null-terminated
+     * string, the output is terminated. As the encoding itself can be used in
+     * various ways, however, its length should never account for that byte.
+     */
+    encoded_length = (terminated_length - 1);
 
     if (aws_common_private_has_avx2()) {
         aws_common_private_base64_encode_sse41(to_encode->ptr, output->buffer + output->len, to_encode->len);
+        output->buffer[output->len + encoded_length] = 0;
         output->len += encoded_length;
         return AWS_OP_SUCCESS;
     }
@@ -333,6 +329,9 @@ int aws_base64_encode(const struct aws_byte_cursor *AWS_RESTRICT to_encode, stru
         }
     }
 
+    /* it's a string add the null terminator. */
+    output->buffer[output->len + encoded_length] = 0;
+
     output->len += encoded_length;
 
     return AWS_OP_SUCCESS;
@@ -362,7 +361,7 @@ int aws_base64_decode(const struct aws_byte_cursor *AWS_RESTRICT to_decode, stru
 
     if (aws_common_private_has_avx2()) {
         size_t result = aws_common_private_base64_decode_sse41(to_decode->ptr, output->buffer, to_decode->len);
-        if (result == SIZE_MAX) {
+        if (result == -1) {
             return aws_raise_error(AWS_ERROR_INVALID_BASE64_STR);
         }
 

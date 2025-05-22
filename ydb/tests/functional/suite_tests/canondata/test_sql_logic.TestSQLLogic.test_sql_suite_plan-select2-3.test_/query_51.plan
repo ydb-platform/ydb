@@ -29,7 +29,7 @@
                                 "PlanNodeType": "Connection",
                                 "Plans": [
                                     {
-                                        "CTE Name": "precompute",
+                                        "CTE Name": "precompute_0_0",
                                         "Node Type": "TopSort-CrossJoin-ConstantExpr",
                                         "Operators": [
                                             {
@@ -68,7 +68,7 @@
                                             {
                                                 "Inputs": [],
                                                 "Name": "ToFlow",
-                                                "ToFlow": "precompute"
+                                                "ToFlow": "precompute_0_0"
                                             }
                                         ],
                                         "PlanNodeId": 8,
@@ -206,7 +206,7 @@
                         ]
                     }
                 ],
-                "Subplan Name": "CTE precompute"
+                "Subplan Name": "CTE precompute_0_0"
             }
         ],
         "Stats": {

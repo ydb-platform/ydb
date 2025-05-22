@@ -141,12 +141,11 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
                 indexPrefixTableDesc = indexDesc.GetIndexImplTableDescriptions(2);
             }
         }
-        const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
+        const THashSet<TString> indexKeyColumns{indexDesc.GetKeyColumnNames().begin(), indexDesc.GetKeyColumnNames().end() - 1};
         result.push_back(createImplTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), indexLevelTableDesc)));
-        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, indexPostingTableDesc)));
+        result.push_back(createImplTable(CalcVectorKmeansTreePostingImplTableDesc(indexKeyColumns, tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPostingTableDesc)));
         if (prefixVectorIndex) {
-            const THashSet<TString> prefixColumns{indexDesc.GetKeyColumnNames().begin(), indexDesc.GetKeyColumnNames().end() - 1};
-            result.push_back(createImplTable(CalcVectorKmeansTreePrefixImplTableDesc(prefixColumns, tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPrefixTableDesc)));
+            result.push_back(createImplTable(CalcVectorKmeansTreePrefixImplTableDesc(indexKeyColumns, tableInfo, tableInfo->PartitionConfig(), implTableColumns, indexPrefixTableDesc)));
         }
     } else {
         NKikimrSchemeOp::TTableDescription indexTableDesc;

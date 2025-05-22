@@ -8,9 +8,10 @@
 #include <aws/common/common.h>
 
 #include <aws/common/atomics.h>
-#include <aws/common/shutdown_types.h>
 
 AWS_PUSH_SANE_WARNING_LEVEL
+
+typedef void(aws_simple_completion_callback)(void *);
 
 /*
  * A utility type for making ref-counted types, reminiscent of std::shared_ptr in C++
@@ -19,6 +20,11 @@ struct aws_ref_count {
     struct aws_atomic_var ref_count;
     void *object;
     aws_simple_completion_callback *on_zero_fn;
+};
+
+struct aws_shutdown_callback_options {
+    aws_simple_completion_callback *shutdown_callback_fn;
+    void *shutdown_callback_user_data;
 };
 
 AWS_EXTERN_C_BEGIN

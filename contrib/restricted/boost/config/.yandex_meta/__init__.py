@@ -20,11 +20,9 @@ boost_config = NixSourceProject(
         "include/boost/**/*.hpp",
     ],
     copy_sources_except=[
-        "include/boost/config/platform/cygwin.hpp",
-        "include/boost/config/platform/vxworks.hpp",
+        "boost/config/platform/vxworks.hpp",
     ],
     disable_includes=[
-        "boost/config/platform/cygwin.hpp",
         "boost/config/platform/vxworks.hpp",
     ],
     post_install=post_install,

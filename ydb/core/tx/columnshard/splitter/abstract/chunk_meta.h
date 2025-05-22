@@ -32,8 +32,5 @@ public:
     ui32 GetRawBytes() const {
         return RawBytes;
     }
-    void SetRawBytes(const ui32 value) {
-        RawBytes = value;
-    }
 };
 }   // namespace NKikimr::NOlap

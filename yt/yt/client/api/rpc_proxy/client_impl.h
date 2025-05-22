@@ -121,7 +121,7 @@ public:
         const NApi::TGetTabletErrorsOptions& options) override;
 
     TFuture<std::vector<NTabletClient::TTabletActionId>> BalanceTabletCells(
-        const std::string& tabletCellBundle,
+        const TString& tabletCellBundle,
         const std::vector<NYPath::TYPath>& movableTables,
         const NApi::TBalanceTabletCellsOptions& options) override;
 
@@ -197,9 +197,6 @@ public:
         const NApi::TPutFileToCacheOptions& options) override;
 
     // Security.
-    TFuture<TGetCurrentUserResultPtr> GetCurrentUser(
-        const TGetCurrentUserOptions& options) override;
-
     TFuture<void> AddMember(
         const TString& group,
         const TString& member,
@@ -223,8 +220,8 @@ public:
         const NApi::TCheckPermissionByAclOptions& options) override;
 
     TFuture<void> TransferAccountResources(
-        const std::string& srcAccount,
-        const std::string& dstAccount,
+        const TString& srcAccount,
+        const TString& dstAccount,
         NYTree::INodePtr resourceDelta,
         const TTransferAccountResourcesOptions& options) override;
 
@@ -543,11 +540,11 @@ public:
     // Bundle Controller
 
     TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr> GetBundleConfig(
-        const std::string& bundleName,
+        const TString& bundleName,
         const NBundleControllerClient::TGetBundleConfigOptions& options = {}) override;
 
     TFuture<void> SetBundleConfig(
-        const std::string& bundleName,
+        const TString& bundleName,
         const NBundleControllerClient::TBundleTargetConfigPtr& bundleConfig,
         const NBundleControllerClient::TSetBundleConfigOptions& options = {}) override;
 
@@ -599,29 +596,27 @@ public:
         const TFlowExecuteOptions& options = {}) override;
 
     // Shuffle service client
-    TFuture<TSignedShuffleHandlePtr> StartShuffle(
+    TFuture<TShuffleHandlePtr> StartShuffle(
         const std::string& account,
         int partitionCount,
         NObjectClient::TTransactionId parentTransactionId,
         const TStartShuffleOptions& options) override;
 
     TFuture<IRowBatchReaderPtr> CreateShuffleReader(
-        const TSignedShuffleHandlePtr& shuffleHandle,
+        const TShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
-        std::optional<std::pair<int, int>> writerIndexRange,
-        const TShuffleReaderOptions& options) override;
+        const NTableClient::TTableReaderConfigPtr& config) override;
 
     TFuture<IRowBatchWriterPtr> CreateShuffleWriter(
-        const TSignedShuffleHandlePtr& shuffleHandle,
+        const TShuffleHandlePtr& shuffleHandle,
         const std::string& partitionColumn,
-        std::optional<int> writerIndex,
-        const TShuffleWriterOptions& options) override;
+        const NTableClient::TTableWriterConfigPtr& config) override;
 
 private:
     const TConnectionPtr Connection_;
-    const TClientOptions ClientOptions_;
     const NRpc::TDynamicChannelPoolPtr ChannelPool_;
     const NRpc::IChannelPtr RetryingChannel_;
+    const TClientOptions ClientOptions_;
 
     TLazyIntrusivePtr<NTabletClient::ITableMountCache> TableMountCache_;
 
@@ -640,7 +635,6 @@ private:
     NRpc::IChannelPtr GetRetryingChannel() const override;
     NRpc::IChannelPtr CreateNonRetryingStickyChannel() const override;
     NRpc::IChannelPtr WrapStickyChannelIntoRetrying(NRpc::IChannelPtr underlying) const override;
-    NRpc::IChannelPtr WrapNonRetryingChannel(NRpc::IChannelPtr underyling) const;
 };
 
 DEFINE_REFCOUNTED_TYPE(TClient)

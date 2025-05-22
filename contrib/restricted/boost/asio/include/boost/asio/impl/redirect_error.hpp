@@ -16,11 +16,9 @@
 #endif // defined(_MSC_VER) && (_MSC_VER >= 1200)
 
 #include <boost/asio/detail/config.hpp>
-#include <boost/asio/associated_executor.hpp>
 #include <boost/asio/associator.hpp>
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/detail/handler_cont_helpers.hpp>
-#include <boost/asio/detail/initiation_base.hpp>
 #include <boost/asio/detail/type_traits.hpp>
 #include <boost/system/system_error.hpp>
 
@@ -185,52 +183,42 @@ struct async_result<redirect_error_t<CompletionToken>, Signature>
   : async_result<CompletionToken,
       typename detail::redirect_error_signature<Signature>::type>
 {
-  template <typename Initiation>
-  struct init_wrapper : detail::initiation_base<Initiation>
+
+  struct init_wrapper
   {
-    using detail::initiation_base<Initiation>::initiation_base;
-
-    template <typename Handler, typename... Args>
-    void operator()(Handler&& handler,
-        boost::system::error_code* ec, Args&&... args) &&
+    explicit init_wrapper(boost::system::error_code& ec)
+      : ec_(ec)
     {
-      static_cast<Initiation&&>(*this)(
+    }
+
+    template <typename Handler, typename Initiation, typename... Args>
+    void operator()(Handler&& handler,
+        Initiation&& initiation, Args&&... args) const
+    {
+      static_cast<Initiation&&>(initiation)(
           detail::redirect_error_handler<decay_t<Handler>>(
-            *ec, static_cast<Handler&&>(handler)),
+            ec_, static_cast<Handler&&>(handler)),
           static_cast<Args&&>(args)...);
     }
 
-    template <typename Handler, typename... Args>
-    void operator()(Handler&& handler,
-        boost::system::error_code* ec, Args&&... args) const &
-    {
-      static_cast<const Initiation&>(*this)(
-          detail::redirect_error_handler<decay_t<Handler>>(
-            *ec, static_cast<Handler&&>(handler)),
-          static_cast<Args&&>(args)...);
-    }
+    boost::system::error_code& ec_;
   };
 
   template <typename Initiation, typename RawCompletionToken, typename... Args>
   static auto initiate(Initiation&& initiation,
       RawCompletionToken&& token, Args&&... args)
     -> decltype(
-      async_initiate<
-        conditional_t<
-          is_const<remove_reference_t<RawCompletionToken>>::value,
-            const CompletionToken, CompletionToken>,
+      async_initiate<CompletionToken,
         typename detail::redirect_error_signature<Signature>::type>(
-          declval<init_wrapper<decay_t<Initiation>>>(),
-          token.token_, &token.ec_, static_cast<Args&&>(args)...))
+          declval<init_wrapper>(), token.token_,
+          static_cast<Initiation&&>(initiation),
+          static_cast<Args&&>(args)...))
   {
-    return async_initiate<
-      conditional_t<
-        is_const<remove_reference_t<RawCompletionToken>>::value,
-          const CompletionToken, CompletionToken>,
+    return async_initiate<CompletionToken,
       typename detail::redirect_error_signature<Signature>::type>(
-        init_wrapper<decay_t<Initiation>>(
-          static_cast<Initiation&&>(initiation)),
-        token.token_, &token.ec_, static_cast<Args&&>(args)...);
+        init_wrapper(token.ec_), token.token_,
+        static_cast<Initiation&&>(initiation),
+        static_cast<Args&&>(args)...);
   }
 };
 
@@ -251,31 +239,6 @@ struct associator<Associator,
     -> decltype(Associator<Handler, DefaultCandidate>::get(h.handler_, c))
   {
     return Associator<Handler, DefaultCandidate>::get(h.handler_, c);
-  }
-};
-
-template <typename... Signatures>
-struct async_result<partial_redirect_error, Signatures...>
-{
-  template <typename Initiation, typename RawCompletionToken, typename... Args>
-  static auto initiate(Initiation&& initiation,
-      RawCompletionToken&& token, Args&&... args)
-    -> decltype(
-      async_initiate<Signatures...>(
-        static_cast<Initiation&&>(initiation),
-        redirect_error_t<
-          default_completion_token_t<associated_executor_t<Initiation>>>(
-            default_completion_token_t<associated_executor_t<Initiation>>{},
-            token.ec_),
-        static_cast<Args&&>(args)...))
-  {
-    return async_initiate<Signatures...>(
-        static_cast<Initiation&&>(initiation),
-        redirect_error_t<
-          default_completion_token_t<associated_executor_t<Initiation>>>(
-            default_completion_token_t<associated_executor_t<Initiation>>{},
-            token.ec_),
-        static_cast<Args&&>(args)...);
   }
 };
 

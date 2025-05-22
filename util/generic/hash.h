@@ -3,7 +3,6 @@
 #include "fwd.h"
 
 #include "hash_table.h"
-#include "mapfindptr.h"
 
 template <class Key, class T, class HashFcn, class EqualKey, class Alloc>
 class THashMap: public TMapOps<THashMap<Key, T, HashFcn, EqualKey, Alloc>> {

@@ -42,8 +42,7 @@ def user_config_dir(appname: str, roaming: bool = True) -> str:
 # see <https://github.com/pypa/pip/issues/1733>
 def site_config_dirs(appname: str) -> List[str]:
     if sys.platform == "darwin":
-        dirval = _appdirs.site_data_dir(appname, appauthor=False, multipath=True)
-        return dirval.split(os.pathsep)
+        return [_appdirs.site_data_dir(appname, appauthor=False, multipath=True)]
 
     dirval = _appdirs.site_config_dir(appname, appauthor=False, multipath=True)
     if sys.platform == "win32":

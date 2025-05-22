@@ -34,7 +34,4 @@ RESOURCE_FILES(
 
 END()
 
-RECURSE_FOR_TESTS(
-    subinterpreter
-    traceback
-)
+RECURSE_FOR_TESTS(traceback)

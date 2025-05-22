@@ -1,6 +1,6 @@
 #include "escape.h"
 
-#ifdef __SSE4_2__
+#ifdef YT_USE_SSE42
     #include <util/system/cpu_id.h>
 #endif
 
@@ -10,7 +10,7 @@ namespace NYT::NFormats {
 
 namespace {
 
-#ifdef __SSE4_2__
+#ifdef YT_USE_SSE42
 
 const char _m128i_shift_right[31] = {
      0,  1,  2,  3,  4,  5,  6,  7,
@@ -150,7 +150,7 @@ void TEscapeTable::FillStops(const std::vector<char>& stopSymbols)
 {
     YT_VERIFY(stopSymbols.size() <= 16);
 
-#ifdef __SSE4_2__
+#ifdef YT_USE_SSE42
     if (NX86::CachedHaveSSE42()) {
         char storage[16] = {0};
 
@@ -182,7 +182,7 @@ const char* TEscapeTable::FindNext(const char* begin, const char* end) const
     if (begin == end) {
         return end;
     }
-#ifdef __SSE4_2__
+#ifdef YT_USE_SSE42
     if (NX86::CachedHaveSSE42()) {
         return FindNextSymbol(begin, end, Symbols, SymbolCount);
     } else

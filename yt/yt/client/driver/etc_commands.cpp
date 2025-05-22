@@ -29,16 +29,6 @@ using namespace NApi;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TGetCurrentUserCommand::DoExecute(ICommandContextPtr context)
-{
-    auto userInfo = WaitFor(context->GetClient()->GetCurrentUser())
-        .ValueOrThrow();
-
-    context->ProduceOutputValue(ConvertToYsonString(userInfo));
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 void TAddMemberCommand::DoExecute(ICommandContextPtr context)
 {
     WaitFor(context->GetClient()->AddMember(

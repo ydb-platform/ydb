@@ -1,7 +1,6 @@
 #pragma once
 
 #include <util/generic/hash.h>
-#include <util/generic/utility.h>
 #include <util/system/spinlock.h>
 
 #include <array>
@@ -102,12 +101,6 @@ public:
         TBucket& bucket = GetBucketForKey(key);
         TBucketGuard guard(bucket.Mutex);
         bucket.Map[key] = value;
-    }
-
-    void Exchange(const K& key, V& value) {
-        TBucket& bucket = GetBucketForKey(key);
-        TBucketGuard guard(bucket.Mutex);
-        DoSwap(bucket.Map[key], value);
     }
 
     void InsertUnique(const K& key, const V& value) {

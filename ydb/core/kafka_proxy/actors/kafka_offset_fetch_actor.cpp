@@ -93,10 +93,10 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
         Y_UNUSED(tabletInfo);
         Y_UNUSED(ctx);
         for (auto& partResult : ev->Get()->Record.GetPartResult()) {
-            std::unordered_map<TString, TEvKafka::PartitionConsumerOffset> consumerToOffset;
+            std::unordered_map<TString, ui32> consumerToOffset;
             for (auto& consumerResult : partResult.GetConsumerResult()) {
                 if (consumerResult.GetErrorCode() == NPersQueue::NErrorCode::OK) {
-                    consumerToOffset.emplace(consumerResult.GetConsumer(), TEvKafka::PartitionConsumerOffset{static_cast<ui64>(partResult.GetPartition()), static_cast<ui64>(consumerResult.GetCommitedOffset()), consumerResult.GetCommittedMetadata()});
+                    consumerToOffset[consumerResult.GetConsumer()] = consumerResult.GetCommitedOffset();
                 }
             }
             (*PartitionIdToOffsets)[partResult.GetPartition()] = consumerToOffset;
@@ -144,7 +144,6 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
         response->TopicName = OriginalTopicName;
         response->Status = NONE_ERROR;
         response->PartitionIdToOffsets = PartitionIdToOffsets;
-
         Send(Requester, response.Release());
         Die(ctx);
     };
@@ -153,7 +152,8 @@ class TTopicOffsetActor: public NKikimr::NGRpcProxy::V1::TPQInternalSchemaActor<
         const TActorId Requester;
         const TString OriginalTopicName;
         const TString UserSID;
-        std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, TEvKafka::PartitionConsumerOffset>>> PartitionIdToOffsets = std::make_shared<std::unordered_map<ui32, std::unordered_map<TString, TEvKafka::PartitionConsumerOffset>>>();
+        std::unordered_map<ui32, ui32> PartitionIdToOffset {};
+        std::shared_ptr<std::unordered_map<ui32, std::unordered_map<TString, ui32>>> PartitionIdToOffsets = std::make_shared<std::unordered_map<ui32, std::unordered_map<TString, ui32>>>();
 };
 
 NActors::IActor* CreateKafkaOffsetFetchActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TOffsetFetchRequestData>& message) {
@@ -175,15 +175,10 @@ TOffsetFetchResponseData::TPtr TKafkaOffsetFetchActor::GetOffsetFetchResponse() 
                     TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions partition;
                     partition.PartitionIndex = requestPartition;
                     if (partitionsToOffsets.get() != nullptr
-                            && partitionsToOffsets->contains(requestPartition)) {
-                        auto groupPartitionToOffset = (*partitionsToOffsets)[requestPartition].find(requestGroup.GroupId.value());
-                        if (groupPartitionToOffset != (*partitionsToOffsets)[requestPartition].end()) {
-                            partition.CommittedOffset = groupPartitionToOffset->second.Offset;
-                            partition.Metadata = groupPartitionToOffset->second.Metadata;
-                            partition.ErrorCode = NONE_ERROR;
-                        } else {
-                            partition.ErrorCode = RESOURCE_NOT_FOUND;
-                        }
+                            && partitionsToOffsets->contains(requestPartition)
+                            && (*partitionsToOffsets)[requestPartition].contains(requestGroup.GroupId.value())) {
+                        partition.CommittedOffset = (*partitionsToOffsets)[requestPartition][requestGroup.GroupId.value()];
+                        partition.ErrorCode = NONE_ERROR;
                     } else {
                         partition.ErrorCode = RESOURCE_NOT_FOUND;
                     }
@@ -209,7 +204,6 @@ TOffsetFetchResponseData::TPtr TKafkaOffsetFetchActor::GetOffsetFetchResponse() 
                 NKafka::TOffsetFetchResponseData::TOffsetFetchResponseTopic::TOffsetFetchResponsePartition partition;
                 partition.CommittedOffset = sourcePartition.CommittedOffset;
                 partition.PartitionIndex = sourcePartition.PartitionIndex;
-                partition.Metadata = sourcePartition.Metadata;
                 partition.ErrorCode = sourcePartition.ErrorCode;
                 topic.Partitions.push_back(partition);
             }

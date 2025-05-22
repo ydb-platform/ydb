@@ -1,36 +1,26 @@
-from __future__ import annotations
-
-from typing import TYPE_CHECKING, Collection, Generic
-
-from .structs import CT, KT, RT, RequirementInformation, State
-
-if TYPE_CHECKING:
-    from .resolvers import Criterion
-
-
-class BaseReporter(Generic[RT, CT, KT]):
+class BaseReporter(object):
     """Delegate class to provider progress reporting for the resolver."""
 
-    def starting(self) -> None:
+    def starting(self):
         """Called before the resolution actually starts."""
 
-    def starting_round(self, index: int) -> None:
+    def starting_round(self, index):
         """Called before each round of resolution starts.
 
         The index is zero-based.
         """
 
-    def ending_round(self, index: int, state: State[RT, CT, KT]) -> None:
+    def ending_round(self, index, state):
         """Called before each round of resolution ends.
 
         This is NOT called if the resolution ends at this round. Use `ending`
         if you want to report finalization. The index is zero-based.
         """
 
-    def ending(self, state: State[RT, CT, KT]) -> None:
+    def ending(self, state):
         """Called before the resolution ends successfully."""
 
-    def adding_requirement(self, requirement: RT, parent: CT | None) -> None:
+    def adding_requirement(self, requirement, parent):
         """Called when adding a new requirement into the resolve criteria.
 
         :param requirement: The additional requirement to be applied to filter
@@ -40,16 +30,14 @@ class BaseReporter(Generic[RT, CT, KT]):
             requirements passed in from ``Resolver.resolve()``.
         """
 
-    def resolving_conflicts(
-        self, causes: Collection[RequirementInformation[RT, CT]]
-    ) -> None:
+    def resolving_conflicts(self, causes):
         """Called when starting to attempt requirement conflict resolution.
 
         :param causes: The information on the collision that caused the backtracking.
         """
 
-    def rejecting_candidate(self, criterion: Criterion[RT, CT], candidate: CT) -> None:
+    def rejecting_candidate(self, criterion, candidate):
         """Called when rejecting a candidate during backtracking."""
 
-    def pinning(self, candidate: CT) -> None:
+    def pinning(self, candidate):
         """Called when adding a candidate to the potential solution."""

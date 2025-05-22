@@ -35,9 +35,8 @@
 
 #ifndef NDEBUG
 static int ispow2(size_t n) {
-#  if defined(DISABLE_POPCNT) ||                                               \
-    (defined(_MSC_VER) && !defined(__clang__) &&                               \
-     (defined(_M_ARM) || (defined(_M_ARM64) && _MSC_VER < 1941)))
+#  if defined(_MSC_VER) && !defined(__clang__) &&                              \
+    (defined(_M_ARM) || (defined(_M_ARM64) && _MSC_VER < 1941))
   return n && !(n & (n - 1));
 #  elif defined(WIN32)
   return 1 == __popcnt((unsigned int)n);

@@ -51,6 +51,8 @@ class TestUnavailableS3(TllTieringTestBase):
             )
         """)
 
+        # table = ColumnTableHelper(self.ydb_client, 'table')
+
         def upsert_chunk(i):
             return self.ydb_client.query(f"""
                 $n = {ROWS_CHUNK_SIZE};

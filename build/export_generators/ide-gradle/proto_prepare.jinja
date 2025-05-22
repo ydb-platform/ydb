@@ -33,26 +33,15 @@ val prepareMainProtos = tasks.register<Copy>("prepareMainProtos") {
 {%- if extractLibrariesProtosTask %}
 
 val extractMainLibrariesProtos = tasks.register<Copy>("extractMainLibrariesProtos") {
-{%- set root_libraries = libraries|rejectattr('proto_namespace') -%}
-{%- set ns_libraries = libraries|selectattr('proto_namespace') -%}
-{%- if root_libraries|length %}
+{%- if libraries|length %}
     from("$arcadia_root") {
-{%-     for library in root_libraries -%}
+{#- list of all library directories -#}
+{%-     for library in libraries -%}
 {%-         set path_and_jar = rsplit(library.jar, '/', 2) %}
         include("{{ path_and_jar[0] }}/**/*.proto")
 {%-     endfor %}
     }
-{%- endif -%}
-{%- if ns_libraries|length -%}
-{%-     for library in ns_libraries -%}
-{%-         set path_and_jar = rsplit(library.jar, '/', 2) -%}
-{%-         set path = "#R/" + path_and_jar[0] -%}
-{%-         set path = path|replace("#R/" + library.proto_namespace + "/", "")|replace("#R/", "") %}
-    from("$arcadia_root/{{ library.proto_namespace }}") {
-        include("{{ path }}/**/*.proto")
-    }
-{%-     endfor -%}
-{%- endif %}
+{%  endif -%}
     into(mainExtractedIncludeProtosDir)
 }
 {%- endif %}
@@ -66,4 +55,7 @@ afterEvaluate {
 {%- endif %}
 }
 
-tasks.getByName("compileJava").dependsOn("generateProto")
+tasks.getByName("sourcesJar").dependsOn("generateProto")
+{%- if with_kotlin %}
+tasks.getByName("compileKotlin").dependsOn("generateProto")
+{%- endif %}

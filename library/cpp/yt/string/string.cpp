@@ -65,17 +65,17 @@ TString CamelCaseToUnderscoreCase(TStringBuf str)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString TrimLeadingWhitespaces(TStringBuf str)
+TString TrimLeadingWhitespaces(const TString& str)
 {
-    for (size_t i = 0; i < str.size(); ++i) {
+    for (int i = 0; i < static_cast<int>(str.size()); ++i) {
         if (str[i] != ' ') {
-            return TString(str.substr(i));
+            return str.substr(i);
         }
     }
     return "";
 }
 
-TString Trim(TStringBuf str, TStringBuf whitespaces)
+TString Trim(const TString& str, const TString& whitespaces)
 {
     size_t end = str.size();
     while (end > 0) {
@@ -100,7 +100,7 @@ TString Trim(TStringBuf str, TStringBuf whitespaces)
     size_t begin = str.find_first_not_of(whitespaces);
     YT_VERIFY(begin != TString::npos);
     YT_VERIFY(begin < end);
-    return TString(str.substr(begin, end - begin));
+    return str.substr(begin, end - begin);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

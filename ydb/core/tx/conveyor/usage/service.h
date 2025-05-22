@@ -59,13 +59,13 @@ public:
     }
     static NActors::IActor* CreateService(const TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals) {
         Register(config);
-        return new TDistributor(config, GetConveyorName(), TConveyorPolicy::EnableProcesses, conveyorSignals);
+        return new TDistributor(config, GetConveyorName(), conveyorSignals);
     }
-    static TProcessGuard StartProcess(const ui64 externalProcessId, const TCPULimitsConfig& cpuLimits) {
+    static TProcessGuard StartProcess(const ui64 externalProcessId) {
         if (TSelf::IsEnabled() && NActors::TlsActivationContext) {
             auto& context = NActors::TActorContext::AsActorContext();
             const NActors::TActorId& selfId = context.SelfID;
-            context.Send(MakeServiceId(selfId.NodeId()), new NConveyor::TEvExecution::TEvRegisterProcess(externalProcessId, cpuLimits));
+            context.Send(MakeServiceId(selfId.NodeId()), new NConveyor::TEvExecution::TEvRegisterProcess(externalProcessId));
             return TProcessGuard(externalProcessId, MakeServiceId(selfId.NodeId()));
         } else {
             return TProcessGuard(externalProcessId, {});
@@ -77,19 +77,16 @@ public:
 class TScanConveyorPolicy {
 public:
     static const inline TString Name = "Scan";
-    static constexpr bool EnableProcesses = true;
 };
 
 class TCompConveyorPolicy {
 public:
     static const inline TString Name = "Comp";
-    static constexpr bool EnableProcesses = false;
 };
 
 class TInsertConveyorPolicy {
 public:
     static const inline TString Name = "Isrt";
-    static constexpr bool EnableProcesses = false;
 };
 
 using TScanServiceOperator = TServiceOperatorImpl<TScanConveyorPolicy>;

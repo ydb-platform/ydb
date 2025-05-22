@@ -1,11 +1,9 @@
 #include "sql_reflect.h"
 
 #include <library/cpp/resource/resource.h>
-#include <library/cpp/case_insensitive_string/case_insensitive_string.h>
 
 #include <util/string/split.h>
 #include <util/string/strip.h>
-#include <util/charset/utf8.h>
 
 namespace NSQLReflect {
 
@@ -17,18 +15,11 @@ namespace NSQLReflect {
     const TStringBuf SectionOther = "//! section:other";
     const TStringBuf FragmentPrefix = "fragment ";
 
-    const TStringBuf TLexerGrammar::KeywordBlockByName(const TStringBuf name Y_LIFETIME_BOUND) {
+    const TStringBuf TLexerGrammar::KeywordBlock(const TStringBuf name) {
         if (name == "TSKIP") {
             return "SKIP";
         }
         return name;
-    }
-
-    const TString TLexerGrammar::KeywordNameByBlock(const TStringBuf block) {
-        if (TCaseInsensitiveStringBuf(block) == "SKIP") {
-            return "TSKIP";
-        }
-        return ToUpperUTF8(block);
     }
 
     TVector<TString> GetResourceLines(const TStringBuf key) {
@@ -142,7 +133,7 @@ namespace NSQLReflect {
         SubstGlobal(block, "'", "");
         SubstGlobal(block, " ", "");
 
-        Y_ENSURE(name == block || (name == "TSKIP" && block == TLexerGrammar::KeywordBlockByName("TSKIP")));
+        Y_ENSURE(name == block || (name == "TSKIP" && block == TLexerGrammar::KeywordBlock("TSKIP")));
         grammar.KeywordNames.emplace(std::move(name));
     }
 

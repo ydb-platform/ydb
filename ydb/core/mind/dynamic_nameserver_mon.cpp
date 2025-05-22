@@ -92,19 +92,6 @@ void OutputNodeInfo(ui32 nodeId,
     str << "</tr>" << Endl;
 }
 
-void OutputExpiredNodeInfo(ui32 nodeId,IOutputStream &str, const TString &cl = "")
-{
-    str << "<tr class='" << cl << "'>" << Endl
-    << "  <td>" << nodeId << "</td>" << Endl
-    << "  <td>N/A</td>" << Endl
-    << "  <td>N/A</td>" << Endl
-    << "  <td>N/A</td>" << Endl
-    << "  <td>N/A</td>" << Endl
-    << "  <td>N/A</td>" << Endl;
-    str << "<td>N/A</td>" << Endl;
-    str << "</tr>" << Endl;
-}
-
 void OutputStaticNodes(const TTableNameserverSetup &setup,
                        IOutputStream &str)
 {
@@ -159,10 +146,11 @@ void OutputDynamicNodes(const TString &domain,
     }
 
     ids.clear();
-    for (auto id : config->ExpiredNodes)
-        ids.insert(id);
+    for (auto &pr : config->ExpiredNodes)
+        ids.insert(pr.first);
     for (auto id : ids) {
-        OutputExpiredNodeInfo(id, str, "gray");
+        auto &node = config->ExpiredNodes.at(id);
+        OutputNodeInfo(id, node, str, node.Expire, "gray");
     }
 
     str << "  </tbody>" << Endl

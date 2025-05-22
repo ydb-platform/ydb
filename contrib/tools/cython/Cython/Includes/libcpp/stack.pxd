@@ -6,6 +6,6 @@ cdef extern from "<stack>" namespace "std" nogil:
         #stack(Container&)
         bint empty()
         void pop()
-        void push(T&) except +
+        void push(T&)
         size_t size()
         T& top()

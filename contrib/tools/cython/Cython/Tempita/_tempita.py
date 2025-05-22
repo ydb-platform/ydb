@@ -1,5 +1,3 @@
-# cython: language_level=3str
-
 """
 A small templating language
 
@@ -95,29 +93,20 @@ class Template(object):
 
     def __init__(self, content, name=None, namespace=None, stacklevel=None,
                  get_template=None, default_inherit=None, line_offset=0,
-                 delimiters=None, delimeters=None):
+                 delimeters=None):
         self.content = content
 
-        # set delimiters
-        if delimeters:
-            import warnings
-            warnings.warn(
-                "'delimeters' kwarg is being deprecated in favor of correctly"
-                " spelled 'delimiters'. Please adjust your code.",
-                DeprecationWarning
-            )
-            if delimiters is None:
-                delimiters = delimeters
-        if delimiters is None:
-            delimiters = (self.default_namespace['start_braces'],
+        # set delimeters
+        if delimeters is None:
+            delimeters = (self.default_namespace['start_braces'],
                           self.default_namespace['end_braces'])
         else:
-            #assert len(delimiters) == 2 and all([isinstance(delimiter, basestring)
-            #                                     for delimiter in delimiters])
+            #assert len(delimeters) == 2 and all([isinstance(delimeter, basestring)
+            #                                     for delimeter in delimeters])
             self.default_namespace = self.__class__.default_namespace.copy()
-            self.default_namespace['start_braces'] = delimiters[0]
-            self.default_namespace['end_braces'] = delimiters[1]
-        self.delimiters = self.delimeters = delimiters  # Keep a legacy read-only copy, but don't use it.
+            self.default_namespace['start_braces'] = delimeters[0]
+            self.default_namespace['end_braces'] = delimeters[1]
+        self.delimeters = delimeters
 
         self._unicode = is_unicode(content)
         if name is None and stacklevel is not None:
@@ -139,7 +128,7 @@ class Template(object):
                 if lineno:
                     name += ':%s' % lineno
         self.name = name
-        self._parsed = parse(content, name=name, line_offset=line_offset, delimiters=self.delimiters)
+        self._parsed = parse(content, name=name, line_offset=line_offset, delimeters=self.delimeters)
         if namespace is None:
             namespace = {}
         self.namespace = namespace
@@ -339,7 +328,7 @@ class Template(object):
                 if not isinstance(value, basestring_):
                     value = coerce_text(value)
                 if (is_unicode(value)
-                        and self.default_encoding):
+                    and self.default_encoding):
                     value = value.encode(self.default_encoding)
         except Exception as e:
             e.args = (self._add_line_info(e.args[0], pos),)
@@ -375,10 +364,9 @@ class Template(object):
         return msg
 
 
-def sub(content, delimiters=None, **kw):
+def sub(content, delimeters=None, **kw):
     name = kw.get('__name')
-    delimeters = kw.pop('delimeters') if 'delimeters' in kw else None  # for legacy code
-    tmpl = Template(content, name=name, delimiters=delimiters, delimeters=delimeters)
+    tmpl = Template(content, name=name, delimeters=delimeters)
     return tmpl.substitute(kw)
 
 
@@ -546,7 +534,7 @@ del _Empty
 ############################################################
 
 
-def lex(s, name=None, trim_whitespace=True, line_offset=0, delimiters=None):
+def lex(s, name=None, trim_whitespace=True, line_offset=0, delimeters=None):
     """
     Lex a string into chunks:
 
@@ -568,28 +556,28 @@ def lex(s, name=None, trim_whitespace=True, line_offset=0, delimiters=None):
         TemplateError: {{ inside expression at line 1 column 10
 
     """
-    if delimiters is None:
-        delimiters = ( Template.default_namespace['start_braces'],
+    if delimeters is None:
+        delimeters = ( Template.default_namespace['start_braces'],
                        Template.default_namespace['end_braces'] )
     in_expr = False
     chunks = []
     last = 0
     last_pos = (line_offset + 1, 1)
 
-    token_re = re.compile(r'%s|%s' % (re.escape(delimiters[0]),
-                                      re.escape(delimiters[1])))
+    token_re = re.compile(r'%s|%s' % (re.escape(delimeters[0]),
+                                      re.escape(delimeters[1])))
     for match in token_re.finditer(s):
         expr = match.group(0)
         pos = find_position(s, match.end(), last, last_pos)
-        if expr == delimiters[0] and in_expr:
-            raise TemplateError('%s inside expression' % delimiters[0],
+        if expr == delimeters[0] and in_expr:
+            raise TemplateError('%s inside expression' % delimeters[0],
                                 position=pos,
                                 name=name)
-        elif expr == delimiters[1] and not in_expr:
-            raise TemplateError('%s outside expression' % delimiters[1],
+        elif expr == delimeters[1] and not in_expr:
+            raise TemplateError('%s outside expression' % delimeters[1],
                                 position=pos,
                                 name=name)
-        if expr == delimiters[0]:
+        if expr == delimeters[0]:
             part = s[last:match.start()]
             if part:
                 chunks.append(part)
@@ -600,7 +588,7 @@ def lex(s, name=None, trim_whitespace=True, line_offset=0, delimiters=None):
         last = match.end()
         last_pos = pos
     if in_expr:
-        raise TemplateError('No %s to finish last expression' % delimiters[1],
+        raise TemplateError('No %s to finish last expression' % delimeters[1],
                             name=name, position=last_pos)
     part = s[last:]
     if part:
@@ -643,7 +631,7 @@ def trim_lex(tokens):
         else:
             next_chunk = tokens[i + 1]
         if (not isinstance(next_chunk, basestring_)
-                or not isinstance(prev, basestring_)):
+            or not isinstance(prev, basestring_)):
             continue
         prev_ok = not prev or trail_whitespace_re.search(prev)
         if i == 1 and not prev.strip():
@@ -655,7 +643,7 @@ def trim_lex(tokens):
                  or (i == len(tokens) - 2 and not next_chunk.strip()))):
             if prev:
                 if ((i == 1 and not prev.strip())
-                        or prev_ok == 'last'):
+                    or prev_ok == 'last'):
                     tokens[i - 1] = ''
                 else:
                     m = trail_whitespace_re.search(prev)
@@ -683,7 +671,7 @@ def find_position(string, index, last_index, last_pos):
     return (last_pos[0] + lines, column)
 
 
-def parse(s, name=None, line_offset=0, delimiters=None):
+def parse(s, name=None, line_offset=0, delimeters=None):
     r"""
     Parses a string into a kind of AST
 
@@ -733,10 +721,10 @@ def parse(s, name=None, line_offset=0, delimiters=None):
             ...
         TemplateError: Multi-line py blocks must start with a newline at line 1 column 3
     """
-    if delimiters is None:
-        delimiters = ( Template.default_namespace['start_braces'],
+    if delimeters is None:
+        delimeters = ( Template.default_namespace['start_braces'],
                        Template.default_namespace['end_braces'] )
-    tokens = lex(s, name=name, line_offset=line_offset, delimiters=delimiters)
+    tokens = lex(s, name=name, line_offset=line_offset, delimeters=delimeters)
     result = []
     while tokens:
         next_chunk, tokens = parse_expr(tokens, name)
@@ -807,7 +795,7 @@ def parse_cond(tokens, name, context):
                 'Missing {{endif}}',
                 position=start, name=name)
         if (isinstance(tokens[0], tuple)
-                and tokens[0][0] == 'endif'):
+            and tokens[0][0] == 'endif'):
             return ('cond', start) + tuple(pieces), tokens[1:]
         next_chunk, tokens = parse_one_cond(tokens, name, context)
         pieces.append(next_chunk)
@@ -845,7 +833,7 @@ def parse_for(tokens, name, context):
     tokens = tokens[1:]
     context = ('for',) + context
     content = []
-    assert first.startswith('for '), first
+    assert first.startswith('for ')
     if first.endswith(':'):
         first = first[:-1]
     first = first[3:].strip()
@@ -869,7 +857,7 @@ def parse_for(tokens, name, context):
                 'No {{endfor}}',
                 position=pos, name=name)
         if (isinstance(tokens[0], tuple)
-                and tokens[0][0] == 'endfor'):
+            and tokens[0][0] == 'endfor'):
             return ('for', pos, vars, expr, content), tokens[1:]
         next_chunk, tokens = parse_expr(tokens, name, context)
         content.append(next_chunk)
@@ -929,7 +917,7 @@ def parse_def(tokens, name, context):
                 'Missing {{enddef}}',
                 position=start, name=name)
         if (isinstance(tokens[0], tuple)
-                and tokens[0][0] == 'enddef'):
+            and tokens[0][0] == 'enddef'):
             return ('def', start, func_name, sig, content), tokens[1:]
         next_chunk, tokens = parse_expr(tokens, name, context)
         content.append(next_chunk)
@@ -992,7 +980,7 @@ def parse_signature(sig_text, name, pos):
                     raise TemplateError('Invalid signature: (%s)' % sig_text,
                                         position=pos, name=name)
                 if (not nest_count and
-                        (tok_type == tokenize.ENDMARKER or (tok_type == tokenize.OP and tok_string == ','))):
+                    (tok_type == tokenize.ENDMARKER or (tok_type == tokenize.OP and tok_string == ','))):
                     default_expr = isolate_expression(sig_text, start_pos, end_pos)
                     defaults[var_name] = default_expr
                     sig_args.append(var_name)

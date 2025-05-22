@@ -62,14 +62,7 @@ Y_UNIT_TEST_SUITE(SqlRegexTests) {
         CheckRegex(
             /* ansi = */ false,
             "DIGITS",
-            R"((0[xX]([0-9]|[a-f]|[A-F])+)|(0[oO][0-8]+)|(0[bB](0|1)+)|([0-9]+))");
-    }
-
-    Y_UNIT_TEST(IntegerValue) {
-        CheckRegex(
-            /* ansi = */ false,
-            "INTEGER_VALUE",
-            R"(((0[xX]([0-9]|[a-f]|[A-F])+)|(0[oO][0-8]+)|(0[bB](0|1)+)|([0-9]+))(([pP]|[uU])?([lL]|[sS]|[tT]|[iI]|[bB]|[nN])?))");
+            R"(([0-9]+)|(0[xX]([0-9]|[a-f]|[A-F])+)|(0[oO][0-8]+)|(0[bB](0|1)+))");
     }
 
     Y_UNIT_TEST(Real) {

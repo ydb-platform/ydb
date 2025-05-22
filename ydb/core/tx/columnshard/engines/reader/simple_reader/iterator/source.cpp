@@ -6,7 +6,6 @@
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/blobs_reader/events.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
-#include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/constructor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/default_fetching.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
@@ -40,9 +39,8 @@ void IDataSource::StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr)
         //    NActors::TLogContextGuard logGuard(NActors::TLogContextBuilder::Build()("source", SourceIdx)("method", "InitFetchingPlan"));
     }
     TFetchingScriptCursor cursor(FetchingPlan, 0);
-    const auto& commonContext = *GetContext()->GetCommonContext();
-    auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), commonContext.GetScanActorId(), true);
-    NConveyor::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
+    auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), GetContext()->GetCommonContext()->GetScanActorId(), true);
+    NConveyor::TScanServiceOperator::SendTaskToExecute(task);
 }
 
 void IDataSource::ContinueCursor(const std::shared_ptr<IDataSource>& sourcePtr) {
@@ -51,9 +49,8 @@ void IDataSource::ContinueCursor(const std::shared_ptr<IDataSource>& sourcePtr) 
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId())("event", "ContinueCursor");
         auto cursor = std::move(*ScriptCursor);
         ScriptCursor.reset();
-        const auto& commonContext = *GetContext()->GetCommonContext();
-        auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), commonContext.GetScanActorId(), true);
-        NConveyor::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
+        auto task = std::make_shared<TStepAction>(sourcePtr, std::move(cursor), GetContext()->GetCommonContext()->GetScanActorId(), true);
+        NConveyor::TScanServiceOperator::SendTaskToExecute(task);
     } else {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_id", GetSourceId())("event", "CannotContinueCursor");
     }
@@ -355,11 +352,10 @@ void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& c
     auto blobSchema = GetContext()->GetReadMetadata()->GetLoadSchemaVerified(*Portion);
 
     std::optional<TSnapshot> ss;
-    if (Portion->GetPortionType() == EPortionType::Written) {
-        const auto* portion = static_cast<const TWrittenPortionInfo*>(Portion.get());
-        if (portion->HasCommitSnapshot()) {
-            ss = portion->GetCommitSnapshotVerified();
-        } else if (GetContext()->GetReadMetadata()->IsMyUncommitted(portion->GetInsertWriteId())) {
+    if (Portion->HasInsertWriteId()) {
+        if (Portion->HasCommitSnapshot()) {
+            ss = Portion->GetCommitSnapshotVerified();
+        } else if (GetContext()->GetReadMetadata()->IsMyUncommitted(Portion->GetInsertWriteIdVerified())) {
             ss = GetContext()->GetReadMetadata()->GetRequestSnapshot();
         }
     }
@@ -390,9 +386,8 @@ private:
         Source->MutableStageData().SetPortionAccessor(std::move(result.ExtractPortionsVector().front()));
         Source->InitUsedRawBytes();
         AFL_VERIFY(Step.Next());
-        const auto& commonContext = *Source->GetContext()->GetCommonContext();
-        auto task = std::make_shared<TStepAction>(Source, std::move(Step), commonContext.GetScanActorId(), false);
-        NConveyor::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
+        auto task = std::make_shared<TStepAction>(Source, std::move(Step), Source->GetContext()->GetCommonContext()->GetScanActorId(), false);
+        NConveyor::TScanServiceOperator::SendTaskToExecute(task);
     }
 
 public:
@@ -477,20 +472,6 @@ TConclusion<bool> TPortionDataSource::DoStartReserveMemory(const NArrow::NSSA::T
     NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(GetContext()->GetProcessMemoryControlId(),
         GetContext()->GetCommonContext()->GetScanId(), GetMemoryGroupId(), { allocation }, (ui32)policy->GetStage());
     return true;
-}
-
-bool TPortionDataSource::DoAddTxConflict() {
-    if (Portion->IsCommitted()) {
-        GetContext()->GetReadMetadata()->SetBrokenWithCommitted();
-        return true;
-    } else {
-        const auto* wPortion = static_cast<const TWrittenPortionInfo*>(Portion.get());
-        if (!GetContext()->GetReadMetadata()->IsMyUncommitted(wPortion->GetInsertWriteId())) {
-            GetContext()->GetReadMetadata()->SetConflictedWriteId(wPortion->GetInsertWriteId());
-            return true;
-        }
-    }
-    return false;
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

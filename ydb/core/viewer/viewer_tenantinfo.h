@@ -31,7 +31,6 @@ class TJsonTenantInfo : public TViewerPipeClient {
     std::unordered_map<TNodeId, TRequestResponse<TEvViewer::TEvViewerResponse>> OffloadedSystemStateResponse;
     std::unordered_map<TNodeId, TRequestResponse<TEvViewer::TEvViewerResponse>> OffloadedTabletStateResponse;
     std::unordered_map<TNodeId, TRequestResponse<NHealthCheck::TEvSelfCheckResultProto>> SelfCheckResults;
-    std::unordered_map<TString, TRequestResponse<TEvStateStorage::TEvBoardInfo>> MetadataCacheEndpointsLookup;
 
     THashMap<TString, NKikimrViewer::TTenant> TenantByPath;
     THashMap<TPathId, NKikimrViewer::TTenant> TenantBySubDomainKey;
@@ -96,8 +95,8 @@ public:
     }
 
     void RequestMetadataCacheHealthCheck(const TString& path) {
-        if (AppData()->FeatureFlags.GetEnableDbMetadataCache() && MetadataCache && MetadataCacheEndpointsLookup.count(path) == 0) {
-            MetadataCacheEndpointsLookup[path] = MakeRequestStateStorageMetadataCacheEndpointsLookup(path);
+        if (AppData()->FeatureFlags.GetEnableDbMetadataCache() && MetadataCache) {
+            RequestStateStorageMetadataCacheEndpointsLookup(path);
         }
     }
 
@@ -154,6 +153,7 @@ public:
             tenant.SetState(Ydb::Cms::GetDatabaseStatusResult::RUNNING);
             tenant.SetType(NKikimrViewer::Domain);
             tenant.SetName(DomainPath);
+            RequestMetadataCacheHealthCheck(DomainPath);
         }
 
         HiveDomainStats[RootHiveId] = MakeRequestHiveDomainStats(RootHiveId);
@@ -229,15 +229,15 @@ public:
     }
 
     void Handle(NConsole::TEvConsole::TEvListTenantsResponse::TPtr& ev) {
-        if (ListTenantsResponse->Set(std::move(ev))) {
-            Ydb::Cms::ListDatabasesResult listTenantsResult;
-            ListTenantsResponse->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
-            for (const TString& path : listTenantsResult.paths()) {
-                TenantStatusResponses[path] = MakeRequestConsoleGetTenantStatus(path);
-                NavigateKeySetResult[path] = MakeRequestSchemeCacheNavigate(path);
-            }
-            RequestDone();
+        ListTenantsResponse->Set(std::move(ev));
+        Ydb::Cms::ListDatabasesResult listTenantsResult;
+        ListTenantsResponse->Get()->Record.GetResponse().operation().result().UnpackTo(&listTenantsResult);
+        for (const TString& path : listTenantsResult.paths()) {
+            TenantStatusResponses[path] = MakeRequestConsoleGetTenantStatus(path);
+            NavigateKeySetResult[path] = MakeRequestSchemeCacheNavigate(path);
+            RequestMetadataCacheHealthCheck(path);
         }
+        RequestDone();
     }
 
     void Handle(NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr& ev) {
@@ -437,10 +437,9 @@ public:
                 }
                 NKikimrViewer::TTenant& tenant = TenantBySubDomainKey[domainInfo->DomainKey];
                 if (domainInfo->ResourcesDomainKey != domainInfo->DomainKey) {
+
                     tenant.SetType(NKikimrViewer::Serverless);
                     tenant.SetResourceId(GetDomainId(domainInfo->ResourcesDomainKey));
-                } else {
-                    RequestMetadataCacheHealthCheck(path);
                 }
                 TString id = GetDomainId(domainInfo->DomainKey);
                 tenant.SetId(id);
@@ -486,35 +485,19 @@ public:
         }
     }
 
-    static TString GetDatabaseFromEndpointsBoardPath(const TString& path) {
-        TStringBuf db(path);
-        db.SkipPrefix("metadatacache+");
-        return TString(db);
-    }
-
     void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
-        TString path = GetDatabaseFromEndpointsBoardPath(ev->Get()->Path);
-        auto& result(MetadataCacheEndpointsLookup[path]);
-        if (result.Set(std::move(ev))) {
-            if (result.IsOk()) {
-                auto activeNode = TDatabaseMetadataCache::PickActiveNode(result->InfoEntries);
-                if (activeNode) {
-                    Subscribers.insert(activeNode);
-                    std::optional<TActorId> cache = MakeDatabaseMetadataCacheId(activeNode);
-                    if (MetadataCacheRequested.insert(path).second) {
-                        if (SelfCheckResults.count(activeNode) == 0) {
-                            SelfCheckResults[activeNode] = MakeRequest<NHealthCheck::TEvSelfCheckResultProto>(*cache, new NHealthCheck::TEvSelfCheckRequestProto,
-                                IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, activeNode);
-                            if (SelfCheckResults[activeNode].Span) {
-                                SelfCheckResults[activeNode].Span.Attribute("path", path);
-                                SelfCheckResults[activeNode].Span.Attribute("target_node_id", activeNode);
-                            }
-                        }
-                    }
+        auto activeNode = TDatabaseMetadataCache::PickActiveNode(ev->Get()->InfoEntries);
+        if (activeNode != 0) {
+            Subscribers.insert(activeNode);
+            std::optional<TActorId> cache = MakeDatabaseMetadataCacheId(activeNode);
+            if (MetadataCacheRequested.insert(ev->Get()->Path).second) {
+                if (SelfCheckResults.count(activeNode) == 0) {
+                    SelfCheckResults[activeNode] = MakeRequest<NHealthCheck::TEvSelfCheckResultProto>(*cache, new NHealthCheck::TEvSelfCheckRequestProto,
+                        IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, activeNode);
                 }
             }
-            RequestDone();
         }
+        RequestDone();
     }
 
     void Handle(TEvViewer::TEvViewerResponse::TPtr& ev) {
@@ -989,6 +972,11 @@ public:
         TStringStream json;
         TProtoToJson::ProtoToJson(json, Result, JsonSettings);
         ReplyAndPassAway(GetHTTPOKJSON(json.Str()));
+    }
+
+    void HandleTimeout() {
+        Result.AddErrors("timeout");
+        ReplyAndPassAway();
     }
 
     static YAML::Node GetSwagger() {

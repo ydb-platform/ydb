@@ -9,8 +9,6 @@
 
 namespace NYT::NTableClient {
 
-////////////////////////////////////////////////////////////////////////////////
-
 struct TMaybeDeletedColumnSchema
     : public TColumnSchema
 {

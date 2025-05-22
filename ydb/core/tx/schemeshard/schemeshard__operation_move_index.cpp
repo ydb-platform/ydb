@@ -575,19 +575,19 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId nextId, cons
                 result.push_back(CreateDropTableIndex(NextPartId(nextId, result), indexDropping));
             }
 
-            for (const auto& [name, pathId]: dstIndexPath.Base()->GetChildren()) {
-                Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
-                auto implPath = context.SS->PathsById.at(pathId);
+            for (const auto& items: dstIndexPath.Base()->GetChildren()) {
+                Y_ABORT_UNLESS(context.SS->PathsById.contains(items.second));
+                auto implPath = context.SS->PathsById.at(items.second);
                 if (implPath->Dropped()) {
                     continue;
                 }
 
-                auto implTable = context.SS->PathsById.at(pathId);
+                auto implTable = context.SS->PathsById.at(items.second);
                 Y_ABORT_UNLESS(implTable->IsTable());
 
                 auto implTableDropping = TransactionTemplate(dstIndexPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
                 auto operation = implTableDropping.MutableDrop();
-                operation->SetName(name);
+                operation->SetName(items.first);
 
                 result.push_back(CreateDropTable(NextPartId(nextId, result), implTableDropping));
             }
@@ -596,17 +596,14 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId nextId, cons
 
     result.push_back(CreateMoveTableIndex(NextPartId(nextId, result), MoveTableIndexTask(srcIndexPath, dstIndexPath)));
 
-    for(const auto& implTable : srcIndexPath.Base()->GetChildren()) {
-        TString srcImplTableName = implTable.first;
-        TPath srcImplTable = srcIndexPath.Child(srcImplTableName);
+    TString srcImplTableName = srcIndexPath.Base()->GetChildren().begin()->first;
+    TPath srcImplTable = srcIndexPath.Child(srcImplTableName);
 
-        Y_ABORT_UNLESS(srcImplTable.Base()->PathId == implTable.second);
+    Y_ABORT_UNLESS(srcImplTable.Base()->PathId == srcIndexPath.Base()->GetChildren().begin()->second);
 
-        TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
+    TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
 
-        result.push_back(CreateMoveTable(NextPartId(nextId, result), MoveTableTask(srcImplTable, dstImplTable)));
-    }
-
+    result.push_back(CreateMoveTable(NextPartId(nextId, result), MoveTableTask(srcImplTable, dstImplTable)));
     return result;
 }
 

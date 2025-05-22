@@ -148,9 +148,6 @@ static struct aws_error_info s_errors[] = {
     AWS_DEFINE_ERROR_INFO_HTTP(
         AWS_ERROR_HTTP_MANUAL_WRITE_HAS_COMPLETED,
         "Manual write failed because manual writes are already completed."),
-    AWS_DEFINE_ERROR_INFO_HTTP(
-        AWS_ERROR_HTTP_RESPONSE_FIRST_BYTE_TIMEOUT,
-        "The server does not begin responding within the configuration after a request is fully sent."),
 };
 /* clang-format on */
 
@@ -540,7 +537,7 @@ void aws_http_library_clean_up(void) {
     aws_io_library_clean_up();
 }
 
-void aws_http_fatal_assert_library_initialized(void) {
+void aws_http_fatal_assert_library_initialized() {
     if (!s_library_initialized) {
         AWS_LOGF_FATAL(
             AWS_LS_HTTP_GENERAL,

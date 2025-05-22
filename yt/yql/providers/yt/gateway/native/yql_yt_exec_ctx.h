@@ -42,7 +42,21 @@ namespace NNative {
 
 struct TInputInfo {
     TInputInfo() = default;
-    TInputInfo(const TString& name, const NYT::TRichYPath& path, bool temp, bool strict, const TYtTableBaseInfo& info, const NYT::TNode& spec, ui32 group = 0);
+    TInputInfo(const TString& name, const NYT::TRichYPath& path, bool temp, bool strict, const TYtTableBaseInfo& info, const NYT::TNode& spec, ui32 group = 0)
+        : Name(name)
+        , Path(path)
+        , Cluster(info.Cluster)
+        , Temp(temp)
+        , Dynamic(info.Meta->IsDynamic)
+        , Strict(strict)
+        , Records(info.Stat->RecordsCount)
+        , DataSize(info.Stat->DataSize)
+        , Spec(spec)
+        , Group(group)
+        , Lookup(info.Meta->Attrs.Value("optimize_for", "scan") != "scan")
+        , Erasure(info.Meta->Attrs.Value("erasure_codec", "none") != "none")
+    {
+    }
 
     TString Name;
     NYT::TRichYPath Path;
@@ -56,10 +70,7 @@ struct TInputInfo {
     NYT::TNode QB2Premapper;
     ui32 Group = 0;
     bool Lookup = false;
-    TString ErasureCodec;
-    TString CompressionCode;
-    TString PrimaryMedium;
-    NYT::TNode Media;
+    bool Erasure = false;
 };
 
 struct TOutputInfo {

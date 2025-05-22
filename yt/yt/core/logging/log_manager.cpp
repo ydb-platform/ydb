@@ -1038,7 +1038,6 @@ private:
         if (!perThreadQueue) {
             perThreadQueue = new TThreadLocalQueue();
             RegisteredLocalQueues_.Enqueue(perThreadQueue);
-            Y_UNUSED(LocalQueueReclaimer()); // Touch thread-local variable so that its destructor is called.
         }
 
         ++EnqueuedEvents_;

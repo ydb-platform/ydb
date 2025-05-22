@@ -15,13 +15,13 @@ namespace NKikimr {
 using namespace NKikimrResourceBroker;
 using namespace NResourceBroker;
 
-static void SetupLogging(TTestActorRuntime& runtime)
-{
+static void SetupLogging(TTestActorRuntime& runtime) {
     NActors::NLog::EPriority priority = ENABLE_DETAILED_RESOURCE_BROKER_LOG ? NLog::PRI_DEBUG : NLog::PRI_ERROR;
     runtime.SetLogPriority(NKikimrServices::RESOURCE_BROKER, priority);
 }
 
-static NKikimrResourceBroker::TResourceBrokerConfig MakeTestConfig()
+static NKikimrResourceBroker::TResourceBrokerConfig
+MakeTestConfig()
 {
     NKikimrResourceBroker::TResourceBrokerConfig config;
 
@@ -71,14 +71,16 @@ static NKikimrResourceBroker::TResourceBrokerConfig MakeTestConfig()
     return config;
 }
 
-static void WaitForBootstrap(TTestActorRuntime &runtime)
+static void
+WaitForBootstrap(TTestActorRuntime &runtime)
 {
     TDispatchOptions options;
     options.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
     UNIT_ASSERT(runtime.DispatchEvents(options));
 }
 
-static void SubmitTask(TTestActorRuntime &runtime, TActorId broker, TActorId sender,
+static void
+SubmitTask(TTestActorRuntime &runtime, TActorId broker, TActorId sender,
            ui64 id, ui64 cpu, ui64 memory, const TString &type,
            ui32 priority, TIntrusivePtr<TThrRefBase> cookie = nullptr)
 {
@@ -92,7 +94,8 @@ static void SubmitTask(TTestActorRuntime &runtime, TActorId broker, TActorId sen
     runtime.Send(new IEventHandle(broker, sender, event.Release()));
 }
 
-static void UpdateTask(TTestActorRuntime &runtime, TActorId broker, TActorId sender,
+static void
+UpdateTask(TTestActorRuntime &runtime, TActorId broker, TActorId sender,
            ui64 id, ui64 cpu, ui64 memory, ui32 priority, const TString &type,
            bool resubmit = false)
 {
@@ -104,7 +107,8 @@ static void UpdateTask(TTestActorRuntime &runtime, TActorId broker, TActorId sen
     runtime.Send(new IEventHandle(broker, sender, event.Release()));
 }
 
-static void UpdateTaskCookie(TTestActorRuntime &runtime, TActorId broker, TActorId sender,
+static void
+UpdateTaskCookie(TTestActorRuntime &runtime, TActorId broker, TActorId sender,
                  ui64 id, TIntrusivePtr<TThrRefBase> cookie)
 {
     TAutoPtr<TEvResourceBroker::TEvUpdateTaskCookie> event
@@ -113,7 +117,8 @@ static void UpdateTaskCookie(TTestActorRuntime &runtime, TActorId broker, TActor
     runtime.Send(new IEventHandle(broker, sender, event.Release()));
 }
 
-static void RemoveTask(TTestActorRuntime &runtime, TActorId broker, TActorId sender, ui64 id)
+static void
+RemoveTask(TTestActorRuntime &runtime, TActorId broker, TActorId sender, ui64 id)
 {
     TAutoPtr<TEvResourceBroker::TEvRemoveTask> event
         = new TEvResourceBroker::TEvRemoveTask(id);
@@ -121,7 +126,8 @@ static void RemoveTask(TTestActorRuntime &runtime, TActorId broker, TActorId sen
     runtime.Send(new IEventHandle(broker, sender, event.Release()));
 }
 
-static void FinishTask(TTestActorRuntime &runtime, TActorId broker, TActorId sender, ui64 id)
+static void
+FinishTask(TTestActorRuntime &runtime, TActorId broker, TActorId sender, ui64 id)
 {
     TAutoPtr<TEvResourceBroker::TEvFinishTask> event
         = new TEvResourceBroker::TEvFinishTask(id);
@@ -141,7 +147,8 @@ WaitForResourceAllocation(TTestActorRuntime &runtime, ui64 id,
     return reply->TaskId;
 }
 
-static void WaitForError(TTestActorRuntime &runtime, ui64 id, TEvResourceBroker::TStatus::ECode code,
+static void
+WaitForError(TTestActorRuntime &runtime, ui64 id, TEvResourceBroker::TStatus::ECode code,
              TIntrusivePtr<TThrRefBase> cookie = nullptr)
 {
     TAutoPtr<IEventHandle> handle;
@@ -151,7 +158,8 @@ static void WaitForError(TTestActorRuntime &runtime, ui64 id, TEvResourceBroker:
     UNIT_ASSERT_VALUES_EQUAL(reply->Cookie, cookie);
 }
 
-static void CheckCounters(::NMonitoring::TDynamicCounterPtr counters, const TString &group, const TString &name,
+static void
+CheckCounters(::NMonitoring::TDynamicCounterPtr counters, const TString &group, const TString &name,
               ui64 cpu, ui64 memory, ui64 finished, ui64 enqueued, ui64 infly)
 {
     auto g = counters->GetSubgroup(group, name);
@@ -177,14 +185,14 @@ static void CheckConfigure(TTestActorRuntime &runtime, TActorId broker, TActorId
     UNIT_ASSERT_VALUES_EQUAL((int)rec.GetSuccess(), (int)success);
 }
 
-static TIntrusivePtr<IResourceBroker> GetInstantResourceBroker(TTestActorRuntime &runtime, TActorId broker, TActorId sender) {
+static
+TIntrusivePtr<IResourceBroker> GetInstantResourceBroker(TTestActorRuntime &runtime, TActorId broker, TActorId sender) {
     runtime.Send(new IEventHandle(broker, sender, new TEvResourceBroker::TEvResourceBrokerRequest));
     auto answer = runtime.GrabEdgeEvent<TEvResourceBroker::TEvResourceBrokerResponse>(sender);
     return answer->Get()->ResourceBroker;
 }
 
 Y_UNIT_TEST_SUITE(TResourceBroker) {
-
     Y_UNIT_TEST(TestErrors) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
@@ -886,7 +894,6 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
 };
 
 Y_UNIT_TEST_SUITE(TResourceBrokerInstant) {
-
     Y_UNIT_TEST(Test) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
@@ -1000,7 +1007,6 @@ Y_UNIT_TEST_SUITE(TResourceBrokerInstant) {
             CheckCounters(counters, "queue", "total", 210, 320, 1, 0, 2);
         }
     }
-
 };
 
 Y_UNIT_TEST_SUITE(TResourceBrokerConfig) {
@@ -1122,21 +1128,6 @@ Y_UNIT_TEST_SUITE(TResourceBrokerConfig) {
         NResourceBroker::MergeConfigUpdates(config, updates);
 
         UNIT_ASSERT_VALUES_EQUAL(config.ShortDebugString(), "ResourceLimit { Cpu: 20 Memory: 2048 }");
-    }
-
-    Y_UNIT_TEST(DefaultConfig) {
-        auto config = MakeDefaultConfig();
-
-        Cerr << config.DebugString() << Endl;
-
-        ui64 queuesCpu = 0;
-        for (const auto& q : config.GetQueues()) {
-            queuesCpu += q.GetLimit().GetCpu();
-        }
-        Cerr << "Total queues cpu: " << queuesCpu;
-
-        // see https://github.com/ydb-platform/ydb/issues/18513
-        UNIT_ASSERT_LE(queuesCpu, config.GetResourceLimit().GetCpu());
     }
 
 } // TResourceBrokerConfig

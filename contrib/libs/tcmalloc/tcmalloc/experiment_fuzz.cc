@@ -16,26 +16,23 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "fuzztest/fuzztest.h"
 #include "absl/strings/string_view.h"
 #include "tcmalloc/experiment.h"
 
-namespace tcmalloc::tcmalloc_internal {
-namespace {
-
-void FuzzSelectExperiments(absl::string_view test_target,
-                           absl::string_view active, absl::string_view disabled,
-                           bool unset) {
-  if (unset && !test_target.empty() && (!active.empty() || !disabled.empty())) {
-    return;
-  }
+extern "C" int LLVMFuzzerTestOneInput(const uint8_t* d, size_t size) {
+  const char* data = reinterpret_cast<const char*>(d);
 
   bool buffer[tcmalloc::tcmalloc_internal::kNumExperiments];
+  absl::string_view active, disabled;
 
-  SelectExperiments(buffer, test_target, active, disabled, unset);
+  const char* split = static_cast<const char*>(memchr(data, ';', size));
+  if (split == nullptr) {
+    active = absl::string_view(data, size);
+  } else {
+    active = absl::string_view(data, split - data);
+    disabled = absl::string_view(split + 1, size - (split - data + 1));
+  }
+
+  tcmalloc::tcmalloc_internal::SelectExperiments(buffer, active, disabled);
+  return 0;
 }
-
-FUZZ_TEST(ExperimentTest, FuzzSelectExperiments);
-
-}  // namespace
-}  // namespace tcmalloc::tcmalloc_internal

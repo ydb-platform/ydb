@@ -12,7 +12,7 @@ namespace NKikimr::NOlap {
 class TPortionAccessorConstructor {
 private:
     bool Constructed = false;
-    std::unique_ptr<TPortionInfoConstructor> PortionInfo;
+    TPortionInfoConstructor PortionInfo;
     std::vector<TIndexChunk> Indexes;
     std::vector<TColumnRecord> Records;
 
@@ -34,15 +34,18 @@ private:
     std::vector<TAddressBlobId> BlobIdxs;
     bool NeedBlobIdxsSort = false;
 
+    TPortionAccessorConstructor(const TPortionAccessorConstructor&) = default;
+    TPortionAccessorConstructor& operator=(const TPortionAccessorConstructor&) = default;
+
     TPortionAccessorConstructor(TPortionDataAccessor&& accessor)
-        : PortionInfo(accessor.GetPortionInfo().BuildConstructor(true, true)) {
+        : PortionInfo(accessor.GetPortionInfo(), true, true) {
         Indexes = accessor.ExtractIndexes();
         Records = accessor.ExtractRecords();
     }
 
     TPortionAccessorConstructor(
         const TPortionDataAccessor& accessor, const bool withBlobs, const bool withMetadata, const bool withMetadataBlobs)
-        : PortionInfo(accessor.GetPortionInfo().BuildConstructor(withMetadata, withMetadataBlobs)) {
+        : PortionInfo(accessor.GetPortionInfo(), withMetadata, withMetadataBlobs) {
         if (withBlobs) {
             AFL_VERIFY(withMetadataBlobs && withMetadata);
             Indexes = accessor.GetIndexesVerified();
@@ -138,26 +141,24 @@ private:
     }
 
 public:
-    TPortionAccessorConstructor(std::unique_ptr<TPortionInfoConstructor>&& portionInfo)
+    TPortionAccessorConstructor(const TInternalPathId pathId)
+        : PortionInfo(pathId)
+    {
+
+    }
+
+    TPortionAccessorConstructor(TPortionInfoConstructor&& portionInfo)
         : PortionInfo(std::move(portionInfo))
     {
 
     }
 
-    ui64 GetTotalBlobsSize() const {
-        AFL_VERIFY(Records.size());
-        ui64 size = 0;
-        for (auto&& r : Records) {
-            size += r.GetBlobRange().GetSize();
-        }
-        for (auto&& r : Indexes) {
-            size += r.GetDataSize();
-        }
-        return size;
+    TPortionAccessorConstructor MakeCopy() const {
+        return TPortionAccessorConstructor(*this);
     }
 
     static TPortionAccessorConstructor BuildForRewriteBlobs(const TPortionInfo& portion) {
-        return TPortionAccessorConstructor(portion.BuildConstructor(true, false));
+        return TPortionAccessorConstructor(TPortionInfoConstructor(portion, true, false));
     }
 
     static TPortionDataAccessor BuildForLoading(
@@ -168,7 +169,7 @@ public:
     }
 
     TPortionInfoConstructor& MutablePortionConstructor() {
-        return *PortionInfo;
+        return PortionInfo;
     }
 
     std::vector<TColumnRecord>& TestMutableRecords() {
@@ -180,7 +181,7 @@ public:
     }
 
     const TPortionInfoConstructor& GetPortionConstructor() const {
-        return *PortionInfo;
+        return PortionInfo;
     }
 
     void RegisterBlobIdx(const TChunkAddress& address, const TBlobRangeLink16::TLinkId blobIdx) {
@@ -192,7 +193,7 @@ public:
 
     TString DebugString() const {
         TStringBuilder sb;
-        sb << PortionInfo->DebugString() << ";";
+        sb << PortionInfo.DebugString() << ";";
         for (auto&& i : Records) {
             sb << i.DebugString() << ";";
         }
@@ -212,19 +213,19 @@ public:
     TPortionDataAccessor Build(const bool needChunksNormalization);
 
     TBlobRangeLink16::TLinkId RegisterBlobId(const TUnifiedBlobId& blobId) {
-        return PortionInfo->MetaConstructor.RegisterBlobId(blobId);
+        return PortionInfo.MetaConstructor.RegisterBlobId(blobId);
     }
 
     const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
-        return PortionInfo->MetaConstructor.RestoreBlobRange(linkRange);
+        return PortionInfo.MetaConstructor.RestoreBlobRange(linkRange);
     }
 
     const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const {
-        return PortionInfo->MetaConstructor.GetBlobId(linkId);
+        return PortionInfo.MetaConstructor.GetBlobId(linkId);
     }
 
     ui32 GetBlobIdsCount() const {
-        return PortionInfo->MetaConstructor.GetBlobIdsCount();
+        return PortionInfo.MetaConstructor.GetBlobIdsCount();
     }
 
     TPortionAccessorConstructor(TPortionAccessorConstructor&&) noexcept = default;
@@ -254,7 +255,7 @@ public:
     }
 
     bool HaveBlobsData() {
-        return PortionInfo->HaveBlobsData() || Records.size() || Indexes.size();
+        return PortionInfo.HaveBlobsData() || Records.size() || Indexes.size();
     }
 
     void ClearRecords() {
@@ -266,6 +267,14 @@ public:
     }
 
     void AddIndex(const TIndexChunk& chunk) {
+        ui32 chunkIdx = 0;
+        for (auto&& i : Indexes) {
+            if (i.GetIndexId() == chunk.GetIndexId()) {
+                AFL_VERIFY(chunkIdx == i.GetChunkIdx())("index_id", chunk.GetIndexId())("expected", chunkIdx)("real", i.GetChunkIdx());
+                ++chunkIdx;
+            }
+        }
+        AFL_VERIFY(chunkIdx == chunk.GetChunkIdx())("index_id", chunk.GetIndexId())("expected", chunkIdx)("real", chunk.GetChunkIdx());
         Indexes.emplace_back(chunk);
     }
 };

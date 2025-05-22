@@ -43,11 +43,8 @@ DEFINE_REFCOUNTED_TYPE(TActionQueue)
 //! #invokerName is used as a profiling tag.
 //! #registry is needed for testing purposes only.
 IInvokerPtr CreateSerializedInvoker(
-    IInvokerPtr underlyingInvoker);
-
-IInvokerPtr CreateSerializedInvoker(
     IInvokerPtr underlyingInvoker,
-    const std::string& invokerName,
+    const TString& invokerName = "default",
     NProfiling::IRegistryPtr registry = nullptr);
 
 IInvokerPtr CreateSerializedInvoker(
@@ -62,11 +59,8 @@ IInvokerPtr CreateSerializedInvoker(
 //! #invokerName is used as a profiling tag.
 //! #registry is needed for testing purposes only.
 IPrioritizedInvokerPtr CreatePrioritizedInvoker(
-    IInvokerPtr underlyingInvoker);
-
-IPrioritizedInvokerPtr CreatePrioritizedInvoker(
     IInvokerPtr underlyingInvoker,
-    const std::string& invokerName,
+    const TString& invokerName = "default",
     NProfiling::IRegistryPtr registry = nullptr);
 
 IPrioritizedInvokerPtr CreatePrioritizedInvoker(
@@ -77,8 +71,7 @@ IPrioritizedInvokerPtr CreatePrioritizedInvoker(
 //! Creates a wrapper around IInvoker that implements IPrioritizedInvoker but
 //! does not perform any actual reordering. Priorities passed to #IPrioritizedInvoker::Invoke
 //! are ignored.
-IPrioritizedInvokerPtr CreateFakePrioritizedInvoker(
-    IInvokerPtr underlyingInvoker);
+IPrioritizedInvokerPtr CreateFakePrioritizedInvoker(IInvokerPtr underlyingInvoker);
 
 //! Creates a wrapper around IPrioritizedInvoker turning it into a regular IInvoker.
 //! All callbacks are propagated with a given fixed #priority.

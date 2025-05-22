@@ -46,7 +46,7 @@ def post_install(self):
     )
     if_arm = Linkable(
         SRCS=[
-            "source/arch/arm/auxv/cpuid.c",
+            "source/arch/arm/asm/cpuid.c",
         ]
     )
     m.after(
@@ -73,12 +73,16 @@ def post_install(self):
     )
 
     # handle arch-specific CFLAGS
+    m.CFLAGS.remove("-DHAVE_MM256_EXTRACT_EPI64")
+    m.CFLAGS.remove("-DHAVE_AVX2_INTRINSICS")
     m.CFLAGS.remove("-DUSE_SIMD_ENCODING")
     m.after(
         "CFLAGS",
         Switch(
             ARCH_X86_64=Linkable(
                 CFLAGS=[
+                    "-DHAVE_MM256_EXTRACT_EPI64",
+                    "-DHAVE_AVX2_INTRINSICS",
                     "-DUSE_SIMD_ENCODING",
                 ],
             )
@@ -93,14 +97,7 @@ aws_c_common = CMakeNinjaNixProject(
     flags=["-DAWS_HAVE_EXECINFO=OFF"],
     copy_sources=[
         "include/aws/common/*.inl",
-        "include/aws/common/external/ittnotify.h",
-        "source/arch/arm/auxv/cpuid.c",
-    ],
-    disable_includes=[
-        "legacy/ittnotify.h",
-    ],
-    platform_dispatchers=[
-        "generated/include/aws/common/config.h",
+        "source/arch/arm/asm/**/*",
     ],
     install_targets=["aws-c-common"],
     post_install=post_install,

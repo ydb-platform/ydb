@@ -2,7 +2,6 @@
 #include "meta.h"
 
 #include <ydb/core/formats/arrow/hash/calcer.h>
-#include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
@@ -277,7 +276,7 @@ public:
 };
 }   // namespace
 
-std::vector<std::shared_ptr<IPortionDataChunk>> TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const {
+TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const {
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
     TNGrammBuilder builder(HashesCount, CaseSensitive);
 
@@ -308,30 +307,27 @@ std::vector<std::shared_ptr<IPortionDataChunk>> TIndexMeta::DoBuildIndexImpl(TCh
             reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount());
         }
     };
-    TString indexData;
+
     if ((size & (size - 1)) == 0) {
         if (size == 1024) {
-            indexData = TBitmapDetector<1024>(this, 1024).Detector(doFillFilter);
+            return TBitmapDetector<1024>(this, 1024).Detector(doFillFilter);
         } else if (size == 2048) {
-            indexData = TBitmapDetector<2048>(this, 2048).Detector(doFillFilter);
+            return TBitmapDetector<2048>(this, 2048).Detector(doFillFilter);
         } else if (size == 4096) {
-            indexData = TBitmapDetector<4096>(this, 4096).Detector(doFillFilter);
+            return TBitmapDetector<4096>(this, 4096).Detector(doFillFilter);
         } else if (size == 4096 * 2) {
-            indexData = TBitmapDetector<4096 * 2>(this, 4096 * 2).Detector(doFillFilter);
+            return TBitmapDetector<4096 * 2>(this, 4096 * 2).Detector(doFillFilter);
         } else if (size == 4096 * 4) {
-            indexData = TBitmapDetector<4096 * 4>(this, 4096 * 4).Detector(doFillFilter);
+            return TBitmapDetector<4096 * 4>(this, 4096 * 4).Detector(doFillFilter);
         } else if (size == 4096 * 8) {
-            indexData = TBitmapDetector<4096 * 8>(this, 4096 * 8).Detector(doFillFilter);
+            return TBitmapDetector<4096 * 8>(this, 4096 * 8).Detector(doFillFilter);
         } else if (size == 4096 * 16) {
-            indexData = TBitmapDetector<4096 * 16>(this, 4096 * 16).Detector(doFillFilter);
+            return TBitmapDetector<4096 * 16>(this, 4096 * 16).Detector(doFillFilter);
         }
     }
-    if (!indexData) {
-        TVectorInserter inserter(size);
-        doFillFilter(inserter);
-        indexData = GetBitsStorageConstructor()->Build(inserter.ExtractBits())->SerializeToString();
-    }
-    return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
+    TVectorInserter inserter(size);
+    doFillFilter(inserter);
+    return GetBitsStorageConstructor()->Build(inserter.ExtractBits())->SerializeToString();
 }
 
 bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,

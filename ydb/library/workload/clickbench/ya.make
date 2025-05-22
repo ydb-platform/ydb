@@ -61,6 +61,7 @@ PEERDIR(
     ydb/library/workload/benchmark_base
     library/cpp/http/io
     library/cpp/resource
+    library/cpp/streams/factory/open_by_signature
 )
 
 END()

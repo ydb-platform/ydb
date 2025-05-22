@@ -2,25 +2,24 @@
 
 This is a good source for looking at the various reporting hooks.
 """
-
 import argparse
-from collections import Counter
 import dataclasses
 import datetime
-from functools import partial
 import inspect
-from pathlib import Path
 import platform
 import sys
 import textwrap
+import warnings
+from collections import Counter
+from functools import partial
+from pathlib import Path
 from typing import Any
 from typing import Callable
+from typing import cast
 from typing import ClassVar
 from typing import Dict
-from typing import final
 from typing import Generator
 from typing import List
-from typing import Literal
 from typing import Mapping
 from typing import NamedTuple
 from typing import Optional
@@ -30,18 +29,18 @@ from typing import TextIO
 from typing import Tuple
 from typing import TYPE_CHECKING
 from typing import Union
-import warnings
 
 import pluggy
 
+import _pytest._version
 from _pytest import nodes
 from _pytest import timing
 from _pytest._code import ExceptionInfo
 from _pytest._code.code import ExceptionRepr
 from _pytest._io import TerminalWriter
 from _pytest._io.wcwidth import wcswidth
-import _pytest._version
 from _pytest.assertion.util import running_on_ci
+from _pytest.compat import final
 from _pytest.config import _PluggyPlugin
 from _pytest.config import Config
 from _pytest.config import ExitCode
@@ -55,8 +54,9 @@ from _pytest.reports import BaseReport
 from _pytest.reports import CollectReport
 from _pytest.reports import TestReport
 
-
 if TYPE_CHECKING:
+    from typing_extensions import Literal
+
     from _pytest.main import Session
 
 
@@ -367,7 +367,7 @@ class TerminalReporter:
         self._already_displayed_warnings: Optional[int] = None
         self._keyboardinterrupt_memo: Optional[ExceptionRepr] = None
 
-    def _determine_show_progress_info(self) -> Literal["progress", "count", False]:
+    def _determine_show_progress_info(self) -> "Literal['progress', 'count', False]":
         """Return whether we should display progress information based on the current config."""
         # do not show progress if we are not capturing output (#3038) unless explicitly
         # overridden by progress-even-when-capture-no
@@ -672,8 +672,8 @@ class TerminalReporter:
             return f" [ {collected} / {collected} ]"
         else:
             if collected:
-                return (
-                    f" [{len(self._progress_nodeids_reported) * 100 // collected:3d}%]"
+                return " [{:3d}%]".format(
+                    len(self._progress_nodeids_reported) * 100 // collected
                 )
             return " [100%]"
 
@@ -758,7 +758,9 @@ class TerminalReporter:
             if pypy_version_info:
                 verinfo = ".".join(map(str, pypy_version_info[:3]))
                 msg += f"[pypy-{verinfo}-{pypy_version_info[3]}]"
-            msg += f", pytest-{_pytest._version.version}, pluggy-{pluggy.__version__}"
+            msg += ", pytest-{}, pluggy-{}".format(
+                _pytest._version.version, pluggy.__version__
+            )
             if (
                 self.verbosity > 0
                 or self.config.option.debug
@@ -847,11 +849,12 @@ class TerminalReporter:
                         for line in doc.splitlines():
                             self._tw.line("{}{}".format(indent + "  ", line))
 
-    @hookimpl(wrapper=True)
+    @hookimpl(hookwrapper=True)
     def pytest_sessionfinish(
         self, session: "Session", exitstatus: Union[int, ExitCode]
-    ) -> Generator[None, None, None]:
-        result = yield
+    ):
+        outcome = yield
+        outcome.get_result()
         self._tw.line("")
         summary_exit_codes = (
             ExitCode.OK,
@@ -872,22 +875,17 @@ class TerminalReporter:
         elif session.shouldstop:
             self.write_sep("!", str(session.shouldstop), red=True)
         self.summary_stats()
-        return result
 
-    @hookimpl(wrapper=True)
+    @hookimpl(hookwrapper=True)
     def pytest_terminal_summary(self) -> Generator[None, None, None]:
         self.summary_errors()
         self.summary_failures()
-        self.summary_xfailures()
         self.summary_warnings()
         self.summary_passes()
-        self.summary_xpasses()
-        try:
-            return (yield)
-        finally:
-            self.short_test_summary()
-            # Display any extra warnings from teardown here (if any).
-            self.summary_warnings()
+        yield
+        self.short_test_summary()
+        # Display any extra warnings from teardown here (if any).
+        self.summary_warnings()
 
     def pytest_keyboard_interrupt(self, excinfo: ExceptionInfo[BaseException]) -> None:
         self._keyboardinterrupt_memo = excinfo.getrepr(funcargs=True)
@@ -1011,20 +1009,12 @@ class TerminalReporter:
             )
 
     def summary_passes(self) -> None:
-        self.summary_passes_combined("passed", "PASSES", "P")
-
-    def summary_xpasses(self) -> None:
-        self.summary_passes_combined("xpassed", "XPASSES", "X")
-
-    def summary_passes_combined(
-        self, which_reports: str, sep_title: str, needed_opt: str
-    ) -> None:
         if self.config.option.tbstyle != "no":
-            if self.hasopt(needed_opt):
-                reports: List[TestReport] = self.getreports(which_reports)
+            if self.hasopt("P"):
+                reports: List[TestReport] = self.getreports("passed")
                 if not reports:
                     return
-                self.write_sep("=", sep_title)
+                self.write_sep("=", "PASSES")
                 for rep in reports:
                     if rep.sections:
                         msg = self._getfailureheadline(rep)
@@ -1058,30 +1048,21 @@ class TerminalReporter:
                 self._tw.line(content)
 
     def summary_failures(self) -> None:
-        self.summary_failures_combined("failed", "FAILURES")
-
-    def summary_xfailures(self) -> None:
-        self.summary_failures_combined("xfailed", "XFAILURES", "x")
-
-    def summary_failures_combined(
-        self, which_reports: str, sep_title: str, needed_opt: Optional[str] = None
-    ) -> None:
         if self.config.option.tbstyle != "no":
-            if not needed_opt or self.hasopt(needed_opt):
-                reports: List[BaseReport] = self.getreports(which_reports)
-                if not reports:
-                    return
-                self.write_sep("=", sep_title)
-                if self.config.option.tbstyle == "line":
-                    for rep in reports:
-                        line = self._getcrashline(rep)
-                        self.write_line(line)
-                else:
-                    for rep in reports:
-                        msg = self._getfailureheadline(rep)
-                        self.write_sep("_", msg, red=True, bold=True)
-                        self._outrep_summary(rep)
-                        self._handle_teardown_sections(rep.nodeid)
+            reports: List[BaseReport] = self.getreports("failed")
+            if not reports:
+                return
+            self.write_sep("=", "FAILURES")
+            if self.config.option.tbstyle == "line":
+                for rep in reports:
+                    line = self._getcrashline(rep)
+                    self.write_line(line)
+            else:
+                for rep in reports:
+                    msg = self._getfailureheadline(rep)
+                    self.write_sep("_", msg, red=True, bold=True)
+                    self._outrep_summary(rep)
+                    self._handle_teardown_sections(rep.nodeid)
 
     def summary_errors(self) -> None:
         if self.config.option.tbstyle != "no":
@@ -1187,11 +1168,8 @@ class TerminalReporter:
                     verbose_word, **{_color_for_type["warnings"]: True}
                 )
                 nodeid = _get_node_id_with_markup(self._tw, self.config, rep)
-                line = f"{markup_word} {nodeid}"
                 reason = rep.wasxfail
-                if reason:
-                    line += " - " + str(reason)
-                lines.append(line)
+                lines.append(f"{markup_word} {nodeid} {reason}")
 
         def show_skipped(lines: List[str]) -> None:
             skipped: List[CollectReport] = self.stats.get("skipped", [])
@@ -1463,7 +1441,7 @@ def _plugin_nameversions(plugininfo) -> List[str]:
     values: List[str] = []
     for plugin, dist in plugininfo:
         # Gets us name and version!
-        name = f"{dist.project_name}-{dist.version}"
+        name = "{dist.project_name}-{dist.version}".format(dist=dist)
         # Questionable convenience, but it keeps things short.
         if name.startswith("pytest-"):
             name = name[7:]
@@ -1488,7 +1466,7 @@ def _get_raw_skip_reason(report: TestReport) -> str:
     The string is just the part given by the user.
     """
     if hasattr(report, "wasxfail"):
-        reason = report.wasxfail
+        reason = cast(str, report.wasxfail)
         if reason.startswith("reason: "):
             reason = reason[len("reason: ") :]
         return reason

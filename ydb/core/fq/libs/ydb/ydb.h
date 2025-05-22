@@ -80,8 +80,6 @@ struct TGenerationContext : public TThrRefBase {
     // result of Select
     ui64 GenerationRead = 0;
 
-    NYdb::NTable::TExecDataQuerySettings ExecDataQuerySettings;
-
     TGenerationContext(NYdb::NTable::TSession session,
                        bool commitTx,
                        const TString& tablePathPrefix,
@@ -89,8 +87,7 @@ struct TGenerationContext : public TThrRefBase {
                        const TString& primaryKeyColumn,
                        const TString& generationColumn,
                        const TString& primaryKey,
-                       ui64 generation,
-                       const NYdb::NTable::TExecDataQuerySettings& execDataQuerySettings = {})
+                       ui64 generation)
         : Session(session)
         , CommitTx(commitTx)
         , TablePathPrefix(tablePathPrefix)
@@ -99,7 +96,6 @@ struct TGenerationContext : public TThrRefBase {
         , GenerationColumn(generationColumn)
         , PrimaryKey(primaryKey)
         , Generation(generation)
-        , ExecDataQuerySettings(execDataQuerySettings)
     {
     }
 };
@@ -158,11 +154,6 @@ TSettings GetClientSettings(const NConfig::TYdbStorageConfig& config,
     if (config.GetCertificateFile()) {
         auto cert = StripString(TFileInput(config.GetCertificateFile()).ReadAll());
         settings.SslCredentials(NYdb::TSslCredentials(true, cert));
-    }
-    if constexpr (std::is_same_v<TSettings, NYdb::NTable::TClientSettings>) {
-        auto maxActiveSessions = config.GetTableClientMaxActiveSessions();
-        settings.SessionPoolSettings(NYdb::NTable::TSessionPoolSettings()
-            .MaxActiveSessions(maxActiveSessions ? maxActiveSessions : 50));    // 50 - default in TSessionPoolSettings
     }
 
     return settings;

@@ -93,7 +93,6 @@ namespace NActors {
         ui64 SafeElapsedTicks = 0;
         ui64 SafeParkedTicks = 0;
         ui64 WorstActivationTimeUs = 0;
-        ui64 OveraddedCpuUs = 0;
 
         TActivationTime CurrentActivationTime;
 

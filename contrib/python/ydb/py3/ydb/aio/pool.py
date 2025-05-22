@@ -199,27 +199,12 @@ class ConnectionPool(IConnectionPool):
         self._store = ConnectionsCache(driver_config.use_all_nodes)
         self._grpc_init = Connection(self._driver_config.endpoint, self._driver_config)
         self._stopped = False
+        self._discovery = Discovery(self._store, self._driver_config)
 
-        if driver_config.disable_discovery:
-            # If discovery is disabled, just add the initial endpoint to the store
-            async def init_connection():
-                ready_connection = Connection(self._driver_config.endpoint, self._driver_config)
-                await ready_connection.connection_ready(
-                    ready_timeout=getattr(self._driver_config, "discovery_request_timeout", 10)
-                )
-                self._store.add(ready_connection)
-
-            # Create and schedule the task to initialize the connection
-            self._discovery = None
-            self._discovery_task = asyncio.get_event_loop().create_task(init_connection())
-        else:
-            # Start discovery as usual
-            self._discovery = Discovery(self._store, self._driver_config)
-            self._discovery_task = asyncio.get_event_loop().create_task(self._discovery.run())
+        self._discovery_task = asyncio.get_event_loop().create_task(self._discovery.run())
 
     async def stop(self, timeout=10):
-        if self._discovery:
-            self._discovery.stop()
+        self._discovery.stop()
         await self._grpc_init.close()
         try:
             await asyncio.wait_for(self._discovery_task, timeout=timeout)
@@ -230,8 +215,7 @@ class ConnectionPool(IConnectionPool):
     def _on_disconnected(self, connection):
         async def __wrapper__():
             await connection.close()
-            if self._discovery:
-                self._discovery.notify_disconnected()
+            self._discovery.notify_disconnected()
 
         return __wrapper__
 
@@ -239,9 +223,7 @@ class ConnectionPool(IConnectionPool):
         await self._store.get(fast_fail=fail_fast, wait_timeout=timeout)
 
     def discovery_debug_details(self):
-        if self._discovery:
-            return self._discovery.discovery_debug_details()
-        return "Discovery is disabled, using only the initial endpoint"
+        return self._discovery.discovery_debug_details()
 
     async def __aenter__(self):
         return self
@@ -266,8 +248,7 @@ class ConnectionPool(IConnectionPool):
         try:
             connection = await self._store.get(preferred_endpoint, fast_fail=fast_fail, wait_timeout=wait_timeout)
         except BaseException:
-            if self._discovery:
-                self._discovery.notify_disconnected()
+            self._discovery.notify_disconnected()
             raise
 
         return await connection(

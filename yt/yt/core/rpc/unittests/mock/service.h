@@ -281,13 +281,13 @@ public:
     MOCK_METHOD(
         void,
         SetRawRequestInfo,
-        (std::string info, bool incremental),
+        (TString info, bool incremental),
         (override));
 
     MOCK_METHOD(
         void,
         SetRawResponseInfo,
-        (std::string info, bool incremental),
+        (TString info, bool incremental),
         (override));
 
     MOCK_METHOD(

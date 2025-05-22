@@ -27,9 +27,6 @@ message TRequestedConstructor {
     message TSparsed {
     }
 
-    message TDictionary {
-    }
-
     message TSubColumns {
         message TSettings {
             optional uint32 SparsedDetectorKff = 1 [default = 20];
@@ -45,7 +42,6 @@ message TRequestedConstructor {
         TPlain Plain = 10;
         TSparsed Sparsed = 11;
         TSubColumns SubColumns = 12;
-        TDictionary Dictionary = 13;
     }
 }
 
@@ -58,9 +54,6 @@ message TConstructor {
     message TSparsed {
     }
 
-    message TDictionary {
-    }
-
     message TSubColumns {
         message TSettings {
             optional uint32 SparsedDetectorKff = 1 [default = 20];
@@ -75,7 +68,6 @@ message TConstructor {
         TPlain Plain = 10;
         TSparsed Sparsed = 11;
         TSubColumns SubColumns = 12;
-        TDictionary Dictionary = 13;
     }
 }
 
@@ -88,9 +80,4 @@ message TSubColumnsAccessor {
     repeated TColumn KeyColumns = 3;
     repeated TColumn OtherColumns = 4;
     optional uint32 OtherRecordsCount = 5;
-}
-
-message TDictionaryAccessor {
-    optional uint32 VariantsBlobSize = 1;
-    optional uint32 RecordsBlobSize = 2;
 }

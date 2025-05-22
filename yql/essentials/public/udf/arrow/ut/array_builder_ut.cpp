@@ -231,8 +231,7 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
     Y_UNIT_TEST(TestTzDateBuilder_Layout) {
         TArrayBuilderTestData data;
         const auto tzDateType = data.PgmBuilder.NewDataType(EDataSlot::TzDate);
-        const NMiniKQL::TTypeInfoHelper typeInfoHelper;
-        const auto arrayBuilder = MakeArrayBuilder(typeInfoHelper, tzDateType,
+        const auto arrayBuilder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), tzDateType,
             *data.ArrowPool, MAX_BLOCK_SIZE, /* pgBuilder */ nullptr);
 
         auto makeTzDate = [] (ui16 val, ui16 tz) {
@@ -248,14 +247,9 @@ Y_UNIT_TEST_SUITE(TArrayBuilderTest) {
 
         const auto datum = arrayBuilder->Build(true);
         UNIT_ASSERT(datum.is_array());
-        const auto array = datum.array();
-        const auto expectedType = GetArrowType(typeInfoHelper, tzDateType);
-        UNIT_ASSERT(array->type->Equals(expectedType));
         UNIT_ASSERT_VALUES_EQUAL(datum.length(), dates.size());
-        const auto childData = array->child_data;
+        const auto childData = datum.array()->child_data;
         UNIT_ASSERT_VALUES_EQUAL_C(childData.size(), 2, "Expected date and timezone children");
-        UNIT_ASSERT(childData[0]->type->Equals(expectedType->field(0)->type()));
-        UNIT_ASSERT(childData[1]->type->Equals(expectedType->field(1)->type()));
     }
 
     Y_UNIT_TEST(TestResourceStringValueBuilderReader) {

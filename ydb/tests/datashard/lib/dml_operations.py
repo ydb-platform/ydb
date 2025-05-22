@@ -13,9 +13,6 @@ class DMLOperations():
     def query(self, text):
         return self.query_object.query(text)
 
-    def transactional(self, process):
-        return self.query_object.transactional(process)
-
     def create_table(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
         columns = {
             "pk_": pk_types.keys(),
@@ -71,8 +68,20 @@ class DMLOperations():
             number_of_columns += 1
 
         for count in range(1, number_of_columns + 1):
-            sql_select = self.create_select_sql_request(
-                table_name, all_types, count, pk_types, count, index, count, ttl, count)
+            create_all_type = []
+            for type_name in all_types.keys():
+                if type_name != "Json" and type_name != "Yson" and type_name != "JsonDocument":
+                    create_all_type.append(
+                        f"col_{cleanup_type_name(type_name)}={format_sql_value(all_types[type_name](count), type_name)}")
+            sql_select = f"""
+                SELECT COUNT(*) as count FROM `{table_name}` WHERE 
+                {" and ".join([f"pk_{cleanup_type_name(type_name)}={format_sql_value(pk_types[type_name](count), type_name)}" for type_name in pk_types.keys()])}
+                {" and " if len(index) != 0 else ""}
+                {" and ".join([f"col_index_{cleanup_type_name(type_name)}={format_sql_value(index[type_name](count), type_name)}" for type_name in index.keys()])}
+                {" and " if len(create_all_type) != 0 else ""}
+                {" and ".join(create_all_type)}
+                {f" and  ttl_{ttl}={format_sql_value(ttl_types[ttl](count), ttl)}" if ttl != "" else ""}
+                """
             rows = self.query(sql_select)
             assert len(
                 rows) == 1 and rows[0].count == 1, f"Expected one rows, failed in {count} value, table {table_name}"
@@ -171,8 +180,20 @@ class DMLOperations():
                                all_types, pk_types, index, ttl)
 
         for count in range(1, number_of_columns + 1):
-            sql_select = self.create_select_sql_request(table_name, all_types, number_of_columns - count + 1,
-                                                        pk_types, count, index, number_of_columns - count + 1, ttl, number_of_columns - count + 1)
+            create_all_type = []
+            for type_name in all_types.keys():
+                if type_name != "Json" and type_name != "Yson" and type_name != "JsonDocument":
+                    create_all_type.append(
+                        f"col_{cleanup_type_name(type_name)}={format_sql_value(all_types[type_name](number_of_columns - count + 1), type_name)}")
+            sql_select = f"""
+                SELECT COUNT(*) as count FROM `{table_name}` WHERE 
+                {" and ".join([f"pk_{cleanup_type_name(type_name)}={format_sql_value(pk_types[type_name](count), type_name)}" for type_name in pk_types.keys()])}
+                {" and " if len(index) != 0 else ""}
+                {" and ".join([f"col_index_{cleanup_type_name(type_name)}={format_sql_value(index[type_name](number_of_columns - count + 1), type_name)}" for type_name in index.keys()])}
+                {" and " if len(create_all_type) != 0 else ""}
+                {" and ".join(create_all_type)}
+                {f" and  ttl_{ttl}={format_sql_value(ttl_types[ttl](number_of_columns - count + 1), ttl)}" if ttl != "" else ""}
+                """
             rows = self.query(sql_select)
             assert len(
                 rows) == 1 and rows[0].count == 1, f"Expected one rows, faild in {count} value, table {table_name}"
@@ -272,14 +293,39 @@ class DMLOperations():
             number_of_columns += 1
 
         for count in range(1, number_of_columns + 1):
-            sql_select = self.create_select_sql_request(table_name, all_types, number_of_columns - count + 1,
-                                                        pk_types, count, index, number_of_columns - count + 1, ttl, number_of_columns - count + 1)
+            create_all_type = []
+            for type_name in all_types.keys():
+                if type_name != "Json" and type_name != "Yson" and type_name != "JsonDocument":
+                    create_all_type.append(
+                        f"col_{cleanup_type_name(type_name)}={format_sql_value(all_types[type_name](number_of_columns - count + 1), type_name)}")
+            sql_select = f"""
+                SELECT COUNT(*) as count FROM `{table_name}` WHERE 
+                {" and ".join([f"pk_{cleanup_type_name(type_name)}={format_sql_value(pk_types[type_name](count), type_name)}" for type_name in pk_types.keys()])}
+                {" and " if len(index) != 0 else ""}
+                {" and ".join([f"col_index_{cleanup_type_name(type_name)}={format_sql_value(index[type_name](number_of_columns - count + 1), type_name)}" for type_name in index.keys()])}
+                {" and " if len(create_all_type) != 0 else ""}
+                {" and ".join(create_all_type)}
+                {f" and  ttl_{ttl}={format_sql_value(ttl_types[ttl](number_of_columns - count + 1), ttl)}" if ttl != "" else ""}
+                """
             rows = self.query(sql_select)
             assert len(
                 rows) == 1 and rows[0].count == 1, f"Expected one rows, faild in {count} value, table {table_name}"
 
         for count in range(number_of_columns + 1, 2*number_of_columns + 1):
-            sql_select = self.create_select_sql_request(table_name, all_types, count, pk_types, count, index, count, ttl, count)
+            create_all_type = []
+            for type_name in all_types.keys():
+                if type_name != "Json" and type_name != "Yson" and type_name != "JsonDocument":
+                    create_all_type.append(
+                        f"col_{cleanup_type_name(type_name)}={format_sql_value(all_types[type_name](count), type_name)}")
+            sql_select = f"""
+                SELECT COUNT(*) as count FROM `{table_name}` WHERE 
+                {" and ".join([f"pk_{cleanup_type_name(type_name)}={format_sql_value(pk_types[type_name](count), type_name)}" for type_name in pk_types.keys()])}
+                {" and " if len(index) != 0 else ""}
+                {" and ".join([f"col_index_{cleanup_type_name(type_name)}={format_sql_value(index[type_name](count), type_name)}" for type_name in index.keys()])}
+                {" and " if len(create_all_type) != 0 else ""}
+                {" and ".join(create_all_type)}
+                {f" and  ttl_{ttl}={format_sql_value(ttl_types[ttl](count), ttl)}" if ttl != "" and ((type_name != "Date" and type_name != "Datetime") or count < 106) else ""}
+                """
             rows = self.query(sql_select)
             assert len(
                 rows) == 1 and rows[0].count == 0, f"Expected one rows, faild in {count} value, table {table_name}"
@@ -294,7 +340,19 @@ class DMLOperations():
         self.query(delete_sql)
 
     def select_all_type(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
-        statements = self.create_statements(pk_types, all_types, index, ttl)
+        statements = []
+        # delete if after https://github.com/ydb-platform/ydb/issues/16930
+        for data_type in all_types.keys():
+            if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':
+                statements.append(f"col_{cleanup_type_name(data_type)}")
+        for data_type in pk_types.keys():
+            if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':
+                statements.append(f"pk_{cleanup_type_name(data_type)}")
+        for data_type in index.keys():
+            if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':
+                statements.append(f"col_index_{cleanup_type_name(data_type)}")
+        if ttl != "":
+            statements.append(f"ttl_{cleanup_type_name(ttl)}")
 
         rows = self.query(f"select {", ".join(statements)} from {table_name}")
         count = 0
@@ -318,55 +376,21 @@ class DMLOperations():
                 self.assert_type(ttl_types, ttl, i+1, rows[i][count])
             count += 1
 
-    def create_statements(self, pk_types, all_types, index, ttl):
-        # delete if after https://github.com/ydb-platform/ydb/issues/16930
-        statements = []
-        for data_type in all_types.keys():
-            if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':
-                statements.append(f"col_{cleanup_type_name(data_type)}")
-        for data_type in pk_types.keys():
-            if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':
-                statements.append(f"pk_{cleanup_type_name(data_type)}")
-        for data_type in index.keys():
-            if data_type != "Date32" and data_type != "Datetime64" and data_type != "Timestamp64" and data_type != 'Interval64':
-                statements.append(f"col_index_{cleanup_type_name(data_type)}")
-        if ttl != "":
-            statements.append(f"ttl_{cleanup_type_name(ttl)}")
-        return statements
-
     def assert_type(self, key, data_type: str, values: int, values_from_rows):
         if data_type == "String" or data_type == "Yson":
             assert values_from_rows.decode(
-                "utf-8") == key[data_type](values), f"{data_type}, expected {key[data_type](values)}, received {values_from_rows.decode("utf-8")}"
+                "utf-8") == key[data_type](values), f"{data_type}"
         elif data_type == "Float" or data_type == "DyNumber":
             assert math.isclose(float(values_from_rows), float(
-                key[data_type](values)), rel_tol=1e-3), f"{data_type}, expected {key[data_type](values)}, received {values_from_rows}"
+                key[data_type](values)), rel_tol=1e-3), f"{data_type}"
         elif data_type == "Interval" or data_type == "Interval64":
             assert values_from_rows == timedelta(
-                microseconds=key[data_type](values)), f"{data_type}, expected {timedelta(microseconds=key[data_type](values))}, received {values_from_rows}"
+                microseconds=key[data_type](values)), f"{data_type}"
         elif data_type == "Timestamp" or data_type == "Timestamp64":
             assert values_from_rows == datetime.fromtimestamp(
-                key[data_type](values)/1_000_000), f"{data_type}, expected {datetime.fromtimestamp(key[data_type](values)/1_000_000)}, received {values_from_rows}"
+                key[data_type](values)/1_000_000), f"{data_type}"
         elif data_type == "Json" or data_type == "JsonDocument":
             assert str(values_from_rows).replace(
-                "'", "\"") == str(key[data_type](values)), f"{data_type}, expected {key[data_type](values)}, received {values_from_rows}"
+                "'", "\"") == str(key[data_type](values)), f"{data_type}"
         else:
-            assert str(values_from_rows) == str(
-                key[data_type](values)), f"{data_type}, expected {key[data_type](values)}, received {values_from_rows}"
-
-    def create_select_sql_request(self, table_name, all_types, all_types_value, pk_types, pk_types_value, index, index_value, ttl, ttl_value):
-        create_all_type = []
-        for type_name in all_types.keys():
-            if type_name != "Json" and type_name != "Yson" and type_name != "JsonDocument":
-                create_all_type.append(
-                    f"col_{cleanup_type_name(type_name)}={format_sql_value(all_types[type_name](all_types_value), type_name)}")
-        sql_select = f"""
-                SELECT COUNT(*) as count FROM `{table_name}` WHERE 
-                {" and ".join([f"pk_{cleanup_type_name(type_name)}={format_sql_value(pk_types[type_name](pk_types_value), type_name)}" for type_name in pk_types.keys()])}
-                {" and " if len(index) != 0 else ""}
-                {" and ".join([f"col_index_{cleanup_type_name(type_name)}={format_sql_value(index[type_name](index_value), type_name)}" for type_name in index.keys()])}
-                {" and " if len(create_all_type) != 0 else ""}
-                {" and ".join(create_all_type)}
-                {f" and  ttl_{ttl}={format_sql_value(ttl_types[ttl](ttl_value), ttl)}" if ttl != "" else ""}
-                """
-        return sql_select
+            assert str(values_from_rows) == str(key[data_type](values)), f"{data_type}"

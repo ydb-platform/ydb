@@ -118,9 +118,7 @@ MakeUploadTypes(const TUserTable& table, NKikimrTxDataShard::EKMeansState upload
     switch (uploadState) {
         case NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_BUILD:
         case NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD:
-            if (auto it = std::find(data.begin(), data.end(), embedding); it == data.end()) {
-                addType(embedding);
-            }
+            addType(embedding);
             [[fallthrough]];
         case NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING:
         case NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING: {

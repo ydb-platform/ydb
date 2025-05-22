@@ -57,7 +57,7 @@ public:
         }
 
     public:
-        const TVector<TSchemaColumn>& GetColumns() const override {
+        TVector<TSchemaColumn> GetColumns() const override {
             return Columns;
         }
 

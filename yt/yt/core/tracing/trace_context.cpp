@@ -45,7 +45,7 @@ using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constinit const auto Logger = TracingLogger;
+static constexpr auto& Logger = TracingLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -111,13 +111,20 @@ void SetCurrentTraceContext(TTraceContext* context)
     std::atomic_signal_fence(std::memory_order::seq_cst);
 }
 
-TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext)
+TTraceContextPtr SwapTraceContext(TTraceContextPtr newContext, TSourceLocation loc)
 {
-    auto& propagatingStorage = CurrentPropagatingStorage();
+    if (NConcurrency::NDetail::PerThreadFls() == NConcurrency::NDetail::CurrentFls() && newContext) {
+        YT_LOG_TRACE("Writing propagating storage in thread FLS (Location: %v)",
+            loc);
+    }
+
+    auto& propagatingStorage = GetCurrentPropagatingStorage();
 
     auto oldContext = newContext
         ? propagatingStorage.Exchange<TTraceContextPtr>(newContext).value_or(nullptr)
         : propagatingStorage.Remove<TTraceContextPtr>().value_or(nullptr);
+
+    propagatingStorage.RecordLocation(loc);
 
     auto now = GetApproximateCpuInstant();
     auto& traceContextTimingCheckpoint = TraceContextTimingCheckpoint();

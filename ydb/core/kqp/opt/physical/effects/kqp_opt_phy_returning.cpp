@@ -102,20 +102,24 @@ TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TKqpOptimiz
             }
             TCoAtomList additionalColumnsToRead = MakeColumnsList(columnsToReadSet, ctx, pos);
 
-            TVector<TString> extraColumnsToReadInLookup(columnsToReadSet.begin(), columnsToReadSet.end());
             TCoArgument existingRow = Build<TCoArgument>(ctx, node.Pos())
                 .Name("existing_row")
                 .Done();
-
             auto prepareUpdateStage = Build<TDqStage>(ctx, pos)
                 .Inputs()
-                    .Add(BuildStreamLookupOverPrecompute(tableDesc, inputDictAndKeys.KeysPrecompute, input.Cast(), returning.Table(), pos, ctx, extraColumnsToReadInLookup))
+                    .Add(inputDictAndKeys.KeysPrecompute)
                     .Add(inputDictAndKeys.DictPrecompute)
                     .Build()
                 .Program()
                     .Args({"keys_list", "dict"})
                     .Body<TCoFlatMap>()
-                        .Input("keys_list")
+                        .Input<TKqpLookupTable>()
+                            .Table(returning.Table())
+                            .LookupKeys<TCoIterator>()
+                                .List("keys_list")
+                                .Build()
+                            .Columns(MakeColumnsList(columnsToLookup, ctx, pos))
+                            .Build()
                         .Lambda()
                             .Args({existingRow})
                             .Body<TCoJust>()

@@ -227,10 +227,6 @@ bool TPathElement::IsView() const {
     return PathType == EPathType::EPathTypeView;
 }
 
-bool TPathElement::IsSysView() const {
-    return PathType == EPathType::EPathTypeSysView;
-}
-
 bool TPathElement::IsTemporary() const {
     return !!TempDirOwnerActorId;
 }

@@ -19,17 +19,17 @@ struct TSamplerConfig
     double GlobalSampleRate;
 
     //! Additionally, request is sampled with probability P(user).
-    THashMap<std::string, double> UserSampleRate;
+    THashMap<TString, double> UserSampleRate;
 
     //! Spans are sent to specified endpoint.
-    THashMap<std::string, TString> UserEndpoint;
+    THashMap<TString, TString> UserEndpoint;
 
     //! Additionally, sample first N requests for each user in the window.
     ui64 MinPerUserSamples;
     TDuration MinPerUserSamplesPeriod;
 
     //! Clear sampled from from incoming user request.
-    THashMap<std::string, bool> ClearSampledFlag;
+    THashMap<TString, bool> ClearSampledFlag;
 
     REGISTER_YSON_STRUCT(TSamplerConfig);
 
@@ -68,7 +68,7 @@ private:
         NProfiling::TCounter TracesSampledByProbability;
     };
 
-    NConcurrency::TSyncMap<std::string, TIntrusivePtr<TUserState>> Users_;
+    NConcurrency::TSyncMap<TString, TIntrusivePtr<TUserState>> Users_;
     NProfiling::TCounter TracesSampled_;
 };
 

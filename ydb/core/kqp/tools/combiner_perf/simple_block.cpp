@@ -70,16 +70,16 @@ TRunResult RunTestOverGraph(const TRunParams& params, const bool measureReferenc
         // Compute graph implementation
         auto stream = NUdf::TUnboxedValuePod(sampler->MakeStream(computeGraphPtr->GetContext()).Release());
         computeGraphPtr->GetEntryPoint(0, true)->SetValue(computeGraphPtr->GetContext(), std::move(stream));
-        const auto graphStart = GetThreadCPUTime();
+        const auto graphStart = TInstant::Now();
         resultList = computeGraphPtr->GetValue();
-        return GetThreadCPUTimeDelta(graphStart);
+        return TInstant::Now() - graphStart;
     };
 
     auto measureRefTime = [&](auto& computeGraphPtr) {
         // Reference implementation (sum via an std::unordered_map)
-        const auto cppStart = GetThreadCPUTime();
+        const auto cppStart = TInstant::Now();
         sampler->ComputeReferenceResult(computeGraphPtr->GetContext());
-        return GetThreadCPUTimeDelta(cppStart);
+        return TInstant::Now() - cppStart;
     };
 
     auto measureGeneratorTime = [&](auto& computeGraphPtr) {
@@ -87,16 +87,16 @@ TRunResult RunTestOverGraph(const TRunParams& params, const bool measureReferenc
         const auto devnullStreamPtr = sampler->MakeStream(computeGraphPtr->GetContext());
         auto& devnullStream = *devnullStreamPtr;
         size_t numBlocks = 0;
-        const auto timeStart = GetThreadCPUTime();
+        const auto timeStart = TInstant::Now();
         {
             NUdf::TUnboxedValue columns[3];
             while (devnullStream.WideFetch(columns, 3) == NUdf::EFetchStatus::Ok) {
                 ++numBlocks;
             }
         }
-        auto duration = GetThreadCPUTimeDelta(timeStart);
+        auto timeEnd = TInstant::Now();
         Cerr << "Blocks generated: " << numBlocks << Endl;
-        return duration;
+        return timeEnd - timeStart;
     };
 
     const auto graph = setup.BuildGraph(pgmReturn, {streamCallable});
@@ -153,7 +153,7 @@ void RunTestBlockCombineHashedSimple(const TRunParams& params, TTestResultCollec
 
     Cerr << "======== " << __func__ << ", keys: " << params.NumKeys << ", block size: " << params.BlockSize << ", llvm: " << LLVM << Endl;
 
-    if (params.NumAttempts <= 1 && !params.MeasureReferenceMemory && !params.AlwaysSubprocess) {
+    if (params.NumAttempts <= 1 && !params.MeasureReferenceMemory) {
         finalResult = RunTestOverGraph<LLVM, Spilling>(params, false);
     } else {
         for (int i = 1; i <= params.NumAttempts; ++i) {

@@ -3,10 +3,7 @@
 namespace benchmark {
 namespace internal {
 
-namespace {
-// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
-AbortHandlerT* handler = &std::abort;
-}  // namespace
+static AbortHandlerT* handler = &std::abort;
 
 BENCHMARK_EXPORT AbortHandlerT*& GetAbortHandler() { return handler; }
 

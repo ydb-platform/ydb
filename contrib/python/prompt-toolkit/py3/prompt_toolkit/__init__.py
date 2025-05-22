@@ -17,7 +17,6 @@ Probably, to get started, you might also want to have a look at
 from __future__ import annotations
 
 import re
-from importlib import metadata
 
 # note: this is a bit more lax than the actual pep 440 to allow for a/b/rc/dev without a number
 pep440 = re.compile(
@@ -29,7 +28,7 @@ from .formatted_text import ANSI, HTML
 from .shortcuts import PromptSession, print_formatted_text, prompt
 
 # Don't forget to update in `docs/conf.py`!
-__version__ = metadata.version("prompt_toolkit")
+__version__ = "3.0.50"
 
 assert pep440.match(__version__)
 

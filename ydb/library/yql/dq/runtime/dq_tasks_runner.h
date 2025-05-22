@@ -57,9 +57,8 @@ struct TDqTaskRunnerStats {
     TDuration WaitStartTime;
     TDuration WaitInputTime;
     TDuration WaitOutputTime;
-
-    TInstant CurrentWaitInputStartTime;
-    TInstant CurrentWaitOutputStartTime;
+    TDuration CurrentWaitInputTime;
+    TDuration CurrentWaitOutputTime;
 
     ui64 SpillingComputeWriteBytes;
     ui64 SpillingChannelWriteBytes;

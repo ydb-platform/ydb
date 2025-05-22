@@ -6,7 +6,7 @@
 
 namespace NKikimr::NOlap::NIndexes {
 
-TConclusion<std::vector<std::shared_ptr<IPortionDataChunk>>> TIndexByColumns::DoBuildIndexOptional(
+TConclusion<std::shared_ptr<IPortionDataChunk>> TIndexByColumns::DoBuildIndexOptional(
     const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount, const TIndexInfo& indexInfo) const {
     AFL_VERIFY(Serializer);
     AFL_VERIFY(data.size());
@@ -16,12 +16,13 @@ TConclusion<std::vector<std::shared_ptr<IPortionDataChunk>>> TIndexByColumns::Do
         if (it == data.end()) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "index_data_absent")("column_id", i)("index_name", GetIndexName())(
                 "index_id", GetIndexId());
-            return std::vector<std::shared_ptr<IPortionDataChunk>>();
+            return std::shared_ptr<IPortionDataChunk>();
         }
         columnReaders.emplace_back(it->second, indexInfo.GetColumnLoaderVerified(i));
     }
     TChunkedBatchReader reader(std::move(columnReaders));
-    return DoBuildIndexImpl(reader, recordsCount);
+    const TString indexData = DoBuildIndexImpl(reader, recordsCount);
+    return std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData);
 }
 
 bool TIndexByColumns::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& /*proto*/) {

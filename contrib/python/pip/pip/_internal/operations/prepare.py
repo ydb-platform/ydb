@@ -1,4 +1,5 @@
-"""Prepares a distribution for installation"""
+"""Prepares a distribution for installation
+"""
 
 # The following comment should be removed at some point in the future.
 # mypy: strict-optional=False
@@ -87,12 +88,7 @@ class File:
 
     def __post_init__(self) -> None:
         if self.content_type is None:
-            # Try to guess the file's MIME type. If the system MIME tables
-            # can't be loaded, give up.
-            try:
-                self.content_type = mimetypes.guess_type(self.path)[0]
-            except OSError:
-                pass
+            self.content_type = mimetypes.guess_type(self.path)[0]
 
 
 def get_http_url(
@@ -235,7 +231,6 @@ class RequirementPreparer:
         lazy_wheel: bool,
         verbosity: int,
         legacy_resolver: bool,
-        resume_retries: int,
     ) -> None:
         super().__init__()
 
@@ -243,8 +238,8 @@ class RequirementPreparer:
         self.build_dir = build_dir
         self.build_tracker = build_tracker
         self._session = session
-        self._download = Downloader(session, progress_bar, resume_retries)
-        self._batch_download = BatchDownloader(session, progress_bar, resume_retries)
+        self._download = Downloader(session, progress_bar)
+        self._batch_download = BatchDownloader(session, progress_bar)
         self.finder = finder
 
         # Where still-packed archives should be written to. If None, they are

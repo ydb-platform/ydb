@@ -583,12 +583,9 @@ namespace NKikimr {
         std::unique_ptr<NKikimrBlobStorage::TStorageConfig> Config;
         std::unique_ptr<NKikimrBlobStorage::TStorageConfig> ProposedConfig;
         bool SelfManagementEnabled;
-        bool IsPrimary; // if bridge mode is enabled
-        bool IsBeingPromoted; // if bridge mode is enabled
 
         TEvNodeWardenStorageConfig(const NKikimrBlobStorage::TStorageConfig& config,
-                const NKikimrBlobStorage::TStorageConfig *proposedConfig, bool selfManagementEnabled,
-                bool isPrimary, bool isBeingPromoted);
+                const NKikimrBlobStorage::TStorageConfig *proposedConfig, bool selfManagementEnabled);
         ~TEvNodeWardenStorageConfig();
     };
 

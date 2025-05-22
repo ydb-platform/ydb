@@ -9,8 +9,6 @@
 #include <aws/common/byte_buf.h>
 #include <aws/sdkutils/sdkutils.h>
 
-AWS_PUSH_SANE_WARNING_LEVEL
-
 struct aws_endpoints_ruleset;
 struct aws_partitions_config;
 struct aws_endpoints_parameter;
@@ -301,6 +299,5 @@ AWS_SDKUTILS_API int aws_endpoints_resolved_endpoint_get_error(
     struct aws_byte_cursor *out_error);
 
 AWS_EXTERN_C_END
-AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_SDKUTILS_ENDPOINTS_RULESET_H */

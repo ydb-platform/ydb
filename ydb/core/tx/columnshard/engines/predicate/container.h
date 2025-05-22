@@ -5,7 +5,6 @@
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/formats/arrow/reader/position.h>
-#include <ydb/core/formats/arrow/rows/view.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/result.h>
@@ -24,9 +23,9 @@ private:
     std::shared_ptr<NOlap::TPredicate> Object;
     NArrow::ECompareType CompareType;
     mutable std::optional<std::vector<TString>> ColumnNames;
-    std::shared_ptr<NArrow::TSimpleRow> ReplaceKey;
+    std::shared_ptr<NArrow::TReplaceKey> ReplaceKey;
 
-    TPredicateContainer(std::shared_ptr<NOlap::TPredicate> object, const std::shared_ptr<NArrow::TSimpleRow>& replaceKey)
+    TPredicateContainer(std::shared_ptr<NOlap::TPredicate> object, const std::shared_ptr<NArrow::TReplaceKey>& replaceKey)
         : Object(object)
         , CompareType(Object->GetCompareType())
         , ReplaceKey(replaceKey) {
@@ -38,15 +37,19 @@ private:
 
     static std::partial_ordering ComparePredicatesSamePrefix(const NOlap::TPredicate& l, const NOlap::TPredicate& r);
 
-    static std::shared_ptr<NArrow::TSimpleRow> ExtractKey(const NOlap::TPredicate& predicate, const std::shared_ptr<arrow::Schema>& key) {
+    static std::shared_ptr<NArrow::TReplaceKey> ExtractKey(const NOlap::TPredicate& predicate, const std::shared_ptr<arrow::Schema>& key) {
         AFL_VERIFY(predicate.Batch);
         const auto& batchFields = predicate.Batch->schema()->fields();
         const auto& keyFields = key->fields();
-        AFL_VERIFY(batchFields.size() <= keyFields.size());
-        for (size_t i = 0; i < batchFields.size(); ++i) {
+        size_t minSize = std::min(batchFields.size(), keyFields.size());
+        for (size_t i = 0; i < minSize; ++i) {
             Y_DEBUG_ABORT_UNLESS(batchFields[i]->type()->Equals(*keyFields[i]->type()));
         }
-        return std::make_shared<NArrow::TSimpleRow>(predicate.Batch, 0);
+        if (batchFields.size() <= keyFields.size()) {
+            return std::make_shared<NArrow::TReplaceKey>(NArrow::TReplaceKey::FromBatch(predicate.Batch, predicate.Batch->schema(), 0));
+        } else {
+            return std::make_shared<NArrow::TReplaceKey>(NArrow::TReplaceKey::FromBatch(predicate.Batch, key, 0));
+        }
     }
 
 public:
@@ -71,7 +74,7 @@ public:
         return CompareType;
     }
 
-    const std::shared_ptr<NArrow::TSimpleRow>& GetReplaceKey() const {
+    const std::shared_ptr<NArrow::TReplaceKey>& GetReplaceKey() const {
         return ReplaceKey;
     }
 

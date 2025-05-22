@@ -28,13 +28,6 @@ void TestHeavy(const ui32 v, ui32 numWorkers) {
 
     runtime.SetLogPriority(NKikimrServices::TABLET_AGGREGATOR, NActors::NLog::PRI_DEBUG);
 
-    runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev){
-        if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo && ev->Sender != edge) {
-            return TTestActorRuntime::EEventAction::DROP;
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    });
-
     IActor* aggregator = CreateClusterLabeledCountersAggregatorActor(edge, TTabletTypes::PersQueue, v, TString(), numWorkers);
     aggregatorId = runtime.Register(aggregator);
 
@@ -721,13 +714,6 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
         runtime.Initialize(TAppPrepare().Unwrap());
         TActorId edge = runtime.AllocateEdgeActor();
 
-        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev){
-            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo && ev->Sender != edge) {
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        });
-
         IActor* aggregator = CreateClusterLabeledCountersAggregatorActor(edge, TTabletTypes::PersQueue, 2, TString(), 3);
         aggregatorId = runtime.Register(aggregator);
 
@@ -828,13 +814,6 @@ Y_UNIT_TEST_SUITE(TTabletLabeledCountersAggregator) {
         runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
 
         TActorId edge = runtime.AllocateEdgeActor();
-
-        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev){
-            if (ev->GetTypeRewrite() == TEvInterconnect::EvNodesInfo && ev->Sender != edge) {
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        });
 
         IActor* aggregator = CreateClusterLabeledCountersAggregatorActor(edge, TTabletTypes::PersQueue, 3, "rt3.*--*,cons*/*/rt.*--*", 3);
         aggregatorId = runtime.Register(aggregator);

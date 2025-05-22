@@ -6,8 +6,6 @@
  */
 #include <aws/event-stream/event_stream.h>
 
-AWS_PUSH_SANE_WARNING_LEVEL
-
 /**
  * :message-type header name
  */
@@ -60,6 +58,5 @@ struct aws_event_stream_rpc_message_args {
      * and the ":message-flags" header should not be included in headers */
     uint32_t message_flags;
 };
-AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_EVENT_STREAM_RPC_SERVER_H */

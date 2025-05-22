@@ -121,13 +121,15 @@ inline bool Regex::Init(const std::string& spec, std::string* error) {
   if (ec != 0) {
     if (error) {
       size_t needed = regerror(ec, &re_, nullptr, 0);
-      std::vector<char> errbuf(needed);
-      regerror(ec, &re_, errbuf.data(), needed);
+      char* errbuf = new char[needed];
+      regerror(ec, &re_, errbuf, needed);
 
       // regerror returns the number of bytes necessary to null terminate
       // the string, so we move that when assigning to error.
       BM_CHECK_NE(needed, 0);
-      error->assign(errbuf.data(), needed - 1);
+      error->assign(errbuf, needed - 1);
+
+      delete[] errbuf;
     }
 
     return false;

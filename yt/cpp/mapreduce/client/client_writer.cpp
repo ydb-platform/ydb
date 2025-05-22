@@ -36,7 +36,7 @@ TClientWriter::TClientWriter(
     } else {
         bool useV2Writer = context.Config->TableWriterVersion == ETableWriterVersion::V2;
         if (useV2Writer) {
-            auto serializedWriterOptions = FormIORequestParameters(path, options);
+            auto serializedWriterOptions = FormIORequestParameters(options);
 
             RawWriter_ = MakeIntrusive<NPrivate::TRetryfulWriterV2>(
                     rawClient,

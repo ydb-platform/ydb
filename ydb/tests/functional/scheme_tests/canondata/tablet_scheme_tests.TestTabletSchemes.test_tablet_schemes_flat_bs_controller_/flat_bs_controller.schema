@@ -258,9 +258,24 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 17,
+                "ColumnName": "DecommitStatus",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 18,
+                "ColumnName": "Mood",
+                "ColumnType": "Byte"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "NodeID",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 19,
+                "ColumnName": "ShredComplete",
+                "ColumnType": "Bool"
             },
             {
                 "ColumnId": 2,
@@ -326,33 +341,16 @@
                 "ColumnId": 16,
                 "ColumnName": "LastSeenPath",
                 "ColumnType": "String"
-            },
-            {
-                "ColumnId": 17,
-                "ColumnName": "DecommitStatus",
-                "ColumnType": "Uint32"
-            },
-            {
-                "ColumnId": 18,
-                "ColumnName": "Mood",
-                "ColumnType": "Byte"
-            },
-            {
-                "ColumnId": 19,
-                "ColumnName": "ShredComplete",
-                "ColumnType": "Bool"
-            },
-            {
-                "ColumnId": 20,
-                "ColumnName": "MaintenanceStatus",
-                "ColumnType": "Byte"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    17,
+                    18,
                     1,
+                    19,
                     2,
                     3,
                     4,
@@ -365,11 +363,7 @@
                     13,
                     14,
                     15,
-                    16,
-                    17,
-                    18,
-                    19,
-                    20
+                    16
                 ],
                 "RoomID": 0,
                 "Codec": 0,

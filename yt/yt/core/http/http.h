@@ -151,7 +151,7 @@ DEFINE_ENUM(EStatusCode,
 //! define our own.
 
 TStringBuf ToHttpString(EMethod method);
-TString ToHttpString(EStatusCode code);
+TStringBuf ToHttpString(EStatusCode code);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -178,20 +178,20 @@ class THeaders
     : public virtual TRefCounted
 {
 public:
-    using THeaderNames = THashSet<std::string, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer>;
+    using THeaderNames = THashSet<TString, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer>;
 
-    void Add(std::string header, std::string value);
-    void Set(std::string header, std::string value);
+    void Add(const TString& header, TString value);
+    void Set(const TString& header, TString value);
     void Remove(TStringBuf header);
 
-    const std::string* Find(TStringBuf header) const;
+    const TString* Find(TStringBuf header) const;
 
     void RemoveOrThrow(TStringBuf header);
 
     //! Returns first header value, if any. Throws otherwise.
-    std::string GetOrThrow(TStringBuf header) const;
+    TString GetOrThrow(TStringBuf header) const;
 
-    const TCompactVector<std::string, 1>& GetAll(TStringBuf header) const;
+    const TCompactVector<TString, 1>& GetAll(TStringBuf header) const;
 
     void WriteTo(IOutputStream* out, const THeaderNames* filtered = nullptr) const;
 
@@ -199,23 +199,23 @@ public:
 
     void MergeFrom(const THeadersPtr& headers);
 
-    std::vector<std::pair<std::string, std::string>> Dump(const THeaderNames* filtered = nullptr) const;
+    std::vector<std::pair<TString, TString>> Dump(const THeaderNames* filtered = nullptr) const;
 
 private:
     struct TEntry
     {
-        std::string OriginalHeaderName;
-        TCompactVector<std::string, 1> Values;
+        TString OriginalHeaderName;
+        TCompactVector<TString, 1> Values;
     };
 
-    THashMap<std::string, TEntry, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer> NameToEntry_;
+    THashMap<TString, TEntry, TCaseInsensitiveStringHasher, TCaseInsensitiveStringEqualityComparer> NameToEntry_;
 };
 
 DEFINE_REFCOUNTED_TYPE(THeaders)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::string EscapeHeaderValue(TStringBuf value);
+TString EscapeHeaderValue(TStringBuf value);
 void ValidateHeaderValue(TStringBuf header, TStringBuf value);
 
 ////////////////////////////////////////////////////////////////////////////////

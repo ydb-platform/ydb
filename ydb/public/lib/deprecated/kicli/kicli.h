@@ -589,8 +589,7 @@ public:
         View,
         ResourcePool,
         BackupCollection,
-        Transfer,
-        SysView,
+        Transfer
     };
 
     TSchemaObject(TSchemaObject&&) = default;

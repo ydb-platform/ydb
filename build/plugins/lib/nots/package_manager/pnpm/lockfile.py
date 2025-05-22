@@ -269,15 +269,12 @@ class PnpmLockfile(BaseLockfile):
         return {".": importer} if importer else {}
 
     def validate_importers(self):
-        validate_keys = ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies")
         importers = self.get_importers()
         pkg = importers.get(".")
         peers = set(["."])
         problem_importers = []
 
-        for deps_key, deps in pkg.items():
-            if deps_key not in validate_keys:
-                continue
+        for _, deps in pkg.items():
             for _, dep in deps.items():
                 specifier = dep.get("specifier")
                 if specifier and specifier.startswith(WS_PREFIX):

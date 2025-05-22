@@ -48,7 +48,7 @@ using namespace NProfiling;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constinit const auto Logger = ConcurrencyLogger;
+static constexpr auto& Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -490,9 +490,9 @@ private:
 Y_FORCE_INLINE TClosure PickCallback(TFiberSchedulerThread* fiberThread)
 {
     TCallback<void()> callback;
-
     // We wrap fiberThread->OnExecute() into a propagating storage guard to ensure
     // that the propagating storage created there won't spill into the fiber callbacks.
+
     TNullPropagatingStorageGuard guard;
     YT_VERIFY(guard.GetOldStorage().IsEmpty());
     callback = fiberThread->OnExecute();
@@ -513,10 +513,12 @@ void FiberTrampoline()
     // Break loop to terminate fiber
     while (auto* fiberThread = TryGetFiberThread()) {
         YT_VERIFY(!TryGetResumerFiber());
-        YT_VERIFY(!CurrentFls());
+        YT_VERIFY(CurrentFls() == nullptr);
+
         YT_VERIFY(GetCurrentPropagatingStorage().IsEmpty());
 
         auto callback = PickCallback(fiberThread);
+
         if (!callback) {
             break;
         }

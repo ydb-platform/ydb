@@ -727,8 +727,8 @@ void TExecutor::DropSingleCache(const TLogoBlobID &label)
 
     auto toActivate = PrivatePageCache->ForgetPageCollection(pageCollection);
     ActivateWaitingTransactions(toActivate);
-    Y_ENSURE(!PrivatePageCache->Info(label));
-    Send(MakeSharedPageCacheId(), new NSharedCache::TEvDetach(label));
+    if (!PrivatePageCache->Info(label))
+        Send(MakeSharedPageCacheId(), new NSharedCache::TEvInvalidate(label));
 
     Counters->Simple()[TExecutorCounters::CACHE_PINNED_SET] = PrivatePageCache->GetStats().PinnedSetSize;
     Counters->Simple()[TExecutorCounters::CACHE_PINNED_LOAD] = PrivatePageCache->GetStats().PinnedLoadSize;
@@ -769,9 +769,9 @@ void TExecutor::StickInMemPages(NSharedCache::TEvResult *msg) {
             auto partStore = partView.As<NTable::TPartStore>();
             for (auto &pageCollection : partStore->PageCollections) {
                 // Note: page collection search optimization seems useless
-                if (pageCollection->PageCollection == msg->PageCollection) {
+                if (pageCollection->PageCollection == msg->Origin) {
                     ui64 stickySizeBefore = pageCollection->GetStickySize();
-                    for (auto& loaded : msg->Pages) {
+                    for (auto& loaded : msg->Loaded) {
                         pageCollection->AddSticky(loaded.PageId, loaded.Page);
                     }
                     StickyPagesMemory += pageCollection->GetStickySize() - stickySizeBefore;
@@ -2974,7 +2974,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
     case EPageCollectionRequest::Cache:
     case EPageCollectionRequest::InMemPages:
         {
-            TPrivatePageCache::TInfo *collectionInfo = PrivatePageCache->Info(msg->PageCollection->Label());
+            TPrivatePageCache::TInfo *collectionInfo = PrivatePageCache->Info(msg->Origin->Label());
             if (!collectionInfo) // collection could be outdated
                 return;
 
@@ -2993,7 +2993,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
             if (requestType == EPageCollectionRequest::InMemPages) {
                 StickInMemPages(msg);
             }
-            for (auto& loaded : msg->Pages) {
+            for (auto& loaded : msg->Loaded) {
                 TPrivatePageCache::TPage::TWaitQueuePtr transactionsToActivate = PrivatePageCache->ProvideBlock(std::move(loaded), collectionInfo);
                 ActivateWaitingTransactions(transactionsToActivate);
             }
@@ -3002,7 +3002,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
 
     case EPageCollectionRequest::PendingInit:
         {
-            const auto *pageCollection = msg->PageCollection.Get();
+            const auto *pageCollection = msg->Origin.Get();
             TPendingPartSwitch *foundSwitch = nullptr;
             TPendingPartSwitch::TNewBundle *foundBundle = nullptr;
             TPendingPartSwitch::TLoaderStage *foundStage = nullptr;
@@ -3039,7 +3039,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
                 return Broken();
             }
 
-            foundStage->Loader.Save(msg->Cookie, msg->Pages);
+            foundStage->Loader.Save(msg->Cookie, msg->Loaded);
             foundSwitch->PendingLoads--;
 
             if (PrepareExternalPart(*foundSwitch, *foundBundle)) {
@@ -3308,6 +3308,9 @@ THolder<TScanSnapshot> TExecutor::PrepareScanSnapshot(ui32 table, const NTable::
         subset = Database->ScanSnapshot(table, snapshot);
     }
 
+    for (auto &partView : subset->Flatten)
+        PrivatePageCache->LockPageCollection(partView->Label);
+
     GcLogic->HoldBarrier(barrier->Step);
     CompactionLogic->UpdateLogUsage(LogicRedo->GrabLogUsage());
 
@@ -3474,9 +3477,11 @@ void TExecutor::UtilizeSubset(const NTable::TSubset &subset,
 
 void TExecutor::ReleaseScanLocks(TIntrusivePtr<TBarrier> barrier, const NTable::TSubset &subset)
 {
-    Y_UNUSED(subset);
-
     CheckCollectionBarrier(barrier);
+
+    for (auto &partView : subset.Flatten)
+        if (PrivatePageCache->UnlockPageCollection(partView->Label))
+            Send(MakeSharedPageCacheId(), new NSharedCache::TEvInvalidate(partView->Label));
 }
 
 void TExecutor::Handle(NOps::TEvScanStat::TPtr &ev, const TActorContext &ctx) {

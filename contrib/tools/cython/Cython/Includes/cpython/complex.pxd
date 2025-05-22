@@ -14,14 +14,9 @@ cdef extern from "Python.h":
 
     ctypedef class __builtin__.complex [object PyComplexObject]:
         cdef Py_complex cval
-
-        @property
-        cdef inline double real(self) noexcept:
-            return self.cval.real
-
-        @property
-        cdef inline double imag(self) noexcept:
-            return self.cval.imag
+        # not making these available to keep them read-only:
+        #cdef double imag "cval.imag"
+        #cdef double real "cval.real"
 
     # PyTypeObject PyComplex_Type
     # This instance of PyTypeObject represents the Python complex

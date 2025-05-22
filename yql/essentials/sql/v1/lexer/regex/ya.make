@@ -2,7 +2,6 @@ LIBRARY()
 
 PEERDIR(
     contrib/libs/re2
-    
     yql/essentials/public/issue
     yql/essentials/parser/lexer_common
     yql/essentials/sql/settings
@@ -29,7 +28,6 @@ CFLAGS(
 )
 
 SRCS(
-    generic.cpp
     lexer.cpp
     regex.cpp
 )

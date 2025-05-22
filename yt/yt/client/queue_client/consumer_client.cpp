@@ -39,7 +39,7 @@ using namespace NYTree;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constinit const auto Logger = QueueClientLogger;
+static constexpr auto& Logger = QueueClientLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -389,7 +389,7 @@ private:
     bool DecrementOffset_ = false;
 
     std::vector<TPartitionInfo> DoCollectPartitions(
-        const std::string& selectQuery,
+        const TString& selectQuery,
         bool withLastConsumeTime) const
     {
         std::vector<TPartitionInfo> result;

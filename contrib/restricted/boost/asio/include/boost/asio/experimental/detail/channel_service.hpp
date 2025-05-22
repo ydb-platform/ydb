@@ -18,12 +18,10 @@
 #include <boost/asio/detail/config.hpp>
 #include <boost/asio/associated_cancellation_slot.hpp>
 #include <boost/asio/cancellation_type.hpp>
-#include <boost/asio/detail/completion_message.hpp>
-#include <boost/asio/detail/completion_payload.hpp>
-#include <boost/asio/detail/completion_payload_handler.hpp>
 #include <boost/asio/detail/mutex.hpp>
 #include <boost/asio/detail/op_queue.hpp>
 #include <boost/asio/execution_context.hpp>
+#include <boost/asio/experimental/detail/channel_message.hpp>
 #include <boost/asio/experimental/detail/channel_receive_op.hpp>
 #include <boost/asio/experimental/detail/channel_send_op.hpp>
 #include <boost/asio/experimental/detail/has_signature.hpp>
@@ -234,7 +232,7 @@ private:
     void operator()(Args&&... args)
     {
       op_->post(
-          boost::asio::detail::completion_message<Signature>(0,
+          channel_message<Signature>(0,
             static_cast<Args&&>(args)...));
     }
 
@@ -310,8 +308,8 @@ struct channel_service<Mutex>::implementation_type : base_implementation_type
           typename traits_type::receive_closed_signature,
           Signatures...
         >::value,
-        boost::asio::detail::completion_payload<Signatures...>,
-        boost::asio::detail::completion_payload<
+        channel_payload<Signatures...>,
+        channel_payload<
           Signatures...,
           typename traits_type::receive_closed_signature
         >
@@ -322,11 +320,11 @@ struct channel_service<Mutex>::implementation_type : base_implementation_type
           Signatures...,
           typename traits_type::receive_cancelled_signature
         >::value,
-        boost::asio::detail::completion_payload<
+        channel_payload<
           Signatures...,
           typename traits_type::receive_cancelled_signature
         >,
-        boost::asio::detail::completion_payload<
+        channel_payload<
           Signatures...,
           typename traits_type::receive_cancelled_signature,
           typename traits_type::receive_closed_signature
@@ -407,8 +405,8 @@ struct channel_service<Mutex>::implementation_type<Traits, R()>
           typename traits_type::receive_closed_signature,
           R()
         >::value,
-        boost::asio::detail::completion_payload<R()>,
-        boost::asio::detail::completion_payload<
+        channel_payload<R()>,
+        channel_payload<
           R(),
           typename traits_type::receive_closed_signature
         >
@@ -419,11 +417,11 @@ struct channel_service<Mutex>::implementation_type<Traits, R()>
           R(),
           typename traits_type::receive_cancelled_signature
         >::value,
-        boost::asio::detail::completion_payload<
+        channel_payload<
           R(),
           typename traits_type::receive_cancelled_signature
         >,
-        boost::asio::detail::completion_payload<
+        channel_payload<
           R(),
           typename traits_type::receive_cancelled_signature,
           typename traits_type::receive_closed_signature
@@ -468,7 +466,7 @@ struct channel_service<Mutex>::implementation_type<Traits, R()>
   // Get the element at the front of the buffer.
   payload_type buffer_front()
   {
-    return payload_type(boost::asio::detail::completion_message<R()>(0));
+    return payload_type(channel_message<R()>(0));
   }
 
   // Pop a value from the front of the buffer.
@@ -510,8 +508,8 @@ struct channel_service<Mutex>::implementation_type<
           typename traits_type::receive_closed_signature,
           R(boost::system::error_code)
         >::value,
-        boost::asio::detail::completion_payload<R(boost::system::error_code)>,
-        boost::asio::detail::completion_payload<
+        channel_payload<R(boost::system::error_code)>,
+        channel_payload<
           R(boost::system::error_code),
           typename traits_type::receive_closed_signature
         >
@@ -522,11 +520,11 @@ struct channel_service<Mutex>::implementation_type<
           R(boost::system::error_code),
           typename traits_type::receive_cancelled_signature
         >::value,
-        boost::asio::detail::completion_payload<
+        channel_payload<
           R(boost::system::error_code),
           typename traits_type::receive_cancelled_signature
         >,
-        boost::asio::detail::completion_payload<
+        channel_payload<
           R(boost::system::error_code),
           typename traits_type::receive_cancelled_signature,
           typename traits_type::receive_closed_signature

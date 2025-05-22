@@ -33,9 +33,9 @@ NObjectClient::TObjectId GetTabletIdFromChunkSpec(const NProto::TChunkSpec& chun
     return FromProto<NTabletClient::TTabletId>(chunkSpec.tablet_id());
 }
 
-TChunkReplicaList GetReplicasFromChunkSpec(const NProto::TChunkSpec& chunkSpec)
+TChunkReplicaWithMediumList GetReplicasFromChunkSpec(const NProto::TChunkSpec& chunkSpec)
 {
-    return FromProto<TChunkReplicaList>(chunkSpec.replicas());
+    return FromProto<TChunkReplicaWithMediumList>(chunkSpec.replicas());
 }
 
 void SetTabletId(NProto::TChunkSpec* chunkSpec, NTabletClient::TTabletId tabletId)

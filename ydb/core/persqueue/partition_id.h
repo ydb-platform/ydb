@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/persqueue/write_id.h>
-#include <ydb/core/kafka_proxy/kafka_producer_instance_id.h>
 
 #include <util/generic/maybe.h>
 #include <util/stream/output.h>
@@ -27,15 +26,6 @@ public:
     TPartitionId(ui32 originalPartitionId, const TMaybe<TWriteId>& writeId, ui32 internalPartitionId) :
         OriginalPartitionId(originalPartitionId),
         WriteId(writeId),
-        KafkaProducerId({}),
-        InternalPartitionId(internalPartitionId)
-    {
-    }
-
-    TPartitionId(ui32 originalPartitionId, const TMaybe<NKafka::TProducerInstanceId>& kafkaProducerId, ui32 internalPartitionId) :
-        OriginalPartitionId(originalPartitionId),
-        WriteId({}),
-        KafkaProducerId(kafkaProducerId),
         InternalPartitionId(internalPartitionId)
     {
     }
@@ -85,7 +75,6 @@ public:
 
     ui32 OriginalPartitionId = 0;
     TMaybe<TWriteId> WriteId;
-    TMaybe<NKafka::TProducerInstanceId> KafkaProducerId;
     ui32 InternalPartitionId = 0;
 };
 

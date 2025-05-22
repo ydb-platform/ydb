@@ -90,8 +90,6 @@ namespace NKikimr::NTable::NPage {
             TRowId RowCount_;
             ui64 DataSize_;
 
-            auto operator<=>(const TShortChild&) const = default;
-
             inline TPageId GetPageId() const noexcept {
                 return PageId_;
             }
@@ -104,9 +102,7 @@ namespace NKikimr::NTable::NPage {
                 return DataSize_;
             }
 
-            TString ToString() const {
-                return TStringBuilder() << "PageId: " << GetPageId() << " RowCount: " << GetRowCount() << " DataSize: " << GetDataSize();
-            }
+            auto operator<=>(const TShortChild&) const = default;
         } Y_PACKED;
 
         static_assert(sizeof(TShortChild) == 20, "Invalid TBtreeIndexNode TShortChild size");

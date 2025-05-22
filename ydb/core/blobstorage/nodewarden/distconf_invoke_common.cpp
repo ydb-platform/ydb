@@ -115,8 +115,7 @@ namespace NKikimr::NStorage {
 
             case TQuery::kFetchStorageConfig: {
                 const auto& request = record.GetFetchStorageConfig();
-                return FetchStorageConfig(request.GetMainConfig(), request.GetStorageConfig(),
-                    request.GetAddExplicitConfigs(), request.GetAddSectionsForMigrationToV1());
+                return FetchStorageConfig(request.GetManual(), request.GetMainConfig(), request.GetStorageConfig());
             }
 
             case TQuery::kReplaceStorageConfig:
@@ -124,9 +123,6 @@ namespace NKikimr::NStorage {
 
             case TQuery::kBootstrapCluster:
                 return BootstrapCluster(record.GetBootstrapCluster().GetSelfAssemblyUUID());
-
-            case TQuery::kSwitchBridgeClusterState:
-                return SwitchBridgeClusterState(record.GetSwitchBridgeClusterState().GetNewClusterState());
 
             case TQuery::REQUEST_NOT_SET:
                 return FinishWithError(TResult::ERROR, "Request field not set");

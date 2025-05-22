@@ -47,8 +47,7 @@ protected:
         AFL_VERIFY(FalsePositiveProbability < 1 && FalsePositiveProbability >= 0.01);
         return TBase::CheckSameColumnsForModification(newMeta);
     }
-    virtual std::vector<std::shared_ptr<IPortionDataChunk>> DoBuildIndexImpl(
-        TChunkedBatchReader& reader, const ui32 recordsCount) const override;
+    virtual TString DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const override;
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override;
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const override;

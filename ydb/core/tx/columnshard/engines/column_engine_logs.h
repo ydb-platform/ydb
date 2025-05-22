@@ -232,7 +232,7 @@ public:
         auto granule = GetGranulePtrVerified(portion->GetPathId());
         granule->ModifyPortionOnComplete(portion, modifier);
         Counters->AddPortion(*portion);
-        Counters->RemovePortion(*exPortion);
+        Counters->RemovePortion(exPortion);
     }
 
     void AppendPortion(const TPortionDataAccessor& portionInfo);

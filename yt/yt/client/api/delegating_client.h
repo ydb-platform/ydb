@@ -370,7 +370,7 @@ public:
         (path, options))
 
     DELEGATE_METHOD(TFuture<std::vector<NTabletClient::TTabletActionId>>, BalanceTabletCells, (
-        const std::string& tabletCellBundle,
+        const TString& tabletCellBundle,
         const std::vector<NYPath::TYPath>& movableTables,
         const TBalanceTabletCellsOptions& options),
         (tabletCellBundle, movableTables, options))
@@ -452,8 +452,8 @@ public:
         (user, permission, acl, options))
 
     DELEGATE_METHOD(TFuture<void>, TransferAccountResources, (
-        const std::string& srcAccount,
-        const std::string& dstAccount,
+        const TString& srcAccount,
+        const TString& dstAccount,
         NYTree::INodePtr resourceDelta,
         const TTransferAccountResourcesOptions& options),
         (srcAccount, dstAccount, resourceDelta, options))
@@ -768,10 +768,6 @@ public:
         const TListUserTokensOptions& options),
         (user, passwordSha256, options))
 
-    DELEGATE_METHOD(TFuture<TGetCurrentUserResultPtr>, GetCurrentUser, (
-        const TGetCurrentUserOptions& options),
-        (options))
-
     // Query tracker
     DELEGATE_METHOD(TFuture<NQueryTrackerClient::TQueryId>, StartQuery, (
         NQueryTrackerClient::EQueryEngine engine,
@@ -816,12 +812,12 @@ public:
 
     // Bundle Controller
     DELEGATE_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (
-        const std::string& bundleName,
+        const TString& bundleName,
         const NBundleControllerClient::TGetBundleConfigOptions& options),
         (bundleName, options))
 
     DELEGATE_METHOD(TFuture<void>, SetBundleConfig, (
-        const std::string& bundleName,
+        const TString& bundleName,
         const NBundleControllerClient::TBundleTargetConfigPtr& bundleConfig,
         const NBundleControllerClient::TSetBundleConfigOptions& options),
         (bundleName, bundleConfig, options))
@@ -899,7 +895,7 @@ public:
         (cookie, options))
 
     // Shuffle Service
-    DELEGATE_METHOD(TFuture<TSignedShuffleHandlePtr>, StartShuffle, (
+    DELEGATE_METHOD(TFuture<TShuffleHandlePtr>, StartShuffle, (
         const std::string& account,
         int partitionCount,
         NObjectClient::TTransactionId transactionId,
@@ -907,18 +903,16 @@ public:
         (account, partitionCount, transactionId, options))
 
     DELEGATE_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (
-        const TSignedShuffleHandlePtr& shuffleHandle,
+        const TShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
-        std::optional<std::pair<int, int>> writerIndexRange,
-        const TShuffleReaderOptions& options),
-        (shuffleHandle, partitionIndex, writerIndexRange, options))
+        const NTableClient::TTableReaderConfigPtr& config),
+        (shuffleHandle, partitionIndex, config))
 
     DELEGATE_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (
-        const TSignedShuffleHandlePtr& shuffleHandle,
+        const TShuffleHandlePtr& shuffleHandle,
         const std::string& partitionColumn,
-        std::optional<int> writerIndex,
-        const TShuffleWriterOptions& options),
-        (shuffleHandle, partitionColumn, writerIndex, options))
+        const NTableClient::TTableWriterConfigPtr& config),
+        (shuffleHandle, partitionColumn, config))
 
     #undef DELEGATE_METHOD
 

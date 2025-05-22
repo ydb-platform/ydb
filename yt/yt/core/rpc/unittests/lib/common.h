@@ -50,7 +50,6 @@
 #include <yt/yt/core/rpc/http/channel.h>
 
 #include <yt/yt/core/misc/error.h>
-#include <yt/yt/core/misc/memory_usage_tracker.h>
 #include <yt/yt/core/misc/shutdown.h>
 
 #include <yt/yt/core/tracing/public.h>
@@ -61,6 +60,8 @@
 #include <yt/yt/core/ytree/helpers.h>
 
 #include <yt/yt/build/ya_version.h>
+
+#include <library/cpp/yt/memory/memory_usage_tracker.h>
 
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/common/network.h>
@@ -103,7 +104,7 @@ public:
     }
 
     IChannelPtr CreateChannel(
-        const std::optional<std::string>& address = {},
+        const std::optional<TString>& address = {},
         THashMap<std::string, NYTree::INodePtr> grpcArguments = {})
     {
         return TImpl::CreateChannel(
@@ -243,7 +244,7 @@ public:
  * openssl x509 -in server.csr -req -days 10000 -out server_cert.pem -CA root_cert.pem -CAkey root_key.pem -CAcreateserial
  * openssl x509 -in client.csr -req -days 10000 -out client_cert.pem -CA root_cert.pem -CAkey root_key.pem -CAserial root_cert.srl
  */
-inline std::string RootCert(
+inline TString RootCert(
     "-----BEGIN CERTIFICATE-----\n"
     "MIID9DCCAtygAwIBAgIJAJLU9fgmNTujMA0GCSqGSIb3DQEBCwUAMFkxCzAJBgNV\n"
     "BAYTAlJVMRMwEQYDVQQIEwpTb21lLVN0YXRlMSEwHwYDVQQKExhJbnRlcm5ldCBX\n"
@@ -269,7 +270,7 @@ inline std::string RootCert(
     "I2TYYgHjI3I=\n"
     "-----END CERTIFICATE-----\n");
 
-inline std::string ClientKey(
+inline TString ClientKey(
     "-----BEGIN RSA PRIVATE KEY-----\n"
     "MIIEpAIBAAKCAQEArZpqucOdMlwZyyTWq+Sz3EGXpAX/4nMpH7s/05d9O4tm0MsK\n"
     "QUhUXRzt3VzOfMOb4cXAVwovHxiQ7NZIFBdmeyCHlT0HVkaqC76Tgi53scUMVKtE\n"
@@ -298,7 +299,7 @@ inline std::string ClientKey(
     "OY4A1p2EvY8/L6PmPXAURfsE8RTL0y4ww/7mPJTQXsteTawAPDdVKQ==\n"
     "-----END RSA PRIVATE KEY-----\n");
 
-inline std::string ClientCert(
+inline TString ClientCert(
     "-----BEGIN CERTIFICATE-----\n"
     "MIIDLjCCAhYCCQCZd28+0jJVLTANBgkqhkiG9w0BAQUFADBZMQswCQYDVQQGEwJS\n"
     "VTETMBEGA1UECBMKU29tZS1TdGF0ZTEhMB8GA1UEChMYSW50ZXJuZXQgV2lkZ2l0\n"
@@ -320,7 +321,7 @@ inline std::string ClientCert(
     "3SA=\n"
     "-----END CERTIFICATE-----\n");
 
-inline std::string ServerKey(
+inline TString ServerKey(
     "-----BEGIN RSA PRIVATE KEY-----\n"
     "MIIEowIBAAKCAQEAzbAyEJFSmPNJ3pLNNSWQVF53Ltof1Wc4JIfvNazl41LjNyuO\n"
     "SQV7+6GVFMIybBBoeWQ58hVJ/d8KxFBf6XIV6uGH9WtN38hWrxR6UEGkHxpUSfvg\n"
@@ -349,7 +350,7 @@ inline std::string ServerKey(
     "CyxY8hFTw3FSk+UYdAAm5qYabGY1DiuvyD1yVAX9aWjAHdbP3H5O\n"
     "-----END RSA PRIVATE KEY-----\n");
 
-inline std::string ServerCert(
+inline TString ServerCert(
     "-----BEGIN CERTIFICATE-----\n"
     "MIIDLjCCAhYCCQCZd28+0jJVLDANBgkqhkiG9w0BAQUFADBZMQswCQYDVQQGEwJS\n"
     "VTETMBEGA1UECBMKU29tZS1TdGF0ZTEhMB8GA1UEChMYSW50ZXJuZXQgV2lkZ2l0\n"

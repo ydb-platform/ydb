@@ -11,12 +11,11 @@ namespace NYT::NSignature {
 struct ISignatureGenerator
     : public TRefCounted
 {
-    [[nodiscard]] TSignaturePtr Sign(std::string payload) const;
-
-private:
     //! Fills out the Signature_ and Header_ fields in a given TSignature
     //! based on its payload.
-    virtual void DoSign(const TSignaturePtr& signature) const = 0;
+    virtual void Resign(const TSignaturePtr& signature) const = 0;
+
+    [[nodiscard]] TSignaturePtr Sign(std::string payload) const;
 };
 
 DEFINE_REFCOUNTED_TYPE(ISignatureGenerator)

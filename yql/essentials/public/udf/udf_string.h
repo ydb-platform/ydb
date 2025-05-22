@@ -94,20 +94,6 @@ class TStringValue
             Refs_ = prev;
         }
 
-        bool TryExpandOn(ui32 len) {
-            if (RefCount() < 0) {
-                return false;
-            }
-
-            const auto size = Size_ + len;
-            if (Capacity_ < size) {
-                return false;
-            }
-
-            Size_ = size;
-            return true;
-        }
-
     private:
         ui32 Size_;
         i32  Refs_;
@@ -183,7 +169,12 @@ public:
         if (RefCount() < 0)
            return false;
 
-        return Data_->TryExpandOn(len);
+        const auto size = Data_->Size_ + len;
+        if (Data_->Capacity_ < size)
+            return false;
+
+        Data_->Size_ = size;
+        return true;
     }
 
     inline i32 LockRef() noexcept {

@@ -27,102 +27,60 @@ struct TExecutionOptions {
         AsyncAnalytics
     };
 
-    std::vector<TString> Queries;
+    TString Query;
     std::vector<FederatedQuery::ConnectionContent> Connections;
     std::vector<FederatedQuery::BindingContent> Bindings;
 
     ui32 LoopCount = 1;
-    TDuration QueryDelay;
     TDuration LoopDelay;
     bool ContinueAfterFail = false;
 
-    std::vector<EExecutionCase> ExecutionCases;
-    std::vector<FederatedQuery::ExecuteMode> QueryActions;
-    std::vector<TString> Scopes;
+    EExecutionCase ExecutionCase = EExecutionCase::Stream;
+    FederatedQuery::ExecuteMode QueryAction;
+    TString Scope;
 
     bool HasResults() const {
-        for (size_t i = 0; i < Queries.size(); ++i) {
-            if (GetQueryAction(i) != FederatedQuery::ExecuteMode::RUN) {
-                continue;
-            }
-            const auto executionCase = GetExecutionCase(i);
-            if (executionCase == EExecutionCase::Stream || executionCase == EExecutionCase::Analytics) {
-                return true;
-            }
-        }
-        return false;
+        return !Query.empty() && (ExecutionCase == EExecutionCase::Stream || ExecutionCase == EExecutionCase::Analytics);
     }
 
-    bool HasExecutionCase(EExecutionCase executionCase) const {
-        for (size_t i = 0; i < Queries.size(); ++i) {
-            if (GetExecutionCase(i) == executionCase) {
-                return true;
-            }
-        }
-        return false;
+    bool IsAnalitycsQuery() const {
+        return ExecutionCase == EExecutionCase::Analytics || ExecutionCase == EExecutionCase::AsyncAnalytics;
     }
 
-    EExecutionCase GetExecutionCase(size_t index) const {
-        return GetValue(index, ExecutionCases, EExecutionCase::Stream);
-    }
-
-    FederatedQuery::ExecuteMode GetQueryAction(size_t index) const {
-        return GetValue(index, QueryActions, FederatedQuery::ExecuteMode::RUN);
-    }
-
-    TString GetScope(size_t index) const {
-        return GetValue<TString>(index, Scopes, "fqrun");
-    }
-
-    TRequestOptions GetQueryOptions(size_t index, ui64 queryId) const {
-        Y_ABORT_UNLESS(index < Queries.size());
-
-        const auto executionCase = GetExecutionCase(index);
-        const bool isAnalytics = executionCase == EExecutionCase::Analytics || executionCase == EExecutionCase::AsyncAnalytics;
+    TFqOptions GetFqOptions() const {
         return {
-            .Query = Queries[index],
-            .Action = GetQueryAction(index),
-            .Type = isAnalytics ? FederatedQuery::QueryContent::ANALYTICS : FederatedQuery::QueryContent::STREAMING,
+            .Scope = Scope
+        };
+    }
+
+    TRequestOptions GetQueryOptions(ui64 queryId) const {
+        return {
+            .Query = Query,
+            .Action = QueryAction,
+            .Type = IsAnalitycsQuery() ? FederatedQuery::QueryContent::ANALYTICS : FederatedQuery::QueryContent::STREAMING,
             .QueryId = queryId,
-            .FqOptions = {
-                .Scope = GetScope(index)
-            }
+            .FqOptions = GetFqOptions()
         };
     }
 
     void Validate(const TRunnerOptions& runnerOptions) const {
-        if (Queries.empty() && Connections.empty() && Bindings.empty() && !runnerOptions.FqSettings.MonitoringEnabled && !runnerOptions.FqSettings.GrpcEnabled) {
+        if (!Query && Connections.empty() && Bindings.empty() && !runnerOptions.FqSettings.MonitoringEnabled && !runnerOptions.FqSettings.GrpcEnabled) {
             ythrow yexception() << "Nothing to execute and is not running as daemon";
         }
-        ValidateOptionsSizes(runnerOptions);
         ValidateAsyncOptions(runnerOptions.FqSettings.AsyncQueriesSettings);
         ValidateTraceOpt(runnerOptions);
     }
 
 private:
-    void ValidateOptionsSizes(const TRunnerOptions& runnerOptions) const {
-        const auto checker = [numberQueries = Queries.size()](size_t checkSize, const TString& optionName) {
-            if (checkSize > numberQueries) {
-                ythrow yexception() << "Too many " << optionName << ". Specified " << checkSize << ", when number of queries is " << numberQueries;
-            }
-        };
-
-        checker(ExecutionCases.size(), "execution cases");
-        checker(QueryActions.size(), "query actions");
-        checker(Scopes.size(), "query scopes");
-        checker(runnerOptions.AstOutputs.size(), "ast output files");
-        checker(runnerOptions.PlanOutputs.size(), "plan output files");
-    }
-
     ui64 GetNumberOfQueries() const {
-        if (Queries.empty()) {
+        if (!Query) {
             return 0;
         }
-        return LoopCount ? LoopCount * Queries.size() : std::numeric_limits<ui64>::max();
+        return LoopCount ? LoopCount : std::numeric_limits<ui64>::max();
     }
 
     void ValidateAsyncOptions(const TAsyncQueriesSettings& asyncQueriesSettings) const {
-        if (asyncQueriesSettings.InFlightLimit && !HasExecutionCase(EExecutionCase::AsyncStream) && !HasExecutionCase(EExecutionCase::AsyncAnalytics)) {
+        if (asyncQueriesSettings.InFlightLimit && ExecutionCase != EExecutionCase::AsyncStream) {
             ythrow yexception() << "In flight limit can not be used without async queries";
         }
 
@@ -147,13 +105,13 @@ private:
     }
 };
 
-void RunArgumentQuery(size_t index, ui64 queryId, const TExecutionOptions& executionOptions, TFqRunner& runner) {
+void RunArgumentQuery(ui64 queryId, const TExecutionOptions& executionOptions, TFqRunner& runner) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
-    switch (executionOptions.GetExecutionCase(index)) {
+    switch (executionOptions.ExecutionCase) {
         case TExecutionOptions::EExecutionCase::Analytics:
         case TExecutionOptions::EExecutionCase::Stream: {
-            if (!runner.ExecuteQuery(executionOptions.GetQueryOptions(index, queryId))) {
+            if (!runner.ExecuteQuery(executionOptions.GetQueryOptions(queryId))) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Query execution failed";
             }
             Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Fetching query results..." << colors.Default() << Endl;
@@ -165,7 +123,7 @@ void RunArgumentQuery(size_t index, ui64 queryId, const TExecutionOptions& execu
 
         case TExecutionOptions::EExecutionCase::AsyncAnalytics:
         case TExecutionOptions::EExecutionCase::AsyncStream: {
-            runner.ExecuteQueryAsync(executionOptions.GetQueryOptions(index, queryId));
+            runner.ExecuteQueryAsync(executionOptions.GetQueryOptions(queryId));
             break;
         }
     }
@@ -174,57 +132,39 @@ void RunArgumentQuery(size_t index, ui64 queryId, const TExecutionOptions& execu
 void RunArgumentQueries(const TExecutionOptions& executionOptions, TFqRunner& runner) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
-    std::unordered_set<TString> scopes;
-    scopes.reserve(executionOptions.Scopes.size());
-    for (size_t i = 0; i < executionOptions.Queries.size(); ++i){
-        scopes.emplace(executionOptions.GetScope(i));
-    }
-
     if (!executionOptions.Connections.empty()) {
         Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Creating connections..." << colors.Default() << Endl;
-        for (const auto& scope : scopes) {
-            if (!runner.CreateConnections(executionOptions.Connections, {.Scope = scope})) {
-                ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Failed to create connections for scope " << scope;
-            }
+        if (!runner.CreateConnections(executionOptions.Connections, executionOptions.GetFqOptions())) {
+            ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Failed to create connections";
         }
     }
 
     if (!executionOptions.Bindings.empty()) {
         Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Creating bindings..." << colors.Default() << Endl;
-        for (const auto& scope : scopes) {
-            if (!runner.CreateBindings(executionOptions.Bindings, {.Scope = scope})) {
-                ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Failed to create bindings for scope " << scope;
-            }
+        if (!runner.CreateBindings(executionOptions.Bindings, executionOptions.GetFqOptions())) {
+            ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Failed to create bindings";
         }
     }
 
-    const size_t numberQueries = executionOptions.Queries.size();
-    if (!numberQueries) {
+    if (!executionOptions.Query) {
         return;
     }
 
     const size_t numberLoops = executionOptions.LoopCount;
-    for (size_t queryId = 0; queryId < numberQueries * numberLoops || numberLoops == 0; ++queryId) {
-        size_t idx = queryId % numberQueries;
+    for (size_t queryId = 0; queryId < numberLoops || numberLoops == 0; ++queryId) {
         if (queryId > 0) {
-            Sleep(idx == 0 ? executionOptions.LoopDelay : executionOptions.QueryDelay);
+            Sleep(executionOptions.LoopDelay);
         }
 
-        const size_t loopId = queryId / numberQueries;
-        const auto executionCase = executionOptions.GetExecutionCase(idx);
-        if (executionCase != TExecutionOptions::EExecutionCase::AsyncAnalytics && executionCase != TExecutionOptions::EExecutionCase::AsyncStream) {
-            Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Executing query";
-            if (numberQueries > 1) {
-                Cout << " " << idx;
-            }
-            if (numberLoops != 1) {
-                Cout << ", loop " << loopId;
-            }
-            Cout << "..." << colors.Default() << Endl;
+        const TInstant startTime = TInstant::Now();
+        Cout << colors.Yellow() << startTime.ToIsoStringLocal() << " Executing query";
+        if (numberLoops != 1) {
+            Cout << ", loop " << queryId;
         }
+        Cout << "..." << colors.Default() << Endl;
 
         try {
-            RunArgumentQuery(idx, queryId, executionOptions, runner);
+            RunArgumentQuery(queryId, executionOptions, runner);
         } catch (const yexception& exception) {
             if (executionOptions.ContinueAfterFail) {
                 Cerr << colors.Red() <<  CurrentExceptionMessage() << colors.Default() << Endl;
@@ -298,13 +238,12 @@ protected:
 
         options.AddLongOption('p', "query", "Query to execute")
             .RequiredArgument("file")
-            .Handler1([this](const NLastGetopt::TOptsParser* option) {
-                ExecutionOptions.Queries.emplace_back(LoadFile(option->CurVal()));
-            });
+            .StoreMappedResult(&ExecutionOptions.Query, &LoadFile);
 
         options.AddLongOption('s', "sql", "Query SQL text to execute")
             .RequiredArgument("str")
-            .AppendTo(&ExecutionOptions.Queries);
+            .StoreResult(&ExecutionOptions.Query);
+        options.MutuallyExclusive("query", "sql");
 
         options.AddLongOption('c', "connection", "External datasource connection protobuf FederatedQuery::ConnectionContent")
             .RequiredArgument("file")
@@ -399,15 +338,11 @@ protected:
 
         options.AddLongOption("ast-file", "File with query ast (use '-' to write in stdout)")
             .RequiredArgument("file")
-            .Handler1([this](const NLastGetopt::TOptsParser* option) {
-                RunnerOptions.AstOutputs.emplace_back(GetDefaultOutput(TString(option->CurValOrDef())));
-            });
+            .StoreMappedResultT<TString>(&RunnerOptions.AstOutput, &GetDefaultOutput);
 
         options.AddLongOption("plan-file", "File with query plan (use '-' to write in stdout)")
             .RequiredArgument("file")
-            .Handler1([this](const NLastGetopt::TOptsParser* option) {
-                RunnerOptions.PlanOutputs.emplace_back(GetDefaultOutput(TString(option->CurValOrDef())));
-            });
+            .StoreMappedResultT<TString>(&RunnerOptions.PlanOutput, &GetDefaultOutput);
 
         options.AddLongOption("canonical-output", "Make ast and plan output suitable for canonization (replace volatile data such as endpoints with stable one)")
             .NoArgument()
@@ -424,10 +359,7 @@ protected:
         options.AddLongOption('C', "execution-case", "Type of query for -p argument")
             .RequiredArgument("query-type")
             .Choices(executionCase.GetChoices())
-            .Handler1([this, executionCase](const NLastGetopt::TOptsParser* option) {
-                TString choice(option->CurValOrDef());
-                ExecutionOptions.ExecutionCases.emplace_back(executionCase(choice));
-            });
+            .StoreMappedResultT<TString>(&ExecutionOptions.ExecutionCase, executionCase);
 
         options.AddLongOption("inflight-limit", "In flight limit for async queries (use 0 for unlimited)")
             .RequiredArgument("uint")
@@ -466,11 +398,9 @@ protected:
         });
         options.AddLongOption('A', "action", "Query execute action")
             .RequiredArgument("action")
+            .DefaultValue("run")
             .Choices(queryAction.GetChoices())
-            .Handler1([this, queryAction](const NLastGetopt::TOptsParser* option) {
-                TString choice(option->CurValOrDef());
-                ExecutionOptions.QueryActions.emplace_back(queryAction(choice));
-            });
+            .StoreMappedResultT<TString>(&ExecutionOptions.QueryAction, queryAction);
 
         options.AddLongOption("loop-count", "Number of runs of the query (use 0 to start infinite loop)")
             .RequiredArgument("uint")
@@ -482,18 +412,13 @@ protected:
             .DefaultValue(0)
             .StoreMappedResultT<ui64>(&ExecutionOptions.LoopDelay, &TDuration::MilliSeconds<ui64>);
 
-        options.AddLongOption("query-delay", "Delay in milliseconds between queries starts")
-            .RequiredArgument("uint")
-            .DefaultValue(0)
-            .StoreMappedResultT<ui64>(&ExecutionOptions.QueryDelay, &TDuration::MilliSeconds<ui64>);
-
         options.AddLongOption("continue-after-fail", "Don't not stop requests execution after fails")
             .NoArgument()
             .SetFlag(&ExecutionOptions.ContinueAfterFail);
 
         options.AddLongOption('S', "scope-id", "Query scope id")
             .RequiredArgument("scope")
-            .AppendTo(&ExecutionOptions.Scopes);
+            .StoreResult(&ExecutionOptions.Scope);
 
         // Cluster settings
 
@@ -556,7 +481,7 @@ protected:
     int DoRun(NLastGetopt::TOptsParseResult&&) override {
         ExecutionOptions.Validate(RunnerOptions);
 
-        if (ExecutionOptions.HasExecutionCase(TExecutionOptions::EExecutionCase::Analytics) || ExecutionOptions.HasExecutionCase(TExecutionOptions::EExecutionCase::AsyncAnalytics)) {
+        if (ExecutionOptions.IsAnalitycsQuery()) {
             RunnerOptions.FqSettings.EnableYdbCompute = true;
         }
 

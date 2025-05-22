@@ -25,7 +25,7 @@ struct TSchemeShard::TXxport::TTxList: public TSchemeShard::TXxport::TTxBase {
     {
     }
 
-    bool DoExecuteImpl(const TMap<ui64, typename TInfo::TPtr>& container, TTransactionContext&, const TActorContext&) {
+    bool DoExecuteImpl(const THashMap<ui64, typename TInfo::TPtr>& container, TTransactionContext&, const TActorContext&) {
         const auto& record = Request->Get()->Record;
         const auto& request = record.GetRequest();
 
@@ -54,26 +54,26 @@ struct TSchemeShard::TXxport::TTxList: public TSchemeShard::TXxport::TTxBase {
 
         resp.SetStatus(Ydb::StatusIds::SUCCESS);
 
-        auto it = container.end();
+        auto it = container.begin();
         ui64 skip = (page - 1) * pageSize;
-        while (it != container.begin() && skip) {
-            --it;
+        while (it != container.end() && skip) {
             if (IsSameDomain(it->second, domainPathId) && it->second->Kind == kind) {
                 --skip;
             }
+            ++it;
         }
 
         ui64 size = 0;
-        while (it != container.begin() && size < pageSize) {
-            --it;
+        while (it != container.end() && size < pageSize) {
             if (IsSameDomain(it->second, domainPathId) && it->second->Kind == kind) {
-                Self->FromXxportInfo(*resp.MutableEntries()->Add(), *it->second);
+                Self->FromXxportInfo(*resp.MutableEntries()->Add(), it->second);
                 ++size;
             }
+            ++it;
         }
 
-        if (it == container.begin()) {
-            resp.SetNextPageToken("0");
+        if (it == container.end()) {
+            resp.SetNextPageToken("1");
         } else {
             resp.SetNextPageToken(ToString(page + 1));
         }

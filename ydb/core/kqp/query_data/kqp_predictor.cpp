@@ -16,7 +16,9 @@ using namespace NActors;
 
 void TStagePredictor::Prepare() {
     InputDataPrediction = 1;
-    if (HasRangeScanFlag) {
+    if (HasLookupFlag) {
+        InputDataPrediction = 0.5;
+    } else if (HasRangeScanFlag) {
         InputDataPrediction = 1;
     } else if (InputDataVolumes.size()) {
         InputDataPrediction = 0;
@@ -46,6 +48,8 @@ void TStagePredictor::Scan(const NYql::TExprNode::TPtr& stageNode) {
             HasCondenseFlag = true;
         } else if (node.Maybe<NYql::NNodes::TKqpWideReadTable>()) {
             HasRangeScanFlag = true;
+        } else if (node.Maybe<NYql::NNodes::TKqpLookupTable>()) {
+            HasLookupFlag = true;
         } else if (node.Maybe<NYql::NNodes::TKqpUpsertRows>()) {
         } else if (node.Maybe<NYql::NNodes::TKqpDeleteRows>()) {
 
@@ -93,6 +97,7 @@ void TStagePredictor::SerializeToKqpSettings(NYql::NDqProto::TProgram::TSettings
     kqpProto.SetHasTop(HasTopFlag);
     kqpProto.SetHasRangeScan(HasRangeScanFlag);
     kqpProto.SetHasCondense(HasCondenseFlag);
+    kqpProto.SetHasLookup(HasLookupFlag);
     kqpProto.SetNodesCount(NodesCount);
     kqpProto.SetInputDataPrediction(InputDataPrediction);
     kqpProto.SetOutputDataPrediction(OutputDataPrediction);
@@ -111,6 +116,7 @@ bool TStagePredictor::DeserializeFromKqpSettings(const NYql::NDqProto::TProgram:
     HasTopFlag = kqpProto.GetHasTop();
     HasRangeScanFlag = kqpProto.GetHasRangeScan();
     HasCondenseFlag = kqpProto.GetHasCondense();
+    HasLookupFlag = kqpProto.GetHasLookup();
     NodesCount = kqpProto.GetNodesCount();
     InputDataPrediction = kqpProto.GetInputDataPrediction();
     OutputDataPrediction = kqpProto.GetOutputDataPrediction();

@@ -8,7 +8,7 @@
 
 using namespace NYdb::NConsoleClient;
 
-void TTopicWorkloadReader::RetryableReaderLoop(const TTopicWorkloadReaderParams& params) {
+void TTopicWorkloadReader::RetryableReaderLoop(TTopicWorkloadReaderParams& params) {
     const TInstant endTime = Now() + TDuration::Seconds(params.TotalSec + 3);
 
     while (!*params.ErrorFlag && Now() < endTime) {
@@ -20,7 +20,7 @@ void TTopicWorkloadReader::RetryableReaderLoop(const TTopicWorkloadReaderParams&
     }
 }
 
-void TTopicWorkloadReader::ReaderLoop(const TTopicWorkloadReaderParams& params, TInstant endTime) {
+void TTopicWorkloadReader::ReaderLoop(TTopicWorkloadReaderParams& params, TInstant endTime) {
     auto topicClient = std::make_unique<NYdb::NTopic::TTopicClient>(params.Driver);
     std::optional<TTransactionSupport> txSupport;
 
@@ -148,7 +148,7 @@ void TTopicWorkloadReader::ReaderLoop(const TTopicWorkloadReaderParams& params, 
 }
 
 std::vector<NYdb::NTopic::TReadSessionEvent::TEvent> TTopicWorkloadReader::GetEvents(NYdb::NTopic::IReadSession& readSession,
-                                                                                     const TTopicWorkloadReaderParams& params,
+                                                                                     TTopicWorkloadReaderParams& params,
                                                                                      std::optional<TTransactionSupport>& txSupport)
 {
     TVector<NYdb::NTopic::TReadSessionEvent::TEvent> events;
@@ -169,7 +169,7 @@ std::vector<NYdb::NTopic::TReadSessionEvent::TEvent> TTopicWorkloadReader::GetEv
     return readSession.GetEvents(settings);
 }
 
-void TTopicWorkloadReader::TryCommitTx(const TTopicWorkloadReaderParams& params,
+void TTopicWorkloadReader::TryCommitTx(TTopicWorkloadReaderParams& params,
                                        std::optional<TTransactionSupport>& txSupport,
                                        TInstant& commitTime,
                                        TVector<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>& stopPartitionSessionEvents)
@@ -186,7 +186,7 @@ void TTopicWorkloadReader::TryCommitTx(const TTopicWorkloadReaderParams& params,
     commitTime += TDuration::MilliSeconds(params.CommitPeriodMs);
 }
 
-void TTopicWorkloadReader::TryCommitTableChanges(const TTopicWorkloadReaderParams& params,
+void TTopicWorkloadReader::TryCommitTableChanges(TTopicWorkloadReaderParams& params,
                                                  std::optional<TTransactionSupport>& txSupport)
 {
     if (txSupport->Rows.empty()) {

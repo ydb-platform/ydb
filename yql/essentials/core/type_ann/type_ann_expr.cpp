@@ -4,7 +4,6 @@
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
 #include <yql/essentials/core/yql_opt_rewrite_io.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
-#include <yql/essentials/core/yql_func_stack.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/utils/log/log.h>
@@ -129,7 +128,7 @@ public:
         Processed.clear();
         HasRenames = false;
         RepeatCallableCount.clear();
-        FunctionStack.Reset();
+        CurrentFunctions = {};
         CallableTimes.clear();
         IsComplete = false;
     }
@@ -206,9 +205,58 @@ private:
 
         auto input = start;
         for (size_t transformCount = 0; true; ++transformCount) {
-            FunctionStack.EnterFrame(*input, ctx);
-            Y_DEFER {
-                FunctionStack.LeaveFrame(*input, ctx);
+            TIssueScopeGuard issueScope(ctx.IssueManager, [this, input, &ctx]() -> TIssuePtr {
+                TStringBuilder str;
+                str << "At ";
+                switch (input->Type()) {
+                case TExprNode::Callable:
+                    if (!CurrentFunctions.empty() && CurrentFunctions.top().second) {
+                        return nullptr;
+                    }
+
+                    if (!CurrentFunctions.empty()) {
+                        CurrentFunctions.top().second = true;
+                    }
+
+                    str << "function: " << NormalizeCallableName(input->Content());
+                    break;
+                case TExprNode::List:
+                    if (CurrentFunctions.empty()) {
+                        str << "tuple";
+                    } else if (!CurrentFunctions.top().second) {
+                        CurrentFunctions.top().second = true;
+                        str << "function: " << CurrentFunctions.top().first;
+                    } else {
+                        return nullptr;
+                    }
+                    break;
+                case TExprNode::Lambda:
+                    if (CurrentFunctions.empty()) {
+                        str << "lambda";
+                    } else if (!CurrentFunctions.top().second) {
+                        CurrentFunctions.top().second = true;
+                        str << "function: " << CurrentFunctions.top().first;
+                    } else {
+                        return nullptr;
+                    }
+                    break;
+                default:
+                    str << "unknown";
+                }
+
+                return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()), str);
+            });
+
+            if (input->Type() == TExprNode::Callable) {
+                CurrentFunctions.push(std::make_pair(input->Content(), false));
+            }
+            Y_SCOPE_EXIT(this, input) {
+                if (input->Type() == TExprNode::Callable) {
+                    CurrentFunctions.pop();
+                    if (!CurrentFunctions.empty() && CurrentFunctions.top().first.EndsWith('!')) {
+                        CurrentFunctions.top().second = true;
+                    }
+                }
             };
 
             TStatus retStatus = TStatus::Error;
@@ -420,7 +468,7 @@ private:
                     }
                 }
 
-                FunctionStack.MarkUsed();
+                CurrentFunctions.top().second = true;
                 auto cyclesBefore = PrintCallableTimes ? GetCycleCount() : 0;
                 auto status = CallableTransformer->Transform(input, output, ctx);
                 auto cyclesAfter = PrintCallableTimes ? GetCycleCount() : 0;
@@ -586,7 +634,7 @@ private:
     TNodeOnNodeOwnedMap Processed;
     bool HasRenames = false;
     THashMap<TString, ui64> RepeatCallableCount;
-    TFunctionStack FunctionStack;
+    TStack<std::pair<TStringBuf, bool>> CurrentFunctions;
     THashMap<TStringBuf, std::pair<ui64, ui64>> CallableTimes;
     bool KeepWorldEnabled = false;
 };

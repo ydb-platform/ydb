@@ -546,8 +546,7 @@
 ** without modifying the main part of the file.
 */
 
-#include <assert.h>
-#define lua_assert(c) assert(c)
+
 
 #endif
 

@@ -1,26 +1,22 @@
 #include "schema_serialization_helpers.h"
+
 #include "comparator.h"
 
 #include <yt/yt/core/ytree/fluent.h>
 
 namespace NYT::NTableClient {
 
-using namespace NYson;
-using namespace NYTree;
-
-////////////////////////////////////////////////////////////////////////////////
-
-void Deserialize(TMaybeDeletedColumnSchema& schema, TYsonPullParserCursor* cursor)
+void Deserialize(TMaybeDeletedColumnSchema& schema, NYson::TYsonPullParserCursor* cursor)
 {
     TSerializableColumnSchema wrapper;
     wrapper.DeserializeFromCursor(cursor);
     schema = wrapper;
 }
 
-void Deserialize(TMaybeDeletedColumnSchema& schema, INodePtr node)
+void Deserialize(TMaybeDeletedColumnSchema& schema, NYTree::INodePtr node)
 {
     TSerializableColumnSchema wrapper;
-    Deserialize(static_cast<TYsonStructLite&>(wrapper), node);
+    Deserialize(static_cast<NYTree::TYsonStructLite&>(wrapper), node);
     schema = static_cast<TMaybeDeletedColumnSchema>(wrapper);
 }
 
@@ -28,8 +24,6 @@ TDeletedColumn TMaybeDeletedColumnSchema::GetDeletedColumnSchema() const
 {
     return TDeletedColumn(StableName());
 }
-
-////////////////////////////////////////////////////////////////////////////////
 
 void TSerializableColumnSchema::Register(TRegistrar registrar)
 {
@@ -64,10 +58,10 @@ void TSerializableColumnSchema::Register(TRegistrar registrar)
     });
 }
 
-void TSerializableColumnSchema::DeserializeFromCursor(TYsonPullParserCursor* cursor)
+void TSerializableColumnSchema::DeserializeFromCursor(NYson::TYsonPullParserCursor* cursor)
 {
-    cursor->ParseMap([&] (TYsonPullParserCursor* cursor) {
-        EnsureYsonToken("column schema attribute key", *cursor, EYsonItemType::StringValue);
+    cursor->ParseMap([&] (NYson::TYsonPullParserCursor* cursor) {
+        EnsureYsonToken("column schema attribute key", *cursor, NYson::EYsonItemType::StringValue);
         auto key = (*cursor)->UncheckedAsString();
         if (key == TStringBuf("name")) {
             cursor->Next();
@@ -216,16 +210,14 @@ void TSerializableColumnSchema::RunPostprocessor()
     }
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
-void Serialize(const TColumnSchema& schema, IYsonConsumer* consumer)
+void Serialize(const TColumnSchema& schema, NYson::IYsonConsumer* consumer)
 {
     TSerializableColumnSchema wrapper;
     wrapper.SetColumnSchema(schema);
-    Serialize(static_cast<const TYsonStructLite&>(wrapper), consumer);
+    Serialize(static_cast<const NYTree::TYsonStructLite&>(wrapper), consumer);
 }
 
-void Serialize(const TDeletedColumn& schema, IYsonConsumer* consumer)
+void Serialize(const TDeletedColumn& schema, NYson::IYsonConsumer* consumer)
 {
     consumer->OnBeginMap();
     consumer->OnKeyedItem("stable_name");
@@ -235,13 +227,13 @@ void Serialize(const TDeletedColumn& schema, IYsonConsumer* consumer)
     consumer->OnEndMap();
 }
 
-void Serialize(const TTableSchema& schema, IYsonConsumer* consumer)
+void Serialize(const TTableSchema& schema, NYson::IYsonConsumer* consumer)
 {
-    auto position = BuildYsonFluently(consumer)
+    auto position = NYTree::BuildYsonFluently(consumer)
         .BeginAttributes()
             .Item("strict").Value(schema.IsStrict())
             .Item("unique_keys").Value(schema.IsUniqueKeys())
-            .DoIf(schema.HasNontrivialSchemaModification(), [&] (TFluentMap fluent) {
+            .DoIf(schema.HasNontrivialSchemaModification(), [&] (NYTree::TFluentMap fluent) {
                 fluent.Item("schema_modification").Value(schema.GetSchemaModification());
             })
         .EndAttributes()
@@ -257,7 +249,12 @@ void Serialize(const TTableSchema& schema, IYsonConsumer* consumer)
     position.EndList();
 }
 
-void Deserialize(TTableSchema& schema, INodePtr node)
+void Serialize(const TTableSchemaPtr& schema, NYson::IYsonConsumer* consumer)
+{
+    Serialize(*schema, consumer);
+}
+
+void Deserialize(TTableSchema& schema, NYTree::INodePtr node)
 {
     auto childNodes = node->AsList()->GetChildren();
 
@@ -266,7 +263,7 @@ void Deserialize(TTableSchema& schema, INodePtr node)
 
     for (auto childNode : childNodes) {
         TSerializableColumnSchema wrapper;
-        Deserialize(static_cast<TYsonStructLite&>(wrapper), childNode);
+        Deserialize(static_cast<NYTree::TYsonStructLite&>(wrapper), childNode);
         if (wrapper.Deleted() && *wrapper.Deleted()) {
             deletedColumns.push_back(TDeletedColumn(wrapper.StableName()));
         } else {
@@ -284,15 +281,15 @@ void Deserialize(TTableSchema& schema, INodePtr node)
         deletedColumns);
 }
 
-void Deserialize(TTableSchema& schema, TYsonPullParserCursor* cursor)
+void Deserialize(TTableSchema& schema, NYson::TYsonPullParserCursor* cursor)
 {
-    auto strict = true;
-    auto uniqueKeys = false;
-    auto modification = ETableSchemaModification::None;
+    bool strict = true;
+    bool uniqueKeys = false;
+    ETableSchemaModification modification = ETableSchemaModification::None;
 
-    if ((*cursor)->GetType() == EYsonItemType::BeginAttributes) {
-        cursor->ParseAttributes([&] (TYsonPullParserCursor* cursor) {
-            EnsureYsonToken(TStringBuf("table schema attribute key"), *cursor, EYsonItemType::StringValue);
+    if ((*cursor)->GetType() == NYson::EYsonItemType::BeginAttributes) {
+        cursor->ParseAttributes([&] (NYson::TYsonPullParserCursor* cursor) {
+            EnsureYsonToken(TStringBuf("table schema attribute key"), *cursor, NYson::EYsonItemType::StringValue);
             auto key = (*cursor)->UncheckedAsString();
             if (key == TStringBuf("strict")) {
                 cursor->Next();
@@ -310,7 +307,7 @@ void Deserialize(TTableSchema& schema, TYsonPullParserCursor* cursor)
         });
     }
 
-    EnsureYsonToken(TStringBuf("table schema"), *cursor, EYsonItemType::BeginList);
+    EnsureYsonToken(TStringBuf("table schema"), *cursor, NYson::EYsonItemType::BeginList);
 
     auto maybeDeletedColumns = ExtractTo<std::vector<TMaybeDeletedColumnSchema>>(cursor);
 
@@ -328,19 +325,14 @@ void Deserialize(TTableSchema& schema, TYsonPullParserCursor* cursor)
     schema = TTableSchema(columns, strict, uniqueKeys, modification, deletedColumns);
 }
 
-void Serialize(const TTableSchemaPtr& schema, IYsonConsumer* consumer)
-{
-    Serialize(*schema, consumer);
-}
-
-void Deserialize(TTableSchemaPtr& schema, INodePtr node)
+void Deserialize(TTableSchemaPtr& schema, NYTree::INodePtr node)
 {
     TTableSchema actualSchema;
     Deserialize(actualSchema, node);
     schema = New<TTableSchema>(std::move(actualSchema));
 }
 
-void Deserialize(TTableSchemaPtr& schema, TYsonPullParserCursor* cursor)
+void Deserialize(TTableSchemaPtr& schema, NYson::TYsonPullParserCursor* cursor)
 {
     TTableSchema actualSchema;
     Deserialize(actualSchema, cursor);

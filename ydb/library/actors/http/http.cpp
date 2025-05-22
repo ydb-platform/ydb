@@ -89,7 +89,7 @@ bool THttpParser<THttpRequest>::HasBody() const {
 }
 
 template <>
-size_t THttpParser<THttpRequest>::AdvancePartial(size_t len) {
+void THttpParser<THttpRequest>::Advance(size_t len) {
     TStringBuf data(Pos(), len);
     while (!data.empty()) {
         if (Stage != EParseStage::Error) {
@@ -140,7 +140,7 @@ size_t THttpParser<THttpRequest>::AdvancePartial(size_t len) {
                 if (Stage != EParseStage::Body) {
                     break;
                 }
-                return TSocketBuffer::Advance(len - data.size());
+                [[fallthrough]];
             }
             case EParseStage::Body: {
                 if (TEqNoCase()(TransferEncoding, "chunked")) {
@@ -204,7 +204,6 @@ size_t THttpParser<THttpRequest>::AdvancePartial(size_t len) {
                                 // Invalid body encoding
                                 Stage = EParseStage::Error;
                             }
-                            return TSocketBuffer::Advance(len - data.size());
                         }
                     }
                 }
@@ -221,7 +220,7 @@ size_t THttpParser<THttpRequest>::AdvancePartial(size_t len) {
                 break;
         }
     }
-    return TSocketBuffer::Advance(len - data.size());
+    TSocketBuffer::Advance(len);
 }
 
 template <>
@@ -254,7 +253,7 @@ void THttpResponse::Clear() {
 }
 
 template <>
-size_t THttpParser<THttpResponse>::AdvancePartial(size_t len) {
+void THttpParser<THttpResponse>::Advance(size_t len) {
     TStringBuf data(Pos(), len);
     while (!data.empty()) {
         if (Stage != EParseStage::Error) {
@@ -305,7 +304,7 @@ size_t THttpParser<THttpResponse>::AdvancePartial(size_t len) {
                 if (Stage != EParseStage::Body) {
                     break;
                 }
-                return TSocketBuffer::Advance(len - data.size());
+                [[fallthrough]];
             }
             case EParseStage::Body: {
                 if (TEqNoCase()(TransferEncoding, "chunked")) {
@@ -380,7 +379,6 @@ size_t THttpParser<THttpResponse>::AdvancePartial(size_t len) {
                                 // Invalid body encoding
                                 Stage = EParseStage::Error;
                             }
-                            return TSocketBuffer::Advance(len - data.size());
                         }
                     }
                 }
@@ -396,7 +394,7 @@ size_t THttpParser<THttpResponse>::AdvancePartial(size_t len) {
                 break;
         }
     }
-    return TSocketBuffer::Advance(len - data.size());
+    TSocketBuffer::Advance(len);
 }
 
 template <>
@@ -411,10 +409,8 @@ void THttpParser<THttpResponse>::ConnectionClosed() {
 THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponseString(TStringBuf data) {
     THttpParser<THttpResponse> parser(data);
     THeadersBuilder headers(parser.Headers);
-    if (!headers.Has("X-Worker-Name")) {
-        if (!Endpoint->WorkerName.empty()) {
-            headers.Set("X-Worker-Name", Endpoint->WorkerName);
-        }
+    if (!Endpoint->WorkerName.empty()) {
+        headers.Set("X-Worker-Name", Endpoint->WorkerName);
     }
     THttpOutgoingResponsePtr response = new THttpOutgoingResponse(this);
     response->InitResponse(parser.Protocol, parser.Version, parser.Status, parser.Message);
@@ -608,10 +604,8 @@ THttpIncomingResponsePtr THttpIncomingResponse::Duplicate(THttpOutgoingRequestPt
 
 THttpOutgoingResponsePtr THttpOutgoingResponse::Duplicate(THttpIncomingRequestPtr request) {
     THeadersBuilder headers(Headers);
-    if (!headers.Has("X-Worker-Name")) {
-        if (!request->Endpoint->WorkerName.empty()) {
-            headers.Set("X-Worker-Name", request->Endpoint->WorkerName);
-        }
+    if (!request->Endpoint->WorkerName.empty()) {
+        headers.Set("X-Worker-Name", request->Endpoint->WorkerName);
     }
     THttpOutgoingResponsePtr response = new THttpOutgoingResponse(request);
     response->InitResponse(Protocol, Version, Status, Message);
@@ -656,14 +650,9 @@ void THttpOutgoingResponse::AddDataChunk(THttpOutgoingDataChunkPtr dataChunk) {
 }
 
 THttpOutgoingDataChunk::THttpOutgoingDataChunk(THttpOutgoingResponsePtr response, TStringBuf data)
-    : Response(std::move(response))
-{
-    if (data) {
-        SetData(data);
-    } else {
-        SetEndOfData();
-    }
-}
+    : THttpDataChunk(data)
+    , Response(std::move(response))
+{}
 
 THttpOutgoingDataChunk::THttpOutgoingDataChunk(THttpOutgoingResponsePtr response)
     : Response(std::move(response))
@@ -913,12 +902,6 @@ THeadersBuilder::THeadersBuilder(TStringBuf headers)
 
 THeadersBuilder::THeadersBuilder(const THeadersBuilder& builder) {
     for (const auto& pr : builder.Headers) {
-        Set(pr.first, pr.second);
-    }
-}
-
-THeadersBuilder::THeadersBuilder(std::initializer_list<std::pair<TString, TString>> headers) {
-    for (const auto& pr : headers) {
         Set(pr.first, pr.second);
     }
 }

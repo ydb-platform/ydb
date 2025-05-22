@@ -40,8 +40,6 @@ class TStorageChanges: public TSimpleRefCount<TStorageChanges> {
     TDeque<TPathId> Sequences;
     TDeque<TPathId> AlterSequences;
 
-    TDeque<TPathId> SysViews;
-
     //PQ part
     TDeque<std::tuple<TPathId, TShardIdx, TTopicTabletInfo::TTopicPartitionInfo>> PersQueue;
     TDeque<std::pair<TPathId, TTopicInfo::TPtr>> PersQueueGroup;
@@ -128,10 +126,6 @@ public:
 
     void PersistSequence(const TPathId& pathId) {
         Sequences.push_back(pathId);
-    }
-
-    void PersistSysView(const TPathId& pathId) {
-        SysViews.emplace_back(pathId);
     }
 
     void Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx);

@@ -535,7 +535,11 @@ public:
 
     NConcurrency::TPropagatingStorageGuard MakePropagatingStorageGuard()
     {
-        return NConcurrency::TPropagatingStorageGuard(Storage_);
+        return NConcurrency::TPropagatingStorageGuard(Storage_
+#ifdef YT_ENABLE_BIND_LOCATION_TRACKING
+            , Location_
+#endif
+        );
     }
 
 private:

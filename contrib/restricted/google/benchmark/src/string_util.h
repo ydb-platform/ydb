@@ -9,6 +9,7 @@
 #include "benchmark/benchmark.h"
 #include "benchmark/export.h"
 #include "check.h"
+#include "internal_macros.h"
 
 namespace benchmark {
 

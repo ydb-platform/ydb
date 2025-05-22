@@ -4,7 +4,6 @@
 
 #include <util/generic/yexception.h>
 #include <util/stream/str.h>
-#include <util/string/cast.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
 namespace NKikimr::NSysView {
@@ -12,12 +11,6 @@ namespace NKikimr::NSysView {
 void EscapeName(const TString& str, TStringStream& stream);
 void EscapeString(const TString& str, TStringStream& stream);
 void EscapeBinary(const TString& str, TStringStream& stream);
-void EscapeValue(bool value, TStringStream& stream);
-
-template<class T>
-void EscapeValue(const T& value, TStringStream& stream) {
-    EscapeName(ToString<T>(value), stream);
-}
 
 class TFormatFail : public yexception {
 public:

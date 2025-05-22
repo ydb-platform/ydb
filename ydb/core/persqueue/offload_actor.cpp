@@ -63,13 +63,13 @@ public:
     {}
 
     auto CreateReaderFactory() {
-        return [=, this]() -> IActor* {
+        return [=]() -> IActor* {
             return NBackup::NImpl::CreateLocalPartitionReader(ParentTablet, Partition);
         };
     }
 
     auto CreateWriterFactory() {
-        return [=, this]() -> IActor* {
+        return [=]() -> IActor* {
             if (Config.HasIncrementalBackup()) {
                 return NBackup::NImpl::CreateLocalTableWriter(TPathId::FromProto(Config.GetIncrementalBackup().GetDstPathId()));
             } else {

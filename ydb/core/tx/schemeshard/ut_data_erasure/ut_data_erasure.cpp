@@ -16,6 +16,7 @@ namespace {
         TTestEnv env(runtime, TTestEnvOptions()
             .NChannels(4)
             .EnablePipeRetries(true)
+            .EnableSystemViews(false)
             .DSProxies(dsProxies));
 
         runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
@@ -74,7 +75,7 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(TestDataErasure) {
-    void SimpleDataErasureTest(const TSchemeObject& createSchemeObject) {
+    Y_UNIT_TEST(SimpleDataErasureTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
@@ -96,8 +97,8 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
 
         ui64 txId = 100;
 
-        CreateTestExtSubdomain(runtime, env, &txId, "Database1", createSchemeObject);
-        CreateTestExtSubdomain(runtime, env, &txId, "Database2", createSchemeObject);
+        CreateTestSubdomain(runtime, env, &txId, "Database1");
+        CreateTestSubdomain(runtime, env, &txId, "Database2");
 
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerShredResponse, 3));
@@ -113,19 +114,7 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
         UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NKikimrScheme::TEvDataErasureInfoResponse::COMPLETED);
     }
 
-    Y_UNIT_TEST(SimpleDataErasureTestForTables) {
-        SimpleDataErasureTest({.Table = true, .Topic = false});
-    }
-
-    Y_UNIT_TEST(SimpleDataErasureTestForTopic) {
-        SimpleDataErasureTest({.Table = false, .Topic = true});
-    }
-
-    Y_UNIT_TEST(SimpleDataErasureTestForAllSupportedObjects) {
-        SimpleDataErasureTest({.Table = true, .Topic = true});
-    }
-
-    void DataErasureRun3Cycles(const TSchemeObject& createSchemeObject) {
+    Y_UNIT_TEST(DataErasureRun3Cycles) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
@@ -147,8 +136,8 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
 
         ui64 txId = 100;
 
-        CreateTestExtSubdomain(runtime, env, &txId, "Database1", createSchemeObject);
-        CreateTestExtSubdomain(runtime, env, &txId, "Database2", createSchemeObject);
+        CreateTestSubdomain(runtime, env, &txId, "Database1");
+        CreateTestSubdomain(runtime, env, &txId, "Database2");
 
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerShredResponse, 9));
@@ -162,18 +151,6 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
 
         UNIT_ASSERT_EQUAL_C(response->Record.GetGeneration(), 3, response->Record.GetGeneration());
         UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NKikimrScheme::TEvDataErasureInfoResponse::COMPLETED);
-    }
-
-    Y_UNIT_TEST(DataErasureRun3CyclesForTables) {
-        DataErasureRun3Cycles({.Table = true, .Topic = false});
-    }
-
-    Y_UNIT_TEST(DataErasureRun3CyclesForTopics) {
-        DataErasureRun3Cycles({.Table = false, .Topic = true});
-    }
-
-    Y_UNIT_TEST(DataErasureRun3CyclesForAllSupportedObjects) {
-        DataErasureRun3Cycles({.Table = true, .Topic = true});
     }
 
     Y_UNIT_TEST(DataErasureManualLaunch) {
@@ -198,8 +175,8 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
 
         ui64 txId = 100;
 
-        CreateTestExtSubdomain(runtime, env, &txId, "Database1");
-        CreateTestExtSubdomain(runtime, env, &txId, "Database2");
+        CreateTestSubdomain(runtime, env, &txId, "Database1");
+        CreateTestSubdomain(runtime, env, &txId, "Database2");
 
         {
             auto request = MakeHolder<TEvSchemeShard::TEvDataErasureManualStartupRequest>();
@@ -242,8 +219,8 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
 
         ui64 txId = 100;
 
-        CreateTestExtSubdomain(runtime, env, &txId, "Database1");
-        CreateTestExtSubdomain(runtime, env, &txId, "Database2");
+        CreateTestSubdomain(runtime, env, &txId, "Database1");
+        CreateTestSubdomain(runtime, env, &txId, "Database2");
 
         auto RunDataErasure = [&runtime] (ui32 expectedGeneration) {
             auto sender = runtime.AllocateEdgeActor();
@@ -282,7 +259,7 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
 
         ui64 txId = 100;
 
-        auto schemeshardId = CreateTestExtSubdomain(runtime, env, &txId, "Database1", {.Table = true, .Topic = false});
+        auto schemeshardId = CreateTestSubdomain(runtime, env, &txId, "Database1");
         auto shards = GetTableShards(runtime, schemeshardId, "/MyRoot/Database1/Simple");
         TString value(size_t(100 * 1024), 'd');
         FillData(runtime, schemeshardId, txId, shards, dsProxies, value);
@@ -319,7 +296,7 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
 
         ui64 txId = 100;
 
-        auto schemeshardId = CreateTestExtSubdomain(runtime, env, &txId, "Database1", {.Table = false, .Topic = false});
+        auto schemeshardId = CreateTestSubdomain(runtime, env, &txId, "Database1", false);
 
         TestCreateTable(runtime, schemeshardId, ++txId, "/MyRoot/Database1",
             R"____(
@@ -383,7 +360,7 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
 
         ui64 txId = 100;
 
-        auto schemeshardId = CreateTestExtSubdomain(runtime, env, &txId, "Database1", {.Table = false, .Topic = false});
+        auto schemeshardId = CreateTestSubdomain(runtime, env, &txId, "Database1", false);
 
         TestCreateTable(runtime, schemeshardId, ++txId, "/MyRoot/Database1",
             R"____(

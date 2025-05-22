@@ -9,6 +9,7 @@ namespace NKqp {
 
 struct TWriteActorSettings : TAtomicRefCount<TWriteActorSettings> {
     i64 InFlightMemoryLimitPerActorBytes = 64_MB;
+    i64 MemoryLimitPerMessageBytes = 64_MB;
     i64 MaxForwardedSize = 64_MB;
 
     TDuration StartRetryDelay = TDuration::Seconds(1);

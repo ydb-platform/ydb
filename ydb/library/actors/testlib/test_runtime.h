@@ -856,13 +856,12 @@ namespace NActors {
 
     struct IReplyChecker {
         virtual ~IReplyChecker() {}
-        virtual bool OnRequest(IEventHandle *request) = 0;
+        virtual void OnRequest(IEventHandle *request) = 0;
         virtual bool IsWaitingForMoreResponses(IEventHandle *response) = 0;
     };
 
     struct TNoneReplyChecker : IReplyChecker {
-        bool OnRequest(IEventHandle*) override {
-            return false;
+        void OnRequest(IEventHandle*) override {
         }
 
         bool IsWaitingForMoreResponses(IEventHandle*) override {

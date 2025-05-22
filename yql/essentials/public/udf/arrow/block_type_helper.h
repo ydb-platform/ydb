@@ -4,8 +4,6 @@
 #include <yql/essentials/public/udf/udf_type_size_check.h>
 #include <yql/essentials/public/udf/udf_version.h>
 
-#include <arrow/type.h>
-
 namespace NYql {
 namespace NUdf {
 
@@ -36,32 +34,6 @@ public:
 #endif
 
 UDF_ASSERT_TYPE_SIZE(IBlockTypeHelper, 8);
-
-template<EDataSlot slot>
-std::shared_ptr<arrow::DataType> MakeTzLayoutArrowType() {
-    static_assert(slot == EDataSlot::TzDate || slot == EDataSlot::TzDatetime || slot == EDataSlot::TzTimestamp
-        || slot == EDataSlot::TzDate32 || slot == EDataSlot::TzDatetime64 || slot == EDataSlot::TzTimestamp64,
-        "Expected tz date type slot");
-
-    if constexpr (slot == EDataSlot::TzDate) {
-        return arrow::uint16();
-    }
-    if constexpr (slot == EDataSlot::TzDatetime) {
-        return arrow::uint32();
-    }
-    if constexpr (slot == EDataSlot::TzTimestamp) {
-        return arrow::uint64();
-    }
-    if constexpr (slot == EDataSlot::TzDate32) {
-        return arrow::int32();
-    }
-    if constexpr (slot == EDataSlot::TzDatetime64) {
-        return arrow::int64();
-    }
-    if constexpr (slot == EDataSlot::TzTimestamp64) {
-        return arrow::int64();
-    }
-}
 
 }
 }

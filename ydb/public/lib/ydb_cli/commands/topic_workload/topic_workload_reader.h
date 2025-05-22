@@ -39,20 +39,20 @@ namespace NYdb {
 
         class TTopicWorkloadReader {
         public:
-            static void RetryableReaderLoop(const TTopicWorkloadReaderParams& params);
+            static void RetryableReaderLoop(TTopicWorkloadReaderParams& params);
 
         private:
-            static void ReaderLoop(const TTopicWorkloadReaderParams& params, TInstant endTime);
+            static void ReaderLoop(TTopicWorkloadReaderParams& params, TInstant endTime);
 
             static std::vector<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvents(NYdb::NTopic::IReadSession& readSession,
-                                                                                  const TTopicWorkloadReaderParams& params,
+                                                                                  TTopicWorkloadReaderParams& params,
                                                                                   std::optional<TTransactionSupport>& txSupport);
 
-            static void TryCommitTx(const TTopicWorkloadReaderParams& params,
+            static void TryCommitTx(TTopicWorkloadReaderParams& params,
                                     std::optional<TTransactionSupport>& txSupport,
                                     TInstant& commitTime,
                                     TVector<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>& stopPartitionSessionEvents);
-            static void TryCommitTableChanges(const TTopicWorkloadReaderParams& params,
+            static void TryCommitTableChanges(TTopicWorkloadReaderParams& params,
                                               std::optional<TTransactionSupport>& txSupport);
             static void GracefullShutdown(TVector<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>& stopPartitionSessionEvents);
         };

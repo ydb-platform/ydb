@@ -1672,39 +1672,68 @@ private:
                 case NKqpProto::TKqpPhyTableOperation::kDeleteRows: {
                     YQL_ENSURE(stage.InputsSize() <= 1, "Effect stage with multiple inputs: " << stage.GetProgramAst());
 
-                    auto result = PruneEffectPartitions(op, stageInfo, HolderFactory(), TypeEnv());
-                    for (auto& [shardId, shardInfo] : result) {
-                        YQL_ENSURE(!shardInfo.KeyReadRanges);
-                        YQL_ENSURE(shardInfo.KeyWriteRanges);
+                    if (stage.InputsSize() == 1 && stage.GetInputs(0).GetTypeCase() == NKqpProto::TKqpPhyConnection::kMapShard) {
+                        const auto& inputStageInfo = TasksGraph.GetStageInfo(
+                            TStageId(stageInfo.Id.TxId, stage.GetInputs(0).GetStageIndex()));
 
-                        auto& task = getShardTask(shardId);
+                        for (ui64 inputTaskId : inputStageInfo.Tasks) {
+                            auto& task = getShardTask(TasksGraph.GetTask(inputTaskId).Meta.ShardId);
 
-                        if (!task.Meta.Writes) {
-                            task.Meta.Writes.ConstructInPlace();
-                            task.Meta.Writes->Ranges = std::move(*shardInfo.KeyWriteRanges);
-                        } else {
-                            task.Meta.Writes->Ranges.MergeWritePoints(std::move(*shardInfo.KeyWriteRanges), keyTypes);
+                            auto& inputTask = TasksGraph.GetTask(inputTaskId);
+                            YQL_ENSURE(inputTask.Meta.Reads, "" << inputTask.Meta.ToString(keyTypes, *AppData()->TypeRegistry));
+                            for (auto& read : *inputTask.Meta.Reads) {
+                                if (!task.Meta.Writes) {
+                                    task.Meta.Writes.ConstructInPlace();
+                                    task.Meta.Writes->Ranges = read.Ranges;
+                                } else {
+                                    task.Meta.Writes->Ranges.MergeWritePoints(TShardKeyRanges(read.Ranges), keyTypes);
+                                }
+
+                                if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kDeleteRows) {
+                                    task.Meta.Writes->AddEraseOp();
+                                } else {
+                                    task.Meta.Writes->AddUpdateOp();
+                                }
+
+                            }
+
+                            ShardsWithEffects.insert(task.Meta.ShardId);
                         }
+                    } else {
+                        auto result = PruneEffectPartitions(op, stageInfo, HolderFactory(), TypeEnv());
+                        for (auto& [shardId, shardInfo] : result) {
+                            YQL_ENSURE(!shardInfo.KeyReadRanges);
+                            YQL_ENSURE(shardInfo.KeyWriteRanges);
 
-                        if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kDeleteRows) {
-                            task.Meta.Writes->AddEraseOp();
-                        } else {
-                            task.Meta.Writes->AddUpdateOp();
+                            auto& task = getShardTask(shardId);
+
+                            if (!task.Meta.Writes) {
+                                task.Meta.Writes.ConstructInPlace();
+                                task.Meta.Writes->Ranges = std::move(*shardInfo.KeyWriteRanges);
+                            } else {
+                                task.Meta.Writes->Ranges.MergeWritePoints(std::move(*shardInfo.KeyWriteRanges), keyTypes);
+                            }
+
+                            if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kDeleteRows) {
+                                task.Meta.Writes->AddEraseOp();
+                            } else {
+                                task.Meta.Writes->AddUpdateOp();
+                            }
+
+                            for (const auto& [name, info] : shardInfo.ColumnWrites) {
+                                auto& column = tableInfo->Columns.at(name);
+
+                                auto& taskColumnWrite = task.Meta.Writes->ColumnWrites[column.Id];
+                                taskColumnWrite.Column.Id = column.Id;
+                                taskColumnWrite.Column.Type = column.Type;
+                                taskColumnWrite.Column.Name = name;
+                                taskColumnWrite.MaxValueSizeBytes = std::max(taskColumnWrite.MaxValueSizeBytes,
+                                    info.MaxValueSizeBytes);
+                            }
+
+                            ShardsWithEffects.insert(shardId);
                         }
-
-                        for (const auto& [name, info] : shardInfo.ColumnWrites) {
-                            auto& column = tableInfo->Columns.at(name);
-
-                            auto& taskColumnWrite = task.Meta.Writes->ColumnWrites[column.Id];
-                            taskColumnWrite.Column.Id = column.Id;
-                            taskColumnWrite.Column.Type = column.Type;
-                            taskColumnWrite.Column.Name = name;
-                            taskColumnWrite.MaxValueSizeBytes = std::max(taskColumnWrite.MaxValueSizeBytes,
-                                info.MaxValueSizeBytes);
-                        }
-                        ShardsWithEffects.insert(shardId);
                     }
-
                     break;
                 }
 

@@ -9,7 +9,7 @@ namespace NYT::NHttp {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using TMockHeaders = std::vector<std::pair<std::string, std::string>>;
+using TMockHeaders = std::vector<std::pair<TString, TString>>;
 
 struct TMockResponse
 {

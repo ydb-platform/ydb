@@ -155,7 +155,7 @@ void TPDisk::PrintLogChunksInfo(const TString& msg) {
         return str.Str();
     };
 
-    P_LOG(PRI_DEBUG, BPD01, "PrintLogChunksInfo " << msg, (LogChunks, debugPrint()));
+    P_LOG(PRI_NOTICE, BPD01, "PrintLogChunksInfo " << msg, (LogChunks, debugPrint()));
 }
 
 bool TPDisk::LogNonceJump(ui64 previousNonce) {
@@ -590,7 +590,8 @@ void TPDisk::ReadAndParseMainLog(const TActorId &pDiskActor) {
 
 void TPDisk::ProcessLogReadQueue() {
     for (auto& req : JointLogReads) {
-        req->Span.Event("PDisk.BeforeBlockDevice");
+        req->SpanStack.PopOk();
+        req->SpanStack.Push(TWilson::PDiskDetailed, "PDisk.InBlockDevice", NWilson::EFlags::AUTO_END);
         switch (req->GetType()) {
         case ERequestType::RequestLogRead:
         {
@@ -653,8 +654,8 @@ void TPDisk::ProcessLogReadQueue() {
             TLogReadContinue *read = static_cast<TLogReadContinue*>(req);
             if (auto ptr = read->CompletionAction.lock()) {
                 ptr->CostNs = DriveModel.TimeForSizeNs(read->Size, read->Offset / Format.ChunkSize, TDriveModel::OP_TYPE_READ);
-                auto traceId = read->Span.GetTraceId();
-                BlockDevice->PreadAsync(read->Data, read->Size, read->Offset, ptr.get(), read->ReqId, &traceId);
+                auto traceId = read->SpanStack.GetTraceId();
+                BlockDevice->PreadAsync(read->Data, read->Size, read->Offset, ptr.get(), read->ReqId, &traceId); // ??? TraceId
             }
             break;
         }
@@ -824,14 +825,15 @@ void TPDisk::ProcessLogWriteBatch(TVector<TLogWrite*> logWrites, TVector<TLogWri
     for (TLogWrite *logWrite : logWrites) {
         Y_VERIFY_DEBUG_S(logWrite, PCtx->PDiskLogPrefix);
         Mon.LogQueueTime.Increment(logWrite->LifeDurationMs(now));
+        logWrite->SpanStack.PopOk();
         logOperationSizeBytes += logWrite->Data.size();
         TStringStream errorReason;
         NKikimrProto::EReplyStatus status = ValidateRequest(logWrite, errorReason);
         if (status == NKikimrProto::OK) {
-            logWrite->Span.Event("PDisk.BeforeBlockDevice");
+            logWrite->SpanStack.Push(TWilson::PDiskDetailed, "PDisk.InBlockDevice", NWilson::EFlags::AUTO_END);
             LogWrite(*logWrite, logChunksToCommit);
             logWrite->ScheduleTime = HPNow();
-            if (auto logWriteTraceId = logWrite->Span.GetTraceId()) {
+            if (auto logWriteTraceId = logWrite->SpanStack.GetTraceId()) {
                 traceId = std::move(logWriteTraceId);
             }
         } else {
@@ -851,7 +853,7 @@ void TPDisk::ProcessLogWriteBatch(TVector<TLogWrite*> logWrites, TVector<TLogWri
     Y_UNUSED(write.Release());
 
     // Check if we can TRIM some chunks that were deleted
-    TryTrimChunk(false, 0);
+    TryTrimChunk(false, 0, NWilson::TSpan{});
 
     Mon.LogOperationSizeBytes.Increment(logOperationSizeBytes);
 }
@@ -992,7 +994,7 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
     }
 
     // Write to log
-    auto evLogTraceId = evLog.Span.GetTraceId();
+    auto evLogTraceId = evLog.SpanStack.GetTraceId();
     CommonLogger->LogHeader(evLog.Owner, evLog.Signature, evLog.Lsn, payloadSize, evLog.ReqId, &evLogTraceId);
     OnNonceChange(NonceLog, evLog.ReqId, &evLogTraceId);
     if (evLog.Data.size()) {
@@ -1427,7 +1429,7 @@ void TPDisk::OnLogCommitDone(TLogCommitDone &req) {
             }
         }
     }
-    TryTrimChunk(false, 0);
+    TryTrimChunk(false, 0, req.SpanStack.PeekTopConst());
 }
 
 void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
@@ -1440,7 +1442,7 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
     }
 
     if (req.IsChunksFromLogSplice) {
-        auto *releaseReq = ReqCreator.CreateFromArgs<TReleaseChunks>(std::move(req.ChunksToRelease));
+        auto *releaseReq = ReqCreator.CreateFromArgs<TReleaseChunks>(std::move(req.ChunksToRelease), req.SpanStack.CreateChild(TWilson::PDiskTopLevel, "PDisk.ReleaseChunks"));
 
         auto flushAction = MakeHolder<TCompletionEventSender>(this, THolder<TReleaseChunks>(releaseReq));
 
@@ -1466,7 +1468,7 @@ void TPDisk::MarkChunksAsReleased(TReleaseChunks& req) {
         }
         IsLogChunksReleaseInflight = false;
 
-        TryTrimChunk(false, 0);
+        TryTrimChunk(false, 0, req.SpanStack.PeekTopConst());
     }
 }
 

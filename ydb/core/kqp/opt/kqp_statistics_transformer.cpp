@@ -98,7 +98,7 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
         keyColumns,
         inputStats->ColumnStatistics,
         inputStats->StorageType);
-    stats->SortColumns = sortedPrefixPtr;
+    stats->SortColumns = sortedPrefixPtr; 
     stats->ShuffledByColumns = inputStats->ShuffledByColumns;
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for read table" << stats->ToString();
@@ -333,7 +333,7 @@ void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnn
  */
 void InferStatisticsForIndexLookup(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx) {
     auto inputNode = TExprBase(input);
-    auto lookupIndex = inputNode.Cast<TKqlStreamLookupIndex>();
+    auto lookupIndex = inputNode.Cast<TKqlLookupIndexBase>();
 
     auto inputStats = typeCtx->GetStats(lookupIndex.LookupKeys().Raw());
     if (!inputStats) {
@@ -478,8 +478,6 @@ public:
                 tmpSelectivity *= Compute(andNode.Cast().Arg(i));
             }
             resSelectivity = tmpSelectivity;
-        } else if (auto olapApply = input.Maybe<TKqpOlapApply>()) {
-            resSelectivity = TPredicateSelectivityComputer::Compute(olapApply.Cast().Lambda().Body());
         } else if (auto orNode = input.Maybe<TKqpOlapOr>()) {
             double tmpSelectivity = 0.0;
             for (size_t i = 0; i < orNode.Cast().ArgCount(); i++) {
@@ -493,7 +491,7 @@ public:
             if (listPtr->ChildrenSize() >= 2 && listPtr->Child(0)->Content() == "??") {
                 listPtr = listPtr->Child(1);
             }
-
+            
             size_t listSize = listPtr->ChildrenSize();
             if (listSize == 3) {
                 TString compSign = TString(listPtr->Child(0)->Content());
@@ -870,7 +868,7 @@ bool TKqpStatisticsTransformer::BeforeLambdasSpecific(const TExprNode::TPtr& inp
     else if(TKqlReadTableBase::Match(input.Get()) || TKqlReadTableRangesBase::Match(input.Get())){
         InferStatisticsForReadTable(input, TypeCtx, KqpCtx);
     }
-    else if(TKqlStreamLookupIndex::Match(input.Get())){
+    else if(TKqlLookupIndexBase::Match(input.Get())){
         InferStatisticsForIndexLookup(input, TypeCtx);
     }
     else if(TKqlLookupTableBase::Match(input.Get())) {

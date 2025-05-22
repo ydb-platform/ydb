@@ -26,8 +26,6 @@ private:
     static Aws::Auth::AWSCredentials CredentialsFromSettings(const NKikimrSchemeOp::TS3Settings& settings);
     static Aws::Client::ClientConfiguration ConfigFromSettings(const Ydb::Import::ImportFromS3Settings& settings);
     static Aws::Auth::AWSCredentials CredentialsFromSettings(const Ydb::Import::ImportFromS3Settings& settings);
-    static Aws::Client::ClientConfiguration ConfigFromSettings(const Ydb::Import::ListObjectsInS3ExportSettings& settings);
-    static Aws::Auth::AWSCredentials CredentialsFromSettings(const Ydb::Import::ListObjectsInS3ExportSettings& settings);
     static Aws::Client::ClientConfiguration ConfigFromSettings(const Ydb::Export::ExportToS3Settings& settings);
     static Aws::Auth::AWSCredentials CredentialsFromSettings(const Ydb::Export::ExportToS3Settings& settings);
 
@@ -48,7 +46,6 @@ public:
 
     TS3ExternalStorageConfig(const NKikimrSchemeOp::TS3Settings& settings);
     TS3ExternalStorageConfig(const Ydb::Import::ImportFromS3Settings& settings);
-    TS3ExternalStorageConfig(const Ydb::Import::ListObjectsInS3ExportSettings& settings);
     TS3ExternalStorageConfig(const Ydb::Export::ExportToS3Settings& settings);
     TS3ExternalStorageConfig(const Aws::Auth::AWSCredentials& credentials, const Aws::Client::ClientConfiguration& config, const TString& bucket);
 };

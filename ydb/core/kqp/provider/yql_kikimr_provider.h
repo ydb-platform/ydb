@@ -207,23 +207,6 @@ public:
         return Tables;
     }
 
-    void AddIndexImplTableToMainTableMapping(const TString& mainTable, const TString& indexTable) {
-        auto [it, success] = IndexTableToMainTable.emplace(indexTable, mainTable);
-        if (!success) {
-            YQL_ENSURE(it->second == mainTable);
-        }
-    }
-
-    const TKikimrTableDescription* GetMainTableIfTableIsImplTableOfIndex(const TStringBuf& cluster, const TStringBuf& id) {
-        auto it = IndexTableToMainTable.find(id);
-        if (it == IndexTableToMainTable.end()) {
-            return nullptr;
-        }
-        return &ExistingTable(cluster, it->second);
-    }
-
-    bool IsTableImmutable(const TStringBuf& cluster, const TStringBuf& path);
-
     std::optional<TString> GetTempTablePath(const TStringBuf& table) const;
 
     void Reset() {
@@ -237,8 +220,6 @@ public:
 private:
     THashMap<std::pair<TString, TString>, TKikimrTableDescription> Tables;
     NKikimr::NKqp::TKqpTempTablesState::TConstPtr TempTablesState;
-
-    THashMap<TString, TString> IndexTableToMainTable;
 };
 
 enum class TYdbOperation : ui64 {

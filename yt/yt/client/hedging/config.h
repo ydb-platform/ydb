@@ -56,8 +56,11 @@ struct TReplicationLagPenaltyProviderOptions
 
     // Same as BanPenalty in hedging client.
     TDuration LagPenalty;
-    // Replica is considered "lagged" if CurrentTimestamp - LastReplicationTimestamp >= MaxReplicaLag.
-    TDuration MaxReplicaLag;
+    // Tablet is considered "lagged" if CurrentTimestamp - TabletLastReplicationTimestamp >= MaxTabletLag.
+    TDuration MaxTabletLag;
+
+    // Real value from 0.0 to 1.0. Replica cluster receives LagPenalty if NumberOfTabletsWithLag >= MaxTabletsWithLagFraction * TotalNumberOfTablets.
+    double MaxTabletsWithLagFraction;
 
     // Replication lag check period.
     TDuration CheckPeriod;

@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import functools
 import types
-import weakref
 import zlib
 from typing import TYPE_CHECKING, Any, Collection, Mapping
 
@@ -129,25 +128,19 @@ class CacheControlAdapter(HTTPAdapter):
                 response._fp = CallbackFileWrapper(  # type: ignore[assignment]
                     response._fp,  # type: ignore[arg-type]
                     functools.partial(
-                        self.controller.cache_response, request, weakref.ref(response)
+                        self.controller.cache_response, request, response
                     ),
                 )
                 if response.chunked:
-                    super_update_chunk_length = response.__class__._update_chunk_length
+                    super_update_chunk_length = response._update_chunk_length
 
-                    def _update_chunk_length(
-                        weak_self: weakref.ReferenceType[HTTPResponse],
-                    ) -> None:
-                        self = weak_self()
-                        if self is None:
-                            return
-
-                        super_update_chunk_length(self)
+                    def _update_chunk_length(self: HTTPResponse) -> None:
+                        super_update_chunk_length()
                         if self.chunk_left == 0:
                             self._fp._close()  # type: ignore[union-attr]
 
-                    response._update_chunk_length = functools.partial(  # type: ignore[method-assign]
-                        _update_chunk_length, weakref.ref(response)
+                    response._update_chunk_length = types.MethodType(  # type: ignore[method-assign]
+                        _update_chunk_length, response
                     )
 
         resp: Response = super().build_response(request, response)

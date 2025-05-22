@@ -24,7 +24,7 @@ extern const TJobTraceId NullJobTraceId;
 
 YT_DEFINE_STRONG_TYPEDEF(TAllocationId, TGuid);
 
-extern const TAllocationId NullAllocationId;
+constexpr TAllocationId NullAllocationId{};
 
 ////////////////////////////////////////////////////////////////////////////////
 

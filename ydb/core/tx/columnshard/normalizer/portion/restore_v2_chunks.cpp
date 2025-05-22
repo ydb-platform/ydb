@@ -170,9 +170,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
     if (buildPortions.empty()) {
         return tasks;
     }
-    if (!AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage()) {
-        return tasks;
-    }
+    AFL_VERIFY(AppDataVerified().ColumnShardConfig.GetColumnChunksV1Usage());
 
     {
         std::vector<TV2BuildTask> package;

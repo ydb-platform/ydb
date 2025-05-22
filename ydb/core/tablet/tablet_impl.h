@@ -30,7 +30,6 @@ struct TEvTabletBase {
         EvFollowerRetry = EvBlockBlobStorageResult + 512,
         EvTrySyncFollower,
         EvTryBuildFollowerGraph,
-        EvLogGcRetry,
 
         EvEnd
     };
@@ -168,8 +167,6 @@ struct TEvTabletBase {
             , TabletId(tabletId)
         {}
     };
-
-    struct TEvLogGcRetry : public TEventLocal<TEvLogGcRetry, EvLogGcRetry> {};
 };
 
 }

@@ -377,7 +377,7 @@ void TGRpcService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrpc::TLogge
 TFuture<void> TGRpcService::Prepare(TActorSystem* system, const TActorId& pqMeta, const TActorId& msgBusProxy,
         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
     auto promise = NewPromise<void>();
-    InitCb_ = [=, this]() mutable {
+    InitCb_ = [=]() mutable {
         try {
             ActorSystem = system;
             PQMeta = pqMeta;

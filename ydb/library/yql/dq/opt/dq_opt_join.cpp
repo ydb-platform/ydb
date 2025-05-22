@@ -1473,7 +1473,6 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
             .KeyColumns()
                 .Add(keys)
                 .Build()
-            .UseSpilling().Build(true)
             .Done().Ptr();
     };
 

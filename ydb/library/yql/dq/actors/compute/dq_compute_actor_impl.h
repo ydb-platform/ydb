@@ -1133,9 +1133,15 @@ protected:
                 break;
             }
             case EEvWakeupTag::PeriodicStatsTag: {
+                const auto maxInterval = RuntimeSettings.ReportStatsSettings->MaxInterval;
                 if (Running && State == NDqProto::COMPUTE_STATE_EXECUTING) {
-                    ReportStats();
-                    this->Schedule(RuntimeSettings.ReportStatsSettings->MaxInterval, new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
+                    if (ProcessOutputsState.LastRunStatus == ERunStatus::Finished) {
+                        // wait until all outputs are drained
+                        ReportStats();
+                    } else {
+                        DoExecute();
+                    }
+                    this->Schedule(maxInterval, new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
                 }
                 break;
             }

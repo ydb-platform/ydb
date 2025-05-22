@@ -2176,12 +2176,12 @@ namespace {
     };
 }
 
-TString SerializeNode(TNode* node, std::vector<TNode*>& nodeStack) noexcept{
-    return SerializeRuntimeNode(TRuntimeNode(node, true), nodeStack);
+TString SerializeNode(TNode* node, const TTypeEnvironment& env) noexcept{
+    return SerializeRuntimeNode(TRuntimeNode(node, true), env);
 }
 
-TString SerializeRuntimeNode(TExploringNodeVisitor& explorer, TRuntimeNode node, std::vector<TNode*>& nodeStack) noexcept{
-    Y_UNUSED(nodeStack);
+TString SerializeRuntimeNode(TExploringNodeVisitor& explorer, TRuntimeNode node, const TTypeEnvironment& env) noexcept{
+    Y_UNUSED(env);
     TPrepareWriteNodeVisitor preparer;
     for (auto node : explorer.GetNodes()) {
         node->Accept(preparer);
@@ -2198,22 +2198,10 @@ TString SerializeRuntimeNode(TExploringNodeVisitor& explorer, TRuntimeNode node,
     return writer.GetOutput();
 }
 
-TString SerializeRuntimeNode(TRuntimeNode node, std::vector<TNode*>& nodeStack) noexcept{
+TString SerializeRuntimeNode(TRuntimeNode node, const TTypeEnvironment& env) noexcept{
     TExploringNodeVisitor explorer;
-    explorer.Walk(node.GetNode(), nodeStack);
-    return SerializeRuntimeNode(explorer, node, nodeStack);
-}
-
-TString SerializeNode(TNode* node, const TTypeEnvironment& env) noexcept {
-    return SerializeNode(node, env.GetNodeStack());
-}
-
-TString SerializeRuntimeNode(TRuntimeNode node, const TTypeEnvironment& env) noexcept {
-    return SerializeRuntimeNode(node, env.GetNodeStack());
-}
-
-TString SerializeRuntimeNode(TExploringNodeVisitor& explorer, TRuntimeNode node, const TTypeEnvironment& env) noexcept {
-    return SerializeRuntimeNode(explorer, node, env.GetNodeStack());
+    explorer.Walk(node.GetNode(), env);
+    return SerializeRuntimeNode(explorer, node, env);
 }
 
 TNode* DeserializeNode(const TStringBuf& buffer, const TTypeEnvironment& env) {

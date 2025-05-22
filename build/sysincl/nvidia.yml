@@ -7,7 +7,6 @@
   - cublasLt.h
   - cublas_v2.h
   - cuda.h
-  - cuda/atomic
   - cuda/std/atomic
   - cuda/std/array
   - cuda/std/cassert

@@ -16,7 +16,7 @@ struct TFederationConfig
     : public virtual NYTree::TYsonStruct
 {
     //! Bundle name which liveness should be checked on the background.
-    std::optional<std::string> BundleName;
+    std::optional<TString> BundleName;
 
     //! How often cluster liveness should be checked on the background.
     TDuration ClusterHealthCheckPeriod;

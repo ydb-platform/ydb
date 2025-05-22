@@ -120,8 +120,7 @@ class Slice:
         self.nodes.execute_async(
             f"{self.slice_kikimr_path} admin blobstorage config init --yaml-file /Berkanavt/kikimr/cfg/config.yaml",
             nodes=self.nodes.nodes_list[:1],
-            check_retcode=True,
-            retry_attempts=5,
+            check_retcode=False
         )
 
         create_db_template = f"{self.slice_kikimr_path} admin database /{{}}/{{}} create {{}}:{{}}"

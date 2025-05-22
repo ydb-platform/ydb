@@ -102,8 +102,7 @@ enum class EIoResult : i64 {
     InvalidSequence = 14,       // aka EILSEQ:                  GetEvents
     // for broken disk's error-log: "READ_ERROR: The read data could not be recovered from the media"
     NoData = 15,                // aka ENODATA:                 GetEvents
-    RemoteIOError = 16,         // aka EREMOTEIO:               GetEvents
-    NoSpaceLeft = 17            // aka ENOSPC:                  GetEvents
+    RemoteIOError = 16          // aka EREMOTEIO:               GetEvents
 };
 
 struct TAsyncIoOperationResult {

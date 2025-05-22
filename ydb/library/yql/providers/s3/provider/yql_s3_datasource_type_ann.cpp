@@ -487,11 +487,14 @@ public:
 
         std::vector<TString> partitionedBy;
         TString projection;
-        const auto useCoro = State_->Configuration->SourceCoroActor.Get();
         {
             TS3Object s3Object(input->Child(TS3ReadObject::idx_Object));
             auto format = s3Object.Format().Ref().Content();
             const TStructExprType* structRowType = rowType->Cast<TStructExprType>();
+
+            if (!NS3Util::ValidateS3ReadWriteSchema(structRowType, ctx)) {
+                return TStatus::Error;
+            }
 
             THashSet<TStringBuf> columns;
             for (const TItemExprType* item : structRowType->GetItems()) {
@@ -530,10 +533,6 @@ public:
                 return TStatus::Error;
             }
 
-            if (!NS3Util::ValidateS3ReadSchema(rowTypeNode.Pos(), format, structRowType, !useCoro || *useCoro, ctx)) {
-                return TStatus::Error;
-            }
-
             // Filter
             const TStatus filterAnnotationStatus = AnnotateFilterPredicate(input, TS3ReadObject::idx_FilterPredicate, structRowType, ctx);
             if (filterAnnotationStatus != TStatus::Ok) {
@@ -551,7 +550,7 @@ public:
             return TStatus::Error;
         }
 
-        if (objectNode->Child(TS3Object::idx_Format)->Content() == "parquet" && (!useCoro || *useCoro)) {
+        if (objectNode->Child(TS3Object::idx_Format)->Content() == "parquet") {
             YQL_ENSURE(State_->Types->ArrowResolver);
             bool allTypesSupported = true;
             for (const auto& item : rowType->Cast<TStructExprType>()->GetItems()) {

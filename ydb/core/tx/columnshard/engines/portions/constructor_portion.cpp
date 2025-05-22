@@ -1,6 +1,4 @@
-#include "compacted.h"
 #include "constructor_portion.h"
-#include "written.h"
 
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/common/limits.h>
@@ -14,55 +12,49 @@ namespace NKikimr::NOlap {
 std::shared_ptr<TPortionInfo> TPortionInfoConstructor::Build() {
     AFL_VERIFY(!Constructed);
     Constructed = true;
-    std::shared_ptr<TPortionInfo> result;
-    {
-        TMemoryProfileGuard mGuard0("portion_construct/meta::" + ::ToString(GetType()));
-        auto meta = MetaConstructor.Build();
-        TMemoryProfileGuard mGuard("portion_construct/main::" + ::ToString(GetType()));
-        result = BuildPortionImpl(std::move(meta));
-    }
-    {
-        TMemoryProfileGuard mGuard1("portion_construct/others::" + ::ToString(GetType()));
-        AFL_VERIFY(PathId);
-        result->PathId = PathId;
-        result->PortionId = GetPortionIdVerified();
 
-        if (RemoveSnapshot) {
-            AFL_VERIFY(RemoveSnapshot->Valid());
-            result->RemoveSnapshot = *RemoveSnapshot;
-        }
-        AFL_VERIFY(SchemaVersion && *SchemaVersion);
-        result->SchemaVersion = *SchemaVersion;
-        result->ShardingVersion = ShardingVersion;
+    std::shared_ptr<TPortionInfo> result(new TPortionInfo(MetaConstructor.Build()));
+    AFL_VERIFY(PathId);
+    result->PathId = PathId;
+    result->PortionId = GetPortionIdVerified();
+
+    AFL_VERIFY(MinSnapshotDeprecated);
+    AFL_VERIFY(MinSnapshotDeprecated->Valid());
+    result->MinSnapshotDeprecated = *MinSnapshotDeprecated;
+    if (RemoveSnapshot) {
+        AFL_VERIFY(RemoveSnapshot->Valid());
+        result->RemoveSnapshot = *RemoveSnapshot;
     }
-    static TAtomicCounter countValues = 0;
-    static TAtomicCounter sumValues = 0;
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("memory_size", result->GetMemorySize())("data_size", result->GetDataSize())(
-        "sum", sumValues.Add(result->GetMemorySize()))("count", countValues.Inc())("size_of_portion", sizeof(TPortionInfo));
+    result->SchemaVersion = SchemaVersion;
+    result->ShardingVersion = ShardingVersion;
+    result->CommitSnapshot = CommitSnapshot;
+    result->InsertWriteId = InsertWriteId;
+    AFL_VERIFY(!CommitSnapshot || !!InsertWriteId);
+
+    if (result->GetMeta().GetProduced() == NPortion::EProduced::INSERTED) {
+//        AFL_VERIFY(!!InsertWriteId);
+    } else {
+        AFL_VERIFY(!CommitSnapshot);
+        AFL_VERIFY(!InsertWriteId);
+    }
+
     return result;
 }
 
 ISnapshotSchema::TPtr TPortionInfoConstructor::GetSchema(const TVersionedIndex& index) const {
-    AFL_VERIFY(SchemaVersion);
-    auto schema = index.GetSchemaVerified(SchemaVersion.value());
-    AFL_VERIFY(!!schema)("details", TStringBuilder() << "cannot find schema for version " << SchemaVersion.value());
-    return schema;
-}
-
-std::shared_ptr<TPortionInfo> TWrittenPortionInfoConstructor::BuildPortionImpl(TPortionMeta&& meta) {
-    auto result = std::make_shared<TWrittenPortionInfo>(std::move(meta));
-    if (CommitSnapshot) {
-        result->CommitSnapshot = *CommitSnapshot;
+    if (SchemaVersion) {
+        auto schema = index.GetSchemaVerified(SchemaVersion.value());
+        AFL_VERIFY(!!schema)("details", TStringBuilder() << "cannot find schema for version " << SchemaVersion.value());
+        return schema;
+    } else {
+        AFL_VERIFY(MinSnapshotDeprecated);
+        return index.GetSchemaVerified(*MinSnapshotDeprecated);
     }
-    AFL_VERIFY(InsertWriteId);
-    result->InsertWriteId = *InsertWriteId;
-
-    AFL_VERIFY(result->GetMeta().GetProduced() == NPortion::EProduced::INSERTED);
-    return result;
 }
 
-std::shared_ptr<TPortionInfo> TCompactedPortionInfoConstructor::BuildPortionImpl(TPortionMeta&& meta) {
-    return std::make_shared<TCompactedPortionInfo>(std::move(meta));
+void TPortionInfoConstructor::AddMetadata(const ISnapshotSchema& snapshotSchema, const std::shared_ptr<arrow::RecordBatch>& batch) {
+    MetaConstructor.FillMetaInfo(NArrow::TFirstLastSpecialKeys(batch), IIndexInfo::CalcDeletions(batch, false),
+        NArrow::TMinMaxSpecialKeys(batch, TIndexInfo::ArrowSchemaSnapshot()), snapshotSchema.GetIndexInfo());
 }
 
 }   // namespace NKikimr::NOlap

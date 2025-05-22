@@ -23,8 +23,6 @@ struct TShuffleHandle
 
 DEFINE_REFCOUNTED_TYPE(TShuffleHandle)
 
-YT_DEFINE_STRONG_TYPEDEF(TSignedShuffleHandlePtr, NSignature::TSignaturePtr);
-
 void FormatValue(TStringBuilderBase* builder, const TShuffleHandlePtr& shuffleHandle, TStringBuf spec);
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -36,40 +34,27 @@ struct TStartShuffleOptions
     std::optional<int> ReplicationFactor;
 };
 
-struct TShuffleReaderOptions
-{
-    NTableClient::TTableReaderConfigPtr Config;
-};
-
-struct TShuffleWriterOptions
-{
-    NTableClient::TTableWriterConfigPtr Config;
-    bool OverwriteExistingWriterData = false;
-};
-
 ////////////////////////////////////////////////////////////////////////////////
 
 struct IShuffleClient
 {
     virtual ~IShuffleClient() = default;
 
-    virtual TFuture<TSignedShuffleHandlePtr> StartShuffle(
+    virtual TFuture<TShuffleHandlePtr> StartShuffle(
         const std::string& account,
         int partitionCount,
         NObjectClient::TTransactionId parentTransactionId,
         const TStartShuffleOptions& options) = 0;
 
     virtual TFuture<IRowBatchReaderPtr> CreateShuffleReader(
-        const TSignedShuffleHandlePtr& shuffleHandle,
+        const TShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
-        std::optional<std::pair<int, int>> writerIndexRange = {},
-        const TShuffleReaderOptions& options = {}) = 0;
+        const NTableClient::TTableReaderConfigPtr& config = New<NTableClient::TTableReaderConfig>()) = 0;
 
     virtual TFuture<IRowBatchWriterPtr> CreateShuffleWriter(
-        const TSignedShuffleHandlePtr& shuffleHandle,
+        const TShuffleHandlePtr& shuffleHandle,
         const std::string& partitionColumn,
-        std::optional<int> writerIndex = {},
-        const TShuffleWriterOptions& options = {}) = 0;
+        const NTableClient::TTableWriterConfigPtr& config = New<NTableClient::TTableWriterConfig>()) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

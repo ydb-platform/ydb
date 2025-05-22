@@ -58,12 +58,6 @@ public:
         }
     };
 
-    struct TLastScheduledTablet {
-        TFullTabletId TabletId;
-        NMetrics::TFastRiseAverageValue<double, 20> UsageSince;
-        double UsageBefore;
-    };
-
     THive& Hive;
     TNodeId Id;
     TActorId Local;
@@ -98,7 +92,6 @@ public:
     bool DeletionScheduled = false;
     TString Name;
     ui64 DrainSeqNo = 0;
-    std::optional<TLastScheduledTablet> LastScheduledTablet; // remembered for a limited time
 
     TNodeInfo(TNodeId nodeId, THive& hive);
     TNodeInfo(const TNodeInfo&) = delete;
@@ -255,7 +248,7 @@ public:
         return ResourceMaximumValues;
     }
 
-    double GetNodeUsageForTablet(const TTabletInfo& tablet, bool neighbourPenalty = true) const;
+    double GetNodeUsageForTablet(const TTabletInfo& tablet) const;
     double GetNodeUsage(EResourceToBalance resource = EResourceToBalance::ComputeResources) const;
     double GetNodeUsage(const TResourceNormalizedValues& normValues,
                         EResourceToBalance resource = EResourceToBalance::ComputeResources) const;
@@ -277,7 +270,7 @@ public:
         return ServicedDomains.empty() ? TSubDomainKey() : ServicedDomains.front();
     }
 
-    void UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& metrics, NIceDb::TNiceDb& db);
+    void UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& metrics);
     void ActualizeNodeStatistics(TInstant now);
     ui64 GetRestartsPerPeriod(TInstant barrier = {}) const;
 

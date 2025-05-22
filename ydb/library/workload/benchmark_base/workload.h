@@ -31,7 +31,6 @@ public:
     YDB_READONLY_DEF(TString, S3Prefix);
     YDB_READONLY(TString, StringType, "Utf8");
     YDB_READONLY(TString, DateType, "Date32");
-    YDB_READONLY(TString, DatetimeType, "Datetime64");
     YDB_READONLY(TString, TimestampType, "Timestamp64");
     YDB_READONLY(ui64, PartitionSizeMb, 2000);
 };
@@ -58,7 +57,7 @@ protected:
 
     THolder<TGeneratorStateProcessor> StateProcessor;
 private:
-    void GenerateDDLForTable(IOutputStream& result, const NJson::TJsonValue& table, const NJson::TJsonValue& common, bool single) const;
+    void GenerateDDLForTable(IOutputStream& result, const NJson::TJsonValue& table, bool single) const;
     const TWorkloadBaseParams& Params;
 };
 
@@ -69,7 +68,6 @@ public:
     TBulkDataGeneratorList GetBulkInitialData() override final;
 
 protected:
-    class TDataGenerator;
     virtual TBulkDataGeneratorList DoGetBulkInitialData() = 0;
     THolder<TGeneratorStateProcessor> StateProcessor;
     const TWorkloadBaseParams& Params;

@@ -46,9 +46,8 @@ public:
         auto& stateStorageLimits = *config.MutableStateStorageLimits();
         stateStorageLimits.SetMaxRowSizeBytes(YdbRowSizeLimit);
 
-        NYdb::TDriver driver(NYdb::TDriverConfig{});
-        auto ydbConnectionPtr = NewYdbConnection(config.GetStorage(), NKikimr::CreateYdbCredentialsProviderFactory, driver);
-        auto storage = NewYdbStateStorage(config, ydbConnectionPtr);
+        YqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, NKikimr::CreateYdbCredentialsProviderFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
+        auto storage = NewYdbStateStorage(config, NKikimr::CreateYdbCredentialsProviderFactory, YqSharedResources);
         storage->Init().GetValueSync();
         return storage;
     }

@@ -77,7 +77,6 @@
                           "DomainLevelEnd":256
                         },
                       "VDiskKind":"Default",
-                      "Kind":"ssd",
                       "PDiskFilter":
                         [
                           {

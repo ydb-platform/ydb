@@ -97,29 +97,13 @@ NKikimr::NArrow::NMerger::TRWSortableBatchPosition TSortableBatchPosition::Build
 TSortableBatchPosition::TFoundPosition TRWSortableBatchPosition::SkipToLower(const TSortableBatchPosition& forFound) {
     AFL_VERIFY(RecordsCount);
     const ui32 posStart = Position;
-    std::optional<TSortableBatchPosition::TFoundPosition> pos;
-    std::optional<ui64> overrideFound;
-    if (ReverseSort) {
-        pos = FindBound(*this, 0, posStart, forFound, true);
-        if (!pos) {
-            overrideFound = posStart;
-        } else if (pos->GetPosition()) {
-            overrideFound = pos->GetPosition() - 1;
-        }
-    } else {
-        pos = FindBound(*this, posStart, RecordsCount - 1, forFound, false);
-        if (pos) {
-            overrideFound = pos->GetPosition();
-        } else {
-            overrideFound = RecordsCount - 1;
-        }
-    }
-    if (overrideFound) {
+    AFL_VERIFY(!ReverseSort)("reason", "unimplemented");
+    auto pos = FindBound(*this, posStart, RecordsCount - 1, forFound, false);
+    if (!pos) {
         auto guard = CreateAsymmetricAccessGuard();
-        AFL_VERIFY(guard.InitSortingPosition(*overrideFound));
-        pos = TFoundPosition(*overrideFound, Compare(forFound));
+        AFL_VERIFY(guard.InitSortingPosition(RecordsCount - 1));
+        return TFoundPosition(RecordsCount - 1, Compare(forFound));
     }
-    AFL_VERIFY(pos)("has_override", !!overrideFound);
     if (ReverseSort) {
         AFL_VERIFY(Position <= posStart)("pos", Position)("pos_skip", pos->GetPosition())("reverse", true);
     } else {
@@ -176,16 +160,6 @@ TSortableScanData::TSortableScanData(const ui64 position, const std::shared_ptr<
         auto f = batch->schema()->GetFieldByName(i);
         AFL_VERIFY(f);
         Fields.emplace_back(f);
-    }
-    BuildPosition(position);
-}
-
-TSortableScanData::TSortableScanData(const ui64 position, const ui64 recordsCount, const std::vector<std::shared_ptr<arrow::Array>>& columns,
-    const std::vector<std::shared_ptr<arrow::Field>>& fields)
-    : RecordsCount(recordsCount)
-    , Fields(fields) {
-    for (auto&& i : columns) {
-        Columns.emplace_back(std::make_shared<NAccessor::TTrivialArray>(i));
     }
     BuildPosition(position);
 }

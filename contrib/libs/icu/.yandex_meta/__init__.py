@@ -104,7 +104,6 @@ icu = NixProject(
         "sys/neutrino.h",
         "ascii_a.h",
         "cics.h",
-        "cygwin/version.h",
         "mih/testptr.h",
         "qliept.h",
         "qusec.h",

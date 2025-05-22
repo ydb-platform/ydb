@@ -15,7 +15,6 @@ TBuildInfo TBuildInfo::GetDefault()
 
     if (GetVCS() == TString{"arc"}) {
         buildInfo.ArcRevision = GetProgramCommitId();
-        buildInfo.ArcLastChangeNum = GetArcadiaLastChangeNum();
     }
 
     return buildInfo;

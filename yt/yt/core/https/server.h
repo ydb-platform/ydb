@@ -8,7 +8,7 @@
 
 #include <yt/yt/core/http/public.h>
 
-#include <yt/yt/core/misc/memory_usage_tracker.h>
+#include <library/cpp/yt/memory/memory_usage_tracker.h>
 
 namespace NYT::NHttps {
 
@@ -28,7 +28,8 @@ NHttp::IServerPtr CreateServer(
     const TServerConfigPtr& config,
     const NConcurrency::IPollerPtr& poller,
     const NConcurrency::IPollerPtr& acceptor,
-    const IInvokerPtr& controlInvoker);
+    const IInvokerPtr& controlInvoker,
+    const IMemoryUsageTrackerPtr& memoryTracker = GetNullMemoryUsageTracker());
 
 ////////////////////////////////////////////////////////////////////////////////
 

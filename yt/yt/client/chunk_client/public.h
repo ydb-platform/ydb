@@ -156,12 +156,11 @@ struct TWrittenChunkReplicasInfo;
 
 class TChunkReplica;
 using TChunkReplicaList = TCompactVector<TChunkReplica, TypicalReplicaCount>;
-using TChunkReplicaSlimList = TCompactVector<TChunkReplica, SlimTypicalReplicaCount>;
 
-extern const std::string DefaultStoreAccountName;
-extern const std::string DefaultStoreMediumName;
-extern const std::string DefaultCacheMediumName;
-extern const std::string DefaultSlotsMediumName;
+extern const TString DefaultStoreAccountName;
+extern const TString DefaultStoreMediumName;
+extern const TString DefaultCacheMediumName;
+extern const TString DefaultSlotsMediumName;
 
 DECLARE_REFCOUNTED_STRUCT(IReaderBase)
 

@@ -67,8 +67,9 @@ void TMemoryUsageInfo::Return(const void* mem, ui64 size) {
         Y_DEBUG_ABORT_UNLESS(it != AllocationsMap_.end(), "Double free at: %p", mem);
     }
 
-    Y_DEBUG_ABORT_UNLESS(size == it->second.Size, "Deallocating wrong size at: %p, allocated at: %s. Actual size: %zu, but expected size is: %zu",
-                         mem, (TStringBuilder() << it->second.Location).c_str(), size, it->second.Size);
+    Y_DEBUG_ABORT_UNLESS(size == it->second.Size,
+                "Deallocating wrong size at: %p, "
+                "allocated at: %s", mem, (TStringBuilder() << it->second.Location).c_str());
     if (AllowMissing_) {
         it->second.IsDeleted = true;
     } else {

@@ -35,9 +35,13 @@ namespace NActors {
             : TActor<TDerived>(&TDerived::StateBootstrap) {
         }
 
-        template <typename T>
-        TActorBootstrapped(T&& activityType)
-            : TActor<TDerived>(&TDerived::StateBootstrap, std::forward<T>(activityType)) {
+        template <class TEnum>
+        TActorBootstrapped(const TEnum activityType)
+            : TActor<TDerived>(&TDerived::StateBootstrap, activityType) {
+        }
+
+        TActorBootstrapped(const TString& activityName)
+            : TActor<TDerived>(&TDerived::StateBootstrap, activityName) {
         }
     };
 }

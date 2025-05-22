@@ -661,29 +661,23 @@ bool TSqlTranslation::CreateTableIndex(const TRule_table_index& node, TVector<TI
             if (globalIndex.HasBlock2()) {
                 uniqIndex = true;
             }
-            bool sync = true;
             if (globalIndex.HasBlock3()) {
                 const TString token = to_lower(Ctx.Token(globalIndex.GetBlock3().GetToken1()));
                 if (token == "sync") {
-                    sync = true;
+                    if (uniqIndex) {
+                        indexes.back().Type = TIndexDescription::EType::GlobalSyncUnique;
+                    } else {
+                        indexes.back().Type = TIndexDescription::EType::GlobalSync;
+                    }
                 } else if (token == "async") {
-                    sync = false;
+                    if (uniqIndex) {
+                        AltNotImplemented("unique", indexType);
+                        return false;
+                    }
+                    indexes.back().Type = TIndexDescription::EType::GlobalAsync;
                 } else {
                     Y_ABORT("You should change implementation according to grammar changes");
                 }
-            }
-            if (sync) {
-                if (uniqIndex) {
-                    indexes.back().Type = TIndexDescription::EType::GlobalSyncUnique;
-                } else {
-                    indexes.back().Type = TIndexDescription::EType::GlobalSync;
-                }
-            } else {
-                if (uniqIndex) {
-                    AltNotImplemented("unique", indexType);
-                    return false;
-                }
-                indexes.back().Type = TIndexDescription::EType::GlobalAsync;
             }
         }
         break;

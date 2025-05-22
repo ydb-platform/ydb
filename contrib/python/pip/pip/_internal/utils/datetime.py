@@ -1,4 +1,5 @@
-"""For when pip wants to check the date or time."""
+"""For when pip wants to check the date or time.
+"""
 
 import datetime
 

@@ -1,8 +1,10 @@
-"""
-Python Lexical Analyser
-
-Exception classes
-"""
+#=======================================================================
+#
+#   Python Lexical Analyser
+#
+#   Exception classes
+#
+#=======================================================================
 
 
 class PlexError(Exception):
@@ -14,6 +16,10 @@ class PlexTypeError(PlexError, TypeError):
 
 
 class PlexValueError(PlexError, ValueError):
+    pass
+
+
+class InvalidRegex(PlexError):
     pass
 
 

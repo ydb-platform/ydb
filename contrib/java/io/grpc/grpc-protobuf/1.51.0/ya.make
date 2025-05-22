@@ -17,9 +17,6 @@ JAR_RESOURCE(4628902851)
 
 SRC_RESOURCE(4628902574)
 
-EXCLUDE(
-    contrib/java/com/google/api/api-common
-    contrib/java/com/google/protobuf/protobuf-javalite
-)
+EXCLUDE(contrib/java/com/google/protobuf/protobuf-javalite)
 
 END()

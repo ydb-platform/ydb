@@ -68,7 +68,7 @@ struct TChannelsTestFixture: public NUnitTest::TBaseFixture
             NYql::NDqProto::EDqStatsMode::DQ_STATS_MODE_NONE,
             /*channelBufferSize = */ 1000000,
             /*callbacks = */ &Callbacks,
-            /*activityType = */ {}
+            /*activityType = */ 0
         ));
         channels->InputChannelsMap.emplace((ui64)0, TDqComputeActorChannels::TInputChannelState {});
         InputChannel = &channels->InCh(0);

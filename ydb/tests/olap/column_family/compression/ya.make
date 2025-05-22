@@ -1,8 +1,6 @@
 PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
-FORK_SUBTESTS()
-
 TEST_SRCS(
     base.py
     alter_compression.py

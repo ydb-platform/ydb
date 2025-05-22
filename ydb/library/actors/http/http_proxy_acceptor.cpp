@@ -32,7 +32,6 @@ protected:
             hFunc(NActors::TEvPollerReady, Handle);
             hFunc(TEvHttpProxy::TEvHttpIncomingConnectionClosed, Handle);
             hFunc(TEvHttpProxy::TEvReportSensors, Handle);
-            cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
         }
     }
 

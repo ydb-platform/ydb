@@ -215,7 +215,6 @@ int aws_websocket_client_connect(const struct aws_websocket_client_connection_op
     http_options.on_setup = s_ws_bootstrap_on_http_setup;
     http_options.on_shutdown = s_ws_bootstrap_on_http_shutdown;
     http_options.requested_event_loop = options->requested_event_loop;
-    http_options.host_resolution_config = options->host_resolution_config;
 
     /* Infer port, if not explicitly specified in URI */
     http_options.port = options->port;
@@ -235,7 +234,7 @@ int aws_websocket_client_connect(const struct aws_websocket_client_connection_op
     /* Success! (so far) */
     AWS_LOGF_TRACE(
         AWS_LS_HTTP_WEBSOCKET_SETUP,
-        "id=%p: Websocket setup begun, connecting to " PRInSTR ":%" PRIu32 PRInSTR,
+        "id=%p: Websocket setup begun, connecting to " PRInSTR ":%" PRIu16 PRInSTR,
         (void *)ws_bootstrap,
         AWS_BYTE_CURSOR_PRI(options->host),
         options->port,

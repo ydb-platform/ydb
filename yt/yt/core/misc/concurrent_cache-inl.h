@@ -70,13 +70,14 @@ TConcurrentCache<T>::RenewTable(const TIntrusivePtr<TLookupTable>& head, size_t 
 
 template <class T>
 TConcurrentCache<T>::TConcurrentCache(size_t capacity, IMemoryUsageTrackerPtr tracker)
-    : MemoryUsageTracker_(std::move(tracker))
+    : MemoryUsageTracker_(tracker)
     , Capacity_(capacity)
     , Head_(New<TLookupTable>(
         capacity,
-        TMemoryUsageTrackerGuard::Acquire(
+        TMemoryUsageTrackerGuard::TryAcquire(
             MemoryUsageTracker_,
-            TLookupTable::GetByteSize(capacity))))
+            TLookupTable::GetByteSize(capacity))
+            .ValueOrThrow()))
 {
     YT_VERIFY(capacity > 0);
 }

@@ -1,15 +1,8 @@
 #include "mkql_buffer.h"
 
-namespace NKikimr::NMiniKQL {
+namespace NKikimr {
 
-#if defined(PROFILE_MEMORY_ALLOCATIONS)
-NMonitoring::TDynamicCounters::TCounterPtr TotalBytesWastedCounter;
-
-void InitializeGlobalPagedBufferCounters(::NMonitoring::TDynamicCounterPtr root) {
-    NMonitoring::TDynamicCounterPtr subGroup = root->GetSubgroup("counters", "utils")->GetSubgroup("subsystem", "mkqlalloc");
-    TotalBytesWastedCounter = subGroup->GetCounter("PagedBuffer/TotalBytesWasted");
-}
-#endif
+namespace NMiniKQL {
 
 const size_t TBufferPage::PageCapacity = TBufferPage::PageAllocSize - sizeof(TBufferPage);
 
@@ -21,16 +14,10 @@ TBufferPage* TBufferPage::Allocate() {
         throw std::bad_alloc();
     }
     TBufferPage* result = ::new (ptr) TBufferPage();
-#if defined(PROFILE_MEMORY_ALLOCATIONS)
-    TotalBytesWastedCounter->Add(result->Wasted());
-#endif
     return result;
 }
 
 void TBufferPage::Free(TBufferPage* page) {
-#if defined(PROFILE_MEMORY_ALLOCATIONS)
-    TotalBytesWastedCounter->Sub(page->Wasted());
-#endif
     free(page);
 }
 
@@ -38,8 +25,8 @@ void TPagedBuffer::AppendPage() {
     TBufferPage* page = nullptr;
     if (Tail_) {
         auto tailPage = TBufferPage::GetPage(Tail_);
-        if (auto next = tailPage->Next()) {
-            // TODO: can we get here?
+        auto next = tailPage->Next();
+        if (next) {
             page = next;
             page->Clear();
         } else {
@@ -67,4 +54,6 @@ TChunkedBuffer TPagedBuffer::AsChunkedBuffer(const TConstPtr& buffer) {
     return result;
 }
 
-} // namespace NKikimr::NMiniKQL
+} // NMiniKQL
+
+} // NKikimr

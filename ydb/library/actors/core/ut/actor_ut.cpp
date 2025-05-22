@@ -480,7 +480,7 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
 
         void Bootstrap()
         {
-            auto activityTypeIndex = GetActivityType().GetIndex();
+            const auto& activityTypeIndex = GetActivityType();
             Y_ENSURE(activityTypeIndex < GetActivityTypeCount());
             Y_ENSURE(GetActivityTypeName(activityTypeIndex) == "TestActor");
             PassAway();

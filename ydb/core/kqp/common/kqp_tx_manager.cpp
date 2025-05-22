@@ -322,7 +322,6 @@ public:
         AFL_ENSURE(!CollectOnly);
         AFL_ENSURE(State == ETransactionState::COLLECTING);
         AFL_ENSURE(NeedCommit());
-        AFL_ENSURE(!BrokenLocks());
 
         THashSet<ui64> sendingColumnShardsSet;
         THashSet<ui64> receivingColumnShardsSet;
@@ -429,7 +428,6 @@ public:
                 || (State == ETransactionState::COLLECTING
                     && IsSingleShard()));
         AFL_ENSURE(NeedCommit());
-        AFL_ENSURE(!BrokenLocks());
         State = ETransactionState::EXECUTING;
 
         for (auto& [_, shardInfo] : ShardsInfo) {

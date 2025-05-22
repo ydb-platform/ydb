@@ -136,10 +136,8 @@ NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
     if (baseTablePartitionConfig.HasKeepSnapshotTimeout()) {
         result.SetKeepSnapshotTimeout(baseTablePartitionConfig.GetKeepSnapshotTimeout());
     }
-    if (indexTableDesc.GetPartitionConfig().FollowerGroupsSize()) {
-        result.MutableFollowerGroups()->CopyFrom(indexTableDesc.GetPartitionConfig().GetFollowerGroups());
-    }
     // skip repeated NKikimrStorageSettings.TStorageRoom StorageRooms = 17;
+    // skip optional NKikimrHive.TFollowerGroup FollowerGroup = 23;
 
     return result;
 }
@@ -257,18 +255,13 @@ auto CalcImplTableDescImpl(
 }
 
 auto CalcVectorKmeansTreePostingImplTableDescImpl(
+    const THashSet<TString>& indexKeyColumns,
     const auto& baseTable,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const THashSet<TString>& indexDataColumns,
+    const TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     std::string_view suffix)
 {
-    auto tableColumns = ExtractInfo(baseTable);
-    THashSet<TString> indexColumns = indexDataColumns;
-    for (const auto & keyColumn: tableColumns.Keys) {
-        indexColumns.insert(keyColumn);
-    }
-
     NKikimrSchemeOp::TTableDescription implTableDesc;
     implTableDesc.SetName(TString::Join(NTableVectorKmeansTreeIndex::PostingTable, suffix));
     SetImplTablePartitionConfig(baseTablePartitionConfig, indexTableDesc, implTableDesc);
@@ -280,7 +273,15 @@ auto CalcVectorKmeansTreePostingImplTableDescImpl(
         parentColumn->SetNotNull(true);
     }
     implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::ParentColumn);
-    FillIndexImplTableColumns(GetColumns(baseTable), tableColumns.Keys, indexColumns, implTableDesc);
+    if (indexKeyColumns.empty()) {
+        FillIndexImplTableColumns(GetColumns(baseTable), implTableColumns.Keys, implTableColumns.Columns, implTableDesc);
+    } else {
+        auto keys = implTableColumns.Keys;
+        auto columns = implTableColumns.Columns;
+        std::erase_if(keys, [&](const auto& key) { return indexKeyColumns.contains(key); });
+        EraseNodesIf(columns, [&](const auto& key) { return indexKeyColumns.contains(key); });
+        FillIndexImplTableColumns(GetColumns(baseTable), keys, columns, implTableDesc);
+    }
 
     implTableDesc.SetSystemColumnNamesAllowed(true);
 
@@ -381,23 +382,25 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
 }
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
+    const THashSet<TString>& indexKeyColumns,
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const THashSet<TString>& indexDataColumns,
+    const TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     std::string_view suffix)
 {
-    return CalcVectorKmeansTreePostingImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexDataColumns, indexTableDesc, suffix);
+    return CalcVectorKmeansTreePostingImplTableDescImpl(indexKeyColumns, baseTableInfo, baseTablePartitionConfig, implTableColumns, indexTableDesc, suffix);
 }
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePostingImplTableDesc(
+    const THashSet<TString>& indexKeyColumns,
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
-    const THashSet<TString>& indexDataColumns,
+    const TTableColumns& implTableColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     std::string_view suffix)
 {
-    return CalcVectorKmeansTreePostingImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexTableDesc, suffix);
+    return CalcVectorKmeansTreePostingImplTableDescImpl(indexKeyColumns, baseTableDescr, baseTablePartitionConfig, implTableColumns, indexTableDesc, suffix);
 }
 
 NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreePrefixImplTableDesc(

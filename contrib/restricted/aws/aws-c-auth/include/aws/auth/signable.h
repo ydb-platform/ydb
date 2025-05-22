@@ -3,8 +3,6 @@
 
 #include <aws/auth/auth.h>
 
-AWS_PUSH_SANE_WARNING_LEVEL
-
 struct aws_http_message;
 struct aws_http_headers;
 struct aws_input_stream;
@@ -232,6 +230,5 @@ struct aws_signable *aws_signable_new_canonical_request(
     struct aws_byte_cursor canonical_request);
 
 AWS_EXTERN_C_END
-AWS_POP_SANE_WARNING_LEVEL
 
 #endif /* AWS_AUTH_SIGNABLE_H */

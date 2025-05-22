@@ -467,8 +467,7 @@ public:
 
         TTenant(const TString &path,
                 EState state,
-                const TString &token,
-                const TString &peer);
+                const TString &token);
 
         static bool IsConfiguringState(EState state);
         static bool IsCreatingState(EState state);
@@ -517,8 +516,6 @@ public:
         TString Issue;
         ui64 TxId;
         NACLib::TUserToken UserToken;
-        // Peer is remote-address of User, who created database. Used for audit logging.
-        const TString PeerName;
         // Subdomain version is incremented on each pool creation.
         ui64 SubdomainVersion;
         // Last subdomain version configured in SchemeShard.
@@ -908,10 +905,6 @@ public:
                                  const TActorContext &ctx);
     void DbUpdateTenantUserToken(TTenant::TPtr tenant,
                                  const TString &userToken,
-                                 TTransactionContext &txc,
-                                 const TActorContext &ctx);
-    void DbUpdateTenantPeerName(TTenant::TPtr tenant,
-                                 const TString &peerName,
                                  TTransactionContext &txc,
                                  const TActorContext &ctx);
     void DbUpdateSubdomainVersion(TTenant::TPtr tenant,

@@ -142,51 +142,51 @@
     #define _console_
 #endif
 
-#if defined(__SSE__)
+#if defined(__SSE__) || defined(SSE_ENABLED)
     #define _sse_
 #endif
 
-#if defined(__SSE2__)
+#if defined(__SSE2__) || defined(SSE2_ENABLED)
     #define _sse2_
 #endif
 
-#if defined(__SSE3__)
+#if defined(__SSE3__) || defined(SSE3_ENABLED)
     #define _sse3_
 #endif
 
-#if defined(__SSSE3__)
+#if defined(__SSSE3__) || defined(SSSE3_ENABLED)
     #define _ssse3_
 #endif
 
-#if defined(__SSE4_1__)
+#if defined(__SSE4_1__) || defined(SSE41_ENABLED)
     #define _sse4_1_
 #endif
 
-#if defined(__SSE4_2__)
+#if defined(__SSE4_2__) || defined(SSE42_ENABLED)
     #define _sse4_2_
 #endif
 
-#if defined(__POPCNT__)
+#if defined(__POPCNT__) || defined(POPCNT_ENABLED)
     #define _popcnt_
 #endif
 
-#if defined(__PCLMUL__)
+#if defined(__PCLMUL__) || defined(PCLMUL_ENABLED)
     #define _pclmul_
 #endif
 
-#if defined(__AES__)
+#if defined(__AES__) || defined(AES_ENABLED)
     #define _aes_
 #endif
 
-#if defined(__AVX__)
+#if defined(__AVX__) || defined(AVX_ENABLED)
     #define _avx_
 #endif
 
-#if defined(__AVX2__)
+#if defined(__AVX2__) || defined(AVX2_ENABLED)
     #define _avx2_
 #endif
 
-#if defined(__FMA__)
+#if defined(__FMA__) || defined(FMA_ENABLED)
     #define _fma_
 #endif
 

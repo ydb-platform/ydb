@@ -44,7 +44,7 @@ private:
     ui32 ActiveNode;
     std::optional<Ydb::Monitoring::SelfCheckResult> Result;
     TInstant LastResultUpdate;
-    std::vector<NHealthCheck::TEvSelfCheckRequestProto::TPtr> Requests;
+    std::vector<TActorId> Clients;
     TBoardInfoEntries BoardInfo;
     TActorId PublishActor;
     TActorId SubscribeActor;
@@ -66,10 +66,10 @@ private:
         Counters->GetCounter(HEALTHCHECK_REQUESTS_MADE_COUNTER, true)->Inc();
     }
 
-    void Reply(NHealthCheck::TEvSelfCheckRequestProto::TPtr& request) {
+    void Reply(TActorId client) {
         auto response = std::make_unique<NHealthCheck::TEvSelfCheckResultProto>();
         response->Record = *Result;
-        Send(request->Sender, response.release(), 0, request->Cookie);
+        Send(client, response.release());
         Counters->GetCounter(HEALTHCHECK_REQUESTS_ANSWERED_COUNTER, true)->Inc();
     }
 
@@ -125,10 +125,10 @@ private:
         RequestInProgress = false;
         Result = ev->Get()->Result;
         LastResultUpdate = TActivationContext::Now();
-        for (auto& request : Requests) {
-            Reply(request);
+        for (const auto& client : Clients) {
+            Reply(client);
         }
-        Requests.clear();
+        Clients.clear();
     }
 
     void Handle(NHealthCheck::TEvSelfCheckRequestProto::TPtr& ev) {
@@ -136,11 +136,11 @@ private:
         TInstant now = TActivationContext::Now();
         if (Result && now - LastResultUpdate <= 2 * RefreshPeriod) {
             LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Replying now");
-            Reply(ev);
+            Reply(ev->Sender);
         } else {
             LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::DB_METADATA_CACHE, "Answer not ready, waiting");
             SendRequest();
-            Requests.emplace_back(std::move(ev));
+            Clients.push_back(ev->Sender);
         }
     }
 

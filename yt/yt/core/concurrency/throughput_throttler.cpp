@@ -219,13 +219,6 @@ public:
         return limit;
     }
 
-    TDuration GetPeriod() const override
-    {
-        YT_ASSERT_THREAD_AFFINITY_ANY();
-
-        return Period_.load();
-    }
-
     i64 GetQueueTotalAmount() const override
     {
         YT_ASSERT_THREAD_AFFINITY_ANY();
@@ -673,13 +666,6 @@ public:
         YT_ASSERT_THREAD_AFFINITY_ANY();
 
         return std::nullopt;
-    }
-
-    TDuration GetPeriod() const override
-    {
-        YT_ASSERT_THREAD_AFFINITY_ANY();
-
-        return TDuration::Max();
     }
 
     TFuture<void> GetAvailableFuture() override

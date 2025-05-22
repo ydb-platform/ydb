@@ -107,8 +107,10 @@ extern void MkqlDelete(MemoryContext context);
 extern MemoryContext MkqlGetChunkContext(void *pointer);
 extern Size MkqlGetChunkSpace(void *pointer);
 extern bool MkqlIsEmpty(MemoryContext context);
-extern void MkqlStats(MemoryContext context, MemoryStatsPrintFunc printfunc, void* passthru, MemoryContextCounters* totals,
-                      bool print_to_stderr);
+extern void MkqlStats(MemoryContext context,
+						  MemoryStatsPrintFunc printfunc, void *passthru,
+						      MemoryContextCounters *totals,
+						  bool print_to_stderr);
 #ifdef MEMORY_CONTEXT_CHECKING
 extern void MkqlCheck(MemoryContext context);
 #endif
@@ -1335,11 +1337,6 @@ public:
         NUdf::TUnboxedValuePod res;
         if constexpr (!UseContext) {
             TPAllocScope call;
-            Y_DEFER {
-                // This ensures that there is no dangling pointers references to freed
-                // |TPAllocScope| pages that can be allocated and stored inside |callInfo.flinfo->fn_extra|.
-                callInfo.flinfo->fn_extra = nullptr;
-            };
             res = this->DoCall(callInfo);
         } else {
             res = this->DoCall(callInfo);

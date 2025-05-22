@@ -33,15 +33,13 @@ TServiceContextBase::TServiceContextBase(
     TMemoryUsageTrackerGuard memoryGuard,
     IMemoryUsageTrackerPtr memoryUsageTracker,
     NLogging::TLogger logger,
-    NLogging::ELogLevel logLevel,
-    std::optional<NLogging::ELogLevel> errorLogLevel)
+    NLogging::ELogLevel logLevel)
     : RequestHeader_(std::move(header))
     , RequestMessage_(std::move(requestMessage))
     , RequestMemoryGuard_(std::move(memoryGuard))
     , MemoryUsageTracker_(std::move(memoryUsageTracker))
     , Logger(std::move(logger))
     , LogLevel_(logLevel)
-    , ErrorLogLevel_(errorLogLevel.value_or(logLevel))
 {
     Initialize();
 }
@@ -51,15 +49,13 @@ TServiceContextBase::TServiceContextBase(
     TMemoryUsageTrackerGuard memoryGuard,
     IMemoryUsageTrackerPtr memoryUsageTracker,
     NLogging::TLogger logger,
-    NLogging::ELogLevel logLevel,
-    std::optional<NLogging::ELogLevel> errorLogLevel)
+    NLogging::ELogLevel logLevel)
     : RequestHeader_(new TRequestHeader())
     , RequestMessage_(std::move(requestMessage))
     , RequestMemoryGuard_(std::move(memoryGuard))
     , MemoryUsageTracker_(std::move(memoryUsageTracker))
     , Logger(std::move(logger))
     , LogLevel_(logLevel)
-    , ErrorLogLevel_(errorLogLevel.value_or(logLevel))
 {
     YT_VERIFY(TryParseRequestHeader(RequestMessage_, RequestHeader_.get()));
     Initialize();
@@ -145,7 +141,7 @@ void TServiceContextBase::ReplyEpilogue()
         LoggingEnabled_ &&
         TDispatcher::Get()->ShouldAlertOnMissingRequestInfo())
     {
-        const auto& Logger = RpcServerLogger();
+        static constexpr auto& Logger = RpcServerLogger;
         YT_LOG_ALERT("Missing request info (RequestId: %v, Method: %v.%v)",
             RequestId_,
             RequestHeader_->service(),
@@ -339,7 +335,7 @@ const IAttributeDictionary& TServiceContextBase::GetEndpointAttributes() const
 
 const std::string& TServiceContextBase::GetEndpointDescription() const
 {
-    static const std::string EmptyEndpointDescription;
+    static const TString EmptyEndpointDescription;
     return EmptyEndpointDescription;
 }
 
@@ -440,7 +436,7 @@ bool TServiceContextBase::IsLoggingEnabled() const
     return LoggingEnabled_;
 }
 
-void TServiceContextBase::SetRawRequestInfo(std::string info, bool incremental)
+void TServiceContextBase::SetRawRequestInfo(TString info, bool incremental)
 {
     YT_ASSERT(!Replied_);
 
@@ -465,7 +461,7 @@ void TServiceContextBase::SuppressMissingRequestInfoCheck()
     RequestInfoSet_ = true;
 }
 
-void TServiceContextBase::SetRawResponseInfo(std::string info, bool incremental)
+void TServiceContextBase::SetRawResponseInfo(TString info, bool incremental)
 {
     YT_ASSERT(!Replied_);
 
@@ -755,7 +751,7 @@ bool TServiceContextWrapper::IsLoggingEnabled() const
     return UnderlyingContext_->IsLoggingEnabled();
 }
 
-void TServiceContextWrapper::SetRawRequestInfo(std::string info, bool incremental)
+void TServiceContextWrapper::SetRawRequestInfo(TString info, bool incremental)
 {
     UnderlyingContext_->SetRawRequestInfo(std::move(info), incremental);
 }
@@ -765,7 +761,7 @@ void TServiceContextWrapper::SuppressMissingRequestInfoCheck()
     UnderlyingContext_->SuppressMissingRequestInfoCheck();
 }
 
-void TServiceContextWrapper::SetRawResponseInfo(std::string info, bool incremental)
+void TServiceContextWrapper::SetRawResponseInfo(TString info, bool incremental)
 {
     UnderlyingContext_->SetRawResponseInfo(std::move(info), incremental);
 }

@@ -50,8 +50,6 @@ RECURSE_FOR_TESTS(
     ut_stats
     ut_subdomain
     ut_subdomain_reboots
-    ut_sysview
-    ut_sysview_reboots
     ut_topic_splitmerge
     ut_transfer
     ut_ttl
@@ -152,7 +150,6 @@ SRCS(
     schemeshard__operation_create_sequence.cpp
     schemeshard__operation_create_solomon.cpp
     schemeshard__operation_create_subdomain.cpp
-    schemeshard__operation_create_sysview.cpp
     schemeshard__operation_create_table.cpp
     schemeshard__operation_create_view.cpp
     schemeshard__operation_db_changes.cpp
@@ -174,7 +171,6 @@ SRCS(
     schemeshard__operation_drop_sequence.cpp
     schemeshard__operation_drop_solomon.cpp
     schemeshard__operation_drop_subdomain.cpp
-    schemeshard__operation_drop_sysview.cpp
     schemeshard__operation_drop_table.cpp
     schemeshard__operation_drop_unsafe.cpp
     schemeshard__operation_drop_view.cpp
@@ -293,8 +289,6 @@ PEERDIR(
     ydb/core/external_sources
     ydb/core/filestore/core
     ydb/core/kesus/tablet
-    ydb/core/keyvalue
-    ydb/core/keyvalue/protos
     ydb/core/metering
     ydb/core/persqueue
     ydb/core/persqueue/config

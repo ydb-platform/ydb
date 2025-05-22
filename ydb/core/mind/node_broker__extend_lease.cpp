@@ -89,6 +89,7 @@ public:
             Self->AddNodeToEpochCache(node);
             Self->AddNodeToUpdateNodesLog(node);
         }
+        Self->SendUpdateNodes(ctx);
     }
 
 private:

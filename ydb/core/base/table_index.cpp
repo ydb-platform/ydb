@@ -154,11 +154,7 @@ bool IsCompatibleIndex(NKikimrSchemeOp::EIndexType indexType, const TTableColumn
     }
     tmp.clear();
     tmp.insert(table.Keys.begin(), table.Keys.end());
-    if (isSecondaryIndex) {
-        tmp.insert(index.KeyColumns.begin(), index.KeyColumns.end());
-    } else {
-        // Vector indexes allow to add all columns both to index & data
-    }
+    tmp.insert(index.KeyColumns.begin(), index.KeyColumns.end() - (isSecondaryIndex ? 0 : 1));
     if (const auto* broken = IsContains(index.DataColumns, tmp, true)) {
         explain = TStringBuilder()
                   << "the same column can't be used as key and data column for one index, for example " << *broken;

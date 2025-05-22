@@ -26,7 +26,6 @@ struct exponential_backoff_retry_token {
     struct aws_atomic_var last_backoff;
     size_t max_retries;
     uint64_t backoff_scale_factor_ns;
-    uint64_t maximum_backoff_ns;
     enum aws_exponential_backoff_jitter_mode jitter_mode;
     /* Let's not make this worse by constantly moving across threads if we can help it */
     struct aws_event_loop *bound_loop;
@@ -140,8 +139,6 @@ static int s_exponential_retry_acquire_token(
     backoff_retry_token->max_retries = exponential_backoff_strategy->config.max_retries;
     backoff_retry_token->backoff_scale_factor_ns = aws_timestamp_convert(
         exponential_backoff_strategy->config.backoff_scale_factor_ms, AWS_TIMESTAMP_MILLIS, AWS_TIMESTAMP_NANOS, NULL);
-    backoff_retry_token->maximum_backoff_ns = aws_timestamp_convert(
-        exponential_backoff_strategy->config.max_backoff_secs, AWS_TIMESTAMP_SECS, AWS_TIMESTAMP_NANOS, NULL);
     backoff_retry_token->jitter_mode = exponential_backoff_strategy->config.jitter_mode;
     backoff_retry_token->generate_random = exponential_backoff_strategy->config.generate_random;
     backoff_retry_token->generate_random_impl = exponential_backoff_strategy->config.generate_random_impl;
@@ -187,8 +184,7 @@ typedef uint64_t(compute_backoff_fn)(struct exponential_backoff_retry_token *tok
 
 static uint64_t s_compute_no_jitter(struct exponential_backoff_retry_token *token) {
     uint64_t retry_count = aws_min_u64(aws_atomic_load_int(&token->current_retry_count), 63);
-    uint64_t backoff_ns = aws_mul_u64_saturating((uint64_t)1 << retry_count, token->backoff_scale_factor_ns);
-    return aws_min_u64(backoff_ns, token->maximum_backoff_ns);
+    return aws_mul_u64_saturating((uint64_t)1 << retry_count, token->backoff_scale_factor_ns);
 }
 
 static uint64_t s_compute_full_jitter(struct exponential_backoff_retry_token *token) {
@@ -202,8 +198,8 @@ static uint64_t s_compute_deccorelated_jitter(struct exponential_backoff_retry_t
     if (!last_backoff_val) {
         return s_compute_full_jitter(token);
     }
-    uint64_t backoff_ns = aws_min_u64(token->maximum_backoff_ns, aws_mul_u64_saturating(last_backoff_val, 3));
-    return s_random_in_range(token->backoff_scale_factor_ns, backoff_ns, token);
+
+    return s_random_in_range(token->backoff_scale_factor_ns, aws_mul_u64_saturating(last_backoff_val, 3), token);
 }
 
 static compute_backoff_fn *s_backoff_compute_table[] = {
@@ -373,11 +369,7 @@ struct aws_retry_strategy *aws_retry_strategy_new_exponential_backoff(
     }
 
     if (!exponential_backoff_strategy->config.backoff_scale_factor_ms) {
-        exponential_backoff_strategy->config.backoff_scale_factor_ms = 500;
-    }
-
-    if (!exponential_backoff_strategy->config.max_backoff_secs) {
-        exponential_backoff_strategy->config.max_backoff_secs = 20;
+        exponential_backoff_strategy->config.backoff_scale_factor_ms = 25;
     }
 
     if (config->shutdown_options) {

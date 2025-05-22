@@ -19,15 +19,13 @@ template="build.gradle.kts.jinja"
 [targets.jar_proto]
 template={ path="build.gradle.kts.proto.jinja", dest="build.gradle.kts" }
 
-[targets.jar_test]
-is_test = true
-is_extra_target = true
-
 [targets.junit4]
+template="build.gradle.kts.jinja"
 is_test = true
 is_extra_target = true
 
 [targets.junit5]
+template="build.gradle.kts.jinja"
 is_test = true
 is_extra_target = true
 
@@ -104,11 +102,6 @@ target_commands-args="list"
 target_commands-args_escaped="list"
 target_commands-flags="list"
 
-with_kapt="flag"
-kapt-classpaths="list"
-kapt-opts="list"
-kapt-processors="list"
-
 [attrs.root]
 
 [attrs.dir]
@@ -117,5 +110,15 @@ kapt-processors="list"
 consumer-classpath="str"
 consumer-jar="str"
 consumer-type="str"
-consumer-proto_namespace="str"
 consumer-prebuilt="flag"
+
+[merge]
+test=[
+    "/ut",
+    "/src/test",
+    "/src/test/java",
+    "/src/test-integration",
+    "/src/integration-test",
+    "/src/testFixtures",
+    "/src/intTest",
+]

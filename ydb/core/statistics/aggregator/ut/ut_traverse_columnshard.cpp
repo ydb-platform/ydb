@@ -30,12 +30,11 @@ bool CheckCountMinSketch(const std::shared_ptr<TCountMinSketch>& sketch, const u
 }
 
 Y_UNIT_TEST_SUITE(TraverseColumnShard) {
-    const ui8 ShardCount = 4;
 
     Y_UNIT_TEST(TraverseColumnTable) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, ShardCount);
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
         const auto& tableInfo = databaseInfo.Tables[0];
 
         WaitForSavedStatistics(runtime, tableInfo.PathId);
@@ -48,7 +47,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     Y_UNIT_TEST(TraverseServerlessColumnTable) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        auto databaseInfo = CreateServerlessDatabaseColumnTables(env, 1, ShardCount);
+        auto databaseInfo = CreateServerlessDatabaseColumnTables(env, 1, 10);
         const auto& tableInfo = databaseInfo.Tables[0];
 
         WaitForSavedStatistics(runtime, tableInfo.PathId);
@@ -61,7 +60,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     Y_UNIT_TEST(TraverseColumnTableRebootColumnshard) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, ShardCount);
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
         const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();
 
@@ -77,7 +76,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeResolve) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, ShardCount);
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
         const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();
 
@@ -103,7 +102,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeReqDistribution) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, ShardCount);
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
         const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();
 
@@ -124,7 +123,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeAggregate) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, ShardCount);
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
         const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();
 
@@ -145,7 +144,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletBeforeSave) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, ShardCount);
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
         const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();
 
@@ -166,18 +165,18 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     Y_UNIT_TEST(TraverseColumnTableRebootSaTabletInAggregate) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, ShardCount);
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
         const auto& tableInfo = databaseInfo.Tables[0];
         auto sender = runtime.AllocateEdgeActor();
 
         int observerCount = 0;
         auto observer = runtime.AddObserver<TEvStatistics::TEvStatisticsRequest>([&](auto& ev){
-            if (++observerCount >= 2) {
+            if (++observerCount >= 5) {
                 ev.Reset();
             }
         });
 
-        runtime.WaitFor("2nd TEvStatisticsRequest", [&]{ return observerCount >= 2; });
+        runtime.WaitFor("5th TEvStatisticsRequest", [&]{ return observerCount >= 5; });
         observer.Remove();
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
 
@@ -188,7 +187,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     Y_UNIT_TEST(TraverseColumnTableHiveDistributionZeroNodes) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, ShardCount);
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
         const auto& tableInfo = databaseInfo.Tables[0];
 
         bool observerFirstExec = true;
@@ -234,7 +233,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     Y_UNIT_TEST(TraverseColumnTableHiveDistributionAbsentNodes) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, ShardCount);
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
         const auto& tableInfo = databaseInfo.Tables[0];
 
         bool observerFirstExec = true;
@@ -272,7 +271,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     Y_UNIT_TEST(TraverseColumnTableAggrStatUnavailableNode) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, ShardCount);
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
         const auto& tableInfo = databaseInfo.Tables[0];
 
         bool observerFirstExec = true;
@@ -310,7 +309,7 @@ Y_UNIT_TEST_SUITE(TraverseColumnShard) {
     Y_UNIT_TEST(TraverseColumnTableAggrStatNonLocalTablet) {
         TTestEnv env(1, 1);
         auto& runtime = *env.GetServer().GetRuntime();
-        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, ShardCount);
+        const auto databaseInfo = CreateDatabaseColumnTables(env, 1, 10);
         const auto& tableInfo = databaseInfo.Tables[0];
 
         bool observerFirstExec = true;

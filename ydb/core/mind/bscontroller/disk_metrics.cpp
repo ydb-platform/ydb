@@ -107,7 +107,6 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateDiskStatu
                 }
             }
             pdisk->UpdateOperational(true);
-            SysViewChangedPDisks.insert(pdiskId);
         } else if (const auto it = StaticPDisks.find(pdiskId); it != StaticPDisks.end()) {
             it->second.PDiskMetrics = m;
         } else {

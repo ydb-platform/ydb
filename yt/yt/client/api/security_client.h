@@ -115,30 +115,11 @@ struct TListUserTokensResult
     THashMap<TString, NYson::TYsonString> Metadata;
 };
 
-struct TGetCurrentUserOptions
-    : public TTimeoutOptions
-{ };
-
-struct TGetCurrentUserResult
-    : public NYTree::TYsonStruct
-{
-    std::string User;
-
-    REGISTER_YSON_STRUCT(TGetCurrentUserResult);
-    static void Register(TRegistrar registrar);
-};
-
-DEFINE_REFCOUNTED_TYPE(TGetCurrentUserResult);
-
 ////////////////////////////////////////////////////////////////////////////////
 
 struct ISecurityClient
 {
     virtual ~ISecurityClient() = default;
-
-    //! Return information about current user.
-    virtual TFuture<TGetCurrentUserResultPtr> GetCurrentUser(
-        const TGetCurrentUserOptions& options = {}) = 0;
 
     virtual TFuture<void> AddMember(
         const TString& group,
@@ -190,3 +171,4 @@ struct ISecurityClient
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
+

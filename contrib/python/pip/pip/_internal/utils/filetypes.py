@@ -1,4 +1,5 @@
-"""Filetype information."""
+"""Filetype information.
+"""
 
 from typing import Tuple
 

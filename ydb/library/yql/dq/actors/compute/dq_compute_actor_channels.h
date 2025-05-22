@@ -83,7 +83,7 @@ public:
 
 public:
     TDqComputeActorChannels(NActors::TActorId owner, const TTxId& txId, const TDqTaskSettings& task, bool retryOnUndelivery,
-        NDqProto::EDqStatsMode statsMode, ui64 channelBufferSize, ICallbacks* cbs, NActors::TActorActivityType actorActivityType);
+        NDqProto::EDqStatsMode statsMode, ui64 channelBufferSize, ICallbacks* cbs, ui32 actorActivityType);
 
 private:
     STATEFN(WorkState);

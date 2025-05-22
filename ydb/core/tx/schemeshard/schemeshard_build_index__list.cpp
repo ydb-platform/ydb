@@ -43,28 +43,28 @@ public:
         const ui64 pageSize = Min(record.GetPageSize() ? Max(record.GetPageSize(), MinPageSize) : DefaultPageSize, MaxPageSize);
 
 
-        auto it = Self->IndexBuilds.end();
+        auto it = Self->IndexBuilds.begin();
         ui64 skip = (page - 1) * pageSize;
-        while ((it != Self->IndexBuilds.begin()) && skip) {
-            --it;
+        while ((it != Self->IndexBuilds.end()) && skip) {
             if (it->second->DomainPathId == domainPathId) {
                 --skip;
             }
+            ++it;
         }
 
         auto& respRecord = Response->Record;
         respRecord.SetStatus(Ydb::StatusIds::SUCCESS);
 
         ui64 size = 0;
-        while ((it != Self->IndexBuilds.begin()) && size < pageSize) {
-            --it;
+        while ((it != Self->IndexBuilds.end()) && size < pageSize) {
             if (it->second->DomainPathId == domainPathId) {
                 Fill(*respRecord.MutableEntries()->Add(), *it->second);
                 ++size;
             }
+            ++it;
         }
 
-        if (it == Self->IndexBuilds.begin()) {
+        if (it == Self->IndexBuilds.end()) {
             respRecord.SetNextPageToken("0");
         } else {
             respRecord.SetNextPageToken(ToString(page + 1));

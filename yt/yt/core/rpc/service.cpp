@@ -6,12 +6,12 @@ namespace NYT::NRpc {
 
 void IServiceContext::SetRequestInfo()
 {
-    SetRawRequestInfo(std::string(), false);
+    SetRawRequestInfo(TString(), false);
 }
 
 void IServiceContext::SetResponseInfo()
 {
-    SetRawResponseInfo(std::string(), false);
+    SetRawResponseInfo(TString(), false);
 }
 
 void IServiceContext::ReplyFrom(TFuture<TSharedRefArray> asyncMessage)

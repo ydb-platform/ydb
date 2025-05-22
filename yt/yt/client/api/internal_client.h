@@ -108,9 +108,7 @@ struct TGetOrderedTabletSafeTrimRowCountRequest
 
 struct TRegisterShuffleChunksOptions
     : public TTimeoutOptions
-{
-    bool OverwriteExistingWriterData = false;
-};
+{ };
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -197,13 +195,11 @@ struct IInternalClient
     virtual TFuture<void> RegisterShuffleChunks(
         const TShuffleHandlePtr& handle,
         const std::vector<NChunkClient::NProto::TChunkSpec>& chunkSpecs,
-        std::optional<int> writerIndex,
         const TRegisterShuffleChunksOptions& options = {}) = 0;
 
     virtual TFuture<std::vector<NChunkClient::NProto::TChunkSpec>> FetchShuffleChunks(
         const TShuffleHandlePtr& handle,
         int partitionIndex,
-        std::optional<std::pair<int, int>> writerIndexRange,
         const TFetchShuffleChunksOptions& options = {}) = 0;
 
     virtual TFuture<void> ForsakeChaosCoordinator(

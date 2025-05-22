@@ -82,7 +82,6 @@ namespace NActors {
             EPriority DefSamplingPriority;
             ui32 DefSamplingRate;
             bool UseLocalTimestamps;
-            bool LogSourceLocation = true;
 
             enum ELogFormat {
                 PLAIN_FULL_FORMAT,

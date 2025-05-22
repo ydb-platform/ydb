@@ -1,12 +1,13 @@
 import os
-from pathlib import Path
 import sys
+from pathlib import Path
 from typing import Dict
 from typing import Iterable
 from typing import List
 from typing import Optional
 from typing import Sequence
 from typing import Tuple
+from typing import TYPE_CHECKING
 from typing import Union
 
 import iniconfig
@@ -16,6 +17,9 @@ from _pytest.outcomes import fail
 from _pytest.pathlib import absolutepath
 from _pytest.pathlib import commonpath
 from _pytest.pathlib import safe_exists
+
+if TYPE_CHECKING:
+    from . import Config
 
 
 def _parse_ini_config(path: Path) -> iniconfig.IniConfig:
@@ -37,6 +41,7 @@ def load_config_dict_from_file(
 
     Return None if the file does not contain valid pytest configuration.
     """
+
     # Configuration from ini files are obtained from the [pytest] section, if present.
     if filepath.suffix == ".ini":
         iniconfig = _parse_ini_config(filepath)
@@ -164,21 +169,8 @@ def determine_setup(
     inifile: Optional[str],
     args: Sequence[str],
     rootdir_cmd_arg: Optional[str] = None,
-    invocation_dir: Optional[Path] = None,
+    config: Optional["Config"] = None,
 ) -> Tuple[Path, Optional[Path], Dict[str, Union[str, List[str]]]]:
-    """Determine the rootdir, inifile and ini configuration values from the
-    command line arguments.
-
-    :param inifile:
-        The `--inifile` command line argument, if given.
-    :param args:
-        The free command line arguments.
-    :param rootdir_cmd_arg:
-        The `--rootdir` command line argument, if given.
-    :param invocation_dir:
-        The working directory when pytest was invoked, if known.
-        If not known, the current working directory is used.
-    """
     rootdir = None
     dirs = get_dirs_from_args(args)
     if inifile:
@@ -199,8 +191,8 @@ def determine_setup(
                 if dirs != [ancestor]:
                     rootdir, inipath, inicfg = locate_config(dirs)
                 if rootdir is None:
-                    if invocation_dir is not None:
-                        cwd = invocation_dir
+                    if config is not None:
+                        cwd = config.invocation_params.dir
                     else:
                         cwd = Path.cwd()
                     rootdir = get_common_ancestor([cwd, ancestor])
@@ -210,7 +202,9 @@ def determine_setup(
         rootdir = absolutepath(os.path.expandvars(rootdir_cmd_arg))
         if not rootdir.is_dir():
             raise UsageError(
-                f"Directory '{rootdir}' not found. Check your '--rootdir' option."
+                "Directory '{}' not found. Check your '--rootdir' option.".format(
+                    rootdir
+                )
             )
     assert rootdir is not None
     return rootdir, inipath, inicfg or {}

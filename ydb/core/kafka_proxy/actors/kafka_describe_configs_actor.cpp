@@ -185,7 +185,6 @@ void TKafkaDescribeConfigsActor::AddDescribeResponse(
     AddConfigEntry(singleConfig, "remote.storage.enable", "false", EKafkaConfigType::BOOLEAN);
     AddConfigEntry(singleConfig, "segment.jitter.ms", "0", EKafkaConfigType::LONG);
     AddConfigEntry(singleConfig, "local.retention.ms", "-2", EKafkaConfigType::LONG);
-    //AddConfigEntry(singleConfig, "cleanup.policy", "delete", EKafkaConfigType::LIST);
     AddConfigEntry(singleConfig, "flush.ms", "9223372036854775807", EKafkaConfigType::LONG);
     AddConfigEntry(singleConfig, "follower.replication.throttled.replicas", "", EKafkaConfigType::LIST);
     AddConfigEntry(singleConfig, "compression.lz4.level", "9", EKafkaConfigType::INT);

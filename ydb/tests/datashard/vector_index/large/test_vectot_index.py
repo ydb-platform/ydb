@@ -234,5 +234,4 @@ class TestVectorIndex(VectorBase):
                                 clusters=clusters,
                                 similarity=similarity,
                             )
-
                 self.vector_index._drop_table(self.table_name)

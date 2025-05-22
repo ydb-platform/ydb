@@ -107,6 +107,7 @@ struct TPartitionBlobEncoder {
     void Dump() const;
 
     bool ForFastWrite = true;
+
 };
 
 }

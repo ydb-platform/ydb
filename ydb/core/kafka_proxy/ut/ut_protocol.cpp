@@ -2080,7 +2080,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
 
         TString topic1 = "topic-999-test", topic2 = "topic-998-test";
-
+        auto describeTopicSettings = NTopic::TDescribeTopicSettings().IncludeStats(true);
         {
             // Creation of two topics
             auto msg = client.CreateTopics({
@@ -2096,6 +2096,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[1].Name.value(), topic2);
             UNIT_ASSERT_VALUES_EQUAL(msg->Topics[2].ErrorCode, INVALID_REQUEST);
         }
+
 
         auto getConfigsMap = [&](const auto& describeResult) {
             THashMap<TString, TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult> configs;
@@ -2139,7 +2140,6 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
                 } else {
                     UNIT_ASSERT_C(!hasCompConsumer, topics[i].name);
                 }
-
             }
         };
 
@@ -2162,15 +2162,23 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             checkDescribeTopic({{topic1, "delete"}, {topic2, "compact"}});
         }
 
-        NYdb::NTopic::TAlterTopicSettings addConsumer;
-        addConsumer.BeginAddConsumer().ConsumerName(NPQ::CLIENTID_COMPACTION_CONSUMER).EndAddConsumer();
-        NYdb::NTopic::TAlterTopicSettings dropConsumer;
-        addConsumer.AppendDropConsumers(NPQ::CLIENTID_COMPACTION_CONSUMER);
-        pqClient.AlterTopic(topic1, addConsumer).GetValueSync();
-        pqClient.AlterTopic(topic2, dropConsumer).GetValueSync();
-        checkDescribeTopic({{topic1, "delete"}, {topic2, "compact"}});
-    }
+        {
+            auto msg = client.DescribeConfigs({topic1, topic2});
+            const auto& res0 = msg->Results[0];
+            UNIT_ASSERT_VALUES_EQUAL(res0.ResourceName.value(), topic1);
+            UNIT_ASSERT_VALUES_EQUAL(res0.ErrorCode, NONE_ERROR);
+            auto configs0 = getConfigsMap(res0);
+            UNIT_ASSERT_VALUES_EQUAL(configs0.size(), 33);
+            UNIT_ASSERT(configs0.find("cleanup.policy") != configs0.end());
+            UNIT_ASSERT_VALUES_EQUAL(configs0.find("cleanup.policy")->second.Value->data(), "compact");
 
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[1].ResourceName.value(), topic2);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Results[1].ErrorCode, NONE_ERROR);
+            auto configs1 = getConfigsMap(msg->Results[1]);
+            UNIT_ASSERT(configs1.find("cleanup.policy") != configs1.end());
+            UNIT_ASSERT_VALUES_EQUAL(configs1.find("cleanup.policy")->second.Value->data(), "delete");
+        }
+    }
 
     Y_UNIT_TEST(TopicsWithCleaunpPolicyScenario) {
         TInsecureTestServer testServer("2");
@@ -3533,6 +3541,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         auto consumerInfo = kafkaClient.JoinAndSyncGroupAndWaitPartitions(topicsToSubscribe, consumerName, 3, protocolName, 3, 15000);
 
         kafkaClient.ValidateNoDataInTopics({{outputTopicName, {0}}});
+
         // move time forward after transaction timeout
         Sleep(TDuration::MilliSeconds(txnTimeoutMs));
 

@@ -289,6 +289,16 @@ Y_UNIT_TEST_SUITE(TTxDataShardLocalKMeansScan) {
             request.SetParentFrom(100);
             request.SetParentTo(99);
         }, "{ <main>: Error: Parent from 100 should be less or equal to parent to 99 }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvLocalKMeansRequest& request) {
+            request.SetParentFrom(0);
+            request.SetParentTo(0);
+            request.SetUpload(NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING);
+        }, "{ <main>: Error: Wrong upload for zero parent }");
+        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvLocalKMeansRequest& request) {
+            request.SetParentFrom(100);
+            request.SetParentTo(200);
+            request.SetUpload(NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD);
+        }, "{ <main>: Error: Wrong upload for non-zero parent }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvLocalKMeansRequest& request) {
             request.ClearLevelName();

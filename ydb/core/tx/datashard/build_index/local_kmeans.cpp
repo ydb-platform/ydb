@@ -22,25 +22,35 @@
 namespace NKikimr::NDataShard {
 using namespace NKMeans;
 
-// This scan needed to run local (not distributed) kmeans.
-// We have this local stage because we construct kmeans tree from top to bottom.
-// And bottom kmeans can be constructed completely locally in datashards to avoid extra communication.
-// Also it can be used for small tables.
-//
-// This class is kind of state machine, it has 3 phases.
-// Each of them corresponds to 1-N rounds of NTable::IScan (which is kind of state machine itself).
-// 1. First iteration collect sample of clusters
-// 2. Then N iterations recompute clusters (main cycle of batched kmeans)
-// 3. Finally last iteration upload clusters to level table and postings to corresponding posting table
-//
-// These phases maps to State:
-// 1. -- EState::SAMPLE
-// 2. -- EState::KMEANS
-// 3. -- EState::UPLOAD*
-//
-// Which UPLOAD* will be used depends on that will client of this scan request (see UploadState)
-//
-// NTable::IScan::Seek used to switch from current state to the next one.
+/*
+ * TEvLocalKMeans executes a "local" (single-shard) K-means job.
+ * It scans either a MAIN or BUILD table shard, while the output rows go to the BUILD or POSTING table.
+ *
+ * Request:
+ * - The client sends TEvLocalKMeans with:
+ *   - ParentFrom and ParentTo, specifying the key range in the input table shard
+ *     - If ParentFrom=0 and ParentTo=0, the entire table shard is scanned
+ *   - Child, serving as the base ID for the new cluster IDs computed in this local stage
+ *   - The embedding column name and additional data columns to be used for K-means
+ *   - K (number of clusters), initial random seed, and the vector dimensionality
+ *   - The names of "level" and "posting" tables for writing out cluster centroids and row data
+ *   - An upload mode that determines how results are stored (for example, main-to-build or build-to-posting)
+ *
+ * Data Flow:
+ * - A TLocalKMeansScan is created, operating in three phases (SAMPLE, KMEANS, UPLOAD)
+ *   on each input cluster (one cluster has same parent for BUILD and the whole shard for MAIN):
+ *   - SAMPLE: Gathers a random sample of embeddings to initialize cluster centers
+ *   - KMEANS: Runs iterative clustering, refining centroids by scanning rows within the specified key range
+ *   - UPLOAD: When final centroids are computed
+ *     - Centroids are written to the "level" (BUILD) table
+ *     - Each input row's cluster membership is written to the "posting" (POSTING) table
+ *     - Any specified data columns are also written to the posting results
+ *
+ * Response:
+ * - Upon completion, a TEvLocalKMeansResponse is returned to the requester
+ * - It provides a status (for example, DONE or BAD_REQUEST), the number of rows read, bytes processed,
+ *   and any error messages
+ */
 
 class TLocalKMeansScanBase: public TActor<TLocalKMeansScanBase>, public NTable::IScan {
 protected:
@@ -592,10 +602,19 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
     const auto parentFrom = request.GetParentFrom();
     const auto parentTo = request.GetParentTo();
     NTable::TLead lead;
-    if (parentFrom == 0 && parentTo == 0) {
+    if (parentFrom == 0) {
+        if (request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD 
+            || request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING)
+        {
+            badRequest("Wrong upload for zero parent");
+        }
         lead.To({}, NTable::ESeek::Lower);
     } else if (parentFrom > parentTo) {
         badRequest(TStringBuilder() << "Parent from " << parentFrom << " should be less or equal to parent to " << parentTo);
+    } else if (request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD 
+        || request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_POSTING)
+    {
+        badRequest("Wrong upload for non-zero parent");
     } else {
         TCell from = TCell::Make(parentFrom - 1);
         TCell to = TCell::Make(parentTo);

@@ -88,6 +88,9 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
             partitionConfig->SetMaxWriteInflightSize(90'000'000);
             partitionConfig->SetLowWatermark(parameters.lowWatermark);
 
+            if (parameters.enableCompactificationByKey) {
+                tabletConfig->SetEnableCompactification(true);
+            }
             for (auto& u : users) {
                 if (u.second)
                     partitionConfig->AddImportantClientId(u.first);

@@ -3,6 +3,7 @@
 #include "source.h"
 
 #include <ydb/core/formats/arrow/program/collection.h>
+#include <ydb/core/formats/arrow/reader/result_builder.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 

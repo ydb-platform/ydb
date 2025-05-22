@@ -593,9 +593,7 @@ private:
 
         TableKind = entry.Kind;
         const bool isColumnTable = (TableKind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
-        IsIndexImplTable = (entry.TableKind == NSchemeCache::ETableKind::KindSyncIndexTable
-            || entry.TableKind == NSchemeCache::ETableKind::KindAsyncIndexTable
-            || entry.TableKind == NSchemeCache::ETableKind::KindVectorIndexTable);
+        IsIndexImplTable = (entry.TableKind != NSchemeCache::ETableKind::KindRegularTable);
 
         if (entry.TableId.IsSystemView()) {
             return ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "is not supported. Table is a system view", ctx);

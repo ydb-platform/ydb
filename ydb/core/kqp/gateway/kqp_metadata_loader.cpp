@@ -166,9 +166,7 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
         }
     }
 
-    tableMeta->IsIndexImplTable = (entry.TableKind == NSchemeCache::ETableKind::KindSyncIndexTable
-        || entry.TableKind == NSchemeCache::ETableKind::KindAsyncIndexTable
-        || entry.TableKind == NSchemeCache::ETableKind::KindVectorIndexTable);
+    tableMeta->IsIndexImplTable = (entry.TableKind != NSchemeCache::ETableKind::KindRegularTable);
 
     tableMeta->Attributes = entry.Attributes;
 

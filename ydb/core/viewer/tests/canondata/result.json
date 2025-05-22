@@ -2352,6 +2352,7 @@
                     "ConnectStatus": "Green",
                     "Connections": "not-zero-number",
                     "CpuUsage": "not-zero-number",
+                    "Database": "/Root",
                     "DiskSpaceUsage": "not-zero-number",
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",

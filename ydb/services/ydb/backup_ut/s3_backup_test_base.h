@@ -272,10 +272,18 @@ protected:
     }
 
     void ModifyChecksumAndCheckThatImportFails(const std::initializer_list<TString>& checksumFiles, const NYdb::NImport::TImportFromS3Settings& importSettings) {
-        for (const TString& checksumFile : checksumFiles) {
+        auto copySettings = [&]() {
             NYdb::NImport::TImportFromS3Settings settings = importSettings;
             settings.DestinationPath(TStringBuilder() << "/Root/Prefix_" << RestoreAttempt++);
-            ModifyChecksumAndCheckThatImportFails(checksumFile, settings);
+            return settings;
+        };
+
+        // Check that settings are OK
+        auto res = YdbImportClient().ImportFromS3(copySettings()).GetValueSync();
+        WaitOpSuccess(res);
+
+        for (const TString& checksumFile : checksumFiles) {
+            ModifyChecksumAndCheckThatImportFails(checksumFile, copySettings());
         }
     }
 

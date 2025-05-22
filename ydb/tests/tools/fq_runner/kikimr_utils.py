@@ -207,7 +207,7 @@ class YQv2Extension(ExtensionPoint):
                             'database': '/local'
                         },
                         'access_config': {
-                            'external_sources_access_sid' : ['account@sa']
+                            'external_sources_access_sid' : ['account@as']
                         }
                     }
                 }

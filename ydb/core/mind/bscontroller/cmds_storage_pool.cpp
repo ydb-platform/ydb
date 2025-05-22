@@ -478,7 +478,7 @@ namespace NKikimr::NBsController {
         
         auto& storagePoolGroups = StoragePoolGroups.Unshare();
 
-        // create a list of groups to be moved
+        // create a list of groups to be resized
         const auto& m = cmd.GetGroupIds();
         TVector<TGroupId> groups;
         std::transform(m.begin(), m.end(), std::back_inserter(groups), [](ui32 id) { return TGroupId::FromValue(id); });
@@ -494,9 +494,20 @@ namespace NKikimr::NBsController {
             if (!group || group->StoragePoolId != poolId) {
                 throw TExError() << "GroupId# " << groupId << " not found in StoragePoolId# " << poolId;
             }
-            
+
+            auto oldSlotSizeUnits = group->SlotSizeUnits.GetOrElse({});
+            auto newSlotSizeUnits = cmd.GetSlotSizeUnits().GetValue();
+            for (auto& vdisk: group->VDisksInGroup) {
+                TVSlotId vslotId = vdisk->VSlotId;
+                TPDiskInfo* pdisk = PDisks.FindForUpdate(vslotId.ComprisingPDiskId());
+                Y_ABORT_UNLESS(pdisk);
+
+                pdisk->NumActiveSlots -= TPDiskConfig::GetOwnerWeight(oldSlotSizeUnits, pdisk->SlotSizeUnits);
+                pdisk->NumActiveSlots += TPDiskConfig::GetOwnerWeight(newSlotSizeUnits, pdisk->SlotSizeUnits);
+            }
+
             // update the group size
-            group->SlotSizeUnits = cmd.GetSlotSizeUnits().GetValue();
+            group->SlotSizeUnits = newSlotSizeUnits;
             GroupContentChanged.insert(groupId);
             Fit.PoolsAndGroups.emplace(poolId, groupId);
         }

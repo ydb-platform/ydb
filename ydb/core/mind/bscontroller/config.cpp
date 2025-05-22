@@ -758,7 +758,9 @@ namespace NKikimr::NBsController {
             // remove slot info from the PDisk
             TPDiskInfo *pdisk = PDisks.FindForUpdate(vslotId.ComprisingPDiskId());
             Y_ABORT_UNLESS(pdisk);
-            --pdisk->NumActiveSlots;
+            pdisk->NumActiveSlots -= TPDiskConfig::GetOwnerWeight(
+                mutableSlot->Group->SlotSizeUnits.GetOrElse({}),
+                pdisk->SlotSizeUnits);
 
             if (UncommittedVSlots.erase(vslotId)) {
                 const ui32 erased = pdisk->VSlotsOnPDisk.erase(vslotId.VSlotId);
